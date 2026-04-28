@@ -1,11 +1,11 @@
-export interface FwxApiResponse<T> {
+﻿export interface ApiResponse<T> {
   code: number
   message: string
   data: T
   traceId: string
 }
 
-export interface FwxPageResult<T> {
+export interface PageResult<T> {
   records: T[]
   pageNo: number
   pageSize: number

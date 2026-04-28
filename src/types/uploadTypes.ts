@@ -1,4 +1,4 @@
-export interface FwxUploadedFileItem {
+﻿export interface UploadedFileItem {
   fileId: number
   projectId: number
   originalFileName: string
