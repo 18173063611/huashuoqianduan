@@ -4,8 +4,8 @@
       <div class="app-brand">
         <span class="app-brand-mark">AI</span>
         <div>
-          <strong>Digital Human Video</strong>
-          <small>Week 1 Framework</small>
+          <strong>数字人视频</strong>
+          <small>第 1 周基础框架</small>
         </div>
       </div>
       <nav class="app-menu">
@@ -24,10 +24,10 @@
     <main class="app-main">
       <header class="app-topbar">
         <div>
-          <p class="app-eyebrow">MVP Workbench</p>
+          <p class="app-eyebrow">MVP 工作台</p>
           <h1>{{ activeTitle }}</h1>
         </div>
-        <div class="app-status-pill">API Prefix /api/v1</div>
+        <div class="app-status-pill">接口前缀 /api/v1</div>
       </header>
 
       <slot />
@@ -40,10 +40,10 @@ import { computed } from 'vue'
 
 // 当前先用静态菜单支撑 MVP 演示，后续接权限或路由时再抽成配置。
 const menuItems = [
-  { key: 'projects', label: 'Projects' },
-  { key: 'upload', label: 'Upload' },
-  { key: 'flow', label: 'Flow' },
-  { key: 'acceptance', label: 'Acceptance' },
+  { key: 'projects', label: '项目管理' },
+  { key: 'upload', label: '文件上传' },
+  { key: 'flow', label: '生成流程' },
+  { key: 'acceptance', label: '验收说明' },
 ] as const
 
 type MenuKey = (typeof menuItems)[number]['key']
@@ -56,5 +56,5 @@ defineEmits<{
   change: [key: MenuKey]
 }>()
 
-const activeTitle = computed(() => menuItems.find((item) => item.key === props.activeKey)?.label ?? 'Projects')
+const activeTitle = computed(() => menuItems.find((item) => item.key === props.activeKey)?.label ?? '项目管理')
 </script>

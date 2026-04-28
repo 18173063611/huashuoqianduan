@@ -11,14 +11,14 @@
   </div>
 
   <section class="app-card app-demo-panel">
-    <p class="app-eyebrow">Week 1 Delivery</p>
-    <h2>Project API Connected</h2>
+    <p class="app-eyebrow">本周交付效果</p>
+    <h2>项目管理基础接口已接入</h2>
     <p>
-      This page calls backend GET /api/v1/projects and POST /api/v1/projects.
-      It demonstrates project creation, project listing, and material upload after project selection.
+      当前页面调用后端 `GET /api/v1/projects` 和 `POST /api/v1/projects`，
+      用于演示项目创建、项目列表，以及选中项目后的素材上传流程。
     </p>
     <p v-if="selectedProject" class="app-selected-project">
-      Selected project: <strong>{{ selectedProject.projectName }}</strong>
+      已选择项目：<strong>{{ selectedProject.projectName }}</strong>
     </p>
     <p v-if="errorMessage" class="app-error">{{ errorMessage }}</p>
   </section>
@@ -49,7 +49,7 @@ async function loadProjects() {
       selectedProject.value = result.records[0]
     }
   } catch (error) {
-    errorMessage.value = error instanceof Error ? error.message : 'Load projects failed'
+    errorMessage.value = error instanceof Error ? error.message : '加载项目失败'
   } finally {
     loading.value = false
   }

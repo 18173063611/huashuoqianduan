@@ -1,22 +1,22 @@
-<template>
+﻿<template>
   <form class="app-card app-form" @submit.prevent="handleSubmit">
     <div>
-      <p class="app-eyebrow">Project API</p>
-      <h2>Create Video Project</h2>
+      <p class="app-eyebrow">项目管理基础接口</p>
+      <h2>创建视频制作项目</h2>
     </div>
 
     <label>
-      Project Name
-      <input v-model.trim="form.projectName" required maxlength="80" placeholder="Example: AI presenter test" />
+      项目名称
+      <input v-model.trim="form.projectName" required maxlength="80" placeholder="例如：AI 数字人口播测试" />
     </label>
 
     <label>
-      Project Description
-      <textarea v-model.trim="form.description" maxlength="500" placeholder="Describe goal, materials, or acceptance target" />
+      项目描述
+      <textarea v-model.trim="form.description" maxlength="500" placeholder="填写项目用途、素材来源或验收目标" />
     </label>
 
     <button class="app-primary-button" type="submit" :disabled="loading">
-      {{ loading ? 'Creating...' : 'Create Project' }}
+      {{ loading ? '创建中...' : '创建项目' }}
     </button>
 
     <p v-if="errorMessage" class="app-error">{{ errorMessage }}</p>
@@ -51,7 +51,7 @@ async function handleSubmit() {
     form.description = ''
     emit('created', project)
   } catch (error) {
-    errorMessage.value = error instanceof Error ? error.message : 'Create project failed'
+    errorMessage.value = error instanceof Error ? error.message : '创建项目失败'
   } finally {
     loading.value = false
   }

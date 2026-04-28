@@ -1,12 +1,12 @@
-<template>
+﻿<template>
   <WorkbenchLayout :active-key="activeKey" @change="activeKey = $event">
     <ProjectWorkbench v-show="activeKey === 'projects'" v-model:selected-project="selectedProject" />
 
     <FileUploadPanel v-show="activeKey === 'upload'" :project="selectedProject" />
 
     <section v-show="activeKey === 'flow'" class="app-card app-flow">
-      <p class="app-eyebrow">Base Page Framework</p>
-      <h2>AI Digital Human Video Flow</h2>
+      <p class="app-eyebrow">基础页面框架</p>
+      <h2>AI 数字人视频制作流程</h2>
       <div class="app-flow-steps">
         <div v-for="step in flowSteps" :key="step.title" class="app-flow-step">
           <span>{{ step.index }}</span>
@@ -17,13 +17,13 @@
     </section>
 
     <section v-show="activeKey === 'acceptance'" class="app-card app-acceptance">
-      <p class="app-eyebrow">Acceptance</p>
-      <h2>This Week Demo</h2>
+      <p class="app-eyebrow">验收说明</p>
+      <h2>本周可演示内容</h2>
       <ul>
-        <li>The workbench has a sidebar, top status area, and main content area.</li>
-        <li>The project page can create, list, refresh, and select projects.</li>
-        <li>The upload page can upload files under the selected project and show preview links.</li>
-        <li>The backend provides an H2 demo database and MySQL-compatible schema.sql.</li>
+        <li>工作台包含左侧菜单、顶部状态和主操作区。</li>
+        <li>项目管理页面支持创建、列表、刷新和选择当前项目。</li>
+        <li>文件上传页面支持按项目上传素材并展示预览链接。</li>
+        <li>后端提供 H2 演示库与 MySQL 兼容的 `schema.sql`。</li>
       </ul>
     </section>
   </WorkbenchLayout>
@@ -42,9 +42,9 @@ const activeKey = ref<MenuKey>('projects')
 const selectedProject = ref<ProjectItem>()
 
 const flowSteps = [
-  { index: '01', title: 'Create Project', description: 'Create a video project and bind future assets and tasks to it.' },
-  { index: '02', title: 'Upload Materials', description: 'Upload avatar photos, reference images, scripts, or source videos.' },
-  { index: '03', title: 'AI Generation', description: 'Later connect script rewrite, TTS, avatar generation, and cover generation.' },
-  { index: '04', title: 'Video Rendering', description: 'Later track rendering progress and retries through the task center.' },
+  { index: '01', title: '项目创建', description: '创建一个视频制作项目，后续资产和任务都绑定到该项目。' },
+  { index: '02', title: '素材上传', description: '上传形象照、参考图、脚本文档或源视频素材。' },
+  { index: '03', title: 'AI 生成', description: '后续接入文案改写、TTS、形象生成与标题封面生成。' },
+  { index: '04', title: '视频合成', description: '后续通过任务中心跟踪视频合成进度与失败重试。' },
 ]
 </script>

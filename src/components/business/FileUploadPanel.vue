@@ -1,19 +1,19 @@
 ﻿<template>
   <section class="app-card app-form">
     <div>
-      <p class="app-eyebrow">Upload API</p>
-      <h2>Upload Project Materials</h2>
-      <p class="app-muted">Images, audio, video, and script files can be uploaded to the local demo storage.</p>
+      <p class="app-eyebrow">文件上传基础能力</p>
+      <h2>上传项目素材</h2>
+      <p class="app-muted">图片、音频、视频和文案文件都可以先进入本地上传演示目录。</p>
     </div>
 
-    <div v-if="!project" class="app-empty">Select a project before uploading files.</div>
+    <div v-if="!project" class="app-empty">请先选择一个项目，再上传文件。</div>
     <template v-else>
       <div class="app-selected-project">
-        Current project: <strong>{{ project.projectName }}</strong>
+        当前项目：<strong>{{ project.projectName }}</strong>
       </div>
       <input type="file" @change="handleFileChange" />
       <button class="app-primary-button" type="button" :disabled="!selectedFile || loading" @click="handleUpload">
-        {{ loading ? 'Uploading...' : 'Upload File' }}
+        {{ loading ? '上传中...' : '上传文件' }}
       </button>
       <p v-if="errorMessage" class="app-error">{{ errorMessage }}</p>
 
@@ -21,9 +21,9 @@
         <div v-for="file in files" :key="file.fileId" class="app-file-item">
           <div>
             <strong>{{ file.originalFileName }}</strong>
-            <p>{{ formatFileSize(file.fileSize) }} - {{ file.mimeType || 'Unknown type' }}</p>
+            <p>{{ formatFileSize(file.fileSize) }} - {{ file.mimeType || '未知类型' }}</p>
           </div>
-          <a :href="file.previewUrl" target="_blank" rel="noreferrer">Preview</a>
+          <a :href="file.previewUrl" target="_blank" rel="noreferrer">预览</a>
         </div>
       </div>
     </template>
@@ -74,7 +74,7 @@ async function handleUpload() {
     await uploadProjectFile(props.project.projectId, selectedFile.value)
     await loadFiles(props.project.projectId)
   } catch (error) {
-    errorMessage.value = error instanceof Error ? error.message : 'Upload failed'
+    errorMessage.value = error instanceof Error ? error.message : '上传失败'
   } finally {
     loading.value = false
   }
@@ -84,7 +84,7 @@ async function loadFiles(projectId: number) {
   try {
     files.value = await getProjectFiles(projectId)
   } catch (error) {
-    errorMessage.value = error instanceof Error ? error.message : 'Load files failed'
+    errorMessage.value = error instanceof Error ? error.message : '加载文件列表失败'
   }
 }
 
