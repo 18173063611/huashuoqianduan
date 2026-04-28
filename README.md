@@ -1,6 +1,3 @@
-# huashuoqianduan
-
-
 #### 技术栈
 - **前端框架**: Vue 3.x
 - **运行环境**: Node.js v22.20
