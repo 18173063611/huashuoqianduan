@@ -1,4 +1,4 @@
-export interface FwxProjectItem {
+﻿export interface ProjectItem {
   projectId: number
   projectName: string
   description: string | null
@@ -7,7 +7,7 @@ export interface FwxProjectItem {
   updatedAt: string
 }
 
-export interface FwxCreateProjectRequest {
+export interface CreateProjectRequest {
   projectName: string
   description?: string
 }

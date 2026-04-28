@@ -1,27 +1,27 @@
-<template>
-  <section class="fwx-card fwx-form">
+﻿<template>
+  <section class="app-card app-form">
     <div>
-      <p class="fwx-eyebrow">文件上传基础能力</p>
+      <p class="app-eyebrow">文件上传基础能力</p>
       <h2>上传项目素材</h2>
-      <p class="fwx-muted">图片、音频、视频和文案文件都可以先进入本地上传演示目录。</p>
+      <p class="app-muted">图片、音频、视频和文案文件都可以先进入本地上传演示目录。</p>
     </div>
 
-    <div v-if="!project" class="fwx-empty">请先选择一个项目，再上传文件。</div>
+    <div v-if="!project" class="app-empty">请先选择一个项目，再上传文件。</div>
     <template v-else>
-      <div class="fwx-selected-project">
+      <div class="app-selected-project">
         当前项目：<strong>{{ project.projectName }}</strong>
       </div>
       <input type="file" @change="handleFileChange" />
-      <button class="fwx-primary-button" type="button" :disabled="!selectedFile || loading" @click="handleUpload">
+      <button class="app-primary-button" type="button" :disabled="!selectedFile || loading" @click="handleUpload">
         {{ loading ? '上传中...' : '上传文件' }}
       </button>
-      <p v-if="errorMessage" class="fwx-error">{{ errorMessage }}</p>
+      <p v-if="errorMessage" class="app-error">{{ errorMessage }}</p>
 
-      <div class="fwx-file-list">
-        <div v-for="file in files" :key="file.fileId" class="fwx-file-item">
+      <div class="app-file-list">
+        <div v-for="file in files" :key="file.fileId" class="app-file-item">
           <div>
             <strong>{{ file.originalFileName }}</strong>
-            <p>{{ formatFileSize(file.fileSize) }} · {{ file.mimeType || '未知类型' }}</p>
+            <p>{{ formatFileSize(file.fileSize) }} - {{ file.mimeType || '未知类型' }}</p>
           </div>
           <a :href="file.previewUrl" target="_blank" rel="noreferrer">预览</a>
         </div>
@@ -32,15 +32,15 @@
 
 <script setup lang="ts">
 import { ref, watch } from 'vue'
-import { fwxGetProjectFiles, fwxUploadProjectFile } from '../../services/fwxUploadApi'
-import type { FwxProjectItem } from '../../types/fwxProjectTypes'
-import type { FwxUploadedFileItem } from '../../types/fwxUploadTypes'
+import { getProjectFiles, uploadProjectFile } from '../../services/uploadApi'
+import type { ProjectItem } from '../../types/projectTypes'
+import type { UploadedFileItem } from '../../types/uploadTypes'
 
 const props = defineProps<{
-  project?: FwxProjectItem
+  project?: ProjectItem
 }>()
 
-const files = ref<FwxUploadedFileItem[]>([])
+const files = ref<UploadedFileItem[]>([])
 const selectedFile = ref<File>()
 const loading = ref(false)
 const errorMessage = ref('')
@@ -48,6 +48,7 @@ const errorMessage = ref('')
 watch(
   () => props.project?.projectId,
   async (projectId) => {
+    // 切换项目时清空旧文件状态，避免把上一个项目的素材误展示到当前项目。
     files.value = []
     selectedFile.value = undefined
     if (projectId) {
@@ -69,7 +70,8 @@ async function handleUpload() {
   loading.value = true
   errorMessage.value = ''
   try {
-    await fwxUploadProjectFile(props.project.projectId, selectedFile.value)
+    // 上传成功后立即刷新文件列表，保证页面展示和后端落库结果一致。
+    await uploadProjectFile(props.project.projectId, selectedFile.value)
     await loadFiles(props.project.projectId)
   } catch (error) {
     errorMessage.value = error instanceof Error ? error.message : '上传失败'
@@ -80,7 +82,7 @@ async function handleUpload() {
 
 async function loadFiles(projectId: number) {
   try {
-    files.value = await fwxGetProjectFiles(projectId)
+    files.value = await getProjectFiles(projectId)
   } catch (error) {
     errorMessage.value = error instanceof Error ? error.message : '加载文件列表失败'
   }

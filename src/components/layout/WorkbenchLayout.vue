@@ -1,18 +1,18 @@
-<template>
-  <div class="fwx-shell">
-    <aside class="fwx-sidebar">
-      <div class="fwx-brand">
-        <span class="fwx-brand-mark">AI</span>
+﻿<template>
+  <div class="app-shell">
+    <aside class="app-sidebar">
+      <div class="app-brand">
+        <span class="app-brand-mark">AI</span>
         <div>
           <strong>数字人视频</strong>
-          <small>费文轩本周框架</small>
+          <small>第 1 周基础框架</small>
         </div>
       </div>
-      <nav class="fwx-menu">
+      <nav class="app-menu">
         <button
           v-for="item in menuItems"
           :key="item.key"
-          :class="['fwx-menu-item', { active: item.key === activeKey }]"
+          :class="['app-menu-item', { active: item.key === activeKey }]"
           type="button"
           @click="$emit('change', item.key)"
         >
@@ -21,13 +21,13 @@
       </nav>
     </aside>
 
-    <main class="fwx-main">
-      <header class="fwx-topbar">
+    <main class="app-main">
+      <header class="app-topbar">
         <div>
-          <p class="fwx-eyebrow">MVP 工作台</p>
+          <p class="app-eyebrow">MVP 工作台</p>
           <h1>{{ activeTitle }}</h1>
         </div>
-        <div class="fwx-status-pill">接口前缀 /api/v1</div>
+        <div class="app-status-pill">接口前缀 /api/v1</div>
       </header>
 
       <slot />
@@ -38,6 +38,7 @@
 <script setup lang="ts">
 import { computed } from 'vue'
 
+// 当前先用静态菜单支撑 MVP 演示，后续接权限或路由时再抽成配置。
 const menuItems = [
   { key: 'projects', label: '项目管理' },
   { key: 'upload', label: '文件上传' },
@@ -45,14 +46,14 @@ const menuItems = [
   { key: 'acceptance', label: '验收说明' },
 ] as const
 
-type FwxMenuKey = (typeof menuItems)[number]['key']
+type MenuKey = (typeof menuItems)[number]['key']
 
 const props = defineProps<{
-  activeKey: FwxMenuKey
+  activeKey: MenuKey
 }>()
 
 defineEmits<{
-  change: [key: FwxMenuKey]
+  change: [key: MenuKey]
 }>()
 
 const activeTitle = computed(() => menuItems.find((item) => item.key === props.activeKey)?.label ?? '项目管理')
