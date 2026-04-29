@@ -5,7 +5,7 @@
         <span class="app-brand-mark">AI</span>
         <div>
           <strong>数字人视频</strong>
-          <small>第 1 周基础框架</small>
+          <small>可扩展工作台</small>
         </div>
       </div>
       <nav class="app-menu">
@@ -42,6 +42,14 @@ import { computed } from 'vue'
 const menuItems = [
   { key: 'projects', label: '项目管理' },
   { key: 'upload', label: '文件上传' },
+  { key: 'video-parse', label: '视频解析' },
+  { key: 'script-rewrite', label: '文案改写' },
+  { key: 'storyboard', label: '分镜脚本' },
+  { key: 'voice', label: '声音选择' },
+  { key: 'avatar', label: '形象生成' },
+  { key: 'render', label: '视频合成' },
+  { key: 'assets', label: '资产中心' },
+  { key: 'tasks', label: '任务中心' },
   { key: 'flow', label: '生成流程' },
   { key: 'acceptance', label: '验收说明' },
 ] as const

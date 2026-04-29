@@ -132,6 +132,21 @@ textarea {
   gap: 16px;
 }
 
+.app-page-stack,
+.app-project-toolbar {
+  display: grid;
+  gap: 16px;
+}
+
+.app-project-toolbar {
+  margin-bottom: 20px;
+}
+
+.app-toolbar-actions {
+  display: flex;
+  gap: 10px;
+}
+
 .app-form label {
   display: grid;
   gap: 8px;
@@ -140,7 +155,8 @@ textarea {
 }
 
 .app-form input,
-.app-form textarea {
+.app-form textarea,
+.app-toolbar-actions input {
   width: 100%;
   border: 1px solid #dbe3ef;
   border-radius: 12px;
@@ -173,6 +189,14 @@ textarea {
   color: #334155;
 }
 
+.app-link-button {
+  border: 0;
+  background: transparent;
+  color: #dc2626;
+  cursor: pointer;
+  font-weight: 800;
+}
+
 .app-primary-button:disabled,
 .app-secondary-button:disabled {
   cursor: not-allowed;
@@ -202,6 +226,12 @@ textarea {
 .app-project-row.active {
   border-color: #2563eb;
   background: #eff6ff;
+}
+
+.app-row-actions {
+  display: flex;
+  gap: 12px;
+  align-items: center;
 }
 
 .app-project-row p,
@@ -237,7 +267,8 @@ textarea {
 }
 
 .app-file-list,
-.app-flow-steps {
+.app-flow-steps,
+.app-mock-grid {
   display: grid;
   gap: 12px;
 }
@@ -257,6 +288,30 @@ textarea {
   border-radius: 18px;
   padding: 18px;
   background: #f8fafc;
+}
+
+.app-mock-grid {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+
+.app-mock-item {
+  border: 1px solid #e2e8f0;
+  border-radius: 16px;
+  background: #f8fafc;
+  padding: 16px;
+}
+
+.app-mock-item p {
+  margin: 6px 0 0;
+  color: #64748b;
+}
+
+.app-task-status {
+  border-radius: 999px;
+  background: #dbeafe;
+  padding: 8px 10px;
+  color: #1d4ed8;
+  font-weight: 800;
 }
 
 .app-flow-step span {
@@ -292,7 +347,8 @@ textarea {
   }
 
   .app-grid,
-  .app-flow-steps {
+  .app-flow-steps,
+  .app-mock-grid {
     grid-template-columns: 1fr;
   }
 }

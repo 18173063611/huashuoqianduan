@@ -3,7 +3,7 @@
     <div>
       <p class="app-eyebrow">文件上传基础能力</p>
       <h2>上传项目素材</h2>
-      <p class="app-muted">图片、音频、视频和文案文件都可以先进入本地上传演示目录。</p>
+      <p class="app-muted">图片、音频、视频和文案文件上传后会自动进入资产中心。</p>
     </div>
 
     <div v-if="!project" class="app-empty">请先选择一个项目，再上传文件。</div>
