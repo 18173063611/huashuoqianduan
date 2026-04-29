@@ -11,3 +11,9 @@ export interface CreateProjectRequest {
   projectName: string
   description?: string
 }
+
+export interface UpdateProjectRequest {
+  projectName: string
+  description?: string
+  status?: ProjectItem['status']
+}

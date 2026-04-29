@@ -22,7 +22,10 @@
         <strong>{{ project.projectName }}</strong>
         <p>{{ project.description || '暂无描述' }}</p>
       </div>
-      <span>{{ project.status }}</span>
+      <div class="app-row-actions">
+        <span>{{ project.status }}</span>
+        <button class="app-link-button" type="button" @click.stop="$emit('delete', project)">删除</button>
+      </div>
     </button>
   </section>
 </template>
@@ -39,5 +42,6 @@ defineProps<{
 defineEmits<{
   refresh: []
   select: [project: ProjectItem]
+  delete: [project: ProjectItem]
 }>()
 </script>
