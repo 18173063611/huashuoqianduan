@@ -1,4 +1,10 @@
-export type TaskStatus = 'QUEUED' | 'RUNNING' | 'SUCCESS' | 'FAILED' | 'RETRYABLE' | 'CANCELLED'
+/** 与《前端文件代码开发规范》§13 任务状态展示约定一致 */
+export type TaskStatus =
+  | 'QUEUED'
+  | 'RUNNING'
+  | 'SUCCESS'
+  | 'FAILED'
+  | 'RETRYABLE'
 
 export interface TaskItem {
   taskId: number

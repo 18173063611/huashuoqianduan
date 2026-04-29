@@ -1,18 +1,18 @@
-﻿<template>
+<template>
   <form class="app-card app-form" @submit.prevent="handleSubmit">
     <div>
-      <p class="app-eyebrow">项目管理基础接口</p>
-      <h2>创建视频制作项目</h2>
+      <h2 class="app-card-title">新建项目</h2>
+      <p class="app-muted">为一条数字人视频制作建立独立工作区，素材与任务将归属该项目。</p>
     </div>
 
     <label>
       项目名称
-      <input v-model.trim="form.projectName" required maxlength="80" placeholder="例如：AI 数字人口播测试" />
+      <input v-model.trim="form.projectName" required maxlength="80" placeholder="例如：春季新品口播" />
     </label>
 
     <label>
       项目描述
-      <textarea v-model.trim="form.description" maxlength="500" placeholder="填写项目用途、素材来源或验收目标" />
+      <textarea v-model.trim="form.description" maxlength="500" placeholder="可选：补充主题、渠道或素材说明" />
     </label>
 
     <button class="app-primary-button" type="submit" :disabled="loading">

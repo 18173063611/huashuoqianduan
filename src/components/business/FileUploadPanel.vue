@@ -1,16 +1,13 @@
-﻿<template>
+<template>
   <section class="app-card app-form">
     <div>
-      <p class="app-eyebrow">文件上传基础能力</p>
-      <h2>上传项目素材</h2>
-      <p class="app-muted">图片、音频、视频和文案文件上传后会自动进入资产中心。</p>
+      <h2 class="app-card-title">素材上传</h2>
+      <p class="app-muted">上传图片、音视频或文案等素材；归档后可在资产中心查看与复用。</p>
     </div>
 
-    <div v-if="!project" class="app-empty">请先选择一个项目，再上传文件。</div>
+    <div v-if="!project" class="app-empty">请先在「项目管理」中选择当前项目，再上传素材。</div>
     <template v-else>
-      <div class="app-selected-project">
-        当前项目：<strong>{{ project.projectName }}</strong>
-      </div>
+      <div class="app-selected-project">当前项目 · <strong>{{ project.projectName }}</strong></div>
       <input type="file" @change="handleFileChange" />
       <button class="app-primary-button" type="button" :disabled="!selectedFile || loading" @click="handleUpload">
         {{ loading ? '上传中...' : '上传文件' }}

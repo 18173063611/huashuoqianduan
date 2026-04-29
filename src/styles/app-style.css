@@ -1,4 +1,4 @@
-﻿* {
+* {
   box-sizing: border-box;
 }
 
@@ -86,6 +86,10 @@ textarea {
 .app-topbar h1,
 .app-card h2 {
   margin: 4px 0 0;
+}
+
+.app-card-title {
+  margin: 0 0 6px;
 }
 
 .app-eyebrow {
@@ -260,10 +264,94 @@ textarea {
   color: #1d4ed8;
 }
 
-.app-demo-panel,
 .app-flow,
 .app-acceptance {
   margin-top: 20px;
+}
+
+.app-page-title {
+  margin: 0 0 6px;
+  font-size: 1.35rem;
+}
+
+.app-page-subtitle {
+  margin: 0;
+}
+
+.app-project-error {
+  margin: 0 0 16px;
+}
+
+.app-project-current {
+  margin-top: 20px;
+}
+
+.module-skeleton-header {
+  margin-bottom: 20px;
+}
+
+.module-skeleton-title {
+  margin: 0 0 10px;
+  font-size: 1.35rem;
+}
+
+.module-skeleton-project-hint {
+  margin: 0;
+}
+
+.module-status-card {
+  border: 1px solid #e2e8f0;
+  border-radius: 16px;
+  padding: 20px;
+  background: #f8fafc;
+}
+
+.module-status-eyebrow {
+  margin: 0 0 8px;
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: #64748b;
+}
+
+.module-status-headline {
+  margin: 0 0 8px;
+  font-size: 1.05rem;
+  font-weight: 800;
+  color: #172033;
+}
+
+.module-status-detail {
+  margin: 0;
+  color: #64748b;
+  line-height: 1.65;
+  font-size: 14px;
+}
+
+.module-skeleton-inline-hint {
+  margin: 8px 0 0;
+  font-size: 12px;
+}
+
+.module-flow-title {
+  margin: 0 0 8px;
+  font-size: 1.35rem;
+}
+
+.module-flow-lead {
+  margin: 0 0 8px;
+}
+
+.app-help-list {
+  margin: 16px 0 0;
+  padding-left: 20px;
+  color: #64748b;
+  line-height: 1.75;
+}
+
+.app-acceptance h2 {
+  margin: 0 0 8px;
 }
 
 .app-file-list,

@@ -2,26 +2,25 @@
   <section class="app-card app-page-stack">
     <div class="app-card-header">
       <div>
-        <p class="app-eyebrow">任务中心</p>
-        <h2>项目任务列表</h2>
+        <h2 class="app-card-title">任务中心</h2>
+        <p class="app-muted">查看任务状态与结果。</p>
       </div>
       <button class="app-secondary-button" type="button" :disabled="loading || !project" @click="loadTasks">
-        {{ loading ? '加载中...' : '刷新任务' }}
+        {{ loading ? '加载中...' : '刷新' }}
       </button>
     </div>
 
-    <div v-if="!project" class="app-empty">请先在项目管理中选择项目，任务会按 projectId 汇总展示。</div>
+    <div v-if="!project" class="app-empty">请先在「项目管理」中选择当前项目。</div>
     <template v-else>
-      <div class="app-selected-project">当前项目：<strong>{{ project.projectName }}</strong></div>
-      <p class="app-muted">后续视频解析、文案改写、TTS、视频合成都将先创建任务，再异步推进状态。</p>
+      <div class="app-selected-project">当前项目 · <strong>{{ project.projectName }}</strong></div>
       <p v-if="errorMessage" class="app-error">{{ errorMessage }}</p>
 
-      <div v-if="tasks.length === 0" class="app-empty">暂无任务。当前页面已预留任务状态、失败原因和 traceId 展示位。</div>
+      <div v-if="tasks.length === 0" class="app-empty">暂无任务。</div>
       <div v-else class="app-file-list">
         <div v-for="task in tasks" :key="task.taskId" class="app-file-item">
           <div>
             <strong>{{ task.taskType }}</strong>
-            <p>状态：{{ task.status }}，重试次数：{{ task.retryCount }}，traceId：{{ task.traceId || '-' }}</p>
+            <p>状态 {{ task.status }} · 已重试 {{ task.retryCount }} 次</p>
           </div>
           <span class="app-task-status">{{ task.status }}</span>
         </div>

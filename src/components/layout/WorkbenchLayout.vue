@@ -1,11 +1,11 @@
-﻿<template>
+<template>
   <div class="app-shell">
     <aside class="app-sidebar">
       <div class="app-brand">
         <span class="app-brand-mark">AI</span>
         <div>
           <strong>数字人视频</strong>
-          <small>可扩展工作台</small>
+          <small>制作工作台</small>
         </div>
       </div>
       <nav class="app-menu">
@@ -24,10 +24,10 @@
     <main class="app-main">
       <header class="app-topbar">
         <div>
-          <p class="app-eyebrow">MVP 工作台</p>
+          <p class="app-eyebrow">工作台</p>
           <h1>{{ activeTitle }}</h1>
         </div>
-        <div class="app-status-pill">接口前缀 /api/v1</div>
+        <div class="app-status-pill">在线</div>
       </header>
 
       <slot />
@@ -38,7 +38,6 @@
 <script setup lang="ts">
 import { computed } from 'vue'
 
-// 当前先用静态菜单支撑 MVP 演示，后续接权限或路由时再抽成配置。
 const menuItems = [
   { key: 'projects', label: '项目管理' },
   { key: 'upload', label: '文件上传' },
@@ -48,10 +47,10 @@ const menuItems = [
   { key: 'voice', label: '声音选择' },
   { key: 'avatar', label: '形象生成' },
   { key: 'render', label: '视频合成' },
+  { key: 'publish', label: '标题封面' },
   { key: 'assets', label: '资产中心' },
   { key: 'tasks', label: '任务中心' },
   { key: 'flow', label: '生成流程' },
-  { key: 'acceptance', label: '验收说明' },
 ] as const
 
 type MenuKey = (typeof menuItems)[number]['key']

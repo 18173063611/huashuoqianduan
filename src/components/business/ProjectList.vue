@@ -1,16 +1,16 @@
-﻿<template>
+<template>
   <section class="app-card">
     <div class="app-card-header">
       <div>
-        <p class="app-eyebrow">项目列表</p>
-        <h2>当前演示项目</h2>
+        <h2 class="app-card-title">全部项目</h2>
+        <p class="app-muted">点击选择当前工作项目，其他模块将使用该选择。</p>
       </div>
       <button class="app-secondary-button" type="button" :disabled="loading" @click="$emit('refresh')">
         {{ loading ? '加载中...' : '刷新' }}
       </button>
     </div>
 
-    <div v-if="projects.length === 0" class="app-empty">暂无项目，请先创建一个演示项目。</div>
+    <div v-if="projects.length === 0" class="app-empty">暂无项目，请先创建项目。</div>
     <button
       v-for="project in projects"
       :key="project.projectId"

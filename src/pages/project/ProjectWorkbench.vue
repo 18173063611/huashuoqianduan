@@ -1,14 +1,16 @@
-﻿<template>
+<template>
   <section class="app-card app-project-toolbar">
     <div>
-      <p class="app-eyebrow">分页与搜索</p>
-      <h2>项目入口模块</h2>
+      <h2 class="app-page-title">项目</h2>
+      <p class="app-muted app-page-subtitle">搜索、创建并选择用于后续制作的视频项目。</p>
     </div>
     <div class="app-toolbar-actions">
-      <input v-model.trim="keyword" placeholder="按项目名称或描述搜索" @keyup.enter="loadProjects" />
+      <input v-model.trim="keyword" placeholder="按名称或描述搜索" @keyup.enter="loadProjects" />
       <button class="app-secondary-button" type="button" :disabled="loading" @click="loadProjects">搜索</button>
     </div>
   </section>
+
+  <p v-if="errorMessage" class="app-error app-project-error">{{ errorMessage }}</p>
 
   <div class="app-grid">
     <ProjectCreateForm @created="handleProjectCreated" />
@@ -22,18 +24,9 @@
     />
   </div>
 
-  <section class="app-card app-demo-panel">
-    <p class="app-eyebrow">本周交付效果</p>
-    <h2>项目管理基础接口已接入</h2>
-    <p>
-      当前页面调用后端 `GET /api/v1/projects` 和 `POST /api/v1/projects`，
-      用于演示项目创建、项目列表，以及选中项目后的素材上传流程。
-    </p>
-    <p v-if="selectedProject" class="app-selected-project">
-      已选择项目：<strong>{{ selectedProject.projectName }}</strong>
-    </p>
-    <p v-if="errorMessage" class="app-error">{{ errorMessage }}</p>
-  </section>
+  <p v-if="selectedProject" class="app-selected-project app-project-current">
+    当前工作项目 · <strong>{{ selectedProject.projectName }}</strong>
+  </p>
 </template>
 
 <script setup lang="ts">
@@ -57,7 +50,6 @@ async function loadProjects() {
   try {
     const result = await getProjectList(1, 20, keyword.value)
     projects.value = result.records
-    // 初次进入页面时默认选中第一个项目，文件上传页可以直接复用当前项目。
     if (!selectedProject.value && result.records.length > 0) {
       selectedProject.value = result.records[0]
     }
@@ -69,7 +61,6 @@ async function loadProjects() {
 }
 
 function handleProjectCreated(project: ProjectItem) {
-  // 新建项目直接插到列表顶部，并同步为当前选中项目，减少演示时的额外点击。
   projects.value = [project, ...projects.value]
   selectedProject.value = project
 }

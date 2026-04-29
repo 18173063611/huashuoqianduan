@@ -1,0 +1,10 @@
+import { request } from './request'
+import type { GenerateTtsRequest, GenerateTtsResponse } from '../types/voiceTypes'
+
+/** TTS 生成；路径对应后端 §7 `POST /api/v1/voices/tts` */
+export function generateTts(payload: GenerateTtsRequest) {
+  return request<GenerateTtsResponse>('/voices/tts', {
+    method: 'POST',
+    body: JSON.stringify(payload),
+  })
+}

@@ -2,21 +2,20 @@
   <section class="app-card app-page-stack">
     <div class="app-card-header">
       <div>
-        <p class="app-eyebrow">资产中心</p>
-        <h2>项目资产列表</h2>
+        <h2 class="app-card-title">资产中心</h2>
+        <p class="app-muted">查看当前项目资产。</p>
       </div>
       <button class="app-secondary-button" type="button" :disabled="loading || !project" @click="loadAssets">
-        {{ loading ? '加载中...' : '刷新资产' }}
+        {{ loading ? '加载中...' : '刷新' }}
       </button>
     </div>
 
-    <div v-if="!project" class="app-empty">请先在项目管理中选择项目，资产会按 projectId 归档展示。</div>
+    <div v-if="!project" class="app-empty">请先在「项目管理」中选择当前项目。</div>
     <template v-else>
-      <div class="app-selected-project">当前项目：<strong>{{ project.projectName }}</strong></div>
-      <p class="app-muted">上传完成后会自动写入 asset 表，后续 AI 生成的文案、音频、视频也复用这里。</p>
+      <div class="app-selected-project">当前项目 · <strong>{{ project.projectName }}</strong></div>
       <p v-if="errorMessage" class="app-error">{{ errorMessage }}</p>
 
-      <div v-if="assets.length === 0" class="app-empty">暂无资产。请先上传图片、音频、视频或文案文件。</div>
+      <div v-if="assets.length === 0" class="app-empty">暂无资产。</div>
       <div v-else class="app-file-list">
         <div v-for="asset in assets" :key="asset.assetId" class="app-file-item">
           <div>
