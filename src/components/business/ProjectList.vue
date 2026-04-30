@@ -11,22 +11,28 @@
     </div>
 
     <div v-if="projects.length === 0" class="app-empty">暂无项目，请先创建项目。</div>
-    <button
+    <article
       v-for="project in projects"
       :key="project.projectId"
       :class="['app-project-row', { active: selectedProjectId === project.projectId }]"
-      type="button"
       @click="$emit('select', project)"
     >
-      <div>
+      <div class="app-project-row-main">
         <strong>{{ project.projectName }}</strong>
         <p>{{ project.description || '暂无描述' }}</p>
+        <div class="app-project-meta">
+          <span>当前阶段：对标分析</span>
+          <span>最近更新：{{ formatUpdatedAt(project.updatedAt) }}</span>
+        </div>
       </div>
       <div class="app-row-actions">
-        <span>{{ project.status }}</span>
+        <span class="app-status-badge">{{ project.status }}</span>
+        <button class="app-secondary-button app-continue-button" type="button" @click.stop="$emit('select', project)">
+          继续制作
+        </button>
         <button class="app-link-button" type="button" @click.stop="$emit('delete', project)">删除</button>
       </div>
-    </button>
+    </article>
   </section>
 </template>
 
@@ -44,4 +50,15 @@ defineEmits<{
   select: [project: ProjectItem]
   delete: [project: ProjectItem]
 }>()
+
+function formatUpdatedAt(updatedAt: string) {
+  if (!updatedAt) {
+    return '刚刚'
+  }
+  const date = new Date(updatedAt)
+  if (Number.isNaN(date.getTime())) {
+    return '刚刚'
+  }
+  return date.toLocaleDateString()
+}
 </script>

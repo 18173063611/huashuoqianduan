@@ -1,6 +1,10 @@
 <template>
-  <WorkbenchLayout :active-key="activeKey" @change="activeKey = $event">
-    <ProjectWorkbench v-show="activeKey === 'projects'" v-model:selected-project="selectedProject" />
+  <WorkbenchLayout :active-key="activeKey" :project="selectedProject" @change="activeKey = $event">
+    <ProjectWorkbench
+      v-show="activeKey === 'projects'"
+      v-model:selected-project="selectedProject"
+      @continue="activeKey = 'video-parse'"
+    />
 
     <UploadCenter v-show="activeKey === 'upload'" :project="selectedProject" />
 

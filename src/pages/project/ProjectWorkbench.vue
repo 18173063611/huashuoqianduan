@@ -24,9 +24,14 @@
     />
   </div>
 
-  <p v-if="selectedProject" class="app-selected-project app-project-current">
-    当前工作项目 · <strong>{{ selectedProject.projectName }}</strong>
-  </p>
+  <section v-if="selectedProject" class="app-selected-project app-project-current">
+    <div>
+      <span>当前工作项目</span>
+      <strong>{{ selectedProject.projectName }}</strong>
+      <small>当前阶段：对标分析 · 下一步：进入爆款对标</small>
+    </div>
+    <button class="app-primary-button" type="button" @click="$emit('continue')">继续制作</button>
+  </section>
 </template>
 
 <script setup lang="ts">
@@ -41,6 +46,10 @@ const selectedProject = defineModel<ProjectItem | undefined>('selectedProject')
 const loading = ref(false)
 const errorMessage = ref('')
 const keyword = ref('')
+
+defineEmits<{
+  continue: []
+}>()
 
 onMounted(loadProjects)
 
