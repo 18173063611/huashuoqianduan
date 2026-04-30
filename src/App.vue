@@ -3,14 +3,14 @@
     <ProjectWorkbench
       v-show="activeKey === 'projects'"
       v-model:selected-project="selectedProject"
-      @continue="activeKey = 'video-parse'"
+      @continue="activeKey = 'script-rewrite'"
     />
 
     <UploadCenter v-show="activeKey === 'upload'" :project="selectedProject" />
 
     <VideoParsePage v-show="activeKey === 'video-parse'" :project="selectedProject" />
 
-    <ScriptRewritePage v-show="activeKey === 'script-rewrite'" :project="selectedProject" />
+    <ScriptRewritePage v-show="activeKey === 'script-rewrite'" :project="selectedProject" @continue="activeKey = 'voice'" />
 
     <StoryboardPage v-show="activeKey === 'storyboard'" :project="selectedProject" />
 
@@ -70,7 +70,7 @@ type MenuKey =
   | 'tasks'
   | 'flow'
 
-const activeKey = ref<MenuKey>('projects')
+const activeKey = ref<MenuKey>('script-rewrite')
 const selectedProject = ref<ProjectItem>()
 
 const flowSteps = [

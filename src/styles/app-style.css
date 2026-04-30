@@ -845,12 +845,18 @@ select {
 
 .script-video-cover {
   display: grid;
+  width: 72px;
   height: 78px;
   place-items: center;
   border-radius: var(--app-radius-sm);
   background: linear-gradient(135deg, #ece9ff, #f8f9ff);
   color: var(--app-primary);
   font-weight: 900;
+  object-fit: cover;
+}
+
+.script-video-cover-placeholder {
+  display: grid;
 }
 
 .script-video-card p,
@@ -885,6 +891,7 @@ select {
 
 .script-tabs {
   display: flex;
+  align-items: center;
   gap: 8px;
   margin-bottom: 14px;
 }
@@ -904,6 +911,16 @@ select {
   border-color: var(--app-primary-border);
   background: var(--app-primary-soft);
   color: var(--app-primary);
+}
+
+.script-style-pill {
+  margin-left: auto;
+  border-radius: 999px;
+  background: #f1f5f9;
+  color: var(--app-text-secondary);
+  padding: 7px 10px;
+  font-size: 12px;
+  font-weight: 800;
 }
 
 .script-form {
@@ -927,6 +944,25 @@ select {
   border-top: 1px solid var(--app-border);
   margin-top: 18px;
   padding-top: 16px;
+}
+
+.script-current-card {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 14px;
+  border-top: 1px solid var(--app-border);
+  margin-top: 18px;
+  padding-top: 16px;
+}
+
+.script-current-card strong {
+  color: var(--app-text);
+}
+
+.script-current-card p,
+.script-loading-hint {
+  margin: 6px 0 0;
 }
 
 .script-version-item {

@@ -5,33 +5,38 @@
         <span>1</span>
         <div>
           <h2>输入对标视频链接</h2>
-          <p class="app-muted">提交后由后端解析视频结构，解析结果可作为文案改写参考。</p>
+          <p class="app-muted">解析抖音视频，返回原文案、爆款分析和 AI 改写文案。</p>
         </div>
       </div>
 
       <div v-if="!project" class="app-empty">请先在「工作台」中选择当前项目。</div>
       <template v-else>
         <div class="script-input-row">
-          <input v-model.trim="videoUrl" placeholder="请输入抖音/快手/视频链接" />
-          <button class="app-primary-button" type="button" :disabled="parsing || !videoUrl" @click="handleParseVideo">
+          <input v-model.trim="videoUrl" placeholder="https://www.douyin.com/video/..." />
+          <button class="app-primary-button" type="button" :disabled="parsing || !videoUrl" @click="handleParseDouyin">
             {{ parsing ? '解析中...' : '解析' }}
           </button>
         </div>
 
         <article v-if="parseResult" class="script-video-card">
-          <div class="script-video-cover">{{ parseResult.summary.slice(0, 1) || 'AI' }}</div>
+          <img v-if="parseResult.videoInfo.coverUrl" class="script-video-cover" :src="parseResult.videoInfo.coverUrl" alt="对标视频封面" />
+          <div v-else class="script-video-cover script-video-cover-placeholder">AI</div>
           <div>
-            <strong>对标视频分析</strong>
-            <p>{{ parseResult.summary }}</p>
-            <small>时长 {{ parseResult.durationSeconds }} 秒 · 场景 {{ parseResult.scenes.length }} 个</small>
+            <strong>{{ parseResult.videoInfo.title || '对标视频信息' }}</strong>
+            <p>{{ parseResult.videoInfo.authorName || '对标账号' }}</p>
+            <small>
+              时长 {{ parseResult.videoInfo.durationText || '--' }}
+              · 点赞 {{ parseResult.videoInfo.likeCountText || '--' }}
+              · 评论 {{ parseResult.videoInfo.commentCountText || '--' }}
+            </small>
           </div>
         </article>
 
         <div v-if="parseResult" class="script-analysis-list">
           <h3>爆款分析结果</h3>
-          <div v-for="scene in parseResult.scenes" :key="`${scene.startSec}-${scene.endSec}-${scene.label}`" class="script-analysis-item">
-            <span>{{ scene.startSec }}s</span>
-            <p>{{ scene.label }}</p>
+          <div v-for="item in analysisItems" :key="item.label" class="script-analysis-item">
+            <span>{{ item.index }}</span>
+            <p><strong>{{ item.label }}</strong>{{ item.value }}</p>
           </div>
         </div>
 
@@ -44,137 +49,135 @@
         <span>2</span>
         <div>
           <h2>文案改写</h2>
-          <p class="app-muted">内容来自当前输入或解析结果，提交后由后端生成并保存脚本版本。</p>
+          <p class="app-muted">确认或微调 AI 改写文案后，保存为后续声音、形象和视频生成的正式脚本。</p>
         </div>
       </div>
 
       <div v-if="!project" class="app-empty">请选择项目后开始改写。</div>
       <template v-else>
+        <p v-if="loadingCurrent" class="app-muted script-loading-hint">正在加载当前项目已应用文案...</p>
+
         <div class="script-tabs">
           <button class="active" type="button">AI 智能改写</button>
           <button type="button">自定义文案</button>
+          <span v-if="parseResult" class="script-style-pill">{{ parseResult.rewriteStyle }} · {{ parseResult.wordCount }} 字</span>
         </div>
 
-        <form class="script-form" @submit.prevent="handleRewrite">
+        <form class="script-form" @submit.prevent="handleApplyScript">
           <label>
             原文案
-            <textarea v-model.trim="sourceText" required placeholder="请输入原文案，或先解析视频后使用解析摘要作为参考" />
+            <textarea v-model.trim="sourceScript" readonly placeholder="解析后这里展示原文案脚本" />
           </label>
 
-          <div class="script-form-grid">
-            <label>
-              改写风格
-              <select v-model="style">
-                <option value="爆款口播">爆款口播</option>
-                <option value="专业讲解">专业讲解</option>
-                <option value="种草转化">种草转化</option>
-                <option value="剧情引导">剧情引导</option>
-              </select>
-            </label>
-            <label>
-              目标字数
-              <input v-model.number="targetLength" min="40" max="1000" type="number" />
-            </label>
-          </div>
-
           <label>
-            改写结果
-            <textarea :value="rewrittenText" readonly placeholder="提交后这里展示后端返回的改写文案" />
+            改写后文案
+            <textarea v-model.trim="finalScript" required placeholder="解析后这里展示大模型改写后的文案，也可以手动调整" />
           </label>
 
           <div class="script-actions">
-            <button class="app-secondary-button" type="button" :disabled="!sourceText" @click="sourceText = ''">清空文案</button>
-            <button class="app-primary-button" type="submit" :disabled="rewriting || !sourceText">
-              {{ rewriting ? '改写中...' : '应用文案并继续' }}
+            <button
+              v-if="currentScript?.scriptId"
+              class="app-secondary-button"
+              type="button"
+              :disabled="saving || !finalScript"
+              @click="handleUpdateScript"
+            >
+              {{ saving ? '保存中...' : '保存文案' }}
+            </button>
+            <button class="app-secondary-button" type="button" :disabled="!parseResult" @click="resetParsedContent">重新解析</button>
+            <button class="app-primary-button" type="submit" :disabled="saving || !sourceScript || !finalScript">
+              {{ saving ? '应用中...' : '应用文案并继续' }}
             </button>
           </div>
         </form>
 
-        <div class="script-version-list">
-          <div class="app-card-header">
-            <div>
-              <h3>历史文案版本</h3>
-              <p class="app-muted">来自后端脚本版本接口。</p>
-            </div>
-            <button class="app-secondary-button" type="button" :disabled="loadingScripts" @click="loadScripts">
-              {{ loadingScripts ? '加载中...' : '刷新' }}
-            </button>
+        <div v-if="currentScript" class="script-current-card">
+          <div>
+            <strong>已应用文案 V{{ currentScript.versionNo }}</strong>
+            <p>当前阶段：{{ currentScript.currentStep }} · 下一步：{{ currentScript.nextStep }}</p>
           </div>
-          <div v-if="scripts.length === 0" class="app-empty">暂无文案版本。</div>
-          <button
-            v-for="script in scripts"
-            :key="script.scriptVersionId"
-            class="script-version-item"
-            type="button"
-            @click="sourceText = script.content"
-          >
-            <span>V{{ script.versionNo }}</span>
-            <p>{{ script.content }}</p>
-            <small>{{ script.sourceType }}</small>
-          </button>
+          <button class="app-secondary-button" type="button" @click="restoreCurrentScript">回显已应用文案</button>
         </div>
 
-        <p v-if="rewriteError" class="app-error">{{ rewriteError }}</p>
+        <p v-if="scriptError" class="app-error">{{ scriptError }}</p>
       </template>
     </section>
   </div>
 </template>
 
 <script setup lang="ts">
-import { ref, watch } from 'vue'
-import { getProjectScripts, rewriteScript } from '../../services/scriptApi'
-import { parseVideoSource } from '../../services/videoApi'
+import { computed, ref, watch } from 'vue'
+import { applyWriterScript, getCurrentWriterScript, parseDouyinVideo, updateWriterScript } from '../../services/writerApi'
 import type { ProjectItem } from '../../types/projectTypes'
-import type { ScriptVersionItem } from '../../types/scriptTypes'
-import type { VideoParseResultItem } from '../../types/videoTypes'
+import type { DouyinParseResponse, WriterScriptItem } from '../../types/writerTypes'
 
 const props = defineProps<{
   project?: ProjectItem
 }>()
 
+const emit = defineEmits<{
+  continue: []
+}>()
+
 const videoUrl = ref('')
-const sourceText = ref('')
-const style = ref('爆款口播')
-const targetLength = ref(180)
-const rewrittenText = ref('')
-const parseResult = ref<VideoParseResultItem>()
-const scripts = ref<ScriptVersionItem[]>([])
+const sourceScript = ref('')
+const finalScript = ref('')
+const parseResult = ref<DouyinParseResponse>()
+const currentScript = ref<WriterScriptItem | null>(null)
 const parsing = ref(false)
-const rewriting = ref(false)
-const loadingScripts = ref(false)
+const loadingCurrent = ref(false)
+const saving = ref(false)
 const parseError = ref('')
-const rewriteError = ref('')
+const scriptError = ref('')
+
+const analysisItems = computed(() => {
+  if (!parseResult.value) {
+    return []
+  }
+  const analysis = parseResult.value.analysis
+  return [
+    { index: '1', label: '内容主题', value: analysis.theme },
+    { index: '2', label: '目标受众', value: analysis.targetAudience },
+    { index: '3', label: '核心卖点', value: analysis.coreSellingPoint },
+    { index: '4', label: '脚本结构', value: analysis.scriptStructure },
+    { index: '5', label: '标题特征', value: analysis.titleFeature },
+    { index: '6', label: '爆款原因', value: analysis.hotReason },
+  ].filter((item) => item.value)
+})
 
 watch(
   () => props.project?.projectId,
   async () => {
     parseResult.value = undefined
-    rewrittenText.value = ''
-    sourceText.value = ''
-    scripts.value = []
+    sourceScript.value = ''
+    finalScript.value = ''
+    currentScript.value = null
     parseError.value = ''
-    rewriteError.value = ''
+    scriptError.value = ''
     if (props.project) {
-      await loadScripts()
+      await loadCurrentScript()
     }
   },
   { immediate: true },
 )
 
-async function handleParseVideo() {
+async function handleParseDouyin() {
   if (!props.project || !videoUrl.value) {
     return
   }
   parsing.value = true
   parseError.value = ''
+  scriptError.value = ''
   try {
-    const result = await parseVideoSource({
+    const result = await parseDouyinVideo({
       projectId: props.project.projectId,
       videoUrl: videoUrl.value,
     })
-    parseResult.value = result.mockParseResult
-    if (!sourceText.value) {
-      sourceText.value = result.mockParseResult.summary
+    parseResult.value = result
+    sourceScript.value = result.sourceScript
+    finalScript.value = result.rewrittenScript
+    if (!result.rewrittenScript) {
+      scriptError.value = '暂未生成改写文案，请重新解析'
     }
   } catch (error) {
     parseError.value = error instanceof Error ? error.message : '解析失败'
@@ -183,39 +186,75 @@ async function handleParseVideo() {
   }
 }
 
-async function handleRewrite() {
-  if (!props.project || !sourceText.value) {
+async function handleApplyScript() {
+  if (!props.project || !sourceScript.value || !finalScript.value) {
     return
   }
-  rewriting.value = true
-  rewriteError.value = ''
+  saving.value = true
+  scriptError.value = ''
   try {
-    const result = await rewriteScript({
+    currentScript.value = await applyWriterScript({
       projectId: props.project.projectId,
-      sourceText: sourceText.value,
-      style: style.value,
-      targetLength: targetLength.value,
+      parseId: parseResult.value?.parseId,
+      sourceScript: sourceScript.value,
+      finalScript: finalScript.value,
+      rewriteStyle: parseResult.value?.rewriteStyle,
     })
-    rewrittenText.value = result.rewrittenText
-    await loadScripts()
+    emit('continue')
   } catch (error) {
-    rewriteError.value = error instanceof Error ? error.message : '改写失败'
+    scriptError.value = error instanceof Error ? error.message : '应用文案失败'
   } finally {
-    rewriting.value = false
+    saving.value = false
   }
 }
 
-async function loadScripts() {
+async function loadCurrentScript() {
   if (!props.project) {
     return
   }
-  loadingScripts.value = true
+  loadingCurrent.value = true
   try {
-    scripts.value = await getProjectScripts(props.project.projectId)
+    currentScript.value = await getCurrentWriterScript(props.project.projectId)
+    restoreCurrentScript()
   } catch (error) {
-    rewriteError.value = error instanceof Error ? error.message : '加载文案版本失败'
+    scriptError.value = error instanceof Error ? error.message : '加载当前文案失败'
   } finally {
-    loadingScripts.value = false
+    loadingCurrent.value = false
   }
+}
+
+async function handleUpdateScript() {
+  if (!props.project || !currentScript.value?.scriptId || !finalScript.value) {
+    return
+  }
+  saving.value = true
+  scriptError.value = ''
+  try {
+    currentScript.value = await updateWriterScript(currentScript.value.scriptId, {
+      projectId: props.project.projectId,
+      finalScript: finalScript.value,
+    })
+    restoreCurrentScript()
+  } catch (error) {
+    scriptError.value = error instanceof Error ? error.message : '保存文案失败'
+  } finally {
+    saving.value = false
+  }
+}
+
+function restoreCurrentScript() {
+  if (!currentScript.value) {
+    return
+  }
+  sourceScript.value = currentScript.value.sourceScript || sourceScript.value
+  finalScript.value = currentScript.value.finalScript || finalScript.value
+}
+
+function resetParsedContent() {
+  parseResult.value = undefined
+  sourceScript.value = currentScript.value?.sourceScript || ''
+  finalScript.value = currentScript.value?.finalScript || ''
+  parseError.value = ''
+  scriptError.value = ''
 }
 </script>
