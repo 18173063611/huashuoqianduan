@@ -5,7 +5,7 @@ import type {
   VideoParseSubmitResponse,
 } from '../types/videoTypes'
 
-/** 提交视频源解析任务；路径对应后端 §7 `POST /api/v1/video-sources/parse` */
+/** 提交视频源解析任务。 */
 export function parseVideoSource(payload: ParseVideoSourceRequest) {
   return request<VideoParseSubmitResponse>('/video-sources/parse', {
     method: 'POST',

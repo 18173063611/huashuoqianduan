@@ -7,7 +7,7 @@ import type {
   StoryboardGenerateResponse,
 } from '../types/scriptTypes'
 
-/** 文案改写；对应 `POST /api/v1/scripts/rewrite` */
+/** 文案改写。 */
 export function rewriteScript(payload: RewriteScriptRequest) {
   return request<RewriteScriptResponse>('/scripts/rewrite', {
     method: 'POST',
