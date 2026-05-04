@@ -1,6 +1,9 @@
 ﻿import type { ApiResponse } from '../types/apiTypes'
 
-const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'https://huashuohouduan.onrender.com/api/v1'
+/** 开发默认连本机；生产或未配置时使用线上占位，也可用环境变量覆盖。 */
+export const API_BASE_URL =
+  import.meta.env.VITE_API_BASE_URL ||
+  (import.meta.env.DEV ? 'http://127.0.0.1:8080/api/v1' : 'https://huashuohouduan.onrender.com/api/v1')
 
 export async function request<T>(path: string, init?: RequestInit): Promise<T> {
   const url = `${API_BASE_URL}${path.startsWith('/') ? path : `/${path}`}`

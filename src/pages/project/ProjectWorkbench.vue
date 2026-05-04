@@ -10,8 +10,6 @@
     </div>
   </section>
 
-  <p v-if="errorMessage" class="app-error app-project-error">{{ errorMessage }}</p>
-
   <div class="app-grid">
     <ProjectCreateForm @created="handleProjectCreated" />
     <ProjectList
