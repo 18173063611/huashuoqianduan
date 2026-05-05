@@ -69,10 +69,10 @@ import { computed } from 'vue'
 import type { ProjectItem } from '../../types/projectTypes'
 
 const menuItems = [
-  { key: 'projects', label: '工作台', icon: '⌂' },
-  { key: 'upload', label: '项目素材', icon: '▣' },
+  { key: 'script-rewrite', label: '工作台', icon: '⌂' },
+  { key: 'projects', label: '项目管理', icon: '▣' },
+  { key: 'upload', label: '素材中心', icon: '◈' },
   { key: 'video-parse', label: '爆款对标', icon: '◉' },
-  { key: 'script-rewrite', label: '数字人脚本', icon: '✎' },
   { key: 'storyboard', label: '分镜生成', icon: '▤' },
   { key: 'voice', label: '数字人形象', icon: '♬' },
   { key: 'avatar', label: '角色库', icon: '◎' },
@@ -108,7 +108,7 @@ const stepIndexMap: Record<MenuKey, number> = {
   projects: 0,
   upload: 0,
   'video-parse': 0,
-  'script-rewrite': 1,
+  'script-rewrite': 0,
   storyboard: 1,
   avatar: 2,
   voice: 3,
@@ -132,11 +132,11 @@ const activeHeadline = computed(() => {
 })
 
 const activeDescription = computed(() => {
-  if (props.activeKey === 'projects') {
-    return '按流程完成项目、素材、脚本、声音、形象与成片制作。'
-  }
   if (props.activeKey === 'script-rewrite') {
-    return '分析爆款视频结构，改写成适合数字人口播的脚本内容。'
+    return '分析爆款视频，改写优质文案，打造更适合数字人口播的内容。'
+  }
+  if (props.activeKey === 'projects') {
+    return '搜索、创建并选择用于后续制作的视频项目。'
   }
   return '按流程完成项目、素材、脚本、声音、形象与成片制作。'
 })

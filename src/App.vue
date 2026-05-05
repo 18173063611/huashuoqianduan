@@ -14,7 +14,7 @@
       @continue="activeKey = 'voice'"
     />
 
-    <ScriptRewritePage v-show="activeKey === 'script-rewrite'" :project="selectedProject" />
+    <ScriptRewritePage v-show="activeKey === 'script-rewrite'" :project="selectedProject" @continue="activeKey = 'voice'" />
 
     <StoryboardPage v-show="activeKey === 'storyboard'" :project="selectedProject" />
 
