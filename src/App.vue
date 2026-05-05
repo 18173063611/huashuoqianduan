@@ -26,9 +26,14 @@
 
     <PublishPackPage v-show="activeKey === 'publish'" :project="selectedProject" />
 
-    <AssetCenter v-show="activeKey === 'assets'" :project="selectedProject" />
+    <AssetCenter
+      v-show="activeKey === 'assets'"
+      :project="selectedProject"
+      :highlight-asset-id="assetHighlightId"
+      @highlight-consumed="assetHighlightId = null"
+    />
 
-    <TaskCenter v-show="activeKey === 'tasks'" :project="selectedProject" />
+    <TaskCenter v-show="activeKey === 'tasks'" :project="selectedProject" @open-asset="onOpenAssetFromTask" />
 
     <section v-show="activeKey === 'flow'" class="app-card app-flow">
       <h2 class="module-flow-title">制作流程</h2>
@@ -76,6 +81,13 @@ type MenuKey =
 
 const activeKey = ref<MenuKey>('projects')
 const selectedProject = ref<ProjectItem>()
+/** 从任务中心「查看结果」跳转时高亮对应资产 */
+const assetHighlightId = ref<number | null>(null)
+
+function onOpenAssetFromTask(assetId: number) {
+  assetHighlightId.value = assetId
+  activeKey.value = 'assets'
+}
 
 const flowSteps = [
   { index: '01', title: '项目与素材', description: '选择项目并上传素材。' },
