@@ -1,16 +1,45 @@
-/** TTS 相关类型，与后端 `com.huashuo.tts.dto` 及资产 `AssetItem` 字段对齐 */
+/** 文案转音频，与后端 `com.huashuo.voice.dto` 对齐 */
 
 import type { AssetItem } from './assetTypes'
 
-/** 规范示例名 GenerateTtsRequest，与《后端文件代码开发规范》§10 一致 */
-export interface GenerateTtsRequest {
-  projectId: number
-  scriptVersionId: number
-  voiceCode: string
+export interface VoicePresetItem {
+  voiceId: number
+  provider: string
+  voiceName: string
+  gender: string
+  scene: string | null
+  sampleUrl: string | null
 }
 
-export interface GenerateTtsResponse {
+export interface VoicePresetListResponse {
+  records: VoicePresetItem[]
+}
+
+export interface TtsGenerateRequest {
+  projectId: number
+  /** 对应后端脚本版本主键 `script_version_id` */
+  scriptId?: number
+  text?: string
+  voiceId: number
+  provider?: string
+  speed?: number
+  pitch?: number
+  volume?: number
+}
+
+export interface TtsGenerateResponse {
   taskId: number
+  projectId: number
+  taskType: string
   status: string
-  audioAsset: AssetItem
+}
+
+export interface TtsTaskDetailResponse {
+  taskId: number
+  projectId: number
+  taskType: string
+  status: string
+  progress: number | null
+  errorMessage: string | null
+  audioAsset: AssetItem | null
 }
