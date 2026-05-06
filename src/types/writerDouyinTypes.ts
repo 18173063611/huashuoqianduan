@@ -31,3 +31,16 @@ export interface DouyinParseWithTranscriptEventPayload {
   parseResult: DouyinVideoParseResponse | null
   transcriptResult: WriterTranscriptVO | null
 }
+
+/** POST `/writer/douyin/rewrite`，与 huaye-ai `writer-douyin-rewrite.md` 一致 */
+export interface DouyinRewriteRequest {
+  originalText: string
+  style?: string
+  introduce?: string
+}
+
+/** 改写接口成功时 `data`：`originalText` 固定为 `null` */
+export interface DouyinRewriteWriterVO {
+  originalText: string | null
+  translatedText: string
+}

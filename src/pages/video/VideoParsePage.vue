@@ -81,35 +81,14 @@
           <p v-if="transcriptLoading" class="transcript-status">正在转写视频文案，请稍候…</p>
           <p v-else-if="parseStage === 'error' && parseError" class="error-text transcript-banner">{{ parseError }}</p>
 
-          <div class="rewrite-toolbar">
-            <div class="tabs">
-              <button class="active" type="button">
-                <span aria-hidden="true">⌁</span>
-                AI智能改写
-              </button>
-              <button type="button">自定义改写</button>
-            </div>
-
-            <div class="style-tools">
-              <label>
-                改写风格：
-                <select v-model="rewriteStyle">
-                  <option value="口语化风格">口语化风格</option>
-                  <option value="专业讲解">专业讲解</option>
-                  <option value="种草转化">种草转化</option>
-                  <option value="剧情引导">剧情引导</option>
-                </select>
-              </label>
-              <button class="secondary-button" type="button" @click="generateRewrite">
-                <span aria-hidden="true">⟳</span>
-                换一换
-              </button>
-            </div>
-          </div>
+          <p class="rewrite-flow-hint">
+            转写完成后可<strong>二次编辑原文</strong>，按需选择改写风格并填写补充说明；点击 <strong>开始改写</strong>
+            返回新文案。
+          </p>
 
           <div class="rewrite-fields">
             <label class="text-area-label">
-              原文案 <span>（ASR 转写）</span>
+              原文案 <span>（ASR 转写，可修改）</span>
               <textarea
                 v-model="sourceText"
                 class="source-text"
@@ -118,8 +97,100 @@
               />
             </label>
 
+            <section class="rewrite-confirm-panel" aria-label="AI 二次改写选项">
+              <div class="rewrite-toolbar">
+                <div class="tabs">
+                  <button
+                    type="button"
+                    :class="{ active: rewriteTab === 'ai' }"
+                    @click="rewriteTab = 'ai'"
+                  >
+                    <span aria-hidden="true">⌁</span>
+                    AI 智能改写
+                  </button>
+                  <button
+                    type="button"
+                    :class="{ active: rewriteTab === 'custom' }"
+                    @click="rewriteTab = 'custom'"
+                  >
+                    自定义改写
+                  </button>
+                </div>
+              </div>
+
+              <div v-show="rewriteTab === 'custom'" class="tab-panel custom-rewrite-shell">
+                <p class="shell-placeholder">
+                  自定义规则、字段与后端契约待定，此处仅预留入口；确认方案后可在此配置话术模板、禁用词等。
+                </p>
+              </div>
+
+              <div v-show="rewriteTab === 'ai'" class="tab-panel ai-rewrite-shell">
+                <div class="style-tools style-tools-row">
+                  <label>
+                    改写风格 <span class="tag-muted">（可选）</span>
+                    <select
+                      v-model="rewriteStyle"
+                      class="rewrite-style-select"
+                      :disabled="transcriptAreaReadonly"
+                    >
+                      <option value="">不指定</option>
+                      <option value="口语化风格">口语化风格</option>
+                      <option value="专业讲解风格">专业讲解风格</option>
+                    </select>
+                  </label>
+                </div>
+
+                <div class="extra-notes-block">
+                  <button
+                    type="button"
+                    class="extra-notes-toggle"
+                    :aria-expanded="extraNotesExpanded"
+                    aria-controls="extra-notes-field"
+                    id="extra-notes-toggle"
+                    @click="extraNotesExpanded = !extraNotesExpanded"
+                  >
+                    <span
+                      class="extra-notes-chevron"
+                      :class="{ 'is-open': extraNotesExpanded }"
+                      aria-hidden="true"
+                    >›</span>
+                    <span class="extra-notes-toggle-title">补充说明</span>
+                    <span class="tag-muted">（点击展开）</span>
+                  </button>
+                  <div
+                    v-show="extraNotesExpanded"
+                    id="extra-notes-field"
+                    class="extra-notes-collapse"
+                    role="region"
+                    aria-labelledby="extra-notes-toggle"
+                  >
+                    <textarea
+                      v-model="rewriteIntroduce"
+                      class="extra-notes-input"
+                      rows="2"
+                      :disabled="transcriptAreaReadonly"
+                      placeholder="请描述你期望的改写效果，例如：偏种草、结尾引导关注等"
+                    />
+                  </div>
+                </div>
+
+                <p v-if="rewriteError" class="rewrite-error" role="alert">{{ rewriteError }}</p>
+
+                <div class="confirm-actions">
+                  <button
+                    class="primary-button confirm-rewrite-btn"
+                    type="button"
+                    :disabled="rewriteLoading || transcriptAreaReadonly || !sourceText.trim()"
+                    @click="handleDouyinRewrite"
+                  >
+                    {{ rewriteLoading ? '改写中…' : '开始改写' }}
+                  </button>
+                </div>
+              </div>
+            </section>
+
             <label class="text-area-label">
-              改写后文案 <span>（服务端改写）</span>
+              改写后文案
               <textarea
                 v-model="rewrittenText"
                 class="result-text"
@@ -156,7 +227,7 @@
 
 <script setup lang="ts">
 import { computed, ref } from 'vue'
-import { startDouyinParseWithTranscript } from '../../services/writerDouyinApi'
+import { rewriteDouyinCopywriting, startDouyinParseWithTranscript } from '../../services/writerDouyinApi'
 import type { ProjectItem } from '../../types/projectTypes'
 import type { DouyinParseStage, DouyinVideoParseResponse } from '../../types/writerDouyinTypes'
 
@@ -173,7 +244,12 @@ const douyinParse = ref<DouyinVideoParseResponse | null>(null)
 const parseStage = ref<DouyinParseStage | ''>('')
 const parsing = ref(false)
 const parseError = ref('')
-const rewriteStyle = ref('口语化风格')
+const rewriteStyle = ref('')
+const rewriteTab = ref<'ai' | 'custom'>('ai')
+const rewriteIntroduce = ref('')
+const extraNotesExpanded = ref(false)
+const rewriteLoading = ref(false)
+const rewriteError = ref('')
 const sourceText = ref('')
 const rewrittenText = ref('')
 const applyMessage = ref('')
@@ -202,7 +278,7 @@ const rewritePlaceholder = computed(() => {
   if (transcriptLoading.value) {
     return '转写中…'
   }
-  return '解析完成后展示改写文案，可使用「换一换」微调语气'
+  return '编辑原文后点击「开始改写」，展示返回的改写结果'
 })
 
 const durationText = computed(() => {
@@ -218,7 +294,7 @@ const insightItems = computed(() => {
   const p = douyinParse.value
   let status = '提交抖音分享链接后开始解析'
   if (parseStage.value === 'completed') {
-    status = '已完成转写，右侧已填入原文与改写稿'
+    status = '已完成转写，右侧已填入原文；改写稿请点击「开始改写」拉取'
   } else if (parseStage.value === 'parsed' || parseStage.value === 'transcribing') {
     status = '正在转写口播文案…'
   } else if (parseStage.value === 'error') {
@@ -253,6 +329,10 @@ async function handleParseVideo() {
   douyinParse.value = null
   sourceText.value = ''
   rewrittenText.value = ''
+  rewriteIntroduce.value = ''
+  extraNotesExpanded.value = false
+  rewriteError.value = ''
+  rewriteLoading.value = false
   parseError.value = ''
   parseStage.value = ''
   applyMessage.value = ''
@@ -276,7 +356,7 @@ async function handleParseVideo() {
         const transcript = payload.data?.transcriptResult
         if (transcript) {
           sourceText.value = transcript.originalText || ''
-          rewrittenText.value = transcript.translatedText || ''
+          rewrittenText.value = ''
         }
         if (payload.data?.parseResult) {
           douyinParse.value = payload.data.parseResult
@@ -303,9 +383,32 @@ async function handleParseVideo() {
   }
 }
 
-function generateRewrite() {
-  const stylePrefix = rewriteStyle.value === '口语化风格' ? '想让你的视频爆火吗？' : '想提升视频表现，关键在这3个步骤。'
-  rewrittenText.value = `${stylePrefix}这3个实用技巧一定要学会！\n首先，选题要抓住用户痛点，越具体越好；其次，标题和封面要有吸引力，让人一眼就想点进去；最后，内容节奏要快，开头3秒就要留住观众！\n做好这3点，你的视频也能轻松上热门！`
+async function handleDouyinRewrite() {
+  const originalText = sourceText.value.trim()
+  if (!originalText) {
+    rewriteError.value = '原文不能为空'
+    return
+  }
+  if (transcriptAreaReadonly.value) {
+    return
+  }
+
+  rewriteLoading.value = true
+  rewriteError.value = ''
+  rewrittenText.value = ''
+
+  try {
+    const data = await rewriteDouyinCopywriting({
+      originalText,
+      style: rewriteStyle.value.trim() || undefined,
+      introduce: rewriteIntroduce.value.trim() || undefined,
+    })
+    rewrittenText.value = data.translatedText ?? ''
+  } catch (e) {
+    rewriteError.value = e instanceof Error ? e.message : '请求失败'
+  } finally {
+    rewriteLoading.value = false
+  }
 }
 
 async function copyRewrittenText() {
@@ -474,6 +577,7 @@ function applyScript() {
 
 .parse-row input,
 .rewrite-toolbar select,
+.rewrite-style-select,
 .text-area-label textarea {
   width: 100%;
   border: 1px solid #e3e7ef;
@@ -484,7 +588,8 @@ function applyScript() {
 }
 
 .parse-row input,
-.rewrite-toolbar select {
+.rewrite-toolbar select,
+.rewrite-style-select {
   height: 42px;
   padding: 0 12px;
 }
@@ -495,6 +600,7 @@ function applyScript() {
 
 .parse-row input:focus,
 .rewrite-toolbar select:focus,
+.rewrite-style-select:focus,
 .text-area-label textarea:focus {
   border-color: #8f81ff;
   box-shadow: 0 0 0 3px rgba(99, 91, 255, 0.12);
@@ -658,13 +764,49 @@ function applyScript() {
   padding: 10px 12px 18px;
 }
 
+.rewrite-flow-hint {
+  flex-shrink: 0;
+  margin: 0 0 14px;
+  padding: 10px 12px;
+  border-radius: 8px;
+  border: 1px dashed #d8d2ff;
+  background: rgba(250, 249, 255, 0.65);
+  color: #5c6477;
+  font-size: 13px;
+  font-weight: 700;
+  line-height: 1.65;
+}
+
+.rewrite-flow-hint strong {
+  color: #4630c9;
+  font-weight: 850;
+}
+
+.rewrite-api-tag {
+  margin: 0 2px;
+  padding: 1px 6px;
+  border-radius: 4px;
+  background: rgba(86, 59, 240, 0.08);
+  color: #5148e5;
+  font-size: 12px;
+  font-weight: 800;
+}
+
+.rewrite-confirm-panel {
+  flex-shrink: 0;
+  border: 1px solid #edf0f6;
+  border-radius: 8px;
+  background: #fcfcff;
+  padding: 12px 12px 14px;
+}
+
 .rewrite-toolbar {
   display: flex;
   flex-shrink: 0;
   align-items: center;
   justify-content: space-between;
   gap: 16px;
-  margin-bottom: 18px;
+  margin-bottom: 0;
 }
 
 .rewrite-fields {
@@ -711,10 +853,44 @@ function applyScript() {
   color: #5e50df;
 }
 
+.tab-panel {
+  margin-top: 12px;
+}
+
+.custom-rewrite-shell {
+  border-radius: 8px;
+  border: 1px dashed #e1e6ef;
+  background: #fff;
+  padding: 14px 12px;
+}
+
+.shell-placeholder {
+  margin: 0;
+  color: #8b94a8;
+  font-size: 13px;
+  font-weight: 700;
+  line-height: 1.65;
+}
+
+.ai-rewrite-shell {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
 .style-tools {
   display: flex;
   align-items: center;
   gap: 14px;
+}
+
+.style-tools-row {
+  flex-wrap: wrap;
+}
+
+.style-tools-row label {
+  flex-wrap: wrap;
+  white-space: normal;
 }
 
 .style-tools label {
@@ -726,8 +902,143 @@ function applyScript() {
   white-space: nowrap;
 }
 
-.rewrite-toolbar select {
+.rewrite-toolbar select,
+.rewrite-style-select {
   min-width: 146px;
+}
+
+/* 避免继承 label 上的高字重；与 body 使用同一套无衬线，与输入框视觉一致 */
+.rewrite-style-select {
+  box-sizing: border-box;
+  max-width: 100%;
+  padding-right: 32px;
+  border: 1px solid #e3e7ef;
+  font-family: Inter, 'PingFang SC', 'Microsoft YaHei', Arial, sans-serif;
+  font-size: 14px;
+  font-weight: 500;
+  line-height: 1.35;
+  letter-spacing: 0;
+  cursor: pointer;
+  -webkit-appearance: none;
+  -moz-appearance: none;
+  appearance: none;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='8' viewBox='0 0 12 8'%3E%3Cpath fill='%2364748b' d='M1.4 0 6 4.6 10.6 0 12 1.4l-6 6-6-6Z'/%3E%3C/svg%3E");
+  background-repeat: no-repeat;
+  background-position: right 12px center;
+  background-color: #fff;
+}
+
+.rewrite-style-select:disabled {
+  cursor: not-allowed;
+  opacity: 0.55;
+}
+
+.tag-muted {
+  color: #98a2b3;
+  font-weight: 700;
+}
+
+.rewrite-error {
+  margin: 0;
+  padding: 8px 10px;
+  border-radius: 8px;
+  border: 1px solid #f5c4c4;
+  background: #fff8f8;
+  color: #c24141;
+  font-size: 13px;
+  font-weight: 750;
+  line-height: 1.5;
+}
+
+.extra-notes-block {
+  display: flex;
+  flex-direction: column;
+  gap: 0;
+}
+
+.extra-notes-toggle {
+  display: flex;
+  width: 100%;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 12px;
+  border: 1px dashed #e1e6ef;
+  border-radius: 8px;
+  background: #fff;
+  color: #374055;
+  font-size: 13px;
+  font-weight: 800;
+  text-align: left;
+  cursor: pointer;
+  outline: none;
+}
+
+.extra-notes-toggle:hover {
+  border-color: #c9c2ff;
+  background: rgba(250, 249, 255, 0.85);
+}
+
+.extra-notes-toggle:focus-visible {
+  border-color: #8f81ff;
+  box-shadow: 0 0 0 3px rgba(99, 91, 255, 0.12);
+}
+
+.extra-notes-toggle-title {
+  flex-shrink: 0;
+}
+
+.extra-notes-chevron {
+  display: inline-flex;
+  flex-shrink: 0;
+  font-size: 18px;
+  font-weight: 900;
+  color: #8b7cf6;
+  line-height: 1;
+  transform: rotate(0deg);
+  transition: transform 0.18s ease;
+}
+
+.extra-notes-chevron.is-open {
+  transform: rotate(90deg);
+}
+
+.extra-notes-collapse {
+  margin-top: 8px;
+}
+
+.extra-notes-input {
+  width: 100%;
+  margin: 0;
+  padding: 10px 12px;
+  border: 1px solid #e3e7ef;
+  border-radius: 8px;
+  background: #fff;
+  color: #4e596d;
+  font-size: 13px;
+  line-height: 1.6;
+  resize: vertical;
+}
+
+.extra-notes-input:focus {
+  border-color: #8f81ff;
+  box-shadow: 0 0 0 3px rgba(99, 91, 255, 0.12);
+  outline: none;
+}
+
+.extra-notes-input:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
+}
+
+.confirm-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 10px 14px;
+}
+
+.confirm-rewrite-btn {
+  min-width: 96px;
 }
 
 .text-area-label {
@@ -825,6 +1136,7 @@ function applyScript() {
 
   .benchmark-head,
   .style-tools,
+  .confirm-actions,
   .rewrite-actions {
     align-items: stretch;
     flex-direction: column;
@@ -841,7 +1153,9 @@ function applyScript() {
 
   .tabs button,
   .style-tools select,
+  .rewrite-style-select,
   .style-tools .secondary-button,
+  .confirm-actions .primary-button,
   .rewrite-actions button {
     width: 100%;
   }

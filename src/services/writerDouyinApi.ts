@@ -1,7 +1,11 @@
 import { fetchEventSource } from '@microsoft/fetch-event-source'
 import type { ApiResponse } from '../types/apiTypes'
-import type { DouyinParseWithTranscriptEventPayload } from '../types/writerDouyinTypes'
-import { API_BASE_URL } from './request'
+import type {
+  DouyinParseWithTranscriptEventPayload,
+  DouyinRewriteRequest,
+  DouyinRewriteWriterVO,
+} from '../types/writerDouyinTypes'
+import { API_BASE_URL, request } from './request'
 
 export interface StartDouyinParseWithTranscriptOptions {
   url: string
@@ -74,5 +78,25 @@ export async function startDouyinParseWithTranscript(options: StartDouyinParseWi
     onerror(err) {
       throw err instanceof Error ? err : new Error(String(err))
     },
+  })
+}
+
+/**
+ * POST JSON：`/writer/douyin/rewrite`
+ * 对已有口播文案做 AI 改写；`style`、`introduce` 为空时不写入请求体。
+ */
+export function rewriteDouyinCopywriting(body: DouyinRewriteRequest) {
+  const payload: Record<string, string> = {
+    originalText: body.originalText,
+  }
+  if (body.style?.trim()) {
+    payload.style = body.style.trim()
+  }
+  if (body.introduce?.trim()) {
+    payload.introduce = body.introduce.trim()
+  }
+  return request<DouyinRewriteWriterVO>('/writer/douyin/rewrite', {
+    method: 'POST',
+    body: JSON.stringify(payload),
   })
 }
