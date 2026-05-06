@@ -153,6 +153,7 @@
 <script setup lang="ts">
 import { computed, onBeforeUnmount, reactive, ref, watch } from 'vue'
 import { getProjectAssets } from '../../services/assetApi'
+import { API_ORIGIN } from '../../services/request'
 import {
   generateAvatar,
   getAvatarGenerateTask,
@@ -167,8 +168,6 @@ import type { ProjectItem } from '../../types/projectTypes'
 const props = defineProps<{
   project?: ProjectItem
 }>()
-
-const API_ORIGIN = (import.meta.env.VITE_API_BASE_URL || '').replace(/\/api\/v1\/?$/, '')
 
 const sourceMode = ref<'AI' | 'UPLOAD'>('AI')
 const form = reactive<AvatarGenerateRequest>({

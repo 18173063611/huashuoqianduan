@@ -5,6 +5,9 @@ export const API_BASE_URL =
   import.meta.env.VITE_API_BASE_URL ||
   (import.meta.env.DEV ? 'http://127.0.0.1:8080/api/v1' : 'https://huashuohouduan.onrender.com/api/v1')
 
+/** 用于拼接 /uploads 等静态资源的绝对地址 */
+export const API_ORIGIN = API_BASE_URL.replace(/\/api\/v1\/?$/, '')
+
 export async function request<T>(path: string, init?: RequestInit): Promise<T> {
   const url = `${API_BASE_URL}${path.startsWith('/') ? path : `/${path}`}`
   const requestInit: RequestInit = { ...init }
@@ -15,9 +18,24 @@ export async function request<T>(path: string, init?: RequestInit): Promise<T> {
       ...(init?.headers as Record<string, string> | undefined),
     }
   }
-  const response = await fetch(url, {
-    ...requestInit,
-  })
+  let response: Response
+  try {
+    response = await fetch(url, {
+      ...requestInit,
+    })
+  } catch (error) {
+    // fetch 网络层失败（服务不可达 / CORS / Mixed Content）会直接抛 TypeError，前端只看到 “Failed to fetch”
+    const pageProtocol = typeof window !== 'undefined' ? window.location.protocol : ''
+    const mixedContentHint =
+      pageProtocol === 'https:' && url.startsWith('http://')
+        ? '当前页面是 https，但请求了 http 接口（浏览器会拦截 Mixed Content）。请把后端/网关也改为 https，或用隧道工具暴露 https 地址后再配置 VITE_API_BASE_URL。'
+        : ''
+    const corsHint = '若后端已启动但仍失败，请检查浏览器控制台 Network/CORS 报错与后端 CORS 配置。'
+    const reachabilityHint = '请确认后端服务可访问，或设置 VITE_API_BASE_URL 指向正确的 /api/v1。'
+    throw new Error(
+      `Failed to fetch: ${url}\n${reachabilityHint}${mixedContentHint ? `\n${mixedContentHint}` : ''}\n${corsHint}`,
+    )
+  }
 
   const text = await response.text()
   if (!response.ok) {
