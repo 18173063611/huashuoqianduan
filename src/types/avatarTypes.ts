@@ -2,7 +2,7 @@ import type { AssetItem } from './assetTypes'
 
 export interface AvatarItem {
   avatarId: number
-  projectId: number
+  projectId: number | null
   taskId: number | null
   assetId: number | null
   avatarName: string
@@ -17,7 +17,7 @@ export interface AvatarItem {
 }
 
 export interface AvatarGenerateRequest {
-  projectId: number
+  projectId?: number | null
   avatarName: string
   prompt: string
   referenceAssetIds: number[]
@@ -28,14 +28,14 @@ export interface AvatarGenerateRequest {
 
 export interface AvatarGenerateResponse {
   taskId: number
-  projectId: number
+  projectId: number | null
   taskType: string
   status: string
 }
 
 export interface AvatarTaskDetailResponse {
   taskId: number
-  projectId: number
+  projectId: number | null
   taskType: string
   status: string
   progress: number | null

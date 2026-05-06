@@ -1,16 +1,15 @@
 <template>
-  <WorkbenchLayout :active-key="activeKey" :project="selectedProject" @change="activeKey = $event">
+  <WorkbenchLayout :active-key="activeKey" @change="activeKey = $event">
     <ProjectWorkbench
       v-if="activeKey === 'projects'"
       v-model:selected-project="selectedProject"
       @continue="activeKey = 'video-parse'"
     />
 
-    <UploadCenter v-show="activeKey === 'upload'" :project="selectedProject" />
+    <UploadCenter v-show="activeKey === 'upload'" />
 
     <VideoParsePage
       v-show="activeKey === 'video-parse'"
-      :project="selectedProject"
       @continue="activeKey = 'voice'"
     />
 
@@ -18,9 +17,9 @@
 
     <StoryboardPage v-show="activeKey === 'storyboard'" :project="selectedProject" />
 
-    <VoiceTtsPage v-show="activeKey === 'voice'" :project="selectedProject" />
+    <VoiceTtsPage v-show="activeKey === 'voice'" />
 
-    <AvatarGeneratePage v-show="activeKey === 'avatar'" :project="selectedProject" />
+    <AvatarGeneratePage v-show="activeKey === 'avatar'" />
 
     <RenderVideoPage v-show="activeKey === 'render'" :project="selectedProject" />
 
@@ -28,12 +27,11 @@
 
     <AssetCenter
       v-show="activeKey === 'assets'"
-      :project="selectedProject"
       :highlight-asset-id="assetHighlightId"
       @highlight-consumed="assetHighlightId = null"
     />
 
-    <TaskCenter v-show="activeKey === 'tasks'" :project="selectedProject" @open-asset="onOpenAssetFromTask" />
+    <TaskCenter v-show="activeKey === 'tasks'" @open-asset="onOpenAssetFromTask" />
 
     <section v-show="activeKey === 'flow'" class="app-card app-flow">
       <h2 class="module-flow-title">制作流程</h2>
@@ -79,7 +77,7 @@ type MenuKey =
   | 'tasks'
   | 'flow'
 
-const activeKey = ref<MenuKey>('projects')
+const activeKey = ref<MenuKey>('avatar')
 const selectedProject = ref<ProjectItem>()
 /** 从任务中心「查看结果」跳转时高亮对应资产 */
 const assetHighlightId = ref<number | null>(null)
@@ -90,7 +88,7 @@ function onOpenAssetFromTask(assetId: number) {
 }
 
 const flowSteps = [
-  { index: '01', title: '项目与素材', description: '选择项目并上传素材。' },
+  { index: '01', title: '素材', description: '上传素材或直接进入生成模块。' },
   { index: '02', title: '解析与脚本', description: '生成可执行脚本。' },
   { index: '03', title: '声音与形象', description: '选择音色与数字人形象。' },
   { index: '04', title: '合成与发布', description: '输出视频与发布素材。' },

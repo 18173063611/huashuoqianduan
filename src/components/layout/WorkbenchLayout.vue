@@ -22,9 +22,9 @@
       </nav>
 
       <div class="app-sidebar-card">
-        <span>当前项目</span>
-        <strong>{{ project?.projectName || '请先选择项目' }}</strong>
-        <small>{{ project?.status || '待选择' }}</small>
+        <span>工作模式</span>
+        <strong>全局资产模式</strong>
+        <small>无需先创建项目</small>
       </div>
     </aside>
 
@@ -41,7 +41,7 @@
           </div>
         </div>
         <div class="app-topbar-actions">
-          <button class="app-ghost-button" type="button" @click="$emit('change', 'projects')">切换项目</button>
+          <button class="app-ghost-button" type="button" @click="$emit('change', 'assets')">资产中心</button>
           <span class="app-status-dot">在线</span>
         </div>
       </header>
@@ -53,8 +53,8 @@
           <p>{{ activeDescription }}</p>
         </div>
         <div class="app-hero-project">
-          <span>当前项目</span>
-          <strong>{{ project?.projectName || '未选择项目' }}</strong>
+          <span>当前范围</span>
+          <strong>全局资产</strong>
           <small>当前阶段：{{ currentStage }}</small>
         </div>
       </section>
@@ -66,7 +66,6 @@
 
 <script setup lang="ts">
 import { computed } from 'vue'
-import type { ProjectItem } from '../../types/projectTypes'
 
 const menuItems = [
   { key: 'script-rewrite', label: '工作台', icon: '⌂' },
@@ -87,7 +86,6 @@ type MenuKey = (typeof menuItems)[number]['key']
 
 const props = defineProps<{
   activeKey: MenuKey
-  project?: ProjectItem
 }>()
 
 defineEmits<{
@@ -136,9 +134,9 @@ const activeDescription = computed(() => {
     return '分析爆款视频，改写优质文案，打造更适合数字人口播的内容。'
   }
   if (props.activeKey === 'projects') {
-    return '搜索、创建并选择用于后续制作的视频项目。'
+    return '项目管理已不再作为主流程前置，可按需管理历史项目。'
   }
-  return '按流程完成项目、素材、脚本、声音、形象与成片制作。'
+  return '无需先创建项目，直接完成素材、脚本、声音、形象与成片制作。'
 })
 
 const currentStage = computed(() => flowSteps[activeStepIndex.value]?.label ?? '对标分析')

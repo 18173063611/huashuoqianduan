@@ -8,7 +8,7 @@ export type TaskStatus =
 
 export interface TaskItem {
   taskId: number
-  projectId: number
+  projectId: number | null
   taskType: string
   status: TaskStatus
   inputJson: string | null
@@ -21,7 +21,7 @@ export interface TaskItem {
 }
 
 export interface CreateTaskRequest {
-  projectId: number
+  projectId?: number | null
   taskType: string
   inputJson?: string
 }

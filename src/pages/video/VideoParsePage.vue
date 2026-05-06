@@ -228,12 +228,7 @@
 <script setup lang="ts">
 import { computed, ref } from 'vue'
 import { rewriteDouyinCopywriting, startDouyinParseWithTranscript } from '../../services/writerDouyinApi'
-import type { ProjectItem } from '../../types/projectTypes'
 import type { DouyinParseStage, DouyinVideoParseResponse } from '../../types/writerDouyinTypes'
-
-defineProps<{
-  project?: ProjectItem
-}>()
 
 const emit = defineEmits<{
   continue: []
