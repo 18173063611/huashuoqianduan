@@ -4,7 +4,7 @@
       <div>
         <p class="avatar-eyebrow">数字人形象</p>
         <h2>上传形象照，或用 AI 生成可复用的数字人形象</h2>
-        <p class="app-muted">生成或上传的图片会自动进入资产中心，可在这里设为当前项目形象。</p>
+        <p class="app-muted">生成或上传的图片会进入资产中心，可在这里设为默认形象。</p>
       </div>
       <div class="avatar-hero-card">
         <span>当前默认形象</span>
@@ -12,9 +12,7 @@
       </div>
     </header>
 
-    <div v-if="!project" class="app-card app-empty-block">请先在「项目管理」中选择当前项目。</div>
-
-    <template v-else>
+    <div class="avatar-content">
       <div class="avatar-layout">
         <section class="app-card avatar-panel">
           <div class="avatar-source-tabs">
@@ -110,6 +108,7 @@
             <span v-if="taskStatus" class="avatar-status">{{ taskStatus }}<template v-if="taskProgress != null"> · {{ taskProgress }}%</template></span>
           </div>
           <p v-if="taskError" class="app-error">{{ taskError }}</p>
+          <p v-if="saveMessage" class="app-muted avatar-small">{{ saveMessage }}</p>
           <div v-if="generatedAvatars.length === 0" class="app-empty-block avatar-result-empty">
             提交生成任务后，这里会展示可选形象。
           </div>
@@ -118,7 +117,7 @@
               <img :src="assetUrl(avatar.previewUrl)" :alt="avatar.avatarName" />
               <div>
                 <strong>{{ avatar.avatarName }}</strong>
-                <button class="app-secondary-button" type="button" @click="setAsDefault(avatar)">设为项目形象</button>
+                <button class="app-secondary-button" type="button" @click="saveGeneratedAvatar(avatar)">保存到资产中心</button>
               </div>
             </article>
           </div>
@@ -127,7 +126,7 @@
 
       <section class="app-card avatar-panel">
         <div class="avatar-section-heading">
-          <h3>项目形象库</h3>
+          <h3>形象库</h3>
           <button type="button" class="app-secondary-button" :disabled="loadingAvatars" @click="loadAvatars">
             {{ loadingAvatars ? '刷新中…' : '刷新' }}
           </button>
@@ -141,37 +140,31 @@
               <p class="app-muted">{{ avatar.sourceType === 'AI_GENERATED' ? 'AI 生成' : '用户上传' }}</p>
             </div>
             <button class="app-secondary-button" type="button" :disabled="avatar.defaultAvatar" @click="setAsDefault(avatar)">
-              {{ avatar.defaultAvatar ? '当前形象' : '设为项目形象' }}
+              {{ avatar.defaultAvatar ? '默认形象' : '设为默认形象' }}
             </button>
           </article>
         </div>
       </section>
-    </template>
+    </div>
   </section>
 </template>
 
 <script setup lang="ts">
-import { computed, onBeforeUnmount, reactive, ref, watch } from 'vue'
-import { getProjectAssets } from '../../services/assetApi'
+import { computed, onBeforeUnmount, onMounted, reactive, ref } from 'vue'
+import { getAssets, saveAsset } from '../../services/assetApi'
 import { API_ORIGIN } from '../../services/request'
 import {
   generateAvatar,
   getAvatarGenerateTask,
-  getProjectAvatars,
+  getAvatars,
   updateAvatar,
   uploadAvatar,
 } from '../../services/avatarApi'
 import type { AssetItem } from '../../types/assetTypes'
 import type { AvatarGenerateRequest, AvatarItem } from '../../types/avatarTypes'
-import type { ProjectItem } from '../../types/projectTypes'
-
-const props = defineProps<{
-  project?: ProjectItem
-}>()
 
 const sourceMode = ref<'AI' | 'UPLOAD'>('AI')
 const form = reactive<AvatarGenerateRequest>({
-  projectId: 0,
   avatarName: '知识类女主播',
   prompt: '生成一位适合知识口播的数字人形象，干净背景，正面半身，商业摄影质感',
   referenceAssetIds: [],
@@ -191,42 +184,26 @@ const submitting = ref(false)
 const uploading = ref(false)
 const errorMessage = ref('')
 const taskError = ref('')
+const saveMessage = ref('')
 const taskStatus = ref('')
 const taskProgress = ref<number | null>(null)
 const pollTimer = ref<number | null>(null)
 
 const defaultAvatar = computed(() => avatars.value.find((item) => item.defaultAvatar))
-const canGenerate = computed(() => Boolean(props.project && form.avatarName && form.prompt && form.imageCount >= 1))
+const canGenerate = computed(() => Boolean(form.avatarName && form.prompt && form.imageCount >= 1))
 
-watch(
-  () => props.project?.projectId,
-  async (projectId) => {
-    stopPoll()
-    errorMessage.value = ''
-    taskError.value = ''
-    taskStatus.value = ''
-    taskProgress.value = null
-    generatedAvatars.value = []
-    form.referenceAssetIds = []
-    if (projectId) {
-      form.projectId = projectId
-      await Promise.all([loadReferenceAssets(), loadAvatars()])
-    }
-  },
-  { immediate: true },
-)
+onMounted(async () => {
+  await Promise.all([loadReferenceAssets(), loadAvatars()])
+})
 
 onBeforeUnmount(() => {
   stopPoll()
 })
 
 async function loadReferenceAssets() {
-  if (!props.project) {
-    return
-  }
   loadingAssets.value = true
   try {
-    referenceAssets.value = await getProjectAssets(props.project.projectId, 'IMAGE')
+    referenceAssets.value = await getAssets('IMAGE')
   } catch (e) {
     errorMessage.value = e instanceof Error ? e.message : '加载图片资产失败'
   } finally {
@@ -235,12 +212,9 @@ async function loadReferenceAssets() {
 }
 
 async function loadAvatars() {
-  if (!props.project) {
-    return
-  }
   loadingAvatars.value = true
   try {
-    avatars.value = await getProjectAvatars(props.project.projectId)
+    avatars.value = await getAvatars()
   } catch (e) {
     errorMessage.value = e instanceof Error ? e.message : '加载形象库失败'
   } finally {
@@ -254,13 +228,14 @@ function onFileChange(event: Event) {
 }
 
 async function submitUpload() {
-  if (!props.project || !uploadFile.value) {
+  if (!uploadFile.value) {
     return
   }
   uploading.value = true
   errorMessage.value = ''
+  saveMessage.value = ''
   try {
-    const avatar = await uploadAvatar(props.project.projectId, uploadName.value || '上传形象', uploadFile.value)
+    const avatar = await uploadAvatar(uploadName.value || '上传形象', uploadFile.value)
     generatedAvatars.value = [avatar]
     await Promise.all([loadAvatars(), loadReferenceAssets()])
   } catch (e) {
@@ -271,15 +246,16 @@ async function submitUpload() {
 }
 
 async function submitGenerate() {
-  if (!props.project || !canGenerate.value) {
+  if (!canGenerate.value) {
     return
   }
   submitting.value = true
   errorMessage.value = ''
   taskError.value = ''
+  saveMessage.value = ''
   generatedAvatars.value = []
   try {
-    const res = await generateAvatar({ ...form, projectId: props.project.projectId })
+    const res = await generateAvatar({ ...form })
     taskStatus.value = res.status
     taskProgress.value = 10
     startPoll(res.taskId)
@@ -326,7 +302,20 @@ async function setAsDefault(avatar: AvatarItem) {
       defaultAvatar: item.avatarId === avatar.avatarId,
     }))
   } catch (e) {
-    errorMessage.value = e instanceof Error ? e.message : '设置项目形象失败'
+    errorMessage.value = e instanceof Error ? e.message : '设置默认形象失败'
+  }
+}
+
+async function saveGeneratedAvatar(avatar: AvatarItem) {
+  if (!avatar.assetId) {
+    saveMessage.value = `已保留生成结果：${avatar.avatarName}`
+    return
+  }
+  try {
+    await saveAsset(avatar.assetId)
+    saveMessage.value = `已保存到资产中心：${avatar.avatarName}`
+  } catch (e) {
+    errorMessage.value = e instanceof Error ? e.message : '保存到资产中心失败'
   }
 }
 
@@ -401,6 +390,11 @@ function assetUrl(url?: string | null) {
 .avatar-hero-card strong {
   display: block;
   margin-top: 6px;
+}
+
+.avatar-content {
+  display: grid;
+  gap: 20px;
 }
 
 .avatar-layout {

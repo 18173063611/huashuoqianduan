@@ -5,14 +5,13 @@
         <h2 class="app-card-title">任务中心</h2>
         <p class="app-muted">查看任务状态与结果。</p>
       </div>
-      <button class="app-secondary-button" type="button" :disabled="loading || !project" @click="loadTasks">
+      <button class="app-secondary-button" type="button" :disabled="loading" @click="loadTasks">
         {{ loading ? '加载中...' : '刷新' }}
       </button>
     </div>
 
-    <div v-if="!project" class="app-empty">请先在「项目管理」中选择当前项目。</div>
-    <template v-else>
-      <div class="app-selected-project">当前项目 · <strong>{{ project.projectName }}</strong></div>
+    <template>
+      <div class="app-selected-project">全局任务 · <strong>所有模块生成记录</strong></div>
       <p v-if="errorMessage" class="app-error">{{ errorMessage }}</p>
 
       <div v-if="tasks.length === 0" class="app-empty">暂无任务。</div>
@@ -46,13 +45,8 @@
 
 <script setup lang="ts">
 import { ref, watch } from 'vue'
-import { getProjectTasks } from '../../services/taskApi'
-import type { ProjectItem } from '../../types/projectTypes'
+import { getTasks } from '../../services/taskApi'
 import type { TaskItem } from '../../types/taskTypes'
-
-const props = defineProps<{
-  project?: ProjectItem
-}>()
 
 const emit = defineEmits<{
   openAsset: [assetId: number]
@@ -63,24 +57,19 @@ const loading = ref(false)
 const errorMessage = ref('')
 
 watch(
-  () => props.project?.projectId,
+  () => true,
   async () => {
     tasks.value = []
-    if (props.project) {
-      await loadTasks()
-    }
+    await loadTasks()
   },
   { immediate: true },
 )
 
 async function loadTasks() {
-  if (!props.project) {
-    return
-  }
   loading.value = true
   errorMessage.value = ''
   try {
-    tasks.value = await getProjectTasks(props.project.projectId)
+    tasks.value = await getTasks()
   } catch (error) {
     errorMessage.value = error instanceof Error ? error.message : '加载任务失败'
   } finally {

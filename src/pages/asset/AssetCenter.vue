@@ -3,16 +3,15 @@
     <div class="app-card-header">
       <div>
         <h2 class="app-card-title">资产中心</h2>
-        <p class="app-muted">查看当前项目资产。</p>
+        <p class="app-muted">查看已保存的全局资产。</p>
       </div>
-      <button class="app-secondary-button" type="button" :disabled="loading || !project" @click="loadAssets">
+      <button class="app-secondary-button" type="button" :disabled="loading" @click="loadAssets">
         {{ loading ? '加载中...' : '刷新' }}
       </button>
     </div>
 
-    <div v-if="!project" class="app-empty">请先在「项目管理」中选择当前项目。</div>
-    <template v-else>
-      <div class="app-selected-project">当前项目 · <strong>{{ project.projectName }}</strong></div>
+    <template>
+      <div class="app-selected-project">全局资产 · <strong>所有模块保存的内容</strong></div>
       <p v-if="jumpHint" class="asset-jump-hint app-muted">{{ jumpHint }}</p>
       <p v-if="errorMessage" class="app-error">{{ errorMessage }}</p>
 
@@ -38,14 +37,12 @@
 
 <script setup lang="ts">
 import { nextTick, onBeforeUnmount, ref, watch } from 'vue'
-import { getProjectAssets } from '../../services/assetApi'
+import { getAssets } from '../../services/assetApi'
 import type { AssetItem } from '../../types/assetTypes'
-import type { ProjectItem } from '../../types/projectTypes'
 
 const API_ORIGIN = (import.meta.env.VITE_API_BASE_URL || '').replace(/\/api\/v1\/?$/, '')
 
 const props = defineProps<{
-  project?: ProjectItem
   /** 从任务中心等入口跳转时高亮并滚动到该资产 */
   highlightAssetId?: number | null
 }>()
@@ -62,15 +59,13 @@ const jumpHint = ref('')
 let highlightClearTimer: number | null = null
 
 watch(
-  () => props.project?.projectId,
+  () => true,
   async () => {
     assets.value = []
     highlightedId.value = null
     jumpHint.value = ''
     clearHighlightTimer()
-    if (props.project) {
-      await loadAssets()
-    }
+    await loadAssets()
   },
   { immediate: true },
 )
@@ -91,13 +86,10 @@ onBeforeUnmount(() => {
 })
 
 async function loadAssets() {
-  if (!props.project) {
-    return
-  }
   loading.value = true
   errorMessage.value = ''
   try {
-    assets.value = await getProjectAssets(props.project.projectId)
+    assets.value = await getAssets()
     await nextTick()
     if (props.highlightAssetId != null && props.highlightAssetId > 0) {
       applyHighlightWhenReady(props.highlightAssetId)

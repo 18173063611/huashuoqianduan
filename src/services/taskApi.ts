@@ -8,8 +8,8 @@ export function createTask(payload: CreateTaskRequest) {
   })
 }
 
-export function getProjectTasks(projectId: number) {
-  return request<TaskItem[]>(`/tasks?projectId=${projectId}`)
+export function getTasks() {
+  return request<TaskItem[]>('/tasks')
 }
 
 export function getTaskDetail(taskId: number) {

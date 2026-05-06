@@ -1,7 +1,7 @@
 /** 视频源解析相关类型，字段需与后端 `com.huashuo.video.dto` 保持一致 */
 
 export interface ParseVideoSourceRequest {
-  projectId: number
+  projectId?: number | null
   videoUrl: string
 }
 

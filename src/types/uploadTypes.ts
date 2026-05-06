@@ -1,6 +1,6 @@
 ﻿export interface UploadedFileItem {
   fileId: number
-  projectId: number
+  projectId: number | null
   originalFileName: string
   storedFileName: string
   filePath: string

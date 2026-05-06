@@ -15,9 +15,9 @@ export function rewriteScript(payload: RewriteScriptRequest) {
   })
 }
 
-/** 项目下全部文案版本 */
-export function getProjectScripts(projectId: number) {
-  return request<ScriptVersionItem[]>(`/scripts/${projectId}`)
+/** 全部文案版本 */
+export function getScripts() {
+  return request<ScriptVersionItem[]>('/scripts')
 }
 
 /** 分镜生成占位 */

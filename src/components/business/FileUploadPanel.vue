@@ -5,9 +5,8 @@
       <p class="app-muted">上传图片、音视频或文案等素材；归档后可在资产中心查看与复用。</p>
     </div>
 
-    <div v-if="!project" class="app-empty">请先在「项目管理」中选择当前项目，再上传素材。</div>
-    <template v-else>
-      <div class="app-selected-project">当前项目 · <strong>{{ project.projectName }}</strong></div>
+    <template>
+      <div class="app-selected-project">全局素材 · <strong>上传后自动进入资产中心</strong></div>
       <input type="file" @change="handleFileChange" />
       <button class="app-primary-button" type="button" :disabled="!selectedFile || loading" @click="handleUpload">
         {{ loading ? '上传中...' : '上传文件' }}
@@ -29,13 +28,8 @@
 
 <script setup lang="ts">
 import { ref, watch } from 'vue'
-import { getProjectFiles, uploadProjectFile } from '../../services/uploadApi'
-import type { ProjectItem } from '../../types/projectTypes'
+import { getFiles, uploadFile } from '../../services/uploadApi'
 import type { UploadedFileItem } from '../../types/uploadTypes'
-
-const props = defineProps<{
-  project?: ProjectItem
-}>()
 
 const files = ref<UploadedFileItem[]>([])
 const selectedFile = ref<File>()
@@ -43,14 +37,12 @@ const loading = ref(false)
 const errorMessage = ref('')
 
 watch(
-  () => props.project?.projectId,
-  async (projectId) => {
+  () => true,
+  async () => {
     // 切换项目时清空旧文件状态，避免把上一个项目的素材误展示到当前项目。
     files.value = []
     selectedFile.value = undefined
-    if (projectId) {
-      await loadFiles(projectId)
-    }
+    await loadFiles()
   },
   { immediate: true },
 )
@@ -61,15 +53,15 @@ function handleFileChange(event: Event) {
 }
 
 async function handleUpload() {
-  if (!props.project || !selectedFile.value) {
+  if (!selectedFile.value) {
     return
   }
   loading.value = true
   errorMessage.value = ''
   try {
     // 上传成功后立即刷新文件列表，保证页面展示和后端落库结果一致。
-    await uploadProjectFile(props.project.projectId, selectedFile.value)
-    await loadFiles(props.project.projectId)
+    await uploadFile(selectedFile.value)
+    await loadFiles()
   } catch (error) {
     errorMessage.value = error instanceof Error ? error.message : '上传失败'
   } finally {
@@ -77,9 +69,9 @@ async function handleUpload() {
   }
 }
 
-async function loadFiles(projectId: number) {
+async function loadFiles() {
   try {
-    files.value = await getProjectFiles(projectId)
+    files.value = await getFiles()
   } catch (error) {
     errorMessage.value = error instanceof Error ? error.message : '加载文件列表失败'
   }

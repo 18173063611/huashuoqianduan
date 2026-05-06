@@ -16,7 +16,7 @@ export interface VoicePresetListResponse {
 }
 
 export interface TtsGenerateRequest {
-  projectId: number
+  projectId?: number | null
   /** 对应后端脚本版本主键 `script_version_id` */
   scriptId?: number
   text?: string
@@ -29,14 +29,14 @@ export interface TtsGenerateRequest {
 
 export interface TtsGenerateResponse {
   taskId: number
-  projectId: number
+  projectId: number | null
   taskType: string
   status: string
 }
 
 export interface TtsTaskDetailResponse {
   taskId: number
-  projectId: number
+  projectId: number | null
   taskType: string
   status: string
   progress: number | null

@@ -1,9 +1,8 @@
 import { request } from './request'
 import type { UploadedFileItem } from '../types/uploadTypes'
 
-export function uploadProjectFile(projectId: number, file: File) {
+export function uploadFile(file: File) {
   const formData = new FormData()
-  formData.append('projectId', String(projectId))
   formData.append('file', file)
   return request<UploadedFileItem>('/uploads', {
     method: 'POST',
@@ -11,6 +10,6 @@ export function uploadProjectFile(projectId: number, file: File) {
   })
 }
 
-export function getProjectFiles(projectId: number) {
-  return request<UploadedFileItem[]>(`/uploads?projectId=${projectId}`)
+export function getFiles() {
+  return request<UploadedFileItem[]>('/uploads')
 }

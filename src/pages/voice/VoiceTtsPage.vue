@@ -12,9 +12,7 @@
       </div>
     </header>
 
-    <div v-if="!project" class="app-card app-empty-block">请先在「项目管理」中选择当前项目。</div>
-
-    <template v-else>
+    <div class="voice-content">
       <div class="voice-layout">
         <section class="app-card voice-panel">
           <h3 class="voice-panel-title">选择声音服务</h3>
@@ -100,21 +98,14 @@
           </div>
         </section>
       </div>
-    </template>
+    </div>
   </section>
 </template>
 
 <script setup lang="ts">
-import { computed, onBeforeUnmount, ref, watch } from 'vue'
-import { getProjectScripts } from '../../services/scriptApi'
-import { getCurrentWriterScript } from '../../services/writerApi'
+import { computed, onBeforeUnmount, onMounted, ref } from 'vue'
 import { generateTts, getTtsTask, getVoicePresets } from '../../services/voiceApi'
-import type { ProjectItem } from '../../types/projectTypes'
 import type { TtsGenerateRequest, VoicePresetItem } from '../../types/voiceTypes'
-
-const props = defineProps<{
-  project?: ProjectItem
-}>()
 
 const API_ORIGIN = (import.meta.env.VITE_API_BASE_URL || '').replace(/\/api\/v1\/?$/, '')
 
@@ -141,22 +132,10 @@ const taskSectionVisible = computed(() => activeTaskId.value != null)
 
 const audioAssetUrl = ref('')
 
-watch(
-  () => props.project?.projectId,
-  async () => {
-    presets.value = []
-    presetsError.value = ''
-    selectedVoiceId.value = null
-    scriptText.value = ''
-    loadedScriptVersionId.value = null
-    scriptLoadMessage.value = ''
-    resetTask()
-    if (props.project) {
-      await loadPresets()
-    }
-  },
-  { immediate: true },
-)
+onMounted(async () => {
+  resetTask()
+  await loadPresets()
+})
 
 onBeforeUnmount(() => {
   stopPoll()
@@ -179,32 +158,11 @@ async function loadPresets() {
 }
 
 async function loadAppliedRewriteScript() {
-  if (!props.project) {
-    return
-  }
   loadingScripts.value = true
   scriptLoadMessage.value = ''
   try {
-    const writer = await getCurrentWriterScript(props.project.projectId)
-    const rewritten = writer?.finalScript?.trim()
-    if (rewritten) {
-      scriptText.value = rewritten
-      loadedScriptVersionId.value = null
-      scriptLoadMessage.value = '已载入当前项目已应用的改写后文案。'
-      return
-    }
-
-    const list = await getProjectScripts(props.project.projectId)
-    if (list.length > 0) {
-      const latest = list[0]
-      scriptText.value = latest.content
-      loadedScriptVersionId.value = latest.scriptVersionId
-      scriptLoadMessage.value = '未找到已应用文案，已改用项目内脚本版本最新一条（非爆款改写流程时请忽略）。'
-      return
-    }
-
-    scriptLoadMessage.value =
-      '暂无已应用改写文案。请先在爆款对标/文案改写中点击「应用文案并继续」，或直接在此粘贴口播稿。'
+    loadedScriptVersionId.value = null
+    scriptLoadMessage.value = '当前已改为无项目模式，请直接粘贴或编辑口播文案后生成。'
   } catch (e) {
     scriptLoadMessage.value = e instanceof Error ? e.message : '载入脚本失败'
   } finally {
@@ -238,14 +196,13 @@ function stopPoll() {
 }
 
 async function submitTts() {
-  if (!props.project || !selectedVoiceId.value || !scriptText.value) {
+  if (!selectedVoiceId.value || !scriptText.value) {
     return
   }
   submitting.value = true
   taskError.value = ''
   try {
     const body: TtsGenerateRequest = {
-      projectId: props.project.projectId,
       voiceId: selectedVoiceId.value,
       text: scriptText.value,
       provider: 'DOUBAO',
@@ -356,6 +313,11 @@ async function pollOnce(taskId: number) {
   margin: 0;
   font-size: 15px;
   font-weight: 800;
+}
+
+.voice-content {
+  display: grid;
+  gap: 20px;
 }
 
 .voice-layout {

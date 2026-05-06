@@ -1,7 +1,7 @@
 /** 文案 / 分镜相关类型，字段需与后端 `com.huashuo.script.dto`、`com.huashuo.storyboard.dto` 对齐 */
 
 export interface RewriteScriptRequest {
-  projectId: number
+  projectId?: number | null
   sourceText: string
   style: string
   targetLength: number
@@ -17,7 +17,7 @@ export interface RewriteScriptResponse {
 
 export interface ScriptVersionItem {
   scriptVersionId: number
-  projectId: number
+  projectId: number | null
   versionNo: number
   content: string
   sourceType: string
@@ -26,7 +26,7 @@ export interface ScriptVersionItem {
 }
 
 export interface StoryboardGenerateRequest {
-  projectId: number
+  projectId?: number | null
   scriptVersionId: number
 }
 
