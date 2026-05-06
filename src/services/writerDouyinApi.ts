@@ -5,7 +5,7 @@ import type {
   DouyinRewriteRequest,
   DouyinRewriteWriterVO,
 } from '../types/writerDouyinTypes'
-import { API_BASE_URL, request } from './request'
+import { API_BASE_URL, getAuthToken, request } from './request'
 
 export interface StartDouyinParseWithTranscriptOptions {
   url: string
@@ -24,11 +24,13 @@ export async function startDouyinParseWithTranscript(options: StartDouyinParseWi
   const path = '/writer/douyin/parse-with-transcript'
   const url = `${API_BASE_URL}${path}`
 
+  const token = getAuthToken()
   await fetchEventSource(url, {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
       Accept: 'text/event-stream',
+      ...(token ? { Authorization: `Bearer ${token}` } : {}),
     },
     body: JSON.stringify({ url: options.url }),
     signal: options.signal,

@@ -79,6 +79,7 @@ const menuItems = [
   { key: 'publish', label: '模板库', icon: '▧' },
   { key: 'assets', label: '资产中心', icon: '◫' },
   { key: 'tasks', label: '任务中心', icon: '☷' },
+  { key: 'user', label: '用户中心', icon: '☺' },
   { key: 'flow', label: '生成流程', icon: '↗' },
 ] as const
 
@@ -114,6 +115,7 @@ const stepIndexMap: Record<MenuKey, number> = {
   publish: 4,
   assets: 4,
   tasks: 4,
+  user: 4,
   flow: 4,
 }
 
