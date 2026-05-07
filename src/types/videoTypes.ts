@@ -45,3 +45,49 @@ export interface VideoScriptShotItem {
   /** 该分镜核心亮点或表达意图 */
   highlight: string
 }
+
+/** 视频生成任务的统一响应，对应后端 VideoTaskVO（火山方舟 Seedance） */
+export interface VideoTaskVO {
+  taskId: string
+  model: string
+  status: string
+  createdAt: number
+  updatedAt: number
+  videoUrl: string
+  lastFrameUrl: string | null
+  completionTokens: number
+  errorCode: string | null
+  errorMessage: string | null
+}
+
+/** 文生视频请求体 */
+export interface TextToVideoRequest {
+  prompt: string
+  duration?: number
+  model?: string
+}
+
+/** 图生视频 - 首帧生成请求体 */
+export interface FirstFrameVideoRequest {
+  imageUrl: string
+  prompt?: string
+  duration?: number
+  model?: string
+}
+
+/** 图生视频 - 首尾帧生成请求体 */
+export interface FirstLastFrameVideoRequest {
+  firstFrameUrl: string
+  lastFrameUrl: string
+  prompt?: string
+  duration?: number
+  model?: string
+}
+
+/** 图生视频 - 参照图生成请求体（imageUrls 长度 1~9，lite i2v 推荐 1~4） */
+export interface ReferenceVideoRequest {
+  imageUrls: string[]
+  prompt?: string
+  duration?: number
+  model?: string
+}

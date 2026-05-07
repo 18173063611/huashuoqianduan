@@ -133,18 +133,33 @@
                   </div>
                 </td>
                 <td class="col-summary">
-                  <p class="storyboard-summary">{{ shot.page || '—' }}</p>
+                  <textarea
+                    v-model="shot.page"
+                    class="storyboard-edit storyboard-edit-summary"
+                    rows="3"
+                    placeholder="场景概述"
+                  />
                   <p v-if="shot.backgroundMusic && shot.backgroundMusic !== '无'" class="storyboard-bgm">
                     <span aria-hidden="true">♪</span>
                     {{ shot.backgroundMusic }}
                   </p>
                 </td>
                 <td class="col-dialogue">
-                  <p v-if="hasContent(shot)" class="storyboard-dialogue">{{ shot.content }}</p>
-                  <p v-else class="storyboard-dialogue is-empty">当前场景暂无台词</p>
+                  <textarea
+                    v-model="shot.content"
+                    class="storyboard-edit storyboard-edit-dialogue"
+                    :class="{ 'is-empty': !hasContent(shot) }"
+                    rows="4"
+                    :placeholder="hasContent(shot) ? '台词' : '当前场景暂无台词'"
+                  />
                 </td>
                 <td class="col-tips">
-                  <p class="storyboard-tips">{{ shot.highlight || '—' }}</p>
+                  <textarea
+                    v-model="shot.highlight"
+                    class="storyboard-edit storyboard-edit-tips"
+                    rows="3"
+                    placeholder="拍摄技巧"
+                  />
                 </td>
               </tr>
             </tbody>
@@ -595,17 +610,49 @@ async function handleAnalyze() {
   letter-spacing: 0.04em;
 }
 
-.storyboard-summary,
-.storyboard-dialogue,
-.storyboard-tips {
+.storyboard-edit {
+  width: 100%;
   margin: 0;
-  white-space: pre-wrap;
-  word-break: break-word;
+  padding: 8px 10px;
+  border: 1px solid transparent;
+  border-radius: 8px;
+  background: transparent;
+  color: #2d3446;
+  font-family: inherit;
+  font-size: 13.5px;
+  line-height: 1.7;
+  resize: vertical;
+  outline: none;
+  transition: border-color 0.15s ease, background 0.15s ease, box-shadow 0.15s ease;
 }
 
-.storyboard-summary {
+.storyboard-edit:hover {
+  border-color: #e3e7ef;
+  background: #fafbff;
+}
+
+.storyboard-edit:focus {
+  border-color: #8f81ff;
+  background: #fff;
+  box-shadow: 0 0 0 3px rgba(99, 91, 255, 0.12);
+}
+
+.storyboard-edit-summary {
   color: #2d3446;
   font-weight: 700;
+}
+
+.storyboard-edit-dialogue {
+  color: #394053;
+}
+
+.storyboard-edit-dialogue.is-empty {
+  color: #b6bdcc;
+  font-style: italic;
+}
+
+.storyboard-edit-tips {
+  color: #4c566a;
 }
 
 .storyboard-bgm {
@@ -619,19 +666,6 @@ async function handleAnalyze() {
   color: #5e50df;
   font-size: 12px;
   font-weight: 750;
-}
-
-.storyboard-dialogue {
-  color: #394053;
-}
-
-.storyboard-dialogue.is-empty {
-  color: #b6bdcc;
-  font-style: italic;
-}
-
-.storyboard-tips {
-  color: #4c566a;
 }
 
 @media (max-width: 900px) {
