@@ -1,5 +1,5 @@
 export interface DouyinParseRequest {
-  projectId: number
+  projectId?: number | null
   videoUrl: string
 }
 
@@ -25,7 +25,7 @@ export interface DouyinAnalysis {
 
 export interface DouyinParseResponse {
   parseId: number
-  projectId: number
+  projectId: number | null
   videoInfo: DouyinVideoInfo
   analysis: DouyinAnalysis
   sourceScript: string
@@ -35,7 +35,7 @@ export interface DouyinParseResponse {
 }
 
 export interface ApplyWriterScriptRequest {
-  projectId: number
+  projectId?: number | null
   parseId?: number
   sourceScript: string
   finalScript: string
@@ -43,13 +43,13 @@ export interface ApplyWriterScriptRequest {
 }
 
 export interface UpdateWriterScriptRequest {
-  projectId: number
+  projectId?: number | null
   finalScript: string
 }
 
 export interface WriterScriptItem {
   scriptId: number
-  projectId: number
+  projectId: number | null
   parseId?: number
   versionNo: number
   currentStep: string

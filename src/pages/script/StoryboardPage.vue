@@ -173,12 +173,7 @@
 import { computed, ref } from 'vue'
 import { uploadFile } from '../../services/uploadApi'
 import { analyzeVideoScript } from '../../services/videoApi'
-import type { ProjectItem } from '../../types/projectTypes'
 import type { VideoScriptShotItem } from '../../types/videoTypes'
-
-const props = defineProps<{
-  project?: ProjectItem
-}>()
 
 type SourceMode = 'url' | 'file'
 

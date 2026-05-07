@@ -6,8 +6,6 @@
         基于火山方舟 Seedance 系列模型，通过文字或图片生成短视频。后端同步轮询任务，
         生成耗时通常 1~3 分钟，期间请保持页面打开。
       </p>
-      <p v-if="!project" class="app-muted render-project-hint">尚未选择项目，生成后的视频请手动归档到资产中心。</p>
-      <p v-else class="app-selected-project render-project-hint">当前项目 · {{ project.projectName }}</p>
     </header>
 
     <section class="app-card render-input">
@@ -237,14 +235,8 @@ import {
   generateReferenceVideo,
   generateTextToVideo,
 } from '../../services/videoApi'
-import type { ProjectItem } from '../../types/projectTypes'
 import type { VideoTaskVO } from '../../types/videoTypes'
 
-const props = defineProps<{
-  project?: ProjectItem
-}>()
-// 仅消费 props.project 用于头部展示，未来可继续扩展归档逻辑
-void props
 
 type MainTab = 'text' | 'image'
 type ImageSubTab = 'first' | 'firstLast' | 'reference'

@@ -9,39 +9,36 @@
         </div>
       </div>
 
-      <div v-if="!project" class="app-empty">请先在「工作台」中选择当前项目。</div>
-      <template v-else>
-        <div class="script-input-row">
-          <input v-model.trim="videoUrl" placeholder="https://www.douyin.com/video/..." />
-          <button class="app-primary-button" type="button" :disabled="parsing || !videoUrl" @click="handleParseDouyin">
-            {{ parsing ? '解析中...' : '解析' }}
-          </button>
+      <div class="script-input-row">
+        <input v-model.trim="videoUrl" placeholder="https://www.douyin.com/video/..." />
+        <button class="app-primary-button" type="button" :disabled="parsing || !videoUrl" @click="handleParseDouyin">
+          {{ parsing ? '解析中...' : '解析' }}
+        </button>
+      </div>
+
+      <article v-if="parseResult" class="script-video-card">
+        <img v-if="parseResult.videoInfo.coverUrl" class="script-video-cover" :src="parseResult.videoInfo.coverUrl" alt="对标视频封面" />
+        <div v-else class="script-video-cover script-video-cover-placeholder">AI</div>
+        <div>
+          <strong>{{ parseResult.videoInfo.title || '对标视频信息' }}</strong>
+          <p>{{ parseResult.videoInfo.authorName || '对标账号' }}</p>
+          <small>
+            时长 {{ parseResult.videoInfo.durationText || '--' }}
+            · 点赞 {{ parseResult.videoInfo.likeCountText || '--' }}
+            · 评论 {{ parseResult.videoInfo.commentCountText || '--' }}
+          </small>
         </div>
+      </article>
 
-        <article v-if="parseResult" class="script-video-card">
-          <img v-if="parseResult.videoInfo.coverUrl" class="script-video-cover" :src="parseResult.videoInfo.coverUrl" alt="对标视频封面" />
-          <div v-else class="script-video-cover script-video-cover-placeholder">AI</div>
-          <div>
-            <strong>{{ parseResult.videoInfo.title || '对标视频信息' }}</strong>
-            <p>{{ parseResult.videoInfo.authorName || '对标账号' }}</p>
-            <small>
-              时长 {{ parseResult.videoInfo.durationText || '--' }}
-              · 点赞 {{ parseResult.videoInfo.likeCountText || '--' }}
-              · 评论 {{ parseResult.videoInfo.commentCountText || '--' }}
-            </small>
-          </div>
-        </article>
-
-        <div v-if="parseResult" class="script-analysis-list">
-          <h3>爆款分析结果</h3>
-          <div v-for="item in analysisItems" :key="item.label" class="script-analysis-item">
-            <span>{{ item.index }}</span>
-            <p><strong>{{ item.label }}</strong>{{ item.value }}</p>
-          </div>
+      <div v-if="parseResult" class="script-analysis-list">
+        <h3>爆款分析结果</h3>
+        <div v-for="item in analysisItems" :key="item.label" class="script-analysis-item">
+          <span>{{ item.index }}</span>
+          <p><strong>{{ item.label }}</strong>{{ item.value }}</p>
         </div>
+      </div>
 
-        <p v-if="parseError" class="app-error">{{ parseError }}</p>
-      </template>
+      <p v-if="parseError" class="app-error">{{ parseError }}</p>
     </section>
 
     <section class="app-card script-panel script-panel-main">
@@ -53,67 +50,57 @@
         </div>
       </div>
 
-      <div v-if="!project" class="app-empty">请选择项目后开始改写。</div>
-      <template v-else>
-        <p v-if="loadingCurrent" class="app-muted script-loading-hint">正在加载当前项目已应用文案...</p>
+      <div class="script-tabs">
+        <button class="active" type="button">AI 智能改写</button>
+        <button type="button">自定义文案</button>
+        <span v-if="parseResult" class="script-style-pill">{{ parseResult.rewriteStyle }} · {{ parseResult.wordCount }} 字</span>
+      </div>
 
-        <div class="script-tabs">
-          <button class="active" type="button">AI 智能改写</button>
-          <button type="button">自定义文案</button>
-          <span v-if="parseResult" class="script-style-pill">{{ parseResult.rewriteStyle }} · {{ parseResult.wordCount }} 字</span>
+      <form class="script-form" @submit.prevent="handleApplyScript">
+        <label>
+          原文案
+          <textarea v-model.trim="sourceScript" readonly placeholder="解析后这里展示原文案脚本" />
+        </label>
+
+        <label>
+          改写后文案
+          <textarea v-model.trim="finalScript" required placeholder="解析后这里展示大模型改写后的文案，也可以手动调整" />
+        </label>
+
+        <div class="script-actions">
+          <button
+            v-if="currentScript?.scriptId"
+            class="app-secondary-button"
+            type="button"
+            :disabled="saving || !finalScript"
+            @click="handleUpdateScript"
+          >
+            {{ saving ? '保存中...' : '保存文案' }}
+          </button>
+          <button class="app-secondary-button" type="button" :disabled="!parseResult" @click="resetParsedContent">重新解析</button>
+          <button class="app-primary-button" type="submit" :disabled="saving || !sourceScript || !finalScript">
+            {{ saving ? '应用中...' : '应用文案并继续' }}
+          </button>
         </div>
+      </form>
 
-        <form class="script-form" @submit.prevent="handleApplyScript">
-          <label>
-            原文案
-            <textarea v-model.trim="sourceScript" readonly placeholder="解析后这里展示原文案脚本" />
-          </label>
-
-          <label>
-            改写后文案
-            <textarea v-model.trim="finalScript" required placeholder="解析后这里展示大模型改写后的文案，也可以手动调整" />
-          </label>
-
-          <div class="script-actions">
-            <button
-              v-if="currentScript?.scriptId"
-              class="app-secondary-button"
-              type="button"
-              :disabled="saving || !finalScript"
-              @click="handleUpdateScript"
-            >
-              {{ saving ? '保存中...' : '保存文案' }}
-            </button>
-            <button class="app-secondary-button" type="button" :disabled="!parseResult" @click="resetParsedContent">重新解析</button>
-            <button class="app-primary-button" type="submit" :disabled="saving || !sourceScript || !finalScript">
-              {{ saving ? '应用中...' : '应用文案并继续' }}
-            </button>
-          </div>
-        </form>
-
-        <div v-if="currentScript" class="script-current-card">
-          <div>
-            <strong>已应用文案 V{{ currentScript.versionNo }}</strong>
-            <p>当前阶段：{{ currentScript.currentStep }} · 下一步：{{ currentScript.nextStep }}</p>
-          </div>
-          <button class="app-secondary-button" type="button" @click="restoreCurrentScript">回显已应用文案</button>
+      <div v-if="currentScript" class="script-current-card">
+        <div>
+          <strong>已应用文案 V{{ currentScript.versionNo }}</strong>
+          <p>当前阶段：{{ currentScript.currentStep }} · 下一步：{{ currentScript.nextStep }}</p>
         </div>
+        <button class="app-secondary-button" type="button" @click="restoreCurrentScript">回显已应用文案</button>
+      </div>
 
-        <p v-if="scriptError" class="app-error">{{ scriptError }}</p>
-      </template>
+      <p v-if="scriptError" class="app-error">{{ scriptError }}</p>
     </section>
   </div>
 </template>
 
 <script setup lang="ts">
-import { computed, ref, watch } from 'vue'
-import { applyWriterScript, getCurrentWriterScript, parseDouyinVideo, updateWriterScript } from '../../services/writerApi'
-import type { ProjectItem } from '../../types/projectTypes'
+import { computed, onMounted, ref } from 'vue'
+import { applyWriterScript, parseDouyinVideo, updateWriterScript } from '../../services/writerApi'
 import type { DouyinParseResponse, WriterScriptItem } from '../../types/writerTypes'
-
-const props = defineProps<{
-  project?: ProjectItem
-}>()
 
 const emit = defineEmits<{
   continue: []
@@ -125,7 +112,6 @@ const finalScript = ref('')
 const parseResult = ref<DouyinParseResponse>()
 const currentScript = ref<WriterScriptItem | null>(null)
 const parsing = ref(false)
-const loadingCurrent = ref(false)
 const saving = ref(false)
 const parseError = ref('')
 const scriptError = ref('')
@@ -145,24 +131,17 @@ const analysisItems = computed(() => {
   ].filter((item) => item.value)
 })
 
-watch(
-  () => props.project?.projectId,
-  async () => {
-    parseResult.value = undefined
-    sourceScript.value = ''
-    finalScript.value = ''
-    currentScript.value = null
-    parseError.value = ''
-    scriptError.value = ''
-    if (props.project) {
-      await loadCurrentScript()
-    }
-  },
-  { immediate: true },
-)
+onMounted(async () => {
+  parseResult.value = undefined
+  sourceScript.value = ''
+  finalScript.value = ''
+  currentScript.value = null
+  parseError.value = ''
+  scriptError.value = ''
+})
 
 async function handleParseDouyin() {
-  if (!props.project || !videoUrl.value) {
+  if (!videoUrl.value) {
     return
   }
   parsing.value = true
@@ -170,7 +149,6 @@ async function handleParseDouyin() {
   scriptError.value = ''
   try {
     const result = await parseDouyinVideo({
-      projectId: props.project.projectId,
       videoUrl: videoUrl.value,
     })
     parseResult.value = result
@@ -187,14 +165,13 @@ async function handleParseDouyin() {
 }
 
 async function handleApplyScript() {
-  if (!props.project || !sourceScript.value || !finalScript.value) {
+  if (!sourceScript.value || !finalScript.value) {
     return
   }
   saving.value = true
   scriptError.value = ''
   try {
     currentScript.value = await applyWriterScript({
-      projectId: props.project.projectId,
       parseId: parseResult.value?.parseId,
       sourceScript: sourceScript.value,
       finalScript: finalScript.value,
@@ -208,30 +185,14 @@ async function handleApplyScript() {
   }
 }
 
-async function loadCurrentScript() {
-  if (!props.project) {
-    return
-  }
-  loadingCurrent.value = true
-  try {
-    currentScript.value = await getCurrentWriterScript(props.project.projectId)
-    restoreCurrentScript()
-  } catch (error) {
-    scriptError.value = error instanceof Error ? error.message : '加载当前文案失败'
-  } finally {
-    loadingCurrent.value = false
-  }
-}
-
 async function handleUpdateScript() {
-  if (!props.project || !currentScript.value?.scriptId || !finalScript.value) {
+  if (!currentScript.value?.scriptId || !finalScript.value) {
     return
   }
   saving.value = true
   scriptError.value = ''
   try {
     currentScript.value = await updateWriterScript(currentScript.value.scriptId, {
-      projectId: props.project.projectId,
       finalScript: finalScript.value,
     })
     restoreCurrentScript()

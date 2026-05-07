@@ -41,7 +41,7 @@
           </div>
         </div>
         <div class="app-topbar-actions">
-          <button class="app-ghost-button" type="button" @click="$emit('change', 'assets')">资产中心</button>
+          <button class="app-ghost-button" type="button" @click="$emit('change', 'user')">公共资产</button>
           <span class="app-status-dot">在线</span>
         </div>
       </header>
@@ -68,19 +68,12 @@
 import { computed } from 'vue'
 
 const menuItems = [
-  { key: 'script-rewrite', label: '工作台', icon: '⌂' },
-  { key: 'projects', label: '项目管理', icon: '▣' },
-  { key: 'upload', label: '素材中心', icon: '◈' },
   { key: 'video-parse', label: '爆款对标', icon: '◉' },
   { key: 'storyboard', label: '分镜生成', icon: '▤' },
   { key: 'voice', label: '声音生成', icon: '♬' },
   { key: 'avatar', label: '数字人形象', icon: '◎' },
   { key: 'render', label: '视频制作', icon: '▻' },
-  { key: 'publish', label: '模板库', icon: '▧' },
-  { key: 'assets', label: '资产中心', icon: '◫' },
-  { key: 'tasks', label: '任务中心', icon: '☷' },
-  { key: 'user', label: '用户中心', icon: '☺' },
-  { key: 'flow', label: '生成流程', icon: '↗' },
+  { key: 'user', label: '用户与资产', icon: '◫' },
 ] as const
 
 type MenuKey = (typeof menuItems)[number]['key']
@@ -93,51 +86,32 @@ defineEmits<{
   change: [key: MenuKey]
 }>()
 
-const activeTitle = computed(() => menuItems.find((item) => item.key === props.activeKey)?.label ?? '项目管理')
+const activeTitle = computed(() => menuItems.find((item) => item.key === props.activeKey)?.label ?? '爆款对标')
 
 const flowSteps = [
   { key: 'video-parse', label: '对标分析' },
-  { key: 'script-rewrite', label: '脚本生成' },
-  { key: 'avatar', label: '数字人形象生成' },
+  { key: 'storyboard', label: '脚本生成' },
   { key: 'voice', label: '声音合成' },
+  { key: 'avatar', label: '数字人形象生成' },
   { key: 'render', label: '视频制作生成' },
 ] as const
 
 const stepIndexMap: Record<MenuKey, number> = {
-  projects: 0,
-  upload: 0,
   'video-parse': 0,
-  'script-rewrite': 0,
   storyboard: 1,
-  avatar: 2,
-  voice: 3,
+  voice: 2,
+  avatar: 3,
   render: 4,
-  publish: 4,
-  assets: 4,
-  tasks: 4,
   user: 4,
-  flow: 4,
 }
 
 const activeStepIndex = computed(() => stepIndexMap[props.activeKey] ?? 0)
 
 const activeHeadline = computed(() => {
-  if (props.activeKey === 'projects') {
-    return '工作台'
-  }
-  if (props.activeKey === 'script-rewrite') {
-    return '对标分析（文案改写）'
-  }
   return activeTitle.value
 })
 
 const activeDescription = computed(() => {
-  if (props.activeKey === 'script-rewrite') {
-    return '分析爆款视频，改写优质文案，打造更适合数字人口播的内容。'
-  }
-  if (props.activeKey === 'projects') {
-    return '项目管理已不再作为主流程前置，可按需管理历史项目。'
-  }
   return '无需先创建项目，直接完成素材、脚本、声音、形象与成片制作。'
 })
 

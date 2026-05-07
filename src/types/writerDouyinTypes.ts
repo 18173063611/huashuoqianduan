@@ -28,6 +28,7 @@ export type DouyinParseStage = 'parsed' | 'transcribing' | 'completed' | 'error'
 
 export interface DouyinParseWithTranscriptEventPayload {
   stage: DouyinParseStage
+  taskId?: number | null
   parseResult: DouyinVideoParseResponse | null
   transcriptResult: WriterTranscriptVO | null
 }

@@ -1,4 +1,5 @@
 import { request } from './request'
+import type { PageResult } from '../types/apiTypes'
 import type { UploadedFileItem } from '../types/uploadTypes'
 
 export function uploadFile(file: File) {
@@ -10,6 +11,9 @@ export function uploadFile(file: File) {
   })
 }
 
-export function getFiles() {
-  return request<UploadedFileItem[]>('/uploads')
+export function getFiles(pageNo = 1, pageSize = 20) {
+  const params = new URLSearchParams()
+  params.set('pageNo', String(pageNo))
+  params.set('pageSize', String(pageSize))
+  return request<PageResult<UploadedFileItem>>(`/uploads?${params.toString()}`)
 }

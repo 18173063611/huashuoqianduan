@@ -68,15 +68,27 @@
                 </button>
               </div>
               <p class="app-muted avatar-small">
-                参考图需要是图片生成服务可访问的地址；本地开发未配置公网访问时，可不选参考图直接生成。
+                参考图需要是图片生成服务可访问的地址；本地开发未配置公网访问时，可不选参考图直接生成。仅您名下的私有图片可在此列表中删除。
               </p>
               <p v-if="referenceAssets.length === 0" class="app-muted avatar-small">资产中心暂无图片资产，可先上传形象照或直接文生图。</p>
               <div v-else class="avatar-reference-list">
-                <label v-for="asset in referenceAssets" :key="asset.assetId" class="avatar-reference-item">
-                  <input v-model="form.referenceAssetIds" type="checkbox" :value="asset.assetId" />
-                  <img :src="assetUrl(asset.fileUrl)" alt="" />
-                  <span>{{ asset.fileName }}</span>
-                </label>
+                <div v-for="asset in referenceAssets" :key="asset.assetId" class="avatar-reference-item">
+                  <label class="avatar-reference-pick">
+                    <input v-model="form.referenceAssetIds" type="checkbox" :value="asset.assetId" />
+                    <img :src="assetUrl(asset.fileUrl)" :alt="asset.fileName" />
+                    <span class="avatar-reference-name">{{ asset.fileName }}</span>
+                  </label>
+                  <button
+                    v-if="canDeleteReferenceAsset(asset)"
+                    type="button"
+                    class="avatar-ref-delete"
+                    title="从资产中删除（仅私有）"
+                    :disabled="deletingAssetId === asset.assetId"
+                    @click="deleteReferenceAsset(asset)"
+                  >
+                    {{ deletingAssetId === asset.assetId ? '…' : '删除' }}
+                  </button>
+                </div>
               </div>
             </div>
 
@@ -105,7 +117,21 @@
         <section class="app-card avatar-panel avatar-result-panel">
           <div class="avatar-section-heading">
             <h3>生成结果</h3>
-            <span v-if="taskStatus" class="avatar-status">{{ taskStatus }}<template v-if="taskProgress != null"> · {{ taskProgress }}%</template></span>
+            <div v-if="taskStatus" class="avatar-task-head-right">
+              <span class="avatar-status">{{ taskStatus }}</span>
+              <div v-if="showTaskProgressBar" class="avatar-progress-row">
+                <div
+                  class="avatar-progress-track"
+                  role="progressbar"
+                  :aria-valuemin="0"
+                  :aria-valuemax="100"
+                  :aria-valuenow="barProgressPercent"
+                >
+                  <div class="avatar-progress-fill" :style="{ width: `${barProgressPercent}%` }" />
+                </div>
+                <span class="avatar-progress-pct">{{ barProgressPercent }}%</span>
+              </div>
+            </div>
           </div>
           <p v-if="taskError" class="app-error">{{ taskError }}</p>
           <p v-if="saveMessage" class="app-muted avatar-small">{{ saveMessage }}</p>
@@ -151,8 +177,10 @@
 
 <script setup lang="ts">
 import { computed, onBeforeUnmount, onMounted, reactive, ref } from 'vue'
-import { getAssets, saveAsset } from '../../services/assetApi'
+import { useSmoothTaskProgress } from '../../composables/useSmoothTaskProgress'
+import { deleteAsset, getAssets, saveAsset } from '../../services/assetApi'
 import { API_ORIGIN } from '../../services/request'
+import { rememberSessionTaskId } from '../../services/sessionTaskStore'
 import {
   generateAvatar,
   getAvatarGenerateTask,
@@ -188,6 +216,12 @@ const saveMessage = ref('')
 const taskStatus = ref('')
 const taskProgress = ref<number | null>(null)
 const pollTimer = ref<number | null>(null)
+const deletingAssetId = ref<number | null>(null)
+
+const { showTaskProgressBar, barProgressPercent, reset: resetSmoothProgress } = useSmoothTaskProgress(
+  taskStatus,
+  taskProgress,
+)
 
 const defaultAvatar = computed(() => avatars.value.find((item) => item.defaultAvatar))
 const canGenerate = computed(() => Boolean(form.avatarName && form.prompt && form.imageCount >= 1))
@@ -208,6 +242,32 @@ async function loadReferenceAssets() {
     errorMessage.value = e instanceof Error ? e.message : '加载图片资产失败'
   } finally {
     loadingAssets.value = false
+  }
+}
+
+/** 列表中「有归属人」的条目在当前会话下即为当前用户私有资产（未登录时仅公共资产，无归属人） */
+function canDeleteReferenceAsset(asset: AssetItem) {
+  return asset.ownerUserId != null
+}
+
+async function deleteReferenceAsset(asset: AssetItem) {
+  if (!canDeleteReferenceAsset(asset)) {
+    return
+  }
+  const ok = window.confirm(`确定从资产中删除「${asset.fileName}」？删除后不可恢复。`)
+  if (!ok) {
+    return
+  }
+  deletingAssetId.value = asset.assetId
+  errorMessage.value = ''
+  try {
+    await deleteAsset(asset.assetId)
+    form.referenceAssetIds = form.referenceAssetIds.filter((id) => id !== asset.assetId)
+    referenceAssets.value = referenceAssets.value.filter((a) => a.assetId !== asset.assetId)
+  } catch (e) {
+    errorMessage.value = e instanceof Error ? e.message : '删除失败'
+  } finally {
+    deletingAssetId.value = null
   }
 }
 
@@ -256,8 +316,10 @@ async function submitGenerate() {
   generatedAvatars.value = []
   try {
     const res = await generateAvatar({ ...form })
+    rememberSessionTaskId(res.taskId)
+    resetSmoothProgress()
     taskStatus.value = res.status
-    taskProgress.value = 10
+    taskProgress.value = 0
     startPoll(res.taskId)
   } catch (e) {
     errorMessage.value = e instanceof Error ? e.message : '提交生成失败'
@@ -271,7 +333,7 @@ function startPoll(taskId: number) {
   void pollOnce(taskId)
   pollTimer.value = window.setInterval(() => {
     void pollOnce(taskId)
-  }, 3000)
+  }, 2000)
 }
 
 async function pollOnce(taskId: number) {
@@ -285,6 +347,9 @@ async function pollOnce(taskId: number) {
     }
     if (['SUCCESS', 'FAILED', 'RETRYABLE', 'CANCELED'].includes(detail.status)) {
       stopPoll()
+      if (detail.status === 'SUCCESS') {
+        taskProgress.value = detail.progress ?? 100
+      }
       await Promise.all([loadAvatars(), loadReferenceAssets()])
     }
   } catch (e) {
@@ -487,11 +552,53 @@ function assetUrl(url?: string | null) {
 .avatar-reference-item {
   display: grid;
   align-items: center;
-  gap: 10px;
-  grid-template-columns: auto 52px 1fr;
+  gap: 8px;
+  grid-template-columns: 1fr auto;
   padding: 8px;
   border-radius: var(--app-radius-sm);
   background: #fff;
+}
+
+.avatar-reference-pick {
+  display: grid;
+  align-items: center;
+  gap: 10px;
+  grid-template-columns: auto 52px 1fr;
+  min-width: 0;
+  cursor: pointer;
+}
+
+.avatar-reference-name {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-weight: 600;
+  font-size: 13px;
+}
+
+.avatar-ref-delete {
+  flex-shrink: 0;
+  padding: 6px 10px;
+  border-radius: var(--app-radius-sm);
+  border: 1px solid rgba(239, 68, 68, 0.45);
+  background: rgba(254, 242, 242, 0.9);
+  color: #b91c1c;
+  font-size: 12px;
+  font-weight: 700;
+  cursor: pointer;
+  transition:
+    background 0.15s ease,
+    opacity 0.15s ease;
+}
+
+.avatar-ref-delete:hover:not(:disabled) {
+  background: rgba(254, 226, 226, 0.95);
+}
+
+.avatar-ref-delete:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
 }
 
 .avatar-reference-item img,
@@ -520,6 +627,47 @@ function assetUrl(url?: string | null) {
   color: var(--app-text-secondary);
   font-size: 13px;
   font-weight: 800;
+}
+
+.avatar-task-head-right {
+  display: flex;
+  min-width: 0;
+  flex: 1;
+  max-width: 320px;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 8px;
+}
+
+.avatar-progress-row {
+  display: flex;
+  width: 100%;
+  align-items: center;
+  gap: 10px;
+}
+
+.avatar-progress-track {
+  flex: 1;
+  height: 8px;
+  overflow: hidden;
+  border-radius: 999px;
+  background: #e8ecf4;
+}
+
+.avatar-progress-fill {
+  height: 100%;
+  border-radius: 999px;
+  background: linear-gradient(90deg, var(--app-primary) 0%, #6366f1 100%);
+  transition: width 0.35s ease;
+}
+
+.avatar-progress-pct {
+  flex-shrink: 0;
+  min-width: 2.75rem;
+  color: var(--app-text-secondary);
+  font-size: 12px;
+  font-weight: 800;
+  text-align: right;
 }
 
 .avatar-result-empty,

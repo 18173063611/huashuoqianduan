@@ -85,11 +85,22 @@
           </div>
 
           <div v-if="taskSectionVisible" class="voice-task-card">
-            <p class="voice-task-title">任务进度</p>
-            <p class="app-muted">
-              状态 <strong>{{ taskStatus }}</strong>
-              <template v-if="taskProgress != null"> · 进度 {{ taskProgress }}%</template>
-            </p>
+            <div class="voice-task-head">
+              <p class="voice-task-title">任务进度</p>
+              <span v-if="taskStatus" class="voice-task-status">{{ taskStatus }}</span>
+            </div>
+            <div v-if="showTaskProgressBar" class="voice-progress-row">
+              <div
+                class="voice-progress-track"
+                role="progressbar"
+                :aria-valuemin="0"
+                :aria-valuemax="100"
+                :aria-valuenow="barProgressPercent"
+              >
+                <div class="voice-progress-fill" :style="{ width: `${barProgressPercent}%` }" />
+              </div>
+              <span class="voice-progress-pct">{{ barProgressPercent }}%</span>
+            </div>
             <p v-if="taskError" class="app-error">{{ taskError }}</p>
             <audio v-if="audioAssetUrl" class="voice-audio" controls :src="audioAssetUrl" />
             <p v-if="taskStatus === 'SUCCESS'" class="app-muted voice-success-tip">
@@ -104,7 +115,9 @@
 
 <script setup lang="ts">
 import { computed, onBeforeUnmount, onMounted, ref } from 'vue'
+import { useSmoothTaskProgress } from '../../composables/useSmoothTaskProgress'
 import { generateTts, getTtsTask, getVoicePresets } from '../../services/voiceApi'
+import { rememberSessionTaskId } from '../../services/sessionTaskStore'
 import type { TtsGenerateRequest, VoicePresetItem } from '../../types/voiceTypes'
 
 const API_ORIGIN = (import.meta.env.VITE_API_BASE_URL || '').replace(/\/api\/v1\/?$/, '')
@@ -127,6 +140,11 @@ const taskStatus = ref('')
 const taskProgress = ref<number | null>(null)
 const taskError = ref('')
 const pollTimer = ref<number | null>(null)
+
+const { showTaskProgressBar, barProgressPercent, reset: resetSmoothProgress } = useSmoothTaskProgress(
+  taskStatus,
+  taskProgress,
+)
 
 const taskSectionVisible = computed(() => activeTaskId.value != null)
 
@@ -181,6 +199,7 @@ function playSample(v: VoicePresetItem) {
 
 function resetTask() {
   stopPoll()
+  resetSmoothProgress()
   activeTaskId.value = null
   taskStatus.value = ''
   taskProgress.value = null
@@ -214,9 +233,11 @@ async function submitTts() {
       body.scriptId = loadedScriptVersionId.value
     }
     const res = await generateTts(body)
+    rememberSessionTaskId(res.taskId)
+    resetSmoothProgress()
     activeTaskId.value = res.taskId
     taskStatus.value = res.status
-    taskProgress.value = 10
+    taskProgress.value = 0
     startPoll(res.taskId)
   } catch (e) {
     taskError.value = e instanceof Error ? e.message : '提交失败'
@@ -231,7 +252,7 @@ function startPoll(taskId: number) {
   void pollOnce(taskId)
   pollTimer.value = window.setInterval(() => {
     void pollOnce(taskId)
-  }, 3000)
+  }, 2000)
 }
 
 async function pollOnce(taskId: number) {
@@ -246,6 +267,9 @@ async function pollOnce(taskId: number) {
     }
     if (['SUCCESS', 'FAILED', 'RETRYABLE', 'CANCELED'].includes(detail.status)) {
       stopPoll()
+      if (detail.status === 'SUCCESS') {
+        taskProgress.value = detail.progress ?? 100
+      }
     }
   } catch (e) {
     taskError.value = e instanceof Error ? e.message : '查询任务失败'
@@ -482,8 +506,53 @@ async function pollOnce(taskId: number) {
   background: #dcfce7;
 }
 
+.voice-task-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 10px;
+}
+
+.voice-task-status {
+  flex-shrink: 0;
+  font-size: 13px;
+  font-weight: 800;
+  color: #166534;
+}
+
+.voice-progress-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.voice-progress-track {
+  flex: 1;
+  height: 8px;
+  overflow: hidden;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.65);
+}
+
+.voice-progress-fill {
+  height: 100%;
+  border-radius: 999px;
+  background: linear-gradient(90deg, #16a34a 0%, #22c55e 100%);
+  transition: width 0.35s ease;
+}
+
+.voice-progress-pct {
+  flex-shrink: 0;
+  min-width: 2.75rem;
+  font-size: 12px;
+  font-weight: 800;
+  color: #166534;
+  text-align: right;
+}
+
 .voice-task-title {
-  margin: 0 0 8px;
+  margin: 0;
   font-weight: 800;
   color: #166534;
 }
