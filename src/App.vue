@@ -25,20 +25,13 @@
 
     <PublishPackPage v-show="activeKey === 'publish'" :project="selectedProject" />
 
-    <AssetCenter
-      v-show="activeKey === 'assets'"
+    <UserCenter
+      v-show="activeKey === 'user'"
       :highlight-asset-id="assetHighlightId"
       @highlight-consumed="assetHighlightId = null"
     />
 
-    <TaskCenter
-      v-show="activeKey === 'tasks'"
-      :project="selectedProject"
-      :panel-active="activeKey === 'tasks'"
-      @open-asset="onOpenAssetFromTask"
-    />
-
-    <UserCenter v-show="activeKey === 'user'" />
+    <TaskFloatingDock :project="selectedProject" @open-asset="onOpenAssetFromTask" />
 
     <section v-show="activeKey === 'flow'" class="app-card app-flow">
       <h2 class="module-flow-title">制作流程</h2>
@@ -58,13 +51,12 @@
 import { ref } from 'vue'
 import WorkbenchLayout from './components/layout/WorkbenchLayout.vue'
 import AvatarGeneratePage from './pages/avatar/AvatarGeneratePage.vue'
-import AssetCenter from './pages/asset/AssetCenter.vue'
 import PublishPackPage from './pages/publish/PublishPackPage.vue'
 import ProjectWorkbench from './pages/project/ProjectWorkbench.vue'
 import RenderVideoPage from './pages/render/RenderVideoPage.vue'
 import ScriptRewritePage from './pages/script/ScriptRewritePage.vue'
 import StoryboardPage from './pages/script/StoryboardPage.vue'
-import TaskCenter from './pages/task/TaskCenter.vue'
+import TaskFloatingDock from './components/TaskFloatingDock.vue'
 import UploadCenter from './pages/upload/UploadCenter.vue'
 import UserCenter from './pages/user/UserCenter.vue'
 import VideoParsePage from './pages/video/VideoParsePage.vue'
@@ -81,19 +73,17 @@ type MenuKey =
   | 'avatar'
   | 'render'
   | 'publish'
-  | 'assets'
-  | 'tasks'
   | 'user'
   | 'flow'
 
 const activeKey = ref<MenuKey>('avatar')
 const selectedProject = ref<ProjectItem>()
-/** 从任务中心「查看结果」跳转时高亮对应资产 */
+/** 从任务浮层「查看资产」跳转时在「我的资产」中高亮对应行 */
 const assetHighlightId = ref<number | null>(null)
 
 function onOpenAssetFromTask(assetId: number) {
   assetHighlightId.value = assetId
-  activeKey.value = 'assets'
+  activeKey.value = 'user'
 }
 
 const flowSteps = [

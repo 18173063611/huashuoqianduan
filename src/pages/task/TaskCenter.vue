@@ -18,7 +18,7 @@
     </div>
 
     <p v-if="!canQuery && panelActive" class="app-muted task-hint">
-      请<strong>登录</strong>以查看跨项目任务，或在「项目工作台」中<strong>选择项目</strong>以查看该项目内任务（未登录时仅能看到项目内无归属人的演示任务）。
+      请在「用户与资产」中<strong>登录</strong>以查看跨项目任务，或在「项目工作台」中<strong>选择项目</strong>以查看该项目内任务（未登录时仅能看到项目内无归属人的演示任务）。
     </p>
 
     <template v-if="canQuery">

@@ -68,15 +68,27 @@
                 </button>
               </div>
               <p class="app-muted avatar-small">
-                参考图需要是图片生成服务可访问的地址；本地开发未配置公网访问时，可不选参考图直接生成。
+                参考图需要是图片生成服务可访问的地址；本地开发未配置公网访问时，可不选参考图直接生成。仅您名下的私有图片可在此列表中删除。
               </p>
               <p v-if="referenceAssets.length === 0" class="app-muted avatar-small">资产中心暂无图片资产，可先上传形象照或直接文生图。</p>
               <div v-else class="avatar-reference-list">
-                <label v-for="asset in referenceAssets" :key="asset.assetId" class="avatar-reference-item">
-                  <input v-model="form.referenceAssetIds" type="checkbox" :value="asset.assetId" />
-                  <img :src="assetUrl(asset.fileUrl)" alt="" />
-                  <span>{{ asset.fileName }}</span>
-                </label>
+                <div v-for="asset in referenceAssets" :key="asset.assetId" class="avatar-reference-item">
+                  <label class="avatar-reference-pick">
+                    <input v-model="form.referenceAssetIds" type="checkbox" :value="asset.assetId" />
+                    <img :src="assetUrl(asset.fileUrl)" :alt="asset.fileName" />
+                    <span class="avatar-reference-name">{{ asset.fileName }}</span>
+                  </label>
+                  <button
+                    v-if="canDeleteReferenceAsset(asset)"
+                    type="button"
+                    class="avatar-ref-delete"
+                    title="从资产中删除（仅私有）"
+                    :disabled="deletingAssetId === asset.assetId"
+                    @click="deleteReferenceAsset(asset)"
+                  >
+                    {{ deletingAssetId === asset.assetId ? '…' : '删除' }}
+                  </button>
+                </div>
               </div>
             </div>
 
@@ -151,7 +163,7 @@
 
 <script setup lang="ts">
 import { computed, onBeforeUnmount, onMounted, reactive, ref } from 'vue'
-import { getAssets, saveAsset } from '../../services/assetApi'
+import { deleteAsset, getAssets, saveAsset } from '../../services/assetApi'
 import { API_ORIGIN } from '../../services/request'
 import {
   generateAvatar,
@@ -188,6 +200,7 @@ const saveMessage = ref('')
 const taskStatus = ref('')
 const taskProgress = ref<number | null>(null)
 const pollTimer = ref<number | null>(null)
+const deletingAssetId = ref<number | null>(null)
 
 const defaultAvatar = computed(() => avatars.value.find((item) => item.defaultAvatar))
 const canGenerate = computed(() => Boolean(form.avatarName && form.prompt && form.imageCount >= 1))
@@ -208,6 +221,32 @@ async function loadReferenceAssets() {
     errorMessage.value = e instanceof Error ? e.message : '加载图片资产失败'
   } finally {
     loadingAssets.value = false
+  }
+}
+
+/** 列表中「有归属人」的条目在当前会话下即为当前用户私有资产（未登录时仅公共资产，无归属人） */
+function canDeleteReferenceAsset(asset: AssetItem) {
+  return asset.ownerUserId != null
+}
+
+async function deleteReferenceAsset(asset: AssetItem) {
+  if (!canDeleteReferenceAsset(asset)) {
+    return
+  }
+  const ok = window.confirm(`确定从资产中删除「${asset.fileName}」？删除后不可恢复。`)
+  if (!ok) {
+    return
+  }
+  deletingAssetId.value = asset.assetId
+  errorMessage.value = ''
+  try {
+    await deleteAsset(asset.assetId)
+    form.referenceAssetIds = form.referenceAssetIds.filter((id) => id !== asset.assetId)
+    referenceAssets.value = referenceAssets.value.filter((a) => a.assetId !== asset.assetId)
+  } catch (e) {
+    errorMessage.value = e instanceof Error ? e.message : '删除失败'
+  } finally {
+    deletingAssetId.value = null
   }
 }
 
@@ -487,11 +526,53 @@ function assetUrl(url?: string | null) {
 .avatar-reference-item {
   display: grid;
   align-items: center;
-  gap: 10px;
-  grid-template-columns: auto 52px 1fr;
+  gap: 8px;
+  grid-template-columns: 1fr auto;
   padding: 8px;
   border-radius: var(--app-radius-sm);
   background: #fff;
+}
+
+.avatar-reference-pick {
+  display: grid;
+  align-items: center;
+  gap: 10px;
+  grid-template-columns: auto 52px 1fr;
+  min-width: 0;
+  cursor: pointer;
+}
+
+.avatar-reference-name {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-weight: 600;
+  font-size: 13px;
+}
+
+.avatar-ref-delete {
+  flex-shrink: 0;
+  padding: 6px 10px;
+  border-radius: var(--app-radius-sm);
+  border: 1px solid rgba(239, 68, 68, 0.45);
+  background: rgba(254, 242, 242, 0.9);
+  color: #b91c1c;
+  font-size: 12px;
+  font-weight: 700;
+  cursor: pointer;
+  transition:
+    background 0.15s ease,
+    opacity 0.15s ease;
+}
+
+.avatar-ref-delete:hover:not(:disabled) {
+  background: rgba(254, 226, 226, 0.95);
+}
+
+.avatar-ref-delete:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
 }
 
 .avatar-reference-item img,

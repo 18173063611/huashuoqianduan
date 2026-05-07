@@ -1,99 +1,152 @@
 <template>
-  <section class="app-card app-page-stack">
-    <div class="app-card-header">
-      <div>
-        <h2 class="app-card-title">用户中心</h2>
-        <p class="app-muted">注册、登录与查看当前登录用户。</p>
-      </div>
-      <button v-if="meInfo" class="app-secondary-button" type="button" :disabled="loading" @click="handleLogout">
-        {{ loading ? '处理中...' : '退出登录' }}
+  <section class="user-center app-card app-page-stack">
+    <div class="user-main-tabs" role="tablist" aria-label="用户与资产">
+      <button
+        type="button"
+        class="user-main-tab"
+        role="tab"
+        :aria-selected="mainTab === 'account'"
+        :class="{ 'user-main-tab--active': mainTab === 'account' }"
+        @click="mainTab = 'account'"
+      >
+        账户
+      </button>
+      <button
+        type="button"
+        class="user-main-tab"
+        role="tab"
+        :aria-selected="mainTab === 'assets'"
+        :class="{ 'user-main-tab--active': mainTab === 'assets' }"
+        @click="mainTab = 'assets'"
+      >
+        我的资产
       </button>
     </div>
 
-    <p v-if="message" :class="messageType === 'error' ? 'app-error' : 'app-success'">{{ message }}</p>
-
-    <div v-if="meInfo" class="app-file-list">
-      <div class="app-file-item">
-        <div style="flex: 1">
-          <strong>当前用户</strong>
-          <p class="app-muted" style="margin: 6px 0 0">用户名：{{ meInfo.username }} · 展示名：{{ meInfo.displayName }}</p>
+    <div v-show="mainTab === 'account'" class="user-tab-panel">
+      <div class="app-card-header">
+        <div>
+          <h2 class="app-card-title">账户</h2>
+          <p class="app-muted">登录后可在「我的资产」中查看与管理私有内容。</p>
         </div>
-        <button class="app-secondary-button" type="button" :disabled="loading" @click="loadMe">
-          {{ loading ? '加载中...' : '刷新' }}
+        <button v-if="meInfo" class="app-secondary-button" type="button" :disabled="loading" @click="handleLogout">
+          {{ loading ? '处理中...' : '退出登录' }}
         </button>
+      </div>
+
+      <p v-if="message" :class="messageType === 'error' ? 'app-error' : 'app-success'">{{ message }}</p>
+
+      <div v-if="meInfo" class="app-file-list">
+        <div class="app-file-item">
+          <div style="flex: 1">
+            <strong>当前用户</strong>
+            <p class="app-muted" style="margin: 6px 0 0">用户名：{{ meInfo.username }} · 展示名：{{ meInfo.displayName }}</p>
+          </div>
+          <button class="app-secondary-button" type="button" :disabled="loading" @click="loadMe">
+            {{ loading ? '加载中...' : '刷新' }}
+          </button>
+        </div>
+      </div>
+
+      <div v-else class="app-file-list">
+        <div class="auth-mode-segment" role="tablist" aria-label="登录或注册">
+          <button
+            type="button"
+            class="auth-mode-btn"
+            role="tab"
+            :aria-selected="authMode === 'login'"
+            :class="{ 'auth-mode-btn--active': authMode === 'login' }"
+            @click="authMode = 'login'"
+          >
+            登录
+          </button>
+          <button
+            type="button"
+            class="auth-mode-btn"
+            role="tab"
+            :aria-selected="authMode === 'register'"
+            :class="{ 'auth-mode-btn--active': authMode === 'register' }"
+            @click="authMode = 'register'"
+          >
+            注册
+          </button>
+        </div>
+
+        <div class="app-file-item" style="flex-direction: column; align-items: stretch; gap: 10px">
+          <p class="app-muted auth-hint">
+            <template v-if="authMode === 'login'">已有账号直接登录（演示：demo / demo1234）。</template>
+            <template v-else>首次使用可注册，密码至少 6 位，注册成功后将自动登录。</template>
+          </p>
+          <label class="app-field">
+            <span>用户名</span>
+            <input v-model="authForm.username" class="app-input" type="text" placeholder="请输入用户名" />
+          </label>
+          <label class="app-field">
+            <span>密码</span>
+            <input v-model="authForm.password" class="app-input" type="password" placeholder="请输入密码" />
+          </label>
+          <label v-if="authMode === 'register'" class="app-field">
+            <span>展示名（可选）</span>
+            <input v-model="authForm.displayName" class="app-input" type="text" placeholder="例如：张三" />
+          </label>
+          <button
+            class="app-primary-button"
+            type="button"
+            :disabled="loading"
+            @click="authMode === 'login' ? handleLogin() : handleRegister()"
+          >
+            {{ loading ? '处理中...' : authMode === 'login' ? '登录' : '注册并登录' }}
+          </button>
+        </div>
       </div>
     </div>
 
-    <div v-else class="app-file-list">
-      <div class="app-file-item">
-        <div style="flex: 1">
-          <strong>登录</strong>
-          <p class="app-muted" style="margin: 6px 0 0">已有账号可直接登录（演示账号：demo / demo1234）。</p>
-        </div>
-      </div>
-
-      <div class="app-file-item" style="flex-direction: column; align-items: stretch; gap: 10px">
-        <label class="app-field">
-          <span>用户名</span>
-          <input v-model="loginForm.username" class="app-input" type="text" placeholder="请输入用户名" />
-        </label>
-        <label class="app-field">
-          <span>密码</span>
-          <input v-model="loginForm.password" class="app-input" type="password" placeholder="请输入密码" />
-        </label>
-        <button class="app-primary-button" type="button" :disabled="loading" @click="handleLogin">
-          {{ loading ? '登录中...' : '登录' }}
-        </button>
-      </div>
-
-      <div class="app-file-item">
-        <div style="flex: 1">
-          <strong>注册</strong>
-          <p class="app-muted" style="margin: 6px 0 0">首次使用可注册账号（密码至少 6 位）。</p>
-        </div>
-      </div>
-
-      <div class="app-file-item" style="flex-direction: column; align-items: stretch; gap: 10px">
-        <label class="app-field">
-          <span>用户名</span>
-          <input v-model="registerForm.username" class="app-input" type="text" placeholder="请输入用户名" />
-        </label>
-        <label class="app-field">
-          <span>密码</span>
-          <input v-model="registerForm.password" class="app-input" type="password" placeholder="至少 6 位" />
-        </label>
-        <label class="app-field">
-          <span>展示名（可选）</span>
-          <input v-model="registerForm.displayName" class="app-input" type="text" placeholder="例如：张三" />
-        </label>
-        <button class="app-secondary-button" type="button" :disabled="loading" @click="handleRegister">
-          {{ loading ? '注册中...' : '注册并登录' }}
-        </button>
-      </div>
+    <div v-show="mainTab === 'assets'" class="user-tab-panel user-tab-panel--assets">
+      <AssetCenter :highlight-asset-id="highlightAssetId" @highlight-consumed="$emit('highlightConsumed')" />
     </div>
   </section>
 </template>
 
 <script setup lang="ts">
-import { reactive, ref, watch } from 'vue'
+import { onMounted, ref, watch } from 'vue'
+import AssetCenter from '../asset/AssetCenter.vue'
 import { applyLogin, clearLogin, login, logout, me, register } from '../../services/authApi'
 import type { UserMe } from '../../types/userTypes'
 
+const props = defineProps<{
+  /** 从任务等入口跳转时，在「我的资产」中高亮对应行 */
+  highlightAssetId?: number | null
+}>()
+
+defineEmits<{
+  highlightConsumed: []
+}>()
+
+type MainTab = 'account' | 'assets'
+type AuthMode = 'login' | 'register'
+
+const mainTab = ref<MainTab>('account')
+const authMode = ref<AuthMode>('login')
 const meInfo = ref<UserMe | null>(null)
 const loading = ref(false)
 const message = ref('')
 const messageType = ref<'error' | 'success'>('success')
 
-const loginForm = reactive({ username: '', password: '' })
-const registerForm = reactive({ username: '', password: '', displayName: '' })
+const authForm = ref({ username: '', password: '', displayName: '' })
 
 watch(
-  () => true,
-  async () => {
-    await loadMe()
+  () => props.highlightAssetId,
+  (id) => {
+    if (id != null && id > 0) {
+      mainTab.value = 'assets'
+    }
   },
   { immediate: true },
 )
+
+onMounted(() => {
+  void loadMe()
+})
 
 async function loadMe() {
   loading.value = true
@@ -118,14 +171,15 @@ function showSuccess(text: string) {
 }
 
 async function handleLogin() {
-  if (!loginForm.username.trim() || !loginForm.password.trim()) {
+  const { username, password } = authForm.value
+  if (!username.trim() || !password.trim()) {
     showError('请输入用户名和密码')
     return
   }
   loading.value = true
   message.value = ''
   try {
-    const res = await login({ username: loginForm.username.trim(), password: loginForm.password.trim() })
+    const res = await login({ username: username.trim(), password: password.trim() })
     applyLogin(res)
     meInfo.value = { userId: res.userId, username: res.username, displayName: res.displayName }
     showSuccess('登录成功')
@@ -137,7 +191,8 @@ async function handleLogin() {
 }
 
 async function handleRegister() {
-  if (!registerForm.username.trim() || !registerForm.password.trim()) {
+  const { username, password, displayName } = authForm.value
+  if (!username.trim() || !password.trim()) {
     showError('请输入用户名和密码')
     return
   }
@@ -145,9 +200,9 @@ async function handleRegister() {
   message.value = ''
   try {
     const res = await register({
-      username: registerForm.username.trim(),
-      password: registerForm.password.trim(),
-      displayName: registerForm.displayName.trim() || undefined,
+      username: username.trim(),
+      password: password.trim(),
+      displayName: displayName.trim() || undefined,
     })
     applyLogin(res)
     meInfo.value = { userId: res.userId, username: res.username, displayName: res.displayName }
@@ -176,11 +231,51 @@ async function handleLogout() {
 </script>
 
 <style scoped>
-section.app-card {
+.user-center.app-card {
   background: #ffffff;
   border-radius: 12px;
   box-shadow: 0 4px 20px rgba(0, 0, 0, 0.04);
   padding: 24px;
+}
+
+.user-main-tabs {
+  display: inline-flex;
+  margin-bottom: 20px;
+  padding: 3px;
+  border-radius: 10px;
+  background: #eef0f6;
+  border: 1px solid #e5e7eb;
+  gap: 2px;
+}
+
+.user-main-tab {
+  border: none;
+  border-radius: 8px;
+  padding: 8px 18px;
+  font-size: 14px;
+  font-weight: 500;
+  color: #6b7280;
+  background: transparent;
+  cursor: pointer;
+  transition:
+    background 120ms ease,
+    color 120ms ease,
+    box-shadow 120ms ease;
+}
+
+.user-main-tab:hover {
+  color: #111827;
+  background: rgba(255, 255, 255, 0.65);
+}
+
+.user-main-tab--active {
+  color: #111827;
+  background: #ffffff;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.06);
+}
+
+.user-tab-panel--assets {
+  margin-top: 0;
 }
 
 .app-card-title {
@@ -192,6 +287,46 @@ section.app-card {
 .app-muted {
   font-size: 13px;
   color: #6b7280;
+}
+
+.auth-mode-segment {
+  display: inline-flex;
+  padding: 3px;
+  border-radius: 10px;
+  background: #f3f4f6;
+  border: 1px solid #e5e7eb;
+  gap: 2px;
+  margin-bottom: 4px;
+}
+
+.auth-mode-btn {
+  border: none;
+  border-radius: 8px;
+  padding: 6px 16px;
+  font-size: 13px;
+  font-weight: 500;
+  color: #6b7280;
+  background: transparent;
+  cursor: pointer;
+  transition:
+    background 120ms ease,
+    color 120ms ease;
+}
+
+.auth-mode-btn:hover {
+  color: #111827;
+  background: rgba(255, 255, 255, 0.7);
+}
+
+.auth-mode-btn--active {
+  color: #111827;
+  background: #ffffff;
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.06);
+}
+
+.auth-hint {
+  margin: 0 0 4px;
+  line-height: 1.5;
 }
 
 .app-file-list {
@@ -217,7 +352,7 @@ section.app-card {
   display: grid;
   gap: 8px;
   font-size: 13px;
-  color: var(--app-text-secondary);
+  color: var(--app-text-secondary, #6b7280);
 }
 
 .app-input {
@@ -321,4 +456,3 @@ section.app-card {
   font-size: 12px;
 }
 </style>
-

@@ -41,7 +41,7 @@
           </div>
         </div>
         <div class="app-topbar-actions">
-          <button class="app-ghost-button" type="button" @click="$emit('change', 'assets')">资产中心</button>
+          <button class="app-ghost-button" type="button" @click="$emit('change', 'user')">个人与资产</button>
           <span class="app-status-dot">在线</span>
         </div>
       </header>
@@ -77,9 +77,7 @@ const menuItems = [
   { key: 'avatar', label: '数字人形象', icon: '◎' },
   { key: 'render', label: '视频制作', icon: '▻' },
   { key: 'publish', label: '模板库', icon: '▧' },
-  { key: 'assets', label: '资产中心', icon: '◫' },
-  { key: 'tasks', label: '任务中心', icon: '☷' },
-  { key: 'user', label: '用户中心', icon: '☺' },
+  { key: 'user', label: '用户与资产', icon: '☺' },
   { key: 'flow', label: '生成流程', icon: '↗' },
 ] as const
 
@@ -113,8 +111,6 @@ const stepIndexMap: Record<MenuKey, number> = {
   voice: 3,
   render: 4,
   publish: 4,
-  assets: 4,
-  tasks: 4,
   user: 4,
   flow: 4,
 }

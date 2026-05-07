@@ -4,7 +4,7 @@
       <div>
         <h2 class="app-card-title">资产中心</h2>
         <p class="app-muted">
-          使用下方切换在「全局资产」与「私有资产」之间查看；全局为公共内容，私有为当前登录账号下上传/生成的条目。
+          使用下方切换在「全局资产」与「私有资产」之间查看；全局为公共内容，私有为当前登录账号下上传/生成的条目。删除仅出现在「私有资产」中，且服务端校验仅允许删除本人名下条目。
         </p>
         <div class="asset-scope-segment" role="tablist" aria-label="资产范围">
           <button
@@ -83,7 +83,7 @@
           v-if="listScope === 'private' && !hasToken"
           class="app-primary-button asset-empty-action"
           type="button"
-          @click="jumpHint = '请从左侧进入「用户中心」登录后再查看私有资产。'"
+          @click="jumpHint = '请切换到「账户」标签完成登录后再查看私有资产。'"
         >
           去登录
         </button>
@@ -137,9 +137,10 @@
               metadata
             </button>
             <button
-              v-if="asset.ownerUserId != null"
+              v-if="listScope === 'private' && asset.ownerUserId != null"
               class="app-secondary-button asset-danger"
               type="button"
+              title="删除该私有资产（不可恢复）"
               :disabled="loading"
               @click="handleDelete(asset)"
             >
@@ -206,7 +207,7 @@ const metadataLink = ref('#')
 
 const emptySubtitle = computed(() => {
   if (listScope.value === 'private' && !hasToken.value) {
-    return '请先登录用户中心，再查看与当前账号绑定的私有资产。'
+    return '请先在「用户与资产 → 账户」登录，再查看与当前账号绑定的私有资产。'
   }
   if (listScope.value === 'private') {
     return '当前账号下尚无私有资产，可在各模块上传或生成后在此查看。'
