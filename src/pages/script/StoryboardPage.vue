@@ -8,10 +8,7 @@
       </p>
     </header>
 
-    <div v-if="!project" class="app-empty">请先在「工作台」中选择当前项目，再开始分镜解析。</div>
-
-    <template v-else>
-      <section class="app-card storyboard-input">
+    <section class="app-card storyboard-input">
         <div class="app-section-title">
           <span>1</span>
           <div>
@@ -50,7 +47,6 @@
             placeholder="https://example.com/your-video.mp4"
             :disabled="busy"
           />
-          <p class="storyboard-hint">需是公网可直接 GET 访问的视频地址；含中文 / 特殊字符的链接前端会自动转码。</p>
         </div>
 
         <div v-else class="storyboard-source storyboard-source-file">
@@ -61,10 +57,6 @@
               {{ selectedFile ? `${selectedFile.name}（${formatFileSize(selectedFile.size)}）` : '尚未选择文件' }}
             </span>
           </label>
-          <p v-if="uploadedPreviewUrl" class="storyboard-hint">
-            已上传：<a :href="uploadedPreviewUrl" target="_blank" rel="noreferrer">查看预览链接</a>
-          </p>
-          <p v-else class="storyboard-hint">点击「开始解析」会先上传到服务端，再用返回的预览链接调起分镜分析。</p>
         </div>
 
         <div class="storyboard-actions">
@@ -159,13 +151,12 @@
           </table>
         </div>
       </section>
-    </template>
   </div>
 </template>
 
 <script setup lang="ts">
 import { computed, ref } from 'vue'
-import { uploadProjectFile } from '../../services/uploadApi'
+import { uploadFile } from '../../services/uploadApi'
 import { analyzeVideoScript } from '../../services/videoApi'
 import type { ProjectItem } from '../../types/projectTypes'
 import type { VideoScriptShotItem } from '../../types/videoTypes'
@@ -175,6 +166,9 @@ const props = defineProps<{
 }>()
 
 type SourceMode = 'url' | 'file'
+
+// 上传接口只返回相对路径，需要拼上 TOS 桶域名才是公网可访问的地址
+const TOS_BUCKET_ORIGIN = 'https://ceshichucun.tos-cn-guangzhou.volces.com'
 
 const sourceMode = ref<SourceMode>('url')
 const videoUrl = ref('')
@@ -277,7 +271,7 @@ function resetResult() {
 }
 
 async function handleAnalyze() {
-  if (!props.project || !canSubmit.value || busy.value) {
+  if (!canSubmit.value || busy.value) {
     return
   }
 
@@ -294,8 +288,9 @@ async function handleAnalyze() {
       // 已经上传过同一个文件就直接复用 previewUrl，避免重复占用对象存储空间
       if (!uploadedPreviewUrl.value) {
         stage.value = '上传视频中…'
-        const uploaded = await uploadProjectFile(props.project.projectId, selectedFile.value)
-        uploadedPreviewUrl.value = uploaded.previewUrl
+        const uploaded = await uploadFile(selectedFile.value)
+        // 上传接口只返回对象存储里的相对路径，需要拼接桶域名才是公网可访问地址
+        uploadedPreviewUrl.value = `${TOS_BUCKET_ORIGIN}${uploaded.previewUrl}`
       }
       targetUrl = uploadedPreviewUrl.value
     }
