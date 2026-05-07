@@ -1,11 +1,5 @@
 <template>
   <WorkbenchLayout :active-key="activeKey" @change="activeKey = $event">
-    <ProjectWorkbench
-      v-if="activeKey === 'projects'"
-      v-model:selected-project="selectedProject"
-      @continue="activeKey = 'video-parse'"
-    />
-
     <UploadCenter v-show="activeKey === 'upload'" />
 
     <VideoParsePage
@@ -13,17 +7,17 @@
       @continue="activeKey = 'voice'"
     />
 
-    <ScriptRewritePage v-show="activeKey === 'script-rewrite'" :project="selectedProject" @continue="activeKey = 'voice'" />
+    <ScriptRewritePage v-show="activeKey === 'script-rewrite'" @continue="activeKey = 'voice'" />
 
-    <StoryboardPage v-show="activeKey === 'storyboard'" :project="selectedProject" />
+    <StoryboardPage v-show="activeKey === 'storyboard'" />
 
     <VoiceTtsPage v-show="activeKey === 'voice'" />
 
     <AvatarGeneratePage v-show="activeKey === 'avatar'" />
 
-    <RenderVideoPage v-show="activeKey === 'render'" :project="selectedProject" />
+    <RenderVideoPage v-show="activeKey === 'render'" />
 
-    <PublishPackPage v-show="activeKey === 'publish'" :project="selectedProject" />
+    <PublishPackPage v-show="activeKey === 'publish'" />
 
     <UserCenter
       v-show="activeKey === 'user'"
@@ -31,11 +25,11 @@
       @highlight-consumed="assetHighlightId = null"
     />
 
-    <TaskFloatingDock :project="selectedProject" @open-asset="onOpenAssetFromTask" />
+    <TaskFloatingDock @open-asset="onOpenAssetFromTask" />
 
     <section v-show="activeKey === 'flow'" class="app-card app-flow">
       <h2 class="module-flow-title">制作流程</h2>
-      <p class="app-muted module-flow-lead">按流程完成项目、脚本、音色、形象与成片。</p>
+      <p class="app-muted module-flow-lead">按流程完成素材、脚本、音色、形象与成片。</p>
       <div class="app-flow-steps">
         <div v-for="step in flowSteps" :key="step.title" class="app-flow-step">
           <span>{{ step.index }}</span>
@@ -52,7 +46,6 @@ import { ref } from 'vue'
 import WorkbenchLayout from './components/layout/WorkbenchLayout.vue'
 import AvatarGeneratePage from './pages/avatar/AvatarGeneratePage.vue'
 import PublishPackPage from './pages/publish/PublishPackPage.vue'
-import ProjectWorkbench from './pages/project/ProjectWorkbench.vue'
 import RenderVideoPage from './pages/render/RenderVideoPage.vue'
 import ScriptRewritePage from './pages/script/ScriptRewritePage.vue'
 import StoryboardPage from './pages/script/StoryboardPage.vue'
@@ -61,10 +54,8 @@ import UploadCenter from './pages/upload/UploadCenter.vue'
 import UserCenter from './pages/user/UserCenter.vue'
 import VideoParsePage from './pages/video/VideoParsePage.vue'
 import VoiceTtsPage from './pages/voice/VoiceTtsPage.vue'
-import type { ProjectItem } from './types/projectTypes'
 
 type MenuKey =
-  | 'projects'
   | 'upload'
   | 'video-parse'
   | 'script-rewrite'
@@ -76,8 +67,7 @@ type MenuKey =
   | 'user'
   | 'flow'
 
-const activeKey = ref<MenuKey>('avatar')
-const selectedProject = ref<ProjectItem>()
+const activeKey = ref<MenuKey>('video-parse')
 /** 从任务浮层「查看资产」跳转时在「我的资产」中高亮对应行 */
 const assetHighlightId = ref<number | null>(null)
 

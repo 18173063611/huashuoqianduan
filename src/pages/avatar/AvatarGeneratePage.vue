@@ -117,7 +117,21 @@
         <section class="app-card avatar-panel avatar-result-panel">
           <div class="avatar-section-heading">
             <h3>生成结果</h3>
-            <span v-if="taskStatus" class="avatar-status">{{ taskStatus }}<template v-if="taskProgress != null"> · {{ taskProgress }}%</template></span>
+            <div v-if="taskStatus" class="avatar-task-head-right">
+              <span class="avatar-status">{{ taskStatus }}</span>
+              <div v-if="showTaskProgressBar" class="avatar-progress-row">
+                <div
+                  class="avatar-progress-track"
+                  role="progressbar"
+                  :aria-valuemin="0"
+                  :aria-valuemax="100"
+                  :aria-valuenow="barProgressPercent"
+                >
+                  <div class="avatar-progress-fill" :style="{ width: `${barProgressPercent}%` }" />
+                </div>
+                <span class="avatar-progress-pct">{{ barProgressPercent }}%</span>
+              </div>
+            </div>
           </div>
           <p v-if="taskError" class="app-error">{{ taskError }}</p>
           <p v-if="saveMessage" class="app-muted avatar-small">{{ saveMessage }}</p>
@@ -163,8 +177,10 @@
 
 <script setup lang="ts">
 import { computed, onBeforeUnmount, onMounted, reactive, ref } from 'vue'
+import { useSmoothTaskProgress } from '../../composables/useSmoothTaskProgress'
 import { deleteAsset, getAssets, saveAsset } from '../../services/assetApi'
 import { API_ORIGIN } from '../../services/request'
+import { rememberSessionTaskId } from '../../services/sessionTaskStore'
 import {
   generateAvatar,
   getAvatarGenerateTask,
@@ -201,6 +217,11 @@ const taskStatus = ref('')
 const taskProgress = ref<number | null>(null)
 const pollTimer = ref<number | null>(null)
 const deletingAssetId = ref<number | null>(null)
+
+const { showTaskProgressBar, barProgressPercent, reset: resetSmoothProgress } = useSmoothTaskProgress(
+  taskStatus,
+  taskProgress,
+)
 
 const defaultAvatar = computed(() => avatars.value.find((item) => item.defaultAvatar))
 const canGenerate = computed(() => Boolean(form.avatarName && form.prompt && form.imageCount >= 1))
@@ -295,8 +316,10 @@ async function submitGenerate() {
   generatedAvatars.value = []
   try {
     const res = await generateAvatar({ ...form })
+    rememberSessionTaskId(res.taskId)
+    resetSmoothProgress()
     taskStatus.value = res.status
-    taskProgress.value = 10
+    taskProgress.value = 0
     startPoll(res.taskId)
   } catch (e) {
     errorMessage.value = e instanceof Error ? e.message : '提交生成失败'
@@ -310,7 +333,7 @@ function startPoll(taskId: number) {
   void pollOnce(taskId)
   pollTimer.value = window.setInterval(() => {
     void pollOnce(taskId)
-  }, 3000)
+  }, 2000)
 }
 
 async function pollOnce(taskId: number) {
@@ -324,6 +347,9 @@ async function pollOnce(taskId: number) {
     }
     if (['SUCCESS', 'FAILED', 'RETRYABLE', 'CANCELED'].includes(detail.status)) {
       stopPoll()
+      if (detail.status === 'SUCCESS') {
+        taskProgress.value = detail.progress ?? 100
+      }
       await Promise.all([loadAvatars(), loadReferenceAssets()])
     }
   } catch (e) {
@@ -601,6 +627,47 @@ function assetUrl(url?: string | null) {
   color: var(--app-text-secondary);
   font-size: 13px;
   font-weight: 800;
+}
+
+.avatar-task-head-right {
+  display: flex;
+  min-width: 0;
+  flex: 1;
+  max-width: 320px;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 8px;
+}
+
+.avatar-progress-row {
+  display: flex;
+  width: 100%;
+  align-items: center;
+  gap: 10px;
+}
+
+.avatar-progress-track {
+  flex: 1;
+  height: 8px;
+  overflow: hidden;
+  border-radius: 999px;
+  background: #e8ecf4;
+}
+
+.avatar-progress-fill {
+  height: 100%;
+  border-radius: 999px;
+  background: linear-gradient(90deg, var(--app-primary) 0%, #6366f1 100%);
+  transition: width 0.35s ease;
+}
+
+.avatar-progress-pct {
+  flex-shrink: 0;
+  min-width: 2.75rem;
+  color: var(--app-text-secondary);
+  font-size: 12px;
+  font-weight: 800;
+  text-align: right;
 }
 
 .avatar-result-empty,

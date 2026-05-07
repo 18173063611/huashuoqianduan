@@ -18,6 +18,7 @@ export interface RewriteScriptResponse {
 export interface ScriptVersionItem {
   scriptVersionId: number
   projectId: number | null
+  ownerUserId?: number | null
   versionNo: number
   content: string
   sourceType: string

@@ -3,9 +3,7 @@
     <div class="app-card-header">
       <div>
         <h2 class="app-card-title">任务中心</h2>
-        <p class="app-muted">
-          可不选项目：登录后查看与您账号相关的全部任务；选择项目后仅查看该项目内「公共演示任务 + 您本人任务」。
-        </p>
+        <p class="app-muted">登录后查看与您账号相关的<strong>全部任务</strong>（含公共演示任务与本人任务）。</p>
       </div>
       <button
         class="app-secondary-button"
@@ -17,18 +15,17 @@
       </button>
     </div>
 
-    <p v-if="!canQuery && panelActive" class="app-muted task-hint">
-      请在「用户与资产」中<strong>登录</strong>以查看跨项目任务，或在「项目工作台」中<strong>选择项目</strong>以查看该项目内任务（未登录时仅能看到项目内无归属人的演示任务）。
+    <p v-if="!canQuery && !hasSessionTasks && panelActive" class="app-muted task-hint">
+      请在「用户与资产」中<strong>登录</strong>以查看全部任务。
     </p>
 
-    <template v-if="canQuery">
+    <p v-else-if="!canQuery && hasSessionTasks && panelActive" class="app-muted task-hint">
+      当前为<strong>本机会话任务</strong>视图（未登录时）：展示你在此浏览器里触发过的任务。
+    </p>
+
+    <template v-if="canQuery || hasSessionTasks">
       <div class="app-selected-project">
-        <template v-if="project">
-          当前项目 · <strong>{{ project.projectName }}</strong>
-        </template>
-        <template v-else>
-          <strong>全部我的任务</strong>（跨项目）
-        </template>
+        <strong>全部任务</strong>
         <span v-if="summary" class="task-count-inline">
           · 进行中 {{ summary.processingCount }} · 成功 {{ summary.successCount }} · 失败/取消等
           {{ summary.failedCount }}
@@ -63,16 +60,13 @@
         <div v-for="task in tasks" :key="task.taskId" class="app-file-item task-row">
           <div class="task-row-main">
             <strong>{{ displayTitle(task) }}</strong>
-            <div
-              v-if="progressPercent(task) != null"
-              class="task-progress-wrap"
-              :class="{ 'task-progress-wrap--active': task.status === 'RUNNING' }"
-            >
-              <div class="task-progress-bar" :style="{ width: progressPercent(task) + '%' }" />
-            </div>
+            <TaskRowSmoothProgress
+              v-if="taskRowProgressEligible(task)"
+              :status="task.status"
+              :progress="task.progress"
+            />
             <p class="task-row-meta">
               状态 {{ task.status }} · 重试 {{ task.retryCount ?? 0 }} 次
-              <template v-if="!project && task.projectId != null"> · 项目 #{{ task.projectId }}</template>
               <template v-if="task.errorCode"> · {{ task.errorCode }} </template>
               <template v-if="formatWhen(task.startedAt)">
                 · 开始 {{ formatWhen(task.startedAt) }}
@@ -127,20 +121,21 @@
 
 <script setup lang="ts">
 import { computed, ref, watch, watchEffect } from 'vue'
+import TaskRowSmoothProgress from '../../components/TaskRowSmoothProgress.vue'
+import { getAuthToken } from '../../services/request'
 import {
   cancelTask,
+  getTaskDetail,
   getTaskSummary,
   listTasks,
   markTaskViewed,
   retryTask,
 } from '../../services/taskApi'
-import { getAuthToken } from '../../services/request'
-import type { ProjectItem } from '../../types/projectTypes'
+import { getSessionTaskIds } from '../../services/sessionTaskStore'
 import type { TaskItem, TaskSummaryResponse } from '../../types/taskTypes'
 
 const props = withDefaults(
   defineProps<{
-    project?: ProjectItem
     /** 为 false 时停止轮询（例如切换离开任务页） */
     panelActive?: boolean
   }>(),
@@ -151,7 +146,6 @@ const emit = defineEmits<{
   openAsset: [assetId: number]
 }>()
 
-const project = computed(() => props.project)
 const hasToken = ref(false)
 const tasks = ref<TaskItem[]>([])
 const summary = ref<TaskSummaryResponse | null>(null)
@@ -160,7 +154,8 @@ const errorMessage = ref('')
 const taskTypeFilter = ref('')
 const statusFilter = ref('')
 
-const canQuery = computed(() => hasToken.value || !!props.project?.projectId)
+const canQuery = computed(() => hasToken.value)
+const hasSessionTasks = computed(() => getSessionTaskIds().length > 0)
 
 function refreshAuthState() {
   hasToken.value = !!getAuthToken()
@@ -170,7 +165,6 @@ watch(
   () =>
     [
       props.panelActive,
-      props.project?.projectId,
       taskTypeFilter.value,
       statusFilter.value,
     ] as const,
@@ -189,7 +183,7 @@ watchEffect((onCleanup) => {
     return
   }
   refreshAuthState()
-  if (!canQuery.value) {
+  if (!canQuery.value && !hasSessionTasks.value) {
     return
   }
   const hasActive = tasks.value.some((t) => t.status === 'QUEUED' || t.status === 'RUNNING')
@@ -204,8 +198,8 @@ watchEffect((onCleanup) => {
 
 async function loadData(silent: boolean) {
   refreshAuthState()
-  const pid = props.project?.projectId ?? null
-  if (!hasToken.value && pid == null) {
+  const useSessionFallback = !hasToken.value
+  if (useSessionFallback && !hasSessionTasks.value) {
     tasks.value = []
     summary.value = null
     if (!silent) {
@@ -220,18 +214,36 @@ async function loadData(silent: boolean) {
   try {
     const typeArg = taskTypeFilter.value.trim()
     const statusArg = statusFilter.value.trim()
-    const [list, sum] = await Promise.all([
-      listTasks({
-        ...(pid != null ? { projectId: pid } : {}),
-        ...(typeArg ? { taskType: typeArg } : {}),
-        ...(statusArg ? { status: statusArg } : {}),
-        pageNo: 1,
-        pageSize: 50,
-      }),
-      getTaskSummary(pid ?? undefined),
-    ])
-    tasks.value = list
-    summary.value = sum
+    if (useSessionFallback) {
+      const ids = getSessionTaskIds()
+      const details = await Promise.all(ids.map((id) => getTaskDetail(id).catch(() => null)))
+      let list = details.filter((x): x is TaskItem => !!x)
+      if (typeArg) {
+        list = list.filter((t) => t.taskType === typeArg)
+      }
+      if (statusArg) {
+        list = list.filter((t) => String(t.status) === statusArg)
+      }
+      tasks.value = list
+      summary.value = {
+        processingCount: list.filter((t) => t.status === 'QUEUED' || t.status === 'RUNNING').length,
+        successCount: list.filter((t) => t.status === 'SUCCESS').length,
+        failedCount: list.filter((t) => ['FAILED', 'RETRYABLE', 'CANCELED'].includes(String(t.status))).length,
+        records: list,
+      }
+    } else {
+      const [list, sum] = await Promise.all([
+        listTasks({
+          ...(typeArg ? { taskType: typeArg } : {}),
+          ...(statusArg ? { status: statusArg } : {}),
+          pageNo: 1,
+          pageSize: 50,
+        }),
+        getTaskSummary(),
+      ])
+      tasks.value = list
+      summary.value = sum
+    }
   } catch (error) {
     if (!silent) {
       errorMessage.value = error instanceof Error ? error.message : '加载任务失败'
@@ -304,6 +316,10 @@ function taskLabel(taskType: string) {
   return taskType
 }
 
+function taskRowProgressEligible(task: TaskItem) {
+  return task.status === 'QUEUED' || task.status === 'RUNNING' || task.status === 'SUCCESS'
+}
+
 function resultAssetId(task: TaskItem): number | null {
   const rid = task.resultAssetId
   if (typeof rid === 'number' && rid > 0) {
@@ -325,14 +341,6 @@ function resultAssetId(task: TaskItem): number | null {
     /* ignore */
   }
   return null
-}
-
-function progressPercent(task: TaskItem): number | null {
-  const n = task.progress
-  if (typeof n !== 'number' || n < 0) {
-    return null
-  }
-  return Math.min(100, Math.max(0, n))
 }
 
 function formatWhen(iso: string | null | undefined): string | null {
@@ -573,37 +581,6 @@ section.app-card.app-page-stack {
 .task-unread {
   color: #6c5ce7;
   font-weight: 500;
-}
-
-/* 进度条 */
-.task-progress-wrap {
-  height: 6px;
-  margin-top: 12px;
-  overflow: hidden;
-  border-radius: 6px;
-  background: #e5e7eb;
-}
-
-.task-progress-bar {
-  height: 100%;
-  border-radius: 6px;
-  background: linear-gradient(90deg, #6c5ce7, #8a7cff);
-  transition: width 0.35s ease;
-}
-
-.task-progress-wrap--active .task-progress-bar {
-  background: linear-gradient(90deg, #6c5ce7, #9d8fff, #8a7cff);
-  background-size: 200% 100%;
-  animation: task-progress-flow 2.2s ease infinite;
-}
-
-@keyframes task-progress-flow {
-  0% {
-    background-position: 100% 50%;
-  }
-  100% {
-    background-position: 0% 50%;
-  }
 }
 
 /* 状态标签 */

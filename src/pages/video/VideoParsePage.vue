@@ -229,6 +229,7 @@
 import { computed, ref } from 'vue'
 import { rewriteDouyinCopywriting, startDouyinParseWithTranscript } from '../../services/writerDouyinApi'
 import type { DouyinParseStage, DouyinVideoParseResponse } from '../../types/writerDouyinTypes'
+import { rememberSessionTaskId } from '../../services/sessionTaskStore'
 
 const emit = defineEmits<{
   continue: []
@@ -339,6 +340,9 @@ async function handleParseVideo() {
       signal: parseAbort.value.signal,
       onParsed(payload) {
         parseStage.value = 'parsed'
+        if (payload.data?.taskId) {
+          rememberSessionTaskId(payload.data.taskId)
+        }
         if (payload.data?.parseResult) {
           douyinParse.value = payload.data.parseResult
         }
@@ -348,6 +352,9 @@ async function handleParseVideo() {
       },
       onCompleted(payload) {
         parseStage.value = 'completed'
+        if (payload.data?.taskId) {
+          rememberSessionTaskId(payload.data.taskId)
+        }
         const transcript = payload.data?.transcriptResult
         if (transcript) {
           sourceText.value = transcript.originalText || ''
@@ -359,6 +366,9 @@ async function handleParseVideo() {
       },
       onErrorEvent(payload) {
         parseStage.value = 'error'
+        if (payload.data?.taskId) {
+          rememberSessionTaskId(payload.data.taskId)
+        }
         parseError.value = `${payload.message || '解析或转写失败'}${payload.traceId ? `（traceId：${payload.traceId}）` : ''}`
         if (payload.data?.parseResult) {
           douyinParse.value = payload.data.parseResult

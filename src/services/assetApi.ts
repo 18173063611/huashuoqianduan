@@ -6,7 +6,6 @@ export type AssetListSort = 'createdAtDesc' | 'createdAtAsc' | 'fileNameAsc' | '
 export type AssetListScope = 'global' | 'private' | 'all'
 
 export interface ListAssetsParams {
-  projectId?: number
   /** global=仅公共；private=仅当前用户；省略或 all=未登录仅公共，已登录公共+本人 */
   scope?: AssetListScope
   assetType?: AssetType
@@ -17,9 +16,6 @@ export interface ListAssetsParams {
 
 export async function getAssets(params?: ListAssetsParams) {
   const search = new URLSearchParams()
-  if (params?.projectId != null) {
-    search.set('projectId', String(params.projectId))
-  }
   if (params?.assetType) {
     search.set('assetType', params.assetType)
   }

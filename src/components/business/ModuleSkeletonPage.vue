@@ -2,8 +2,7 @@
   <section class="app-card app-page-stack module-skeleton">
     <header class="module-skeleton-header">
       <h2 class="module-skeleton-title">{{ title }}</h2>
-      <p v-if="!project" class="module-skeleton-project-hint app-muted">请先在「项目管理」中选择当前项目。</p>
-      <p v-else class="app-selected-project module-skeleton-project-hint">当前项目 · {{ project.projectName }}</p>
+      <p class="module-skeleton-project-hint app-muted">全局模式：无需选择项目，功能接入后将直接在此使用。</p>
     </header>
 
     <div class="module-status-card">
@@ -22,11 +21,8 @@
 </template>
 
 <script setup lang="ts">
-import type { ProjectItem } from '../../types/projectTypes'
-
 defineProps<{
   title: string
-  project?: ProjectItem
   feature: string
   input: string
   output: string

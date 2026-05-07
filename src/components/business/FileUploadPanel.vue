@@ -71,7 +71,8 @@ async function handleUpload() {
 
 async function loadFiles() {
   try {
-    files.value = await getFiles()
+    const page = await getFiles(1, 50)
+    files.value = page.records
   } catch (error) {
     errorMessage.value = error instanceof Error ? error.message : '加载文件列表失败'
   }

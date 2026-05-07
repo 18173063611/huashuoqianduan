@@ -23,9 +23,9 @@ export function applyWriterScript(payload: ApplyWriterScriptRequest) {
   })
 }
 
-/** 查询当前项目已应用的文案草稿。 */
-export function getCurrentWriterScript(projectId: number) {
-  return request<WriterScriptItem | null>(`/writer/scripts/current?projectId=${projectId}`)
+/** 查询当前已应用的文案草稿（全局，不按项目过滤）。 */
+export function getCurrentWriterScript() {
+  return request<WriterScriptItem | null>('/writer/scripts/current')
 }
 
 /** 保存用户手动编辑后的最终文案。 */

@@ -3,7 +3,6 @@ import type { CreateTaskRequest, TaskItem, TaskSummaryResponse } from '../types/
 
 export interface ListTasksParams {
   /** 不传或 null：当前登录用户的跨项目任务（须已登录） */
-  projectId?: number | null
   taskType?: string
   status?: string
   pageNo?: number
@@ -19,9 +18,6 @@ export function createTask(payload: CreateTaskRequest) {
 
 export async function listTasks(params: ListTasksParams) {
   const search = new URLSearchParams()
-  if (params.projectId != null) {
-    search.set('projectId', String(params.projectId))
-  }
   if (params.taskType && params.taskType.trim()) {
     search.set('taskType', params.taskType.trim())
   }
@@ -34,14 +30,9 @@ export async function listTasks(params: ListTasksParams) {
   return request<TaskItem[]>(`/tasks?${qs}`)
 }
 
-/** 不传 projectId：与 listTasks 相同边界（仅登录用户有数据） */
-export function getTaskSummary(projectId?: number | null) {
-  const search = new URLSearchParams()
-  if (projectId != null) {
-    search.set('projectId', String(projectId))
-  }
-  const qs = search.toString()
-  return request<TaskSummaryResponse>(qs ? `/tasks/summary?${qs}` : '/tasks/summary')
+/** 全局任务汇总（与 listTasks 不传 projectId 一致，须已登录） */
+export function getTaskSummary() {
+  return request<TaskSummaryResponse>('/tasks/summary')
 }
 
 export function retryTask(taskId: number) {

@@ -69,7 +69,6 @@ import { computed } from 'vue'
 
 const menuItems = [
   { key: 'script-rewrite', label: '工作台', icon: '⌂' },
-  { key: 'projects', label: '项目管理', icon: '▣' },
   { key: 'upload', label: '素材中心', icon: '◈' },
   { key: 'video-parse', label: '爆款对标', icon: '◉' },
   { key: 'storyboard', label: '分镜生成', icon: '▤' },
@@ -91,7 +90,7 @@ defineEmits<{
   change: [key: MenuKey]
 }>()
 
-const activeTitle = computed(() => menuItems.find((item) => item.key === props.activeKey)?.label ?? '项目管理')
+const activeTitle = computed(() => menuItems.find((item) => item.key === props.activeKey)?.label ?? '工作台')
 
 const flowSteps = [
   { key: 'video-parse', label: '对标分析' },
@@ -102,7 +101,6 @@ const flowSteps = [
 ] as const
 
 const stepIndexMap: Record<MenuKey, number> = {
-  projects: 0,
   upload: 0,
   'video-parse': 0,
   'script-rewrite': 0,
@@ -118,9 +116,6 @@ const stepIndexMap: Record<MenuKey, number> = {
 const activeStepIndex = computed(() => stepIndexMap[props.activeKey] ?? 0)
 
 const activeHeadline = computed(() => {
-  if (props.activeKey === 'projects') {
-    return '工作台'
-  }
   if (props.activeKey === 'script-rewrite') {
     return '对标分析（文案改写）'
   }
@@ -130,9 +125,6 @@ const activeHeadline = computed(() => {
 const activeDescription = computed(() => {
   if (props.activeKey === 'script-rewrite') {
     return '分析爆款视频，改写优质文案，打造更适合数字人口播的内容。'
-  }
-  if (props.activeKey === 'projects') {
-    return '项目管理已不再作为主流程前置，可按需管理历史项目。'
   }
   return '无需先创建项目，直接完成素材、脚本、声音、形象与成片制作。'
 })

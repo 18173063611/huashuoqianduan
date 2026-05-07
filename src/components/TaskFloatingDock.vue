@@ -35,7 +35,6 @@
         </div>
         <div class="task-dock-sheet-body">
           <TaskCenter
-            :project="project"
             :panel-active="sheetOpen"
             @open-asset="onOpenAsset"
           />
@@ -50,11 +49,6 @@ import { onBeforeUnmount, ref, watch } from 'vue'
 import TaskCenter from '../pages/task/TaskCenter.vue'
 import { getAuthToken } from '../services/request'
 import { getTaskSummary } from '../services/taskApi'
-import type { ProjectItem } from '../types/projectTypes'
-
-const props = defineProps<{
-  project?: ProjectItem
-}>()
 
 const emit = defineEmits<{
   openAsset: [assetId: number]
@@ -65,7 +59,7 @@ const processingCount = ref(0)
 let pollTimer: number | null = null
 
 function canPoll() {
-  return !!getAuthToken() || props.project?.projectId != null
+  return !!getAuthToken()
 }
 
 async function refreshBadge() {
@@ -74,8 +68,7 @@ async function refreshBadge() {
     return
   }
   try {
-    const pid = props.project?.projectId ?? undefined
-    const sum = await getTaskSummary(pid)
+    const sum = await getTaskSummary()
     processingCount.value = typeof sum.processingCount === 'number' ? sum.processingCount : 0
   } catch {
     /* 忽略轮询错误 */
@@ -96,7 +89,7 @@ function stopPolling() {
 }
 
 watch(
-  () => props.project?.projectId,
+  () => getAuthToken(),
   () => startPolling(),
   { immediate: true },
 )
