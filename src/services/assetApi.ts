@@ -54,6 +54,18 @@ export function saveAsset(assetId: number) {
   })
 }
 
+export function publishAsset(assetId: number) {
+  return request<AssetItem>(`/assets/${assetId}/publish`, {
+    method: 'POST',
+  })
+}
+
+export function unpublishAsset(assetId: number) {
+  return request<AssetItem>(`/assets/${assetId}/unpublish`, {
+    method: 'POST',
+  })
+}
+
 export function deleteAsset(assetId: number) {
   return request<void>(`/assets/${assetId}`, {
     method: 'DELETE',
