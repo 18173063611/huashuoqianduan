@@ -165,7 +165,7 @@ import type { AvatarGenerateRequest, AvatarItem } from '../../types/avatarTypes'
 
 const sourceMode = ref<'AI' | 'UPLOAD'>('AI')
 const form = reactive<AvatarGenerateRequest>({
-  avatarName: '知识类女主播',
+  avatarName: '知识类男主播',
   prompt: '生成一位适合知识口播的数字人形象，干净背景，正面半身，商业摄影质感',
   referenceAssetIds: [],
   style: 'REALISTIC',
@@ -203,7 +203,7 @@ onBeforeUnmount(() => {
 async function loadReferenceAssets() {
   loadingAssets.value = true
   try {
-    referenceAssets.value = await getAssets('IMAGE')
+    referenceAssets.value = await getAssets({ assetType: 'IMAGE' })
   } catch (e) {
     errorMessage.value = e instanceof Error ? e.message : '加载图片资产失败'
   } finally {

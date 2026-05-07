@@ -31,7 +31,14 @@
       @highlight-consumed="assetHighlightId = null"
     />
 
-    <TaskCenter v-show="activeKey === 'tasks'" @open-asset="onOpenAssetFromTask" />
+    <TaskCenter
+      v-show="activeKey === 'tasks'"
+      :project="selectedProject"
+      :panel-active="activeKey === 'tasks'"
+      @open-asset="onOpenAssetFromTask"
+    />
+
+    <UserCenter v-show="activeKey === 'user'" />
 
     <section v-show="activeKey === 'flow'" class="app-card app-flow">
       <h2 class="module-flow-title">制作流程</h2>
@@ -59,6 +66,7 @@ import ScriptRewritePage from './pages/script/ScriptRewritePage.vue'
 import StoryboardPage from './pages/script/StoryboardPage.vue'
 import TaskCenter from './pages/task/TaskCenter.vue'
 import UploadCenter from './pages/upload/UploadCenter.vue'
+import UserCenter from './pages/user/UserCenter.vue'
 import VideoParsePage from './pages/video/VideoParsePage.vue'
 import VoiceTtsPage from './pages/voice/VoiceTtsPage.vue'
 import type { ProjectItem } from './types/projectTypes'
@@ -75,6 +83,7 @@ type MenuKey =
   | 'publish'
   | 'assets'
   | 'tasks'
+  | 'user'
   | 'flow'
 
 const activeKey = ref<MenuKey>('avatar')

@@ -2,6 +2,7 @@ export type AssetType = 'TEXT' | 'IMAGE' | 'AUDIO' | 'VIDEO' | 'COVER' | 'JSON'
 
 export interface AssetItem {
   assetId: number
+  ownerUserId: number | null
   projectId: number | null
   taskId: number | null
   assetType: AssetType

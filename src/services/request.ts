@@ -8,13 +8,39 @@ export const API_BASE_URL =
 /** 用于拼接 /uploads 等静态资源的绝对地址 */
 export const API_ORIGIN = API_BASE_URL.replace(/\/api\/v1\/?$/, '')
 
+const AUTH_TOKEN_KEY = 'huashuo_auth_token'
+
+export function setAuthToken(token: string | null) {
+  if (!token) {
+    window.localStorage.removeItem(AUTH_TOKEN_KEY)
+    return
+  }
+  window.localStorage.setItem(AUTH_TOKEN_KEY, token)
+}
+
+export function getAuthToken(): string | null {
+  try {
+    const v = window.localStorage.getItem(AUTH_TOKEN_KEY)
+    return v && v.trim() ? v.trim() : null
+  } catch {
+    return null
+  }
+}
+
 export async function request<T>(path: string, init?: RequestInit): Promise<T> {
   const url = `${API_BASE_URL}${path.startsWith('/') ? path : `/${path}`}`
   const requestInit: RequestInit = { ...init }
+  const token = getAuthToken()
   // FormData 由浏览器自动生成 multipart boundary，不能手动设置 Content-Type。
   if (!(init?.body instanceof FormData)) {
     requestInit.headers = {
       'Content-Type': 'application/json',
+      ...(token ? { Authorization: `Bearer ${token}` } : null),
+      ...(init?.headers as Record<string, string> | undefined),
+    }
+  } else {
+    requestInit.headers = {
+      ...(token ? { Authorization: `Bearer ${token}` } : null),
       ...(init?.headers as Record<string, string> | undefined),
     }
   }
