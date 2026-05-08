@@ -54,10 +54,22 @@ export interface VideoTaskVO {
   createdAt: number
   updatedAt: number
   videoUrl: string
+  resultAssetId?: number | null
   lastFrameUrl: string | null
   completionTokens: number
   errorCode: string | null
   errorMessage: string | null
+}
+
+export interface DigitalHumanVideoRequest {
+  projectId?: number | null
+  imageUrl: string
+  audioUrl?: string
+  text?: string
+  voiceId?: string
+  prompt?: string
+  resolution?: '540p' | '720p' | '1080p'
+  model?: string
 }
 
 /** 文生视频请求体 */
