@@ -1,9 +1,14 @@
 import { request } from './request'
 import type {
+  FirstFrameVideoRequest,
+  FirstLastFrameVideoRequest,
   ParseVideoSourceRequest,
+  ReferenceVideoRequest,
+  TextToVideoRequest,
   VideoParseQueryResponse,
   VideoParseSubmitResponse,
   VideoScriptShotItem,
+  VideoTaskVO,
 } from '../types/videoTypes'
 
 /** 提交视频源解析任务。 */
@@ -25,5 +30,40 @@ export function analyzeVideoScript(videoUrl: string) {
   const qs = `url=${encodeURIComponent(videoUrl)}`
   return request<VideoScriptShotItem[]>(`/video/script/analy?${qs}`, {
     method: 'POST',
+  })
+}
+
+/**
+ * 文生视频。后端会同步轮询火山方舟，1~3 分钟后返回最终 videoUrl。
+ * 仅传必填字段，其它分辨率/比例/水印等参数由后端按文档默认值固定。
+ */
+export function generateTextToVideo(payload: TextToVideoRequest) {
+  return request<VideoTaskVO>('/video/generate/text', {
+    method: 'POST',
+    body: JSON.stringify(payload),
+  })
+}
+
+/** 图生视频 - 首帧生成。仅支持公网 URL / Base64 / asset:// 三种 imageUrl 取值。 */
+export function generateFirstFrameVideo(payload: FirstFrameVideoRequest) {
+  return request<VideoTaskVO>('/video/generate/image/first-frame', {
+    method: 'POST',
+    body: JSON.stringify(payload),
+  })
+}
+
+/** 图生视频 - 首尾帧生成。模型以首帧为主，尾帧自动居中裁剪适配。 */
+export function generateFirstLastFrameVideo(payload: FirstLastFrameVideoRequest) {
+  return request<VideoTaskVO>('/video/generate/image/first-last-frame', {
+    method: 'POST',
+    body: JSON.stringify(payload),
+  })
+}
+
+/** 图生视频 - 参照图生成。imageUrls 长度 1~9，lite i2v 实际支持 1~4。 */
+export function generateReferenceVideo(payload: ReferenceVideoRequest) {
+  return request<VideoTaskVO>('/video/generate/image/reference', {
+    method: 'POST',
+    body: JSON.stringify(payload),
   })
 }
