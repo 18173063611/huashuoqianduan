@@ -679,6 +679,17 @@ section.app-card {
   background: transparent;
 }
 
+section.app-card > .app-card-header {
+  align-items: flex-start;
+  flex-wrap: wrap;
+  gap: 20px 24px;
+}
+
+section.app-card > .app-card-header > :first-child {
+  flex: 1 1 360px;
+  min-width: min(360px, 100%);
+}
+
 .app-card-title {
   font-size: 20px;
   font-weight: 600;
@@ -686,6 +697,7 @@ section.app-card {
 }
 
 .app-muted {
+  max-width: 620px;
   font-size: 13px;
   color: #6b7280;
 }
@@ -708,9 +720,13 @@ section.app-card {
 }
 
 .asset-header-actions {
-  display: flex;
-  align-items: center;
+  display: grid;
+  flex: 1 1 680px;
+  grid-template-columns: repeat(3, minmax(136px, 1fr)) minmax(190px, 1.25fr) auto;
+  align-items: stretch;
   gap: 12px;
+  min-width: min(680px, 100%);
+  margin-left: auto;
 }
 
 .asset-scope-segment {
@@ -755,6 +771,8 @@ section.app-card {
 }
 
 .asset-type-select {
+  width: 100%;
+  min-width: 0;
   height: 36px;
   border: 1px solid #e5e7eb;
   background: #f5f6f8;
@@ -775,7 +793,8 @@ section.app-card {
 }
 
 .asset-search {
-  width: 220px;
+  width: 100%;
+  min-width: 0;
   height: 36px;
   border: 1px solid #e5e7eb;
   background: #f5f6f8;
@@ -796,6 +815,13 @@ section.app-card {
   border-color: #7c6cff;
   box-shadow: 0 0 0 2px rgba(124, 108, 255, 0.1);
   background: #ffffff;
+}
+
+.asset-header-actions .app-secondary-button {
+  min-width: 68px;
+  height: 36px;
+  justify-content: center;
+  white-space: nowrap;
 }
 
 .app-file-list {
@@ -923,6 +949,52 @@ section.app-card {
   opacity: 0.92;
   transform: translateY(-1px);
   box-shadow: 0 8px 18px rgba(124, 108, 255, 0.22);
+}
+
+@media (max-width: 1320px) {
+  section.app-card > .app-card-header {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  section.app-card > .app-card-header > :first-child,
+  .asset-header-actions {
+    min-width: 0;
+    width: 100%;
+  }
+
+  .asset-header-actions {
+    margin-left: 0;
+  }
+}
+
+@media (max-width: 980px) {
+  .asset-header-actions {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .asset-header-actions .app-secondary-button {
+    width: 100%;
+  }
+}
+
+@media (max-width: 640px) {
+  section.app-card > .app-card-header {
+    gap: 16px;
+  }
+
+  .asset-header-actions {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .asset-scope-segment,
+  .app-selected-project {
+    width: 100%;
+  }
+
+  .asset-scope-btn {
+    flex: 1 1 0;
+  }
 }
 
 .asset-modal-backdrop {
