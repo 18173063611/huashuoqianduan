@@ -177,9 +177,6 @@ import type { VideoScriptShotItem } from '../../types/videoTypes'
 
 type SourceMode = 'url' | 'file'
 
-// 上传接口只返回相对路径，需要拼上 TOS 桶域名才是公网可访问的地址
-const TOS_BUCKET_ORIGIN = 'https://ceshichucun.tos-cn-guangzhou.volces.com'
-
 const sourceMode = ref<SourceMode>('url')
 const videoUrl = ref('')
 const selectedFile = ref<File | null>(null)
