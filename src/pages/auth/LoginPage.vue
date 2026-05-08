@@ -1,114 +1,115 @@
 <template>
   <main class="auth-page">
-    <section class="auth-panel" aria-label="登录与注册">
-      <div class="auth-tabs" role="tablist" aria-label="登录或注册">
-        <button
-          type="button"
-          class="auth-tab"
-          role="tab"
-          :aria-selected="authMode === 'login'"
-          :class="{ 'auth-tab--active': authMode === 'login' }"
-          @click="switchMode('login')"
-        >
-          登录
-        </button>
-        <button
-          type="button"
-          class="auth-tab"
-          role="tab"
-          :aria-selected="authMode === 'register'"
-          :class="{ 'auth-tab--active': authMode === 'register' }"
-          @click="switchMode('register')"
-        >
-          注册
-        </button>
+    <section class="auth-shell" aria-label="登录与注册">
+      <div class="auth-visual">
+        <img class="auth-visual-image" :src="welcomeIllustration" alt="登录欢迎插画" />
       </div>
 
-      <form class="auth-form" @submit.prevent="handleSubmit">
-        <div>
-          <h1>{{ authMode === 'login' ? '欢迎回来' : '创建账号' }}</h1>
-          <p>{{ authMode === 'login' ? '登录以继续使用我们的服务' : '注册后即可进入智能内容生产工作台' }}</p>
-        </div>
-
-        <p v-if="message" :class="messageType === 'error' ? 'auth-message auth-message--error' : 'auth-message'">
-          {{ message }}
-        </p>
-
-        <label class="auth-field">
-          <span>账号</span>
-          <span class="auth-input-wrap">
-            <span class="auth-input-icon" aria-hidden="true">✉</span>
-            <input
-              v-model="authForm.username"
-              type="text"
-              autocomplete="username"
-              maxlength="60"
-              placeholder="请输入账号或邮箱地址"
-            />
-          </span>
-        </label>
-
-        <label class="auth-field">
-          <span>密码</span>
-          <span class="auth-input-wrap">
-            <span class="auth-input-icon" aria-hidden="true">▢</span>
-            <input
-              v-model="authForm.password"
-              :type="passwordVisible ? 'text' : 'password'"
-              autocomplete="current-password"
-              maxlength="60"
-              placeholder="请输入密码"
-            />
-            <button
-              type="button"
-              class="auth-eye-button"
-              :aria-label="passwordVisible ? '隐藏密码' : '显示密码'"
-              @click="passwordVisible = !passwordVisible"
-            >
-              {{ passwordVisible ? '◉' : '◎' }}
-            </button>
-          </span>
-        </label>
-
-        <label v-if="authMode === 'register'" class="auth-field">
-          <span>展示名</span>
-          <span class="auth-input-wrap">
-            <span class="auth-input-icon" aria-hidden="true">◇</span>
-            <input
-              v-model="authForm.displayName"
-              type="text"
-              autocomplete="nickname"
-              maxlength="80"
-              placeholder="请输入展示名（可选）"
-            />
-          </span>
-        </label>
-
-        <div v-if="authMode === 'login'" class="auth-row">
-          <label class="auth-check">
-            <input v-model="rememberMe" type="checkbox" />
-            <span>记住我</span>
-          </label>
-          <button type="button" class="auth-link" @click="showInfo('请联系管理员重置密码')">忘记密码?</button>
-        </div>
-
-        <button class="auth-submit" type="submit" :disabled="loading">
-          {{ loading ? '处理中...' : authMode === 'login' ? '登录' : '注册并登录' }}
-        </button>
-
-        <div class="auth-divider"><span>或</span></div>
-
-        <button class="auth-outline" type="button" @click="showInfo('当前后端暂未开放验证码登录')">
-          使用验证码登录（支持手机号）
-        </button>
-
-        <div class="auth-footer">
-          <span>{{ authMode === 'login' ? '还没有账号?' : '已有账号?' }}</span>
-          <button type="button" class="auth-link" @click="switchMode(authMode === 'login' ? 'register' : 'login')">
-            {{ authMode === 'login' ? '立即注册' : '返回登录' }}
+      <section class="auth-panel" aria-label="登录表单">
+        <div class="auth-tabs" role="tablist" aria-label="登录或注册">
+          <button
+            type="button"
+            class="auth-tab"
+            role="tab"
+            :aria-selected="authMode === 'login'"
+            :class="{ 'auth-tab--active': authMode === 'login' }"
+            @click="switchMode('login')"
+          >
+            登录
+          </button>
+          <button
+            type="button"
+            class="auth-tab"
+            role="tab"
+            :aria-selected="authMode === 'register'"
+            :class="{ 'auth-tab--active': authMode === 'register' }"
+            @click="switchMode('register')"
+          >
+            注册
           </button>
         </div>
-      </form>
+
+        <form class="auth-form" @submit.prevent="handleSubmit">
+          <p v-if="message" :class="messageType === 'error' ? 'auth-message auth-message--error' : 'auth-message'">
+            {{ message }}
+          </p>
+
+          <label class="auth-field">
+            <span>账号</span>
+            <span class="auth-input-wrap">
+              <span class="auth-input-icon" aria-hidden="true">✉</span>
+              <input
+                v-model="authForm.username"
+                type="text"
+                autocomplete="username"
+                maxlength="60"
+                placeholder="请输入账号或邮箱地址"
+              />
+            </span>
+          </label>
+
+          <label class="auth-field">
+            <span>密码</span>
+            <span class="auth-input-wrap">
+              <span class="auth-input-icon" aria-hidden="true">▢</span>
+              <input
+                v-model="authForm.password"
+                :type="passwordVisible ? 'text' : 'password'"
+                autocomplete="current-password"
+                maxlength="60"
+                placeholder="请输入密码"
+              />
+              <button
+                type="button"
+                class="auth-eye-button"
+                :aria-label="passwordVisible ? '隐藏密码' : '显示密码'"
+                @click="passwordVisible = !passwordVisible"
+              >
+                {{ passwordVisible ? '◉' : '◎' }}
+              </button>
+            </span>
+          </label>
+
+          <label v-if="authMode === 'register'" class="auth-field">
+            <span>展示名</span>
+            <span class="auth-input-wrap">
+              <span class="auth-input-icon" aria-hidden="true">◇</span>
+              <input
+                v-model="authForm.displayName"
+                type="text"
+                autocomplete="nickname"
+                maxlength="80"
+                placeholder="请输入展示名（可选）"
+              />
+            </span>
+          </label>
+
+          <div v-if="authMode === 'login'" class="auth-row">
+            <label class="auth-check">
+              <input v-model="rememberMe" type="checkbox" />
+              <span>记住我</span>
+            </label>
+            <button type="button" class="auth-link" @click="showInfo('请联系管理员重置密码')">忘记密码?</button>
+          </div>
+
+          <button class="auth-submit" type="submit" :disabled="loading">
+            {{ loading ? '处理中...' : authMode === 'login' ? '登录' : '注册并登录' }}
+          </button>
+
+          <div class="auth-divider"><span>或</span></div>
+
+          <button class="auth-outline" type="button" @click="showInfo('当前后端暂未开放验证码登录')">
+            使用验证码登录（支持手机号）
+          </button>
+
+          <div class="auth-footer">
+            <span>{{ authMode === 'login' ? '还没有账号?' : '已有账号?' }}</span>
+            <button type="button" class="auth-link" @click="switchMode(authMode === 'login' ? 'register' : 'login')">
+              {{ authMode === 'login' ? '立即注册' : '返回登录' }}
+            </button>
+          </div>
+        </form>
+      </section>
     </section>
   </main>
 </template>
@@ -116,6 +117,7 @@
 <script setup lang="ts">
 import { ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
+import welcomeIllustration from '../../assets/image.png'
 import { applyLogin, login, register } from '../../services/authApi'
 import type { UserMe } from '../../types/userTypes'
 
@@ -215,23 +217,75 @@ async function handleSubmit() {
 
 <style scoped>
 .auth-page {
+  position: relative;
   display: grid;
   min-height: 100vh;
   place-items: center;
-  background:
-    radial-gradient(circle at 20% 14%, rgba(159, 92, 255, 0.08), transparent 26%),
-    linear-gradient(135deg, #f8f9fc 0%, #ffffff 45%, #f4f0ff 100%);
-  padding: 24px;
+  background: #f8f7ff url("../../assets/background.png") center / cover no-repeat;
+  overflow: hidden;
+  padding: 48px 24px;
+}
+
+.auth-page::before,
+.auth-page::after {
+  display: none;
+}
+
+.auth-page::before {
+  top: -150px;
+  right: -90px;
+  width: 440px;
+  height: 440px;
+  border: 72px solid rgba(158, 119, 255, 0.1);
+  border-radius: 50%;
+}
+
+.auth-page::after {
+  right: -120px;
+  bottom: -170px;
+  width: 360px;
+  height: 360px;
+  border-radius: 50%;
+  background: rgba(160, 129, 255, 0.1);
+}
+
+.auth-shell {
+  position: relative;
+  z-index: 1;
+  display: grid;
+  width: min(1110px, 100%);
+  align-items: center;
+  justify-content: center;
+  grid-template-columns: minmax(380px, 500px) minmax(420px, 560px);
+}
+
+.auth-visual {
+  height: 666px;
+  overflow: hidden;
+  border-radius: 8px;
+  box-shadow: 0 24px 54px rgba(126, 92, 210, 0.16);
+  transform: translateX(90px);
+}
+
+.auth-visual-image {
+  display: block;
+  width: 80%;
+  height: 100%;
+  object-fit: fill;
 }
 
 .auth-panel {
-  width: min(508px, 100%);
+  position: relative;
+  z-index: 2;
+  width: 100%;
+  min-height: 620px;
+  margin-left: -44px;
   overflow: hidden;
-  border: 1px solid rgba(226, 232, 240, 0.9);
+  border: 1px solid rgba(226, 232, 240, 0.82);
   border-radius: 8px;
-  background: rgba(255, 255, 255, 0.92);
-  box-shadow: 0 18px 44px rgba(15, 23, 42, 0.1);
-  backdrop-filter: blur(12px);
+  background: rgba(255, 255, 255, 0.95);
+  box-shadow: 0 24px 58px rgba(32, 25, 80, 0.13);
+  backdrop-filter: blur(16px);
 }
 
 .auth-tabs {
@@ -242,40 +296,32 @@ async function handleSubmit() {
 
 .auth-tab {
   position: relative;
-  height: 80px;
+  height: 86px;
   border: 0;
   background: transparent;
-  color: #7b8190;
-  font-size: 18px;
+  color: #7d8493;
+  font-size: 19px;
   font-weight: 700;
 }
 
 .auth-tab--active {
-  color: #a340cf;
+  color: #9655f6;
 }
 
 .auth-tab--active::after {
   position: absolute;
-  right: 18px;
+  right: 48px;
   bottom: 0;
-  left: 18px;
+  left: 48px;
   height: 3px;
-  background: linear-gradient(90deg, #b545d6, #8f3ed6);
+  background: linear-gradient(90deg, #b663ff, #7e4bf4);
   content: "";
 }
 
 .auth-form {
   display: grid;
-  gap: 20px;
-  padding: 36px 38px 32px;
-}
-
-.auth-form h1 {
-  margin: 0 0 10px;
-  color: #1f2433;
-  font-size: 28px;
-  font-weight: 800;
-  letter-spacing: 0;
+  gap: 22px;
+  padding: 46px 46px 34px;
 }
 
 .auth-form p {
@@ -289,7 +335,7 @@ async function handleSubmit() {
   border-radius: 8px;
   background: #f1fdf6;
   color: #15803d;
-  padding: 10px 12px;
+  padding: 11px 13px;
   font-size: 13px;
 }
 
@@ -300,8 +346,8 @@ async function handleSubmit() {
 
 .auth-field {
   display: grid;
-  gap: 10px;
-  color: #1f2937;
+  gap: 12px;
+  color: #151927;
   font-size: 14px;
   font-weight: 700;
 }
@@ -313,37 +359,40 @@ async function handleSubmit() {
 
 .auth-input-wrap input {
   width: 100%;
-  height: 52px;
+  height: 56px;
   border: 1px solid #e0e2e7;
   border-radius: 6px;
   background: #fff;
   color: #111827;
   outline: none;
-  padding: 0 48px 0 52px;
+  padding: 0 48px 0 54px;
+  font-size: 15px;
+  font-weight: 600;
 }
 
 .auth-input-wrap input::placeholder {
-  color: #9ca3af;
+  color: #9aa3b2;
 }
 
 .auth-input-wrap input:focus {
-  border-color: #b04bd2;
-  box-shadow: 0 0 0 3px rgba(176, 75, 210, 0.1);
+  border-color: #a864ff;
+  box-shadow: 0 0 0 3px rgba(168, 100, 255, 0.11);
 }
 
 .auth-input-icon {
   position: absolute;
   top: 50%;
-  left: 17px;
-  color: #ad62c2;
-  font-size: 21px;
+  left: 18px;
+  color: #9b62f6;
+  font-size: 20px;
+  line-height: 1;
   transform: translateY(-50%);
 }
 
 .auth-eye-button {
   position: absolute;
   top: 50%;
-  right: 12px;
+  right: 13px;
   display: grid;
   width: 32px;
   height: 32px;
@@ -351,13 +400,13 @@ async function handleSubmit() {
   border: 0;
   border-radius: 6px;
   background: transparent;
-  color: #a0a6b2;
+  color: #9aa3b2;
   transform: translateY(-50%);
 }
 
 .auth-eye-button:hover {
-  background: #f6f1fb;
-  color: #9a42c8;
+  background: #f6f2ff;
+  color: #8854ee;
 }
 
 .auth-row {
@@ -371,19 +420,20 @@ async function handleSubmit() {
   display: inline-flex;
   align-items: center;
   gap: 8px;
-  color: #6b7280;
+  color: #747b8b;
+  font-weight: 500;
 }
 
 .auth-check input {
   width: 18px;
   height: 18px;
-  accent-color: #a746d2;
+  accent-color: #995af7;
 }
 
 .auth-link {
   border: 0;
   background: transparent;
-  color: #a340cf;
+  color: #8f56f2;
   padding: 0;
   font-weight: 700;
 }
@@ -391,24 +441,24 @@ async function handleSubmit() {
 .auth-submit,
 .auth-outline {
   display: inline-flex;
-  min-height: 52px;
+  min-height: 56px;
   align-items: center;
   justify-content: center;
   border-radius: 8px;
-  font-size: 15px;
+  font-size: 16px;
   font-weight: 800;
 }
 
 .auth-submit {
   border: 0;
-  background: linear-gradient(135deg, #bd43d8, #9d3ed7);
-  box-shadow: 0 12px 22px rgba(161, 62, 209, 0.24);
+  background: linear-gradient(135deg, #b758ff, #794df4);
+  box-shadow: 0 14px 24px rgba(126, 77, 244, 0.26);
   color: #fff;
 }
 
 .auth-submit:hover:not(:disabled) {
   transform: translateY(-1px);
-  box-shadow: 0 16px 26px rgba(161, 62, 209, 0.28);
+  box-shadow: 0 18px 28px rgba(126, 77, 244, 0.3);
 }
 
 .auth-submit:disabled {
@@ -420,7 +470,8 @@ async function handleSubmit() {
   display: flex;
   align-items: center;
   gap: 18px;
-  color: #a0a6b2;
+  color: #a6adba;
+  font-size: 14px;
 }
 
 .auth-divider::before,
@@ -432,20 +483,40 @@ async function handleSubmit() {
 }
 
 .auth-outline {
-  border: 1px solid #c454db;
+  border: 1px solid #b36eff;
   background: #fff;
-  color: #a340cf;
+  color: #8d55f2;
 }
 
 .auth-outline:hover {
-  background: #fbf4ff;
+  background: #fbf8ff;
 }
 
 .auth-footer {
   display: flex;
   justify-content: center;
   gap: 8px;
-  color: #9ca3af;
+  color: #a3aab8;
+}
+
+@media (max-width: 960px) {
+  .auth-page {
+    padding: 28px 18px;
+  }
+
+  .auth-shell {
+    gap: 20px;
+    grid-template-columns: minmax(0, 560px);
+  }
+
+  .auth-visual {
+    height: 300px;
+  }
+
+  .auth-panel {
+    min-height: 0;
+    margin-left: 0;
+  }
 }
 
 @media (max-width: 540px) {
@@ -453,9 +524,18 @@ async function handleSubmit() {
     padding: 14px;
   }
 
+  .auth-visual {
+    height: 230px;
+  }
+
   .auth-tab {
     height: 64px;
     font-size: 16px;
+  }
+
+  .auth-tab--active::after {
+    right: 26px;
+    left: 26px;
   }
 
   .auth-form {
@@ -463,8 +543,10 @@ async function handleSubmit() {
     padding: 28px 22px 26px;
   }
 
-  .auth-form h1 {
-    font-size: 24px;
+  .auth-row,
+  .auth-footer {
+    align-items: center;
+    flex-wrap: wrap;
   }
 }
 </style>

@@ -336,10 +336,10 @@ async function handleAnalyzeFile() {
     if (!uploadedPreviewUrl.value) {
       stage.value = '上传视频中…'
       const uploaded = await uploadFile(selectedFile.value)
-      // 上传接口只返回对象存储里的相对路径，需要拼接桶域名才是公网可访问地址
+      // 上传接口只返回对象存储里的相对路径
       uploadedPreviewUrl.value = uploaded.previewUrl.startsWith('http')
         ? uploaded.previewUrl
-        : `${TOS_BUCKET_ORIGIN}${uploaded.previewUrl}`
+        : `${uploaded.previewUrl}`
     }
 
     const targetUrl = uploadedPreviewUrl.value
@@ -669,10 +669,12 @@ async function handleAnalyzeFile() {
 
 .storyboard-edit-summary {
   color: #2d3446;
+  height: 150px;
   font-weight: 700;
 }
 
 .storyboard-edit-dialogue {
+  height: 150px;
   color: #394053;
 }
 
