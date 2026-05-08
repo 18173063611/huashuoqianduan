@@ -1,5 +1,6 @@
 import { request } from './request'
 import type {
+  DigitalHumanVideoRequest,
   FirstFrameVideoRequest,
   FirstLastFrameVideoRequest,
   ParseVideoSourceRequest,
@@ -63,6 +64,13 @@ export function generateFirstLastFrameVideo(payload: FirstLastFrameVideoRequest)
 /** 图生视频 - 参照图生成。imageUrls 长度 1~9，lite i2v 实际支持 1~4。 */
 export function generateReferenceVideo(payload: ReferenceVideoRequest) {
   return request<VideoTaskVO>('/video/generate/image/reference', {
+    method: 'POST',
+    body: JSON.stringify(payload),
+  })
+}
+
+export function generateDigitalHumanVideo(payload: DigitalHumanVideoRequest) {
+  return request<VideoTaskVO>('/video/generate/digital-human', {
     method: 'POST',
     body: JSON.stringify(payload),
   })

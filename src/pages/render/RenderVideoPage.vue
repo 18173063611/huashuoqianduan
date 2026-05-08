@@ -50,6 +50,97 @@
       </div>
 
       <div class="render-form">
+        <template v-if="mainTab === 'digitalHuman'">
+          <div class="render-digital-section">
+            <AssetPicker
+              title="从资产中心选择主播图"
+              asset-type="IMAGE"
+              :selected-url="digitalHumanImage"
+              placeholder="搜索图片资产..."
+              @select="digitalHumanImage = $event.url"
+            />
+            <ImageInput
+              label="或粘贴 / 上传主播图片"
+              :busy="busy"
+              :value="digitalHumanImage"
+              placeholder="https://xxx.tos-cn-guangzhou.volces.com/avatar.png"
+              @update="digitalHumanImage = $event"
+            />
+          </div>
+
+          <div class="render-digital-section">
+            <div class="render-tabs render-tabs-sub" role="tablist">
+              <button
+                v-for="tab in digitalHumanAudioTabs"
+                :key="tab.key"
+                type="button"
+                role="tab"
+                :class="{ active: digitalHumanAudioMode === tab.key }"
+                :aria-selected="digitalHumanAudioMode === tab.key"
+                :disabled="busy"
+                @click="digitalHumanAudioMode = tab.key"
+              >
+                {{ tab.label }}
+              </button>
+            </div>
+
+            <AssetPicker
+              v-if="digitalHumanAudioMode === 'asset'"
+              title="从资产中心选择口播音频"
+              asset-type="AUDIO"
+              :selected-url="digitalHumanAudio"
+              placeholder="搜索音频资产..."
+              @select="digitalHumanAudio = $event.url"
+            />
+
+            <div v-else-if="digitalHumanAudioMode === 'upload'" class="render-form-field">
+              <label>上传本地口播音频</label>
+              <label class="render-upload-audio" :class="{ disabled: busy || digitalHumanAudioUploading }">
+                <input
+                  type="file"
+                  accept="audio/*"
+                  :disabled="busy || digitalHumanAudioUploading"
+                  @change="handleDigitalHumanAudioUpload"
+                />
+                <span>{{ digitalHumanAudioUploading ? '上传中...' : '选择音频文件' }}</span>
+                <small>{{ digitalHumanAudioUploadName || '支持 mp3 / wav / m4a 等音频' }}</small>
+              </label>
+              <p v-if="digitalHumanAudio" class="app-muted render-ref-tip">{{ digitalHumanAudio }}</p>
+            </div>
+
+            <div v-else-if="digitalHumanAudioMode === 'url'" class="render-form-field">
+              <label>口播音频 URL</label>
+              <input v-model.trim="digitalHumanAudio" type="url" :disabled="busy" placeholder="https://xxx/tts.mp3" />
+            </div>
+
+            <div v-else class="render-form-field">
+              <label>口播文本</label>
+              <textarea
+                v-model="digitalHumanText"
+                :disabled="busy"
+                rows="4"
+                maxlength="2000"
+                placeholder="输入文本后由 Vidu 使用指定音色生成口播。"
+              />
+            </div>
+          </div>
+
+          <div class="render-grid-two">
+            <div v-if="digitalHumanAudioMode === 'text'" class="render-form-field">
+              <label>Vidu 音色 ID</label>
+              <input v-model.trim="digitalHumanVoiceId" :disabled="busy" placeholder="例如 Vidu 提供的 voice_id" />
+            </div>
+            <div class="render-form-field">
+              <label>分辨率</label>
+              <select v-model="digitalHumanResolution" :disabled="busy">
+                <option value="540p">540p</option>
+                <option value="720p">720p</option>
+                <option value="1080p">1080p</option>
+              </select>
+            </div>
+          </div>
+        </template>
+
         <template v-if="mainTab === 'image' && imageSubTab === 'first'">
           <ImageInput
             label="首帧图片"
@@ -119,7 +210,7 @@
           </div>
         </template>
 
-        <div class="render-form-field">
+        <div v-if="mainTab !== 'digitalHuman'" class="render-form-field">
           <label>
             提示词
             <span v-if="mainTab === 'text'" class="render-required">*</span>
@@ -135,7 +226,7 @@
           <div class="render-counter">{{ prompt.length }} / 500</div>
         </div>
 
-        <div class="render-form-field render-form-field-inline">
+        <div v-if="mainTab !== 'digitalHuman'" class="render-form-field render-form-field-inline">
           <label>视频时长（秒）</label>
           <select v-model.number="duration" :disabled="busy">
             <option v-for="d in durationOptions" :key="d.value" :value="d.value">
@@ -224,8 +315,12 @@
 
 <script setup lang="ts">
 import { computed, ref, watch } from 'vue'
+import AssetPicker from './AssetPicker.vue'
 import ImageInput from './ImageInput.vue'
+import { API_ORIGIN } from '../../services/request'
+import { uploadFile } from '../../services/uploadApi'
 import {
+  generateDigitalHumanVideo,
   generateFirstFrameVideo,
   generateFirstLastFrameVideo,
   generateReferenceVideo,
@@ -234,20 +329,29 @@ import {
 import type { VideoTaskVO } from '../../types/videoTypes'
 
 
-type MainTab = 'text' | 'image'
+type MainTab = 'text' | 'image' | 'digitalHuman'
 type ImageSubTab = 'first' | 'firstLast' | 'reference'
+type DigitalHumanAudioMode = 'asset' | 'upload' | 'url' | 'text'
 
 const MAX_REFERENCE = 9
 
 const mainTabs: Array<{ key: MainTab; label: string }> = [
   { key: 'text', label: '文生视频' },
   { key: 'image', label: '图生视频' },
+  { key: 'digitalHuman', label: '数字人口播' },
 ]
 
 const imageSubTabs: Array<{ key: ImageSubTab; label: string }> = [
   { key: 'first', label: '首帧生成' },
   { key: 'firstLast', label: '首尾帧生成' },
   { key: 'reference', label: '参照图生成' },
+]
+
+const digitalHumanAudioTabs: Array<{ key: DigitalHumanAudioMode; label: string }> = [
+  { key: 'asset', label: '资产音频' },
+  { key: 'upload', label: '上传音频' },
+  { key: 'url', label: '音频链接' },
+  { key: 'text', label: '文本口播' },
 ]
 
 const mainTab = ref<MainTab>('text')
@@ -258,6 +362,14 @@ const duration = ref<number>(5)
 const firstFrame = ref('')
 const lastFrame = ref('')
 const referenceImages = ref<string[]>([''])
+const digitalHumanImage = ref('')
+const digitalHumanAudio = ref('')
+const digitalHumanText = ref('')
+const digitalHumanVoiceId = ref('')
+const digitalHumanResolution = ref<'540p' | '720p' | '1080p'>('720p')
+const digitalHumanAudioMode = ref<DigitalHumanAudioMode>('asset')
+const digitalHumanAudioUploading = ref(false)
+const digitalHumanAudioUploadName = ref('')
 
 const busy = ref(false)
 const errorMessage = ref('')
@@ -299,6 +411,12 @@ watch([mainTab, imageSubTab], () => {
 })
 
 const canSubmit = computed(() => {
+  if (mainTab.value === 'digitalHuman') {
+    if (digitalHumanAudioMode.value === 'text') {
+      return digitalHumanImage.value.trim().length > 0 && digitalHumanText.value.trim().length > 0
+    }
+    return digitalHumanImage.value.trim().length > 0 && digitalHumanAudio.value.trim().length > 0
+  }
   if (mainTab.value === 'text') {
     return prompt.value.trim().length > 0
   }
@@ -344,6 +462,35 @@ function formatTimestamp(seconds: number) {
   return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())} ${pad(d.getHours())}:${pad(d.getMinutes())}:${pad(d.getSeconds())}`
 }
 
+function normalizePublicUrl(url: string) {
+  if (!url) {
+    return ''
+  }
+  return url.startsWith('http') ? url : `${API_ORIGIN}${url}`
+}
+
+async function handleDigitalHumanAudioUpload(event: Event) {
+  const input = event.target as HTMLInputElement
+  const file = input.files?.[0]
+  if (!file) {
+    return
+  }
+
+  digitalHumanAudioUploadName.value = file.name
+  digitalHumanAudioUploading.value = true
+  errorMessage.value = ''
+
+  try {
+    const uploaded = await uploadFile(file)
+    digitalHumanAudio.value = normalizePublicUrl(uploaded.previewUrl)
+  } catch (error) {
+    errorMessage.value = error instanceof Error ? error.message : '音频上传失败'
+  } finally {
+    digitalHumanAudioUploading.value = false
+    input.value = ''
+  }
+}
+
 async function handleGenerate() {
   if (!canSubmit.value || busy.value) {
     return
@@ -355,7 +502,16 @@ async function handleGenerate() {
 
   try {
     let task: VideoTaskVO
-    if (mainTab.value === 'text') {
+    if (mainTab.value === 'digitalHuman') {
+      const useText = digitalHumanAudioMode.value === 'text'
+      task = await generateDigitalHumanVideo({
+        imageUrl: digitalHumanImage.value.trim(),
+        audioUrl: useText ? undefined : digitalHumanAudio.value.trim(),
+        text: useText ? digitalHumanText.value.trim() : undefined,
+        voiceId: useText ? digitalHumanVoiceId.value.trim() || undefined : undefined,
+        resolution: digitalHumanResolution.value,
+      })
+    } else if (mainTab.value === 'text') {
       task = await generateTextToVideo({
         prompt: prompt.value.trim(),
         duration: duration.value,
@@ -469,6 +625,11 @@ async function handleGenerate() {
   gap: 16px;
 }
 
+.render-digital-section {
+  display: grid;
+  gap: 12px;
+}
+
 .render-grid-two {
   display: grid;
   grid-template-columns: 1fr 1fr;
@@ -503,6 +664,8 @@ async function handleGenerate() {
   font-weight: 700;
 }
 
+.render-form-field input,
+.render-form-field select,
 .render-form-field textarea {
   border: 1px solid #e3e7ef;
   border-radius: 8px;
@@ -511,14 +674,64 @@ async function handleGenerate() {
   padding: 10px 12px;
   font-family: inherit;
   font-size: 13.5px;
-  line-height: 1.7;
-  resize: vertical;
   outline: none;
 }
 
+.render-form-field input,
+.render-form-field select {
+  height: 38px;
+}
+
+.render-form-field textarea {
+  line-height: 1.7;
+  resize: vertical;
+}
+
+.render-form-field input:focus,
+.render-form-field select:focus,
 .render-form-field textarea:focus {
   border-color: #8f81ff;
   box-shadow: 0 0 0 3px rgba(99, 91, 255, 0.12);
+}
+
+.render-upload-audio {
+  display: flex;
+  min-height: 58px;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  border: 1px dashed #d9d2ff;
+  border-radius: 10px;
+  background: #fbfaff;
+  padding: 12px 14px;
+  cursor: pointer;
+}
+
+.render-upload-audio input {
+  display: none;
+}
+
+.render-upload-audio span {
+  flex: 0 0 auto;
+  color: #5e50df;
+  font-size: 13px;
+  font-weight: 800;
+}
+
+.render-upload-audio small {
+  min-width: 0;
+  overflow: hidden;
+  color: #98a2b3;
+  font-size: 12.5px;
+  font-weight: 700;
+  text-align: right;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.render-upload-audio.disabled {
+  cursor: not-allowed;
+  opacity: 0.65;
 }
 
 .render-counter {
