@@ -1,5 +1,5 @@
 <template>
-  <section class="voice-page">
+  <section class="voice-page app-page-stack">
     <header class="voice-hero app-card">
       <div class="voice-hero-copy">
         <p class="voice-hero-eyebrow">声音生成</p>
@@ -103,8 +103,20 @@
             </div>
             <p v-if="taskError" class="app-error">{{ taskError }}</p>
             <audio v-if="audioAssetUrl" class="voice-audio" controls :src="audioAssetUrl" />
+            <div v-if="taskStatus === 'SUCCESS' && audioAssetId" class="voice-save-row">
+              <button
+                v-if="!audioSaved"
+                class="app-primary-button"
+                type="button"
+                :disabled="savingAudio"
+                @click="saveGeneratedAudio"
+              >
+                {{ savingAudio ? '保存中...' : '保存到资产中心' }}
+              </button>
+              <span v-else class="voice-saved-badge">已保存到私有资产</span>
+            </div>
             <p v-if="taskStatus === 'SUCCESS'" class="app-muted voice-success-tip">
-              生成完成后可在「资产中心 / 音频」查看该条口播音频。
+              生成完成后可先试听，点击保存后会进入「资产中心 / 我的资产 / 音频」。
             </p>
           </div>
         </section>
@@ -116,6 +128,7 @@
 <script setup lang="ts">
 import { computed, onBeforeUnmount, onMounted, ref } from 'vue'
 import { useSmoothTaskProgress } from '../../composables/useSmoothTaskProgress'
+import { saveAsset } from '../../services/assetApi'
 import { generateTts, getTtsTask, getVoicePresets } from '../../services/voiceApi'
 import { rememberSessionTaskId } from '../../services/sessionTaskStore'
 import type { TtsGenerateRequest, VoicePresetItem } from '../../types/voiceTypes'
@@ -149,6 +162,9 @@ const { showTaskProgressBar, barProgressPercent, reset: resetSmoothProgress } = 
 const taskSectionVisible = computed(() => activeTaskId.value != null)
 
 const audioAssetUrl = ref('')
+const audioAssetId = ref<number | null>(null)
+const audioSaved = ref(false)
+const savingAudio = ref(false)
 
 onMounted(async () => {
   resetTask()
@@ -205,6 +221,9 @@ function resetTask() {
   taskProgress.value = null
   taskError.value = ''
   audioAssetUrl.value = ''
+  audioAssetId.value = null
+  audioSaved.value = false
+  savingAudio.value = false
 }
 
 function stopPoll() {
@@ -264,6 +283,8 @@ async function pollOnce(taskId: number) {
     if (detail.audioAsset?.fileUrl) {
       const u = detail.audioAsset.fileUrl
       audioAssetUrl.value = u.startsWith('http') ? u : `${API_ORIGIN}${u}`
+      audioAssetId.value = detail.audioAsset.assetId
+      audioSaved.value = detail.audioAsset.ownerUserId != null && detail.audioAsset.visibility === 'PRIVATE'
     }
     if (['SUCCESS', 'FAILED', 'RETRYABLE', 'CANCELED'].includes(detail.status)) {
       stopPoll()
@@ -275,16 +296,31 @@ async function pollOnce(taskId: number) {
     taskError.value = e instanceof Error ? e.message : '查询任务失败'
   }
 }
+
+async function saveGeneratedAudio() {
+  if (!audioAssetId.value || savingAudio.value) {
+    return
+  }
+  savingAudio.value = true
+  taskError.value = ''
+  try {
+    const saved = await saveAsset(audioAssetId.value)
+    audioAssetId.value = saved.assetId
+    audioSaved.value = true
+  } catch (e) {
+    taskError.value = e instanceof Error ? e.message : '保存到资产中心失败'
+  } finally {
+    savingAudio.value = false
+  }
+}
 </script>
 
 <style scoped>
 .voice-page {
   display: flex;
-  max-width: var(--app-content-width);
   flex-direction: column;
   gap: 20px;
-  margin: 0 auto;
-  padding: 8px 8px 32px;
+  padding: 8px 0 32px;
 }
 
 .voice-hero {
@@ -560,6 +596,26 @@ async function pollOnce(taskId: number) {
 .voice-audio {
   width: 100%;
   margin-top: 12px;
+}
+
+.voice-save-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-top: 12px;
+}
+
+.voice-saved-badge {
+  display: inline-flex;
+  height: 34px;
+  align-items: center;
+  border: 1px solid #bbf7d0;
+  border-radius: var(--app-radius-sm);
+  background: rgba(255, 255, 255, 0.72);
+  color: #166534;
+  padding: 0 12px;
+  font-size: 13px;
+  font-weight: 800;
 }
 
 .voice-success-tip {
