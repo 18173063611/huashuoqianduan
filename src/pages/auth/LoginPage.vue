@@ -206,7 +206,7 @@ async function handleSubmit() {
     applyLogin(res, rememberMe.value)
     emit('success', { userId: res.userId, username: res.username, displayName: res.displayName })
   } catch (e) {
-    showError(e instanceof Error ? e.message : authMode.value === 'login' ? '登录失败' : '注册失败')
+    showError(authMode.value === 'login' ? '账号或密码错误，请重新输入' : '注册失败')
   } finally {
     loading.value = false
   }
