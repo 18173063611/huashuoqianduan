@@ -98,7 +98,7 @@
           v-if="listScope === 'private' && !hasToken"
           class="app-primary-button asset-empty-action"
           type="button"
-          @click="jumpHint = '请切换到「账户」标签完成登录后再查看私有资产。'"
+          @click="jumpHint = '请先登录后再查看私有资产。'"
         >
           去登录
         </button>
@@ -198,7 +198,7 @@
           v-if="templateScope === 'private' && !hasToken"
           class="app-primary-button asset-empty-action"
           type="button"
-          @click="jumpHint = '请切换到「账户」标签完成登录后再查看私有模板。'"
+          @click="jumpHint = '请先登录后再查看私有模板。'"
         >
           去登录
         </button>
@@ -289,7 +289,7 @@ const metadataLink = ref('#')
 
 const emptySubtitle = computed(() => {
   if (listScope.value === 'private' && !hasToken.value) {
-    return '请先在「用户与资产 → 账户」登录，再查看与当前账号绑定的私有资产。'
+    return '请先登录，再在资产中心查看与当前账号绑定的私有资产。'
   }
   if (listScope.value === 'private') {
     return '当前账号下尚无私有资产，可在各模块上传或生成后在此查看。'
@@ -299,7 +299,7 @@ const emptySubtitle = computed(() => {
 
 const templateEmptySubtitle = computed(() => {
   if (templateScope.value === 'private' && !hasToken.value) {
-    return '请先在「用户与资产 → 账户」登录，再查看与当前账号绑定的私有模板。'
+    return '请先登录，再在资产中心查看与当前账号绑定的私有模板。'
   }
   if (templateScope.value === 'private') {
     return '当前账号下尚无私有模板，可从公共模板复制或后续创建。'

@@ -1,4 +1,9 @@
-﻿import type { ApiResponse } from '../types/apiTypes'
+import type { ApiResponse } from '../types/apiTypes'
+import {
+  clearAuthSession,
+  getAuthToken as readAuthToken,
+  setAuthToken as writeAuthToken,
+} from './authSession'
 
 /** 开发默认连本机；生产或未配置时使用线上占位，也可用环境变量覆盖。 */
 export const API_BASE_URL =
@@ -8,23 +13,25 @@ export const API_BASE_URL =
 /** 用于拼接 /uploads 等静态资源的绝对地址 */
 export const API_ORIGIN = API_BASE_URL.replace(/\/api\/v1\/?$/, '')
 
-const AUTH_TOKEN_KEY = 'huashuo_auth_token'
-
-export function setAuthToken(token: string | null) {
-  if (!token) {
-    window.localStorage.removeItem(AUTH_TOKEN_KEY)
-    return
-  }
-  window.localStorage.setItem(AUTH_TOKEN_KEY, token)
+export function setAuthToken(token: string | null, persist = true) {
+  void persist
+  writeAuthToken(token)
 }
 
 export function getAuthToken(): string | null {
-  try {
-    const v = window.localStorage.getItem(AUTH_TOKEN_KEY)
-    return v && v.trim() ? v.trim() : null
-  } catch {
-    return null
-  }
+  return readAuthToken()
+}
+
+function redirectToLogin() {
+  clearAuthSession()
+  if (typeof window === 'undefined') return
+
+  const { pathname, search, hash } = window.location
+  if (pathname === '/login' || pathname === '/register') return
+
+  const currentPath = `${pathname}${search}${hash}`
+  const params = new URLSearchParams({ redirect: currentPath })
+  window.location.assign(`/login?${params.toString()}`)
 }
 
 export async function request<T>(path: string, init?: RequestInit): Promise<T> {
@@ -65,6 +72,9 @@ export async function request<T>(path: string, init?: RequestInit): Promise<T> {
 
   const text = await response.text()
   if (!response.ok) {
+    if (response.status === 401) {
+      redirectToLogin()
+    }
     throw new Error(`HTTP ${response.status}: ${text}`)
   }
   if (!text) {
@@ -77,6 +87,9 @@ export async function request<T>(path: string, init?: RequestInit): Promise<T> {
   } catch (error) {
     console.error('接口返回的不是 JSON:', text)
     throw error
+  }
+  if (payload.code === 40100) {
+    redirectToLogin()
   }
   if (payload.code !== 0) {
     // 统一把后端 message 和 traceId 抛给页面，方便联调时快速定位问题。

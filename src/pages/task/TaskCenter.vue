@@ -16,7 +16,7 @@
     </div>
 
     <p v-if="!canQuery && !hasSessionTasks && panelActive" class="app-muted task-hint">
-      请在「用户与资产」中<strong>登录</strong>以查看全部任务。
+      请先<strong>登录</strong>以查看全部任务。
     </p>
 
     <p v-else-if="!canQuery && hasSessionTasks && panelActive" class="app-muted task-hint">

@@ -55,7 +55,6 @@
             label="首帧图片"
             :busy="busy"
             :value="firstFrame"
-            placeholder="https://xxx.tos-cn-guangzhou.volces.com/xxx.png"
             @update="firstFrame = $event"
           />
         </template>
@@ -66,14 +65,12 @@
               label="首帧图片"
               :busy="busy"
               :value="firstFrame"
-              placeholder="首帧公网链接 / 上传"
               @update="firstFrame = $event"
             />
             <ImageInput
               label="尾帧图片"
               :busy="busy"
               :value="lastFrame"
-              placeholder="尾帧公网链接 / 上传"
               @update="lastFrame = $event"
             />
           </div>
@@ -102,7 +99,6 @@
                 <ImageInput
                   :busy="busy"
                   :value="item"
-                  :placeholder="`参照图 ${idx + 1} 链接 / 上传`"
                   compact
                   @update="updateReferenceImage(idx, $event)"
                 />

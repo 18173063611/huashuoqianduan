@@ -41,7 +41,7 @@
           </div>
         </div>
         <div class="app-topbar-actions">
-          <button class="app-ghost-button" type="button" @click="$emit('change', 'user')">公共资产</button>
+          <button class="app-ghost-button" type="button" @click="$emit('change', 'assets')">资产中心</button>
           <span class="app-status-dot">在线</span>
         </div>
       </header>
@@ -73,7 +73,7 @@ const menuItems = [
   { key: 'voice', label: '声音生成', icon: '♬' },
   { key: 'avatar', label: '数字人形象', icon: '◎' },
   { key: 'render', label: '视频制作', icon: '▻' },
-  { key: 'user', label: '用户与资产', icon: '◫' },
+  { key: 'assets', label: '资产中心', icon: '◫' },
 ] as const
 
 type MenuKey = (typeof menuItems)[number]['key']
@@ -102,7 +102,7 @@ const stepIndexMap: Record<MenuKey, number> = {
   voice: 2,
   avatar: 3,
   render: 4,
-  user: 4,
+  assets: 4,
 }
 
 const activeStepIndex = computed(() => stepIndexMap[props.activeKey] ?? 0)

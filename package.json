@@ -14,7 +14,7 @@
     "typescript": "latest",
     "vite": "latest",
     "vue": "latest",
+    "vue-router": "^5.0.6",
     "vue-tsc": "latest"
-  },
-  "devDependencies": {}
+  }
 }

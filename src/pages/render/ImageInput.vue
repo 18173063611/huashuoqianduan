@@ -2,40 +2,7 @@
   <div class="image-input" :class="{ 'image-input-compact': compact }">
     <label v-if="label" class="image-input-label">{{ label }}</label>
 
-    <div class="image-input-modes" role="tablist">
-      <button
-        type="button"
-        role="tab"
-        :class="{ active: mode === 'url' }"
-        :aria-selected="mode === 'url'"
-        :disabled="busy"
-        @click="mode = 'url'"
-      >
-        粘贴链接
-      </button>
-      <button
-        type="button"
-        role="tab"
-        :class="{ active: mode === 'upload' }"
-        :aria-selected="mode === 'upload'"
-        :disabled="busy"
-        @click="mode = 'upload'"
-      >
-        上传本地图片
-      </button>
-    </div>
-
-    <div v-if="mode === 'url'" class="image-input-row">
-      <input
-        :value="value"
-        type="url"
-        :placeholder="placeholder || 'https://example.com/your-image.png'"
-        :disabled="busy"
-        @input="onUrlInput"
-      />
-    </div>
-
-    <div v-else class="image-input-row">
+    <div class="image-input-row">
       <label class="image-input-file" :class="{ 'is-disabled': busy || uploading }">
         <input
           type="file"
@@ -43,7 +10,7 @@
           :disabled="busy || uploading"
           @change="handleFileChange"
         />
-        <span class="image-input-cta">{{ uploading ? '上传中…' : '选择图片' }}</span>
+        <span class="image-input-cta">{{ uploading ? '上传中…' : '上传本地图片' }}</span>
         <span class="image-input-meta">
           {{ fileLabel }}
         </span>
@@ -67,7 +34,6 @@ const props = defineProps<{
   label?: string
   value: string
   busy?: boolean
-  placeholder?: string
   compact?: boolean
 }>()
 
@@ -78,7 +44,6 @@ const emit = defineEmits<{
 // 上传接口返回的 previewUrl 是相对路径，需要拼上 TOS 桶域名才是公网可访问地址
 const TOS_BUCKET_ORIGIN = 'https://ceshichucun.tos-cn-guangzhou.volces.com'
 
-const mode = ref<'url' | 'upload'>('url')
 const uploading = ref(false)
 const errorMessage = ref('')
 const lastFileName = ref('')
@@ -92,11 +57,6 @@ const fileLabel = computed(() => {
   }
   return '尚未选择文件'
 })
-
-function onUrlInput(event: Event) {
-  const target = event.target as HTMLInputElement
-  emit('update', target.value)
-}
 
 async function handleFileChange(event: Event) {
   const input = event.target as HTMLInputElement
@@ -145,51 +105,6 @@ void props
   color: #2d3446;
   font-size: 13px;
   font-weight: 800;
-}
-
-.image-input-modes {
-  display: inline-flex;
-  gap: 6px;
-}
-
-.image-input-modes button {
-  height: 30px;
-  padding: 0 12px;
-  border-radius: 6px;
-  border: 1px solid #e7eaf2;
-  background: #fff;
-  color: #4f586c;
-  font-size: 12.5px;
-  font-weight: 800;
-  cursor: pointer;
-}
-
-.image-input-modes button.active {
-  border-color: #c8bfff;
-  background: #faf9ff;
-  color: #5e50df;
-}
-
-.image-input-modes button:disabled {
-  opacity: 0.6;
-  cursor: not-allowed;
-}
-
-.image-input-row input[type='url'] {
-  width: 100%;
-  height: 38px;
-  border: 1px solid #e3e7ef;
-  border-radius: 8px;
-  padding: 0 12px;
-  font-size: 13px;
-  background: #fff;
-  color: #232838;
-  outline: none;
-}
-
-.image-input-row input[type='url']:focus {
-  border-color: #8f81ff;
-  box-shadow: 0 0 0 3px rgba(99, 91, 255, 0.12);
 }
 
 .image-input-file {

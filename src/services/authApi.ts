@@ -1,4 +1,11 @@
-import { request, setAuthToken } from './request'
+import { request } from './request'
+import {
+  clearAuthSession,
+  clearAuthUser,
+  getAuthUser,
+  setAuthToken,
+  setAuthUser,
+} from './authSession'
 import type { LoginRequest, LoginResponse, RegisterRequest, UserMe } from '../types/userTypes'
 
 export function register(payload: RegisterRequest) {
@@ -23,11 +30,19 @@ export function me() {
   return request<UserMe>('/auth/me')
 }
 
-export function applyLogin(res: LoginResponse) {
+export function applyLogin(res: LoginResponse, persist = true) {
+  void persist
   setAuthToken(res.token)
+  setAuthUser({
+    userId: res.userId,
+    username: res.username,
+    displayName: res.displayName,
+  })
 }
 
 export function clearLogin() {
-  setAuthToken(null)
+  clearAuthSession()
 }
+
+export { clearAuthUser, getAuthUser, setAuthUser }
 

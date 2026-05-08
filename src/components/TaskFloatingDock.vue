@@ -29,7 +29,7 @@
         <div class="task-dock-sheet-head">
           <h2 id="task-dock-sheet-title" class="task-dock-sheet-title">进行中的任务</h2>
           <p class="task-dock-sheet-lead">
-            已完成任务请在「用户与资产 → 我的资产」中查看产出，或通过消息通知跳转。
+            已完成任务请在「资产中心」中查看产出，或通过消息通知跳转。
           </p>
           <button type="button" class="task-dock-close app-ghost-button" @click="sheetOpen = false">关闭</button>
         </div>
