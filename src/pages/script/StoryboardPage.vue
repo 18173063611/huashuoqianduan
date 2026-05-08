@@ -47,6 +47,26 @@
             placeholder="https://example.com/your-video.mp4"
             :disabled="busy"
           />
+
+          <div class="storyboard-actions">
+            <button
+              class="app-primary-button"
+              type="button"
+              :disabled="!canAnalyzeUrl || busy"
+              @click="handleAnalyzeUrl"
+            >
+              {{ busyLabel }}
+            </button>
+            <button
+              v-if="shots.length || errorMessage"
+              class="app-secondary-button"
+              type="button"
+              :disabled="busy"
+              @click="resetResult"
+            >
+              重新开始
+            </button>
+          </div>
         </div>
 
         <div v-else class="storyboard-source storyboard-source-file">
@@ -57,26 +77,26 @@
               {{ selectedFile ? `${selectedFile.name}（${formatFileSize(selectedFile.size)}）` : '尚未选择文件' }}
             </span>
           </label>
-        </div>
 
-        <div class="storyboard-actions">
-          <button
-            class="app-primary-button"
-            type="button"
-            :disabled="!canSubmit || busy"
-            @click="handleAnalyze"
-          >
-            {{ busyLabel }}
-          </button>
-          <button
-            v-if="shots.length || errorMessage"
-            class="app-secondary-button"
-            type="button"
-            :disabled="busy"
-            @click="resetResult"
-          >
-            重新开始
-          </button>
+          <div class="storyboard-actions">
+            <button
+              class="app-primary-button"
+              type="button"
+              :disabled="!canAnalyzeFile || busy"
+              @click="handleAnalyzeFile"
+            >
+              {{ busyLabel }}
+            </button>
+            <button
+              v-if="shots.length || errorMessage"
+              class="app-secondary-button"
+              type="button"
+              :disabled="busy"
+              @click="resetResult"
+            >
+              重新开始
+            </button>
+          </div>
         </div>
 
         <p v-if="errorMessage" class="app-error">{{ errorMessage }}</p>
@@ -172,7 +192,7 @@
 <script setup lang="ts">
 import { computed, ref } from 'vue'
 import { uploadFile } from '../../services/uploadApi'
-import { analyzeVideoScript } from '../../services/videoApi'
+import { analyzeVideoScript, analyzeVideoScriptByUrl } from '../../services/videoApi'
 import type { VideoScriptShotItem } from '../../types/videoTypes'
 
 type SourceMode = 'url' | 'file'
@@ -198,12 +218,8 @@ const busyLabel = computed(() => {
   return stage.value || '处理中…'
 })
 
-const canSubmit = computed(() => {
-  if (sourceMode.value === 'url') {
-    return Boolean(videoUrl.value)
-  }
-  return Boolean(selectedFile.value)
-})
+const canAnalyzeUrl = computed(() => Boolean(videoUrl.value))
+const canAnalyzeFile = computed(() => Boolean(selectedFile.value))
 
 const ORDER_CN = ['一', '二', '三', '四', '五', '六', '七', '八', '九', '十']
 
@@ -280,8 +296,36 @@ function resetResult() {
   analyzedVideoUrl.value = ''
 }
 
-async function handleAnalyze() {
-  if (!canSubmit.value || busy.value) {
+async function runAnalyze(analyze: () => Promise<VideoScriptShotItem[]>, targetUrl: string) {
+  busy.value = true
+  errorMessage.value = ''
+  shots.value = []
+  analyzedVideoUrl.value = ''
+
+  try {
+    stage.value = '解析分镜中…'
+    const list = await analyze()
+    shots.value = [...list].sort((a, b) => a.order - b.order)
+    analyzedVideoUrl.value = targetUrl
+  } catch (error) {
+    errorMessage.value = error instanceof Error ? error.message : '解析失败'
+  } finally {
+    busy.value = false
+    stage.value = ''
+  }
+}
+
+async function handleAnalyzeUrl() {
+  if (!canAnalyzeUrl.value || busy.value) {
+    return
+  }
+
+  const targetUrl = videoUrl.value
+  await runAnalyze(() => analyzeVideoScriptByUrl(targetUrl), targetUrl)
+}
+
+async function handleAnalyzeFile() {
+  if (!canAnalyzeFile.value || busy.value || !selectedFile.value) {
     return
   }
 
@@ -291,28 +335,22 @@ async function handleAnalyze() {
   analyzedVideoUrl.value = ''
 
   try {
-    let targetUrl = ''
-    if (sourceMode.value === 'url') {
-      targetUrl = videoUrl.value
-    } else if (selectedFile.value) {
-      // 已经上传过同一个文件就直接复用 previewUrl，避免重复占用对象存储空间
-      if (!uploadedPreviewUrl.value) {
-        stage.value = '上传视频中…'
-        const uploaded = await uploadFile(selectedFile.value)
-        // 上传接口只返回对象存储里的相对路径，需要拼接桶域名才是公网可访问地址
-        uploadedPreviewUrl.value = `${uploaded.previewUrl}`
-      }
-      targetUrl = uploadedPreviewUrl.value
+    // 已经上传过同一个文件就直接复用 previewUrl，避免重复占用对象存储空间
+    if (!uploadedPreviewUrl.value) {
+      stage.value = '上传视频中…'
+      const uploaded = await uploadFile(selectedFile.value)
+      // 上传接口只返回对象存储里的相对路径，需要拼接桶域名才是公网可访问地址
+      uploadedPreviewUrl.value = uploaded.previewUrl.startsWith('http')
+        ? uploaded.previewUrl
+        : `${TOS_BUCKET_ORIGIN}${uploaded.previewUrl}`
     }
 
+    const targetUrl = uploadedPreviewUrl.value
     if (!targetUrl) {
-      throw new Error('请提供视频链接或选择本地文件')
+      throw new Error('请选择本地视频文件')
     }
 
-    stage.value = '解析分镜中…'
-    const list = await analyzeVideoScript(targetUrl)
-    shots.value = [...list].sort((a, b) => a.order - b.order)
-    analyzedVideoUrl.value = targetUrl
+    await runAnalyze(() => analyzeVideoScript(targetUrl), targetUrl)
   } catch (error) {
     errorMessage.value = error instanceof Error ? error.message : '解析失败'
   } finally {

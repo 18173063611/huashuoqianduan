@@ -34,6 +34,14 @@ export function analyzeVideoScript(videoUrl: string) {
   })
 }
 
+/** 视频链接分镜解析：后端先解析分享链接，再对真实播放地址做分镜分析。 */
+export function analyzeVideoScriptByUrl(videoUrl: string) {
+  const qs = `url=${encodeURIComponent(videoUrl)}`
+  return request<VideoScriptShotItem[]>(`/video/script/url?${qs}`, {
+    method: 'POST',
+  })
+}
+
 /**
  * 文生视频。后端会同步轮询火山方舟，1~3 分钟后返回最终 videoUrl。
  * 仅传必填字段，其它分辨率/比例/水印等参数由后端按文档默认值固定。
