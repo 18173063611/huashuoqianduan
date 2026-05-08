@@ -1,5 +1,5 @@
 <template>
-  <section class="avatar-page">
+  <section class="avatar-page app-page-stack">
     <header class="avatar-hero app-card">
       <div>
         <p class="avatar-eyebrow">数字人形象</p>
@@ -402,11 +402,9 @@ function assetUrl(url?: string | null) {
 <style scoped>
 .avatar-page {
   display: flex;
-  max-width: var(--app-content-width);
   flex-direction: column;
   gap: 20px;
-  margin: 0 auto;
-  padding: 8px 8px 32px;
+  padding: 8px 0 32px;
 }
 
 .avatar-hero {
