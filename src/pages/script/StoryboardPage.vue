@@ -300,7 +300,7 @@ async function handleAnalyze() {
         stage.value = '上传视频中…'
         const uploaded = await uploadFile(selectedFile.value)
         // 上传接口只返回对象存储里的相对路径，需要拼接桶域名才是公网可访问地址
-        uploadedPreviewUrl.value = `${TOS_BUCKET_ORIGIN}${uploaded.previewUrl}`
+        uploadedPreviewUrl.value = `${uploaded.previewUrl}`
       }
       targetUrl = uploadedPreviewUrl.value
     }
