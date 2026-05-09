@@ -1,44 +1,13 @@
 <template>
   <section class="voice-page app-page-stack">
-    <header class="voice-hero app-card">
-      <div class="voice-hero-copy">
-        <p class="voice-hero-eyebrow">声音生成</p>
-        <h2 class="voice-hero-title">选择豆包或预设 AI 音色，直接生成口播音频</h2>
-        <p class="app-muted voice-hero-lead">选择音色并确认口播文案，一键生成可下载的解说音频。</p>
-      </div>
-      <div class="voice-hero-badge">
-        <p class="voice-hero-badge-label">当前阶段</p>
-        <p class="voice-hero-badge-value">声音生成</p>
-      </div>
-    </header>
-
     <div class="voice-content">
       <div class="voice-layout">
         <section class="app-card voice-panel">
-          <h3 class="voice-panel-title">选择声音服务</h3>
-          <button
-            type="button"
-            class="voice-service-card"
-            :class="{ active: providerMode === 'DOUBAO' }"
-            @click="providerMode = 'DOUBAO'"
-          >
-            <div>
-              <strong>豆包 TTS</strong>
-              <p class="app-muted">推荐：稳定、适合口播</p>
-            </div>
-            <span class="voice-service-pill">默认</span>
-          </button>
-          <button type="button" class="voice-service-card voice-service-card-muted" disabled>
-            <div>
-              <strong>预设 AI 音色</strong>
-              <p class="app-muted">备用：平台内置音色池</p>
-            </div>
-          </button>
-
+          <h3 class="voice-panel-title">口播文案</h3>
           <div class="voice-script-block">
             <h4>待生成内容</h4>
             <p class="app-muted voice-script-hint">
-              无需先完成视频解析：可直接粘贴或编辑口播文案再生成。载入当前脚本会拉取「文案改写」里已点击「应用文案并继续」的<strong>改写后文案</strong>。
+              粘贴或编辑文案，选择右侧火山音色后生成音频。
             </p>
             <p v-if="scriptLoadMessage" class="voice-script-load-msg app-muted">{{ scriptLoadMessage }}</p>
             <textarea v-model.trim="scriptText" class="voice-textarea" rows="8" placeholder="在此粘贴或编辑口播文案…" />
@@ -59,12 +28,48 @@
         </section>
 
         <section class="app-card voice-panel voice-panel-wide">
-          <h3 class="voice-panel-title">音色列表</h3>
+          <div class="voice-library-head">
+            <div>
+              <h3 class="voice-panel-title">火山音色库</h3>
+              <p class="app-muted voice-library-subtitle">将控制台里的 voice_type 保存到这里后即可选择使用。</p>
+            </div>
+            <button type="button" class="app-secondary-button" @click="addingVoice = !addingVoice">
+              {{ addingVoice ? '收起' : '新增音色' }}
+            </button>
+          </div>
+
+          <form v-if="addingVoice" class="voice-add-form" @submit.prevent="submitVoicePreset">
+            <input v-model.trim="voiceForm.providerVoiceId" placeholder="voice_type，例如 zh_female_xxx_bigtts" />
+            <input v-model.trim="voiceForm.voiceName" placeholder="音色名称" />
+            <select v-model="voiceForm.gender">
+              <option value="未知">未知</option>
+              <option value="女声">女声</option>
+              <option value="男声">男声</option>
+              <option value="童声">童声</option>
+            </select>
+            <input v-model.trim="voiceForm.scene" placeholder="适用场景" />
+            <input v-model.trim="voiceForm.sampleUrl" class="voice-add-form-wide" placeholder="试听地址，可不填" />
+            <button class="app-primary-button" type="submit" :disabled="savingVoice">
+              {{ savingVoice ? '保存中…' : '保存音色' }}
+            </button>
+          </form>
+
+          <div class="voice-filter-row">
+            <input v-model.trim="voiceKeyword" placeholder="搜索音色名称或 voice_type" />
+            <select v-model="voiceGenderFilter">
+              <option value="">全部性别</option>
+              <option value="女声">女声</option>
+              <option value="男声">男声</option>
+              <option value="童声">童声</option>
+              <option value="未知">未知</option>
+            </select>
+          </div>
+
           <p v-if="presetsError" class="app-error">{{ presetsError }}</p>
           <div v-if="presetsLoading" class="app-muted">加载音色中…</div>
           <div v-else class="voice-preset-list">
             <div
-              v-for="v in presets"
+              v-for="v in filteredPresets"
               :key="v.voiceId"
               class="voice-preset-row"
               :class="{ selected: selectedVoiceId === v.voiceId }"
@@ -72,7 +77,8 @@
               <button type="button" class="voice-play" :disabled="!v.sampleUrl" @click="playSample(v)">▶</button>
               <div class="voice-preset-meta">
                 <strong>{{ v.voiceName }}</strong>
-                <p class="app-muted">{{ v.scene || '通用场景' }}</p>
+                <p class="app-muted">{{ v.providerVoiceId }}</p>
+                <span>{{ v.gender || '未知' }} · {{ v.scene || '通用口播' }}</span>
               </div>
               <button
                 type="button"
@@ -82,6 +88,7 @@
                 {{ selectedVoiceId === v.voiceId ? '已选择' : '选择' }}
               </button>
             </div>
+            <div v-if="!filteredPresets.length" class="app-empty-block">暂无匹配音色</div>
           </div>
 
           <div v-if="taskSectionVisible" class="voice-task-card">
@@ -104,19 +111,10 @@
             <p v-if="taskError" class="app-error">{{ taskError }}</p>
             <audio v-if="audioAssetUrl" class="voice-audio" controls :src="audioAssetUrl" />
             <div v-if="taskStatus === 'SUCCESS' && audioAssetId" class="voice-save-row">
-              <button
-                v-if="!audioSaved"
-                class="app-primary-button"
-                type="button"
-                :disabled="savingAudio"
-                @click="saveGeneratedAudio"
-              >
-                {{ savingAudio ? '保存中...' : '保存到资产中心' }}
-              </button>
-              <span v-else class="voice-saved-badge">已保存到私有资产</span>
+              <span class="voice-saved-badge">已自动保存到资产中心</span>
             </div>
             <p v-if="taskStatus === 'SUCCESS'" class="app-muted voice-success-tip">
-              生成完成后可先试听，点击保存后会进入「资产中心 / 我的资产 / 音频」。
+              生成完成后可直接试听，也可在「资产中心 / 私有素材 / 音频」中查看。
             </p>
           </div>
         </section>
@@ -128,18 +126,27 @@
 <script setup lang="ts">
 import { computed, onBeforeUnmount, onMounted, ref } from 'vue'
 import { useSmoothTaskProgress } from '../../composables/useSmoothTaskProgress'
-import { saveAsset } from '../../services/assetApi'
-import { generateTts, getTtsTask, getVoicePresets } from '../../services/voiceApi'
+import { createVoicePreset, generateTts, getTtsTask, getVoicePresets } from '../../services/voiceApi'
 import { rememberSessionTaskId } from '../../services/sessionTaskStore'
-import type { TtsGenerateRequest, VoicePresetItem } from '../../types/voiceTypes'
+import type { TtsGenerateRequest, VoicePresetCreateRequest, VoicePresetItem } from '../../types/voiceTypes'
 
 const API_ORIGIN = (import.meta.env.VITE_API_BASE_URL || '').replace(/\/api\/v1\/?$/, '')
 
-const providerMode = ref<'DOUBAO' | 'PRESET'>('DOUBAO')
 const presets = ref<VoicePresetItem[]>([])
 const presetsLoading = ref(false)
 const presetsError = ref('')
 const selectedVoiceId = ref<number | null>(null)
+const voiceKeyword = ref('')
+const voiceGenderFilter = ref('')
+const addingVoice = ref(false)
+const savingVoice = ref(false)
+const voiceForm = ref<VoicePresetCreateRequest>({
+  providerVoiceId: '',
+  voiceName: '',
+  gender: '未知',
+  scene: '通用口播',
+  sampleUrl: '',
+})
 
 const scriptText = ref('')
 /** 仅当文案来自 `script_version` 表时传给后端 scriptId；writer 已应用文案只用 text，避免 ID 混用 */
@@ -160,11 +167,21 @@ const { showTaskProgressBar, barProgressPercent, reset: resetSmoothProgress } = 
 )
 
 const taskSectionVisible = computed(() => activeTaskId.value != null)
+const filteredPresets = computed(() => {
+  const keyword = voiceKeyword.value.toLowerCase()
+  return presets.value.filter((item) => {
+    const matchesKeyword =
+      !keyword ||
+      item.voiceName.toLowerCase().includes(keyword) ||
+      item.providerVoiceId.toLowerCase().includes(keyword) ||
+      (item.scene || '').toLowerCase().includes(keyword)
+    const matchesGender = !voiceGenderFilter.value || item.gender === voiceGenderFilter.value
+    return matchesKeyword && matchesGender
+  })
+})
 
 const audioAssetUrl = ref('')
 const audioAssetId = ref<number | null>(null)
-const audioSaved = ref(false)
-const savingAudio = ref(false)
 
 onMounted(async () => {
   resetTask()
@@ -188,6 +205,38 @@ async function loadPresets() {
     presetsError.value = e instanceof Error ? e.message : '加载音色失败'
   } finally {
     presetsLoading.value = false
+  }
+}
+
+async function submitVoicePreset() {
+  if (!voiceForm.value.providerVoiceId || !voiceForm.value.voiceName) {
+    presetsError.value = '请填写 voice_type 和音色名称'
+    return
+  }
+  savingVoice.value = true
+  presetsError.value = ''
+  try {
+    const item = await createVoicePreset({
+      providerVoiceId: voiceForm.value.providerVoiceId,
+      voiceName: voiceForm.value.voiceName,
+      gender: voiceForm.value.gender || '未知',
+      scene: voiceForm.value.scene || '通用口播',
+      sampleUrl: voiceForm.value.sampleUrl || undefined,
+    })
+    await loadPresets()
+    selectedVoiceId.value = item.voiceId
+    addingVoice.value = false
+    voiceForm.value = {
+      providerVoiceId: '',
+      voiceName: '',
+      gender: '未知',
+      scene: '通用口播',
+      sampleUrl: '',
+    }
+  } catch (e) {
+    presetsError.value = e instanceof Error ? e.message : '保存音色失败'
+  } finally {
+    savingVoice.value = false
   }
 }
 
@@ -222,8 +271,6 @@ function resetTask() {
   taskError.value = ''
   audioAssetUrl.value = ''
   audioAssetId.value = null
-  audioSaved.value = false
-  savingAudio.value = false
 }
 
 function stopPoll() {
@@ -284,7 +331,6 @@ async function pollOnce(taskId: number) {
       const u = detail.audioAsset.fileUrl
       audioAssetUrl.value = u.startsWith('http') ? u : `${API_ORIGIN}${u}`
       audioAssetId.value = detail.audioAsset.assetId
-      audioSaved.value = detail.audioAsset.ownerUserId != null && detail.audioAsset.visibility === 'PRIVATE'
     }
     if (['SUCCESS', 'FAILED', 'RETRYABLE', 'CANCELED'].includes(detail.status)) {
       stopPoll()
@@ -297,22 +343,6 @@ async function pollOnce(taskId: number) {
   }
 }
 
-async function saveGeneratedAudio() {
-  if (!audioAssetId.value || savingAudio.value) {
-    return
-  }
-  savingAudio.value = true
-  taskError.value = ''
-  try {
-    const saved = await saveAsset(audioAssetId.value)
-    audioAssetId.value = saved.assetId
-    audioSaved.value = true
-  } catch (e) {
-    taskError.value = e instanceof Error ? e.message : '保存到资产中心失败'
-  } finally {
-    savingAudio.value = false
-  }
-}
 </script>
 
 <style scoped>
@@ -321,58 +351,6 @@ async function saveGeneratedAudio() {
   flex-direction: column;
   gap: 20px;
   padding: 8px 0 32px;
-}
-
-.voice-hero {
-  display: flex;
-  align-items: flex-start;
-  justify-content: space-between;
-  gap: 24px;
-  padding: 24px 28px;
-  border-radius: var(--app-radius-lg);
-  background: linear-gradient(180deg, #fbfaff 0%, #f5f3ff 100%);
-  border: 1px solid #ebe8ff;
-  box-shadow: var(--app-shadow);
-}
-
-.voice-hero-eyebrow {
-  margin: 0 0 8px;
-  color: var(--app-primary);
-  font-size: 12px;
-  font-weight: 800;
-  letter-spacing: 0.04em;
-}
-
-.voice-hero-title {
-  margin: 0 0 8px;
-  font-size: 22px;
-  font-weight: 800;
-}
-
-.voice-hero-lead {
-  margin: 0;
-  max-width: 720px;
-  line-height: 1.5;
-}
-
-.voice-hero-badge {
-  min-width: 200px;
-  padding: 14px 18px;
-  border-radius: var(--app-radius-md);
-  border: 1px solid #e5e1ff;
-  background: rgba(255, 255, 255, 0.72);
-}
-
-.voice-hero-badge-label {
-  margin: 0 0 4px;
-  color: var(--app-text-secondary);
-  font-size: 12px;
-}
-
-.voice-hero-badge-value {
-  margin: 0;
-  font-size: 15px;
-  font-weight: 800;
 }
 
 .voice-content {
@@ -389,10 +367,6 @@ async function saveGeneratedAudio() {
 @media (max-width: 1024px) {
   .voice-layout {
     grid-template-columns: 1fr;
-  }
-
-  .voice-hero {
-    flex-direction: column;
   }
 }
 
@@ -411,39 +385,7 @@ async function saveGeneratedAudio() {
   font-weight: 850;
 }
 
-.voice-service-card {
-  display: flex;
-  width: 100%;
-  align-items: center;
-  justify-content: space-between;
-  margin-bottom: 12px;
-  padding: 16px 18px;
-  border: 1px solid var(--app-border);
-  border-radius: var(--app-radius-md);
-  background: var(--app-surface-soft);
-  text-align: left;
-}
-
-.voice-service-card.active {
-  border-color: var(--app-primary);
-  background: var(--app-primary-soft);
-}
-
-.voice-service-card-muted {
-  opacity: 0.65;
-}
-
-.voice-service-pill {
-  padding: 6px 14px;
-  border-radius: 999px;
-  background: var(--app-primary);
-  color: #fff;
-  font-size: 12px;
-  font-weight: 800;
-}
-
 .voice-script-block {
-  margin-top: 20px;
   padding: 16px;
   border-radius: var(--app-radius-md);
   border: 1px solid var(--app-border);
@@ -479,6 +421,64 @@ async function saveGeneratedAudio() {
   display: flex;
   flex-wrap: wrap;
   gap: 10px;
+}
+
+.voice-library-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px;
+  margin-bottom: 16px;
+}
+
+.voice-library-head .voice-panel-title {
+  margin-bottom: 6px;
+}
+
+.voice-library-subtitle {
+  margin: 0;
+  font-size: 13px;
+}
+
+.voice-add-form,
+.voice-filter-row {
+  display: grid;
+  gap: 10px;
+  margin-bottom: 16px;
+}
+
+.voice-add-form {
+  grid-template-columns: minmax(220px, 1.6fr) minmax(160px, 1fr) 120px minmax(140px, 1fr) auto;
+  padding: 14px;
+  border: 1px solid #e3dcff;
+  border-radius: var(--app-radius-md);
+  background: #fbfaff;
+}
+
+.voice-filter-row {
+  grid-template-columns: minmax(260px, 1fr) 160px;
+}
+
+.voice-add-form input,
+.voice-add-form select,
+.voice-filter-row input,
+.voice-filter-row select {
+  width: 100%;
+  height: 40px;
+  border: 1px solid var(--app-border);
+  border-radius: var(--app-radius-sm);
+  background: #fff;
+  padding: 0 12px;
+  color: var(--app-text);
+  outline: none;
+}
+
+.voice-add-form input:focus,
+.voice-add-form select:focus,
+.voice-filter-row input:focus,
+.voice-filter-row select:focus {
+  border-color: var(--app-primary);
+  box-shadow: 0 0 0 3px rgba(99, 91, 255, 0.12);
 }
 
 .voice-preset-list {
@@ -528,6 +528,14 @@ async function saveGeneratedAudio() {
 .voice-preset-meta strong {
   display: block;
   margin-bottom: 4px;
+}
+
+.voice-preset-meta span {
+  display: inline-flex;
+  margin-top: 4px;
+  color: #667085;
+  font-size: 12px;
+  font-weight: 700;
 }
 
 .voice-select-btn {
@@ -625,5 +633,34 @@ async function saveGeneratedAudio() {
 
 .app-empty-block {
   padding: 24px;
+}
+
+@media (max-width: 1240px) {
+  .voice-add-form {
+    grid-template-columns: 1fr 1fr;
+  }
+
+  .voice-add-form-wide {
+    grid-column: span 2;
+  }
+}
+
+@media (max-width: 720px) {
+  .voice-library-head,
+  .voice-filter-row {
+    grid-template-columns: 1fr;
+  }
+
+  .voice-library-head {
+    display: grid;
+  }
+
+  .voice-add-form {
+    grid-template-columns: 1fr;
+  }
+
+  .voice-add-form-wide {
+    grid-column: auto;
+  }
 }
 </style>

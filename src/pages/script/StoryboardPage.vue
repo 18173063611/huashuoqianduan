@@ -1,13 +1,5 @@
 <template>
   <div class="storyboard-page app-page-stack">
-    <header class="storyboard-head">
-      <h1>分镜脚本</h1>
-      <p>
-        上传本地视频或粘贴一条公网可访问的视频链接，AI 将逐镜头拆解画面、台词、配乐与拍摄技巧，
-        帮助你快速获得一份可复用的拍摄脚本。
-      </p>
-    </header>
-
     <section class="app-card storyboard-input">
         <div class="app-section-title">
           <span>1</span>
@@ -96,8 +88,17 @@
           {{ stage }}
         </div>
 
-        <div v-if="!shots.length && !busy" class="app-empty storyboard-empty">
-          解析完成后，分镜将以表格的形式展示在这里。
+        <div v-if="!shots.length && !busy" class="storyboard-empty">
+          <div class="storyboard-empty-panel">
+            <span class="storyboard-empty-icon">▤</span>
+            <strong>等待解析结果</strong>
+            <p>解析后将在这里呈现镜头画面、台词与拍摄技巧。</p>
+            <div class="storyboard-empty-lines" aria-hidden="true">
+              <span />
+              <span />
+              <span />
+            </div>
+          </div>
         </div>
 
         <div v-else-if="shots.length" class="storyboard-table-wrap">
@@ -322,7 +323,9 @@ async function handleAnalyze() {
 <style scoped>
 .storyboard-page {
   display: grid;
-  gap: 16px;
+  grid-template-columns: minmax(360px, 420px) minmax(620px, 1fr);
+  align-items: start;
+  gap: 24px;
 }
 
 .storyboard-head h1 {
@@ -345,8 +348,18 @@ async function handleAnalyze() {
   gap: 16px;
 }
 
+.storyboard-input {
+  position: sticky;
+  top: 92px;
+}
+
+.storyboard-result {
+  min-height: 520px;
+}
+
 .storyboard-tabs {
-  display: inline-flex;
+  display: grid;
+  grid-template-columns: 1fr 1fr;
   gap: 8px;
 }
 
@@ -354,6 +367,7 @@ async function handleAnalyze() {
   display: inline-flex;
   height: 36px;
   align-items: center;
+  justify-content: center;
   border: 1px solid #e7eaf2;
   border-radius: 8px;
   background: #fff;
@@ -378,7 +392,7 @@ async function handleAnalyze() {
 
 .storyboard-source-url input {
   width: 100%;
-  height: 42px;
+  height: 46px;
   border: 1px solid #e3e7ef;
   border-radius: 8px;
   background: #fff;
@@ -393,15 +407,16 @@ async function handleAnalyze() {
 }
 
 .storyboard-file-picker {
-  display: inline-flex;
+  display: flex;
   align-items: center;
+  justify-content: space-between;
   gap: 12px;
   padding: 10px 14px;
   border: 1px dashed #d8d2ff;
   border-radius: 8px;
   background: #fbfaff;
   cursor: pointer;
-  width: fit-content;
+  width: 100%;
 }
 
 .storyboard-file-picker.is-disabled {
@@ -426,9 +441,13 @@ async function handleAnalyze() {
 }
 
 .storyboard-file-meta {
+  min-width: 0;
   color: #5c6477;
   font-size: 13px;
   font-weight: 700;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .storyboard-hint {
@@ -449,6 +468,11 @@ async function handleAnalyze() {
   flex-wrap: wrap;
   gap: 12px;
   align-items: center;
+}
+
+.storyboard-actions .app-primary-button,
+.storyboard-actions .app-secondary-button {
+  min-width: 128px;
 }
 
 .storyboard-status {
@@ -485,7 +509,67 @@ async function handleAnalyze() {
 }
 
 .storyboard-empty {
+  display: grid;
+  min-height: 330px;
+  place-items: center;
+  border: 1px dashed #d8dce8;
+  border-radius: 12px;
+  background: #fbfcff;
+  color: #667085;
+}
+
+.storyboard-empty-panel {
+  display: grid;
+  width: min(420px, 100%);
+  justify-items: center;
+  gap: 10px;
+  text-align: center;
+}
+
+.storyboard-empty-icon {
+  display: grid;
+  width: 44px;
+  height: 44px;
+  place-items: center;
+  border-radius: 999px;
+  background: #f1efff;
+  color: #5e50df;
+  font-size: 20px;
+  font-weight: 850;
+}
+
+.storyboard-empty-panel strong {
+  color: #2d3446;
+  font-size: 15px;
+}
+
+.storyboard-empty-panel p {
   margin: 0;
+  font-size: 13px;
+}
+
+.storyboard-empty-lines {
+  display: grid;
+  width: 100%;
+  gap: 8px;
+  margin-top: 8px;
+}
+
+.storyboard-empty-lines span {
+  display: block;
+  height: 10px;
+  border-radius: 999px;
+  background: #eef1f7;
+}
+
+.storyboard-empty-lines span:nth-child(2) {
+  width: 76%;
+  justify-self: center;
+}
+
+.storyboard-empty-lines span:nth-child(3) {
+  width: 58%;
+  justify-self: center;
 }
 
 .storyboard-table-wrap {
@@ -661,6 +745,14 @@ async function handleAnalyze() {
 }
 
 @media (max-width: 900px) {
+  .storyboard-page {
+    grid-template-columns: 1fr;
+  }
+
+  .storyboard-input {
+    position: static;
+  }
+
   .storyboard-table {
     table-layout: auto;
   }

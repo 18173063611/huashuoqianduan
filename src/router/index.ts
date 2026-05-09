@@ -2,7 +2,7 @@ import { createRouter, createWebHistory, type RouteRecordRaw } from 'vue-router'
 import WorkbenchShell from '../components/layout/WorkbenchShell.vue'
 import { getAuthToken } from '../services/request'
 
-export type WorkbenchRouteName = 'video-parse' | 'storyboard' | 'voice' | 'avatar' | 'render' | 'assets'
+export type WorkbenchRouteName = 'video-parse' | 'storyboard' | 'voice' | 'avatar' | 'render'
 
 const businessRouteMeta = {
   requiresAuth: true,
@@ -63,9 +63,7 @@ const routes: RouteRecordRaw[] = [
       },
       {
         path: 'assets',
-        name: 'assets',
-        component: () => import('../pages/user/UserCenter.vue'),
-        meta: { ...businessRouteMeta, menuKey: 'assets' },
+        redirect: { name: 'video-parse' },
       },
     ],
   },

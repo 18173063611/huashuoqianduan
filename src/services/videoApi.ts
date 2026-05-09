@@ -1,5 +1,7 @@
 import { request } from './request'
 import type {
+  DigitalHumanGenerateResponse,
+  DigitalHumanTaskDetailResponse,
   DigitalHumanVideoRequest,
   FirstFrameVideoRequest,
   FirstLastFrameVideoRequest,
@@ -70,8 +72,12 @@ export function generateReferenceVideo(payload: ReferenceVideoRequest) {
 }
 
 export function generateDigitalHumanVideo(payload: DigitalHumanVideoRequest) {
-  return request<VideoTaskVO>('/video/generate/digital-human', {
+  return request<DigitalHumanGenerateResponse>('/video/generate/digital-human', {
     method: 'POST',
     body: JSON.stringify(payload),
   })
+}
+
+export function getDigitalHumanVideoTask(taskId: number) {
+  return request<DigitalHumanTaskDetailResponse>(`/video/generate/digital-human/${taskId}`)
 }

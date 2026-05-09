@@ -1,18 +1,5 @@
 <template>
   <div class="benchmark-page">
-    <header class="benchmark-head">
-      <div>
-        <h1>对标分析（文案改写）</h1>
-        <p>分析爆款视频，改写优质文案，打造更具吸引力的内容</p>
-      </div>
-    </header>
-
-    <div class="tips-bar">
-      <span aria-hidden="true">☼</span>
-      <strong>Tips:</strong>
-      从抖音/快手/视频号/小红书等平台复制视频链接，AI将为你分析爆款要素并改写文案
-    </div>
-
     <div class="benchmark-layout">
       <aside class="analysis-card">
         <section class="panel-block">
