@@ -650,7 +650,8 @@ function assetUrl(url?: string | null) {
 .avatar-grid {
   display: grid;
   gap: 14px;
-  grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
+  grid-template-columns: repeat(auto-fill, minmax(240px, 320px));
+  justify-content: start;
 }
 
 .avatar-card,
@@ -662,8 +663,10 @@ function assetUrl(url?: string | null) {
 }
 
 .avatar-card img {
-  height: 210px;
-  background: #eef2ff;
+  display: block;
+  height: auto;
+  background: #fff;
+  object-fit: contain;
 }
 
 .avatar-card div {
