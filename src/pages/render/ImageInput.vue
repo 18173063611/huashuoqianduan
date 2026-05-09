@@ -71,7 +71,7 @@ async function handleFileChange(event: Event) {
     const uploaded = await uploadFile(file)
     // 后端 /uploads 接口返回的 previewUrl 是 TOS 桶里的相对路径，
     // 必须拼上桶域名才是公网可访问的地址，否则火山方舟拉不到图片。
-    const fullUrl = `${TOS_BUCKET_ORIGIN}${uploaded.previewUrl}`
+    const fullUrl = `${uploaded.previewUrl}`
     emit('update', fullUrl)
   } catch (error) {
     errorMessage.value = error instanceof Error ? error.message : '图片上传失败'
