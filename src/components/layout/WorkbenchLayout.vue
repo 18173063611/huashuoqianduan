@@ -20,12 +20,6 @@
           <span>{{ item.label }}</span>
         </button>
       </nav>
-
-      <div class="app-sidebar-card">
-        <span>工作模式</span>
-        <strong>全局资产模式</strong>
-        <small>无需先创建项目</small>
-      </div>
     </aside>
 
     <main class="app-main">
@@ -41,23 +35,25 @@
           </div>
         </div>
         <div class="app-topbar-actions">
-          <button class="app-ghost-button" type="button" @click="$emit('change', 'assets')">资产中心</button>
-          <span class="app-status-dot">在线</span>
+          <button class="app-ghost-button" type="button" @click="$emit('openAssets')">资产中心</button>
+          <button
+            v-if="!authed"
+            class="app-ghost-button"
+            type="button"
+            @click="jumpToLogin"
+          >
+            登录
+          </button>
+          <button
+            v-else
+            class="app-ghost-button"
+            type="button"
+            @click="handleLogout"
+          >
+            退出登录
+          </button>
         </div>
       </header>
-
-      <section class="app-hero">
-        <div>
-          <p class="app-eyebrow">{{ activeTitle }}</p>
-          <h1>{{ activeHeadline }}</h1>
-          <p>{{ activeDescription }}</p>
-        </div>
-        <div class="app-hero-project">
-          <span>当前范围</span>
-          <strong>全局资产</strong>
-          <small>当前阶段：{{ currentStage }}</small>
-        </div>
-      </section>
 
       <slot />
     </main>
@@ -66,6 +62,9 @@
 
 <script setup lang="ts">
 import { computed } from 'vue'
+import { useRouter } from 'vue-router'
+import { logout, clearLogin } from '../../services/authApi'
+import { getAuthToken } from '../../services/request'
 
 const menuItems = [
   { key: 'video-parse', label: '爆款对标', icon: '◉' },
@@ -73,7 +72,6 @@ const menuItems = [
   { key: 'voice', label: '声音生成', icon: '♬' },
   { key: 'avatar', label: '数字人形象', icon: '◎' },
   { key: 'render', label: '视频制作', icon: '▻' },
-  { key: 'assets', label: '资产中心', icon: '◫' },
 ] as const
 
 type MenuKey = (typeof menuItems)[number]['key']
@@ -84,9 +82,8 @@ const props = defineProps<{
 
 defineEmits<{
   change: [key: MenuKey]
+  openAssets: []
 }>()
-
-const activeTitle = computed(() => menuItems.find((item) => item.key === props.activeKey)?.label ?? '爆款对标')
 
 const flowSteps = [
   { key: 'video-parse', label: '对标分析' },
@@ -96,24 +93,32 @@ const flowSteps = [
   { key: 'render', label: '视频制作生成' },
 ] as const
 
+const router = useRouter()
+
+const authed = computed(() => !!getAuthToken())
+
+function jumpToLogin() {
+  void router.push({ path: '/login', query: { redirect: router.currentRoute.value.fullPath } })
+}
+
+async function handleLogout() {
+  try {
+    await logout()
+  } catch {
+    // ignore: 即使后端 session 已失效，也应清理本地登录态
+  } finally {
+    clearLogin()
+    void router.push({ path: '/login' })
+  }
+}
+
 const stepIndexMap: Record<MenuKey, number> = {
   'video-parse': 0,
   storyboard: 1,
   voice: 2,
   avatar: 3,
   render: 4,
-  assets: 4,
 }
 
 const activeStepIndex = computed(() => stepIndexMap[props.activeKey] ?? 0)
-
-const activeHeadline = computed(() => {
-  return activeTitle.value
-})
-
-const activeDescription = computed(() => {
-  return '无需先创建项目，直接完成素材、脚本、声音、形象与成片制作。'
-})
-
-const currentStage = computed(() => flowSteps[activeStepIndex.value]?.label ?? '对标分析')
 </script>

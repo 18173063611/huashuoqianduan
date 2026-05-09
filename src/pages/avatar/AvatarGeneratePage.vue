@@ -1,17 +1,5 @@
 <template>
   <section class="avatar-page app-page-stack">
-    <header class="avatar-hero app-card">
-      <div>
-        <p class="avatar-eyebrow">数字人形象</p>
-        <h2>上传形象照，或用 AI 生成可复用的数字人形象</h2>
-        <p class="app-muted">生成或上传的图片会进入资产中心，可在这里设为默认形象。</p>
-      </div>
-      <div class="avatar-hero-card">
-        <span>当前默认形象</span>
-        <strong>{{ defaultAvatar?.avatarName || '未设置' }}</strong>
-      </div>
-    </header>
-
     <div class="avatar-content">
       <div class="avatar-layout">
         <section class="app-card avatar-panel">
@@ -23,7 +11,7 @@
           <div v-if="sourceMode === 'AI'" class="avatar-form">
             <label>
               形象名称
-              <input v-model.trim="form.avatarName" type="text" placeholder="例如：知识类女主播" />
+              <input v-model.trim="form.avatarName" type="text" placeholder="请输入形象名称" />
             </label>
             <label>
               生成提示词
@@ -100,13 +88,13 @@
           <div v-else class="avatar-form">
             <label>
               形象名称
-              <input v-model.trim="uploadName" type="text" placeholder="例如：品牌主理人形象" />
+              <input v-model.trim="uploadName" type="text" placeholder="请输入形象名称" />
             </label>
             <label>
               选择图片
               <input type="file" accept="image/*" @change="onFileChange" />
             </label>
-            <button class="app-primary-button" type="button" :disabled="uploading || !uploadFile" @click="submitUpload">
+            <button class="app-primary-button" type="button" :disabled="uploading || !uploadFile || !uploadName" @click="submitUpload">
               {{ uploading ? '上传中…' : '上传并保存形象' }}
             </button>
           </div>
@@ -143,7 +131,7 @@
               <img :src="assetUrl(avatar.previewUrl)" :alt="avatar.avatarName" />
               <div>
                 <strong>{{ avatar.avatarName }}</strong>
-                <button class="app-secondary-button" type="button" @click="saveGeneratedAvatar(avatar)">保存到资产中心</button>
+                <span class="avatar-saved-badge">已自动保存到资产中心</span>
               </div>
             </article>
           </div>
@@ -178,7 +166,7 @@
 <script setup lang="ts">
 import { computed, onBeforeUnmount, onMounted, reactive, ref } from 'vue'
 import { useSmoothTaskProgress } from '../../composables/useSmoothTaskProgress'
-import { deleteAsset, getAssets, saveAsset } from '../../services/assetApi'
+import { deleteAsset, getAssets } from '../../services/assetApi'
 import { API_ORIGIN } from '../../services/request'
 import { rememberSessionTaskId } from '../../services/sessionTaskStore'
 import {
@@ -193,14 +181,14 @@ import type { AvatarGenerateRequest, AvatarItem } from '../../types/avatarTypes'
 
 const sourceMode = ref<'AI' | 'UPLOAD'>('AI')
 const form = reactive<AvatarGenerateRequest>({
-  avatarName: '知识类男主播',
+  avatarName: '',
   prompt: '生成一位适合知识口播的数字人形象，干净背景，正面半身，商业摄影质感',
   referenceAssetIds: [],
   style: 'REALISTIC',
   imageCount: 4,
   size: '2K',
 })
-const uploadName = ref('上传形象')
+const uploadName = ref('')
 const uploadFile = ref<File | null>(null)
 
 const referenceAssets = ref<AssetItem[]>([])
@@ -223,7 +211,6 @@ const { showTaskProgressBar, barProgressPercent, reset: resetSmoothProgress } = 
   taskProgress,
 )
 
-const defaultAvatar = computed(() => avatars.value.find((item) => item.defaultAvatar))
 const canGenerate = computed(() => Boolean(form.avatarName && form.prompt && form.imageCount >= 1))
 
 onMounted(async () => {
@@ -295,7 +282,7 @@ async function submitUpload() {
   errorMessage.value = ''
   saveMessage.value = ''
   try {
-    const avatar = await uploadAvatar(uploadName.value || '上传形象', uploadFile.value)
+    const avatar = await uploadAvatar(uploadName.value, uploadFile.value)
     generatedAvatars.value = [avatar]
     await Promise.all([loadAvatars(), loadReferenceAssets()])
   } catch (e) {
@@ -368,19 +355,6 @@ async function setAsDefault(avatar: AvatarItem) {
     }))
   } catch (e) {
     errorMessage.value = e instanceof Error ? e.message : '设置默认形象失败'
-  }
-}
-
-async function saveGeneratedAvatar(avatar: AvatarItem) {
-  if (!avatar.assetId) {
-    saveMessage.value = `已保留生成结果：${avatar.avatarName}`
-    return
-  }
-  try {
-    await saveAsset(avatar.assetId)
-    saveMessage.value = `已保存到资产中心：${avatar.avatarName}`
-  } catch (e) {
-    errorMessage.value = e instanceof Error ? e.message : '保存到资产中心失败'
   }
 }
 
@@ -676,7 +650,8 @@ function assetUrl(url?: string | null) {
 .avatar-grid {
   display: grid;
   gap: 14px;
-  grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
+  grid-template-columns: repeat(auto-fill, minmax(240px, 320px));
+  justify-content: start;
 }
 
 .avatar-card,
@@ -688,14 +663,30 @@ function assetUrl(url?: string | null) {
 }
 
 .avatar-card img {
-  height: 210px;
-  background: #eef2ff;
+  display: block;
+  height: auto;
+  background: #fff;
+  object-fit: contain;
 }
 
 .avatar-card div {
   display: grid;
   gap: 10px;
   padding: 12px;
+}
+
+.avatar-saved-badge {
+  display: inline-flex;
+  min-height: 34px;
+  align-items: center;
+  justify-content: center;
+  border: 1px solid #d8d2ff;
+  border-radius: var(--app-radius-sm);
+  background: #f5f3ff;
+  color: var(--app-primary);
+  padding: 0 12px;
+  font-size: 13px;
+  font-weight: 800;
 }
 
 .avatar-library {

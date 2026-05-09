@@ -1,66 +1,117 @@
 <template>
-  <section class="app-card app-page-stack">
-    <div class="app-card-header">
+  <section class="asset-center-panel">
+    <div class="asset-center-head">
       <div>
-        <h2 class="app-card-title">资产中心</h2>
-        <p class="app-muted">
-          在「素材」中切换查看公共/私有资产；「模板」用于沉淀可复用的组合方案。公共资产支持发布与下架，私有资产支持删除（服务端校验仅允许操作本人名下条目）。
-        </p>
-        <div class="asset-scope-segment" role="tablist" aria-label="资产视图">
-          <button type="button" class="asset-scope-btn" :class="{ 'asset-scope-btn-active': viewMode === 'assets' }" role="tab" :aria-selected="viewMode === 'assets'" :disabled="loading" @click="viewMode = 'assets'">
-            素材
+        <h2>{{ activeCategory === 'materials' ? '素材资产' : voicesHeadTitle }}</h2>
+        <p>{{ activeCategory === 'materials' ? '筛选公共或私有素材，预览、复制链接，并管理当前账号下的资产。' : voicesHeadSubtitle }}</p>
+      </div>
+
+      <div class="asset-header-actions">
+        <div class="asset-category-segment" role="tablist" aria-label="资产分类">
+          <button
+            type="button"
+            class="asset-scope-btn"
+            :class="{ 'asset-scope-btn-active': activeCategory === 'materials' }"
+            role="tab"
+            :aria-selected="activeCategory === 'materials'"
+            :disabled="loading"
+            @click="activeCategory = 'materials'"
+          >
+            素材资产
           </button>
-          <button type="button" class="asset-scope-btn" :class="{ 'asset-scope-btn-active': viewMode === 'templates' }" role="tab" :aria-selected="viewMode === 'templates'" :disabled="loading" @click="viewMode = 'templates'">
-            模板
+          <button
+            type="button"
+            class="asset-scope-btn"
+            :class="{ 'asset-scope-btn-active': activeCategory === 'voices' }"
+            role="tab"
+            :aria-selected="activeCategory === 'voices'"
+            :disabled="loading"
+            @click="activeCategory = 'voices'"
+          >
+            音色库
           </button>
         </div>
 
-        <div v-if="viewMode === 'assets'" class="asset-scope-segment" role="tablist" aria-label="资产范围">
-          <button type="button" class="asset-scope-btn" :class="{ 'asset-scope-btn-active': listScope === 'global' }" role="tab" :aria-selected="listScope === 'global'" :disabled="loading" @click="listScope = 'global'">
+        <div
+          v-if="activeCategory === 'voices'"
+          class="asset-scope-segment"
+          role="tablist"
+          aria-label="音色库范围"
+        >
+          <button
+            type="button"
+            class="asset-scope-btn"
+            :class="{ 'asset-scope-btn-active': voiceListScope === 'private' }"
+            role="tab"
+            :aria-selected="voiceListScope === 'private'"
+            :disabled="loading"
+            @click="voiceListScope = 'private'"
+          >
+            私人音色库
+          </button>
+          <button
+            type="button"
+            class="asset-scope-btn"
+            :class="{ 'asset-scope-btn-active': voiceListScope === 'public' }"
+            role="tab"
+            :aria-selected="voiceListScope === 'public'"
+            :disabled="loading"
+            @click="voiceListScope = 'public'"
+          >
+            公共音色库
+          </button>
+        </div>
+
+        <div v-if="activeCategory === 'materials'" class="asset-scope-segment" role="tablist" aria-label="资产范围">
+          <button
+            type="button"
+            class="asset-scope-btn"
+            :class="{ 'asset-scope-btn-active': listScope === 'global' }"
+            role="tab"
+            :aria-selected="listScope === 'global'"
+            :disabled="loading"
+            @click="listScope = 'global'"
+          >
             公共素材
           </button>
-          <button type="button" class="asset-scope-btn" :class="{ 'asset-scope-btn-active': listScope === 'private' }" role="tab" :aria-selected="listScope === 'private'" :disabled="loading" @click="listScope = 'private'">
+          <button
+            type="button"
+            class="asset-scope-btn"
+            :class="{ 'asset-scope-btn-active': listScope === 'private' }"
+            role="tab"
+            :aria-selected="listScope === 'private'"
+            :disabled="loading"
+            @click="listScope = 'private'"
+          >
             私有素材
           </button>
         </div>
 
-        <div v-else class="asset-scope-segment" role="tablist" aria-label="模板范围">
-          <button type="button" class="asset-scope-btn" :class="{ 'asset-scope-btn-active': templateScope === 'public' }" role="tab" :aria-selected="templateScope === 'public'" :disabled="loading" @click="templateScope = 'public'">
-            公共模板
-          </button>
-          <button type="button" class="asset-scope-btn" :class="{ 'asset-scope-btn-active': templateScope === 'private' }" role="tab" :aria-selected="templateScope === 'private'" :disabled="loading" @click="templateScope = 'private'">
-            私有模板
-          </button>
-        </div>
-      </div>
-      <div class="asset-header-actions">
-        <template v-if="viewMode === 'assets'">
-          <select v-model="selectedType" class="asset-type-select" :disabled="loading" @change="loadAssets">
-            <option value="">全部类型</option>
-            <option value="TEXT">TEXT 文本</option>
-            <option value="IMAGE">IMAGE 图片</option>
-            <option value="AUDIO">AUDIO 音频</option>
-            <option value="VIDEO">VIDEO 视频</option>
-            <option value="COVER">COVER 封面</option>
-            <option value="JSON">JSON 数据</option>
-          </select>
-          <select v-model="selectedSourceType" class="asset-type-select" :disabled="loading">
-            <option value="">全部来源</option>
-            <option v-for="item in sourceTypeOptions" :key="item" :value="item">{{ item }}</option>
-          </select>
-          <select v-model="sortKey" class="asset-type-select" :disabled="loading">
-            <option value="createdAtDesc">按时间（新→旧）</option>
-            <option value="createdAtAsc">按时间（旧→新）</option>
-            <option value="fileNameAsc">按文件名（A→Z）</option>
-            <option value="fileSizeDesc">按大小（大→小）</option>
-          </select>
-        </template>
+        <select v-if="activeCategory === 'materials'" v-model="selectedType" class="asset-type-select" :disabled="loading">
+          <option value="">全部类型</option>
+          <option value="TEXT">TEXT 文本</option>
+          <option value="IMAGE">IMAGE 图片</option>
+          <option value="AUDIO">AUDIO 音频</option>
+          <option value="VIDEO">VIDEO 视频</option>
+          <option value="COVER">COVER 封面</option>
+          <option value="JSON">JSON 数据</option>
+        </select>
+        <select v-if="activeCategory === 'materials'" v-model="selectedSourceType" class="asset-type-select" :disabled="loading">
+          <option value="">全部来源</option>
+          <option v-for="item in sourceTypeOptions" :key="item" :value="item">{{ item }}</option>
+        </select>
+        <select v-if="activeCategory === 'materials'" v-model="sortKey" class="asset-type-select" :disabled="loading">
+          <option value="createdAtDesc">按时间（新到旧）</option>
+          <option value="createdAtAsc">按时间（旧到新）</option>
+          <option value="fileNameAsc">按文件名（A到Z）</option>
+          <option value="fileSizeDesc">按大小（大到小）</option>
+        </select>
         <input
           v-model="keyword"
           class="asset-search"
           type="search"
           :disabled="loading"
-          :placeholder="viewMode === 'assets' ? '搜索文件名...' : '搜索模板标题...'"
+          :placeholder="activeCategory === 'materials' ? '搜索文件名...' : '搜索音色名称或 voice_type...'"
         />
         <button class="app-secondary-button" type="button" :disabled="loading" @click="refreshCurrent">
           {{ loading ? '加载中...' : '刷新' }}
@@ -69,163 +120,179 @@
     </div>
 
     <div class="app-selected-project">
-      <template v-if="viewMode === 'assets'">
-        <template v-if="listScope === 'global'">
-          公共素材 · <strong>全员可见</strong>
-        </template>
-        <template v-else>
-          私有素材 · <strong>当前账号下上传/生成</strong>
-        </template>
-        <span class="asset-count">共 {{ assets.length }} 条</span>
+      <template v-if="activeCategory === 'voices' && voiceListScope === 'private'">
+        私人音色库 · <strong>当前账号</strong>
+        <span class="asset-count">共 {{ filteredVoices.length }} 条</span>
       </template>
-      <template v-else>
-        <template v-if="templateScope === 'public'">
-          公共模板 · <strong>全员可见</strong>
-        </template>
-        <template v-else>
-          私有模板 · <strong>当前账号下创建/复制</strong>
-        </template>
-        <span class="asset-count">共 {{ templates.length }} 条</span>
+      <template v-else-if="activeCategory === 'voices'">
+        公共音色库 · <strong>浏览并加入私人库</strong>
+        <span class="asset-count">共 {{ filteredVoices.length }} 条</span>
       </template>
+      <template v-else-if="listScope === 'global'">
+        公共素材 · <strong>全员可见</strong>
+      </template>
+      <template v-else-if="activeCategory === 'materials'">
+        私有素材 · <strong>当前账号下上传/生成</strong>
+      </template>
+      <span v-if="activeCategory === 'materials'" class="asset-count">共 {{ assets.length }} 条</span>
     </div>
+
     <p v-if="jumpHint" class="asset-jump-hint app-muted">{{ jumpHint }}</p>
     <p v-if="errorMessage" class="app-error">{{ errorMessage }}</p>
 
-    <div v-if="viewMode === 'assets' && assets.length === 0" class="app-empty asset-empty">
-        <div class="asset-empty-title">📂 暂无资产</div>
-        <div class="asset-empty-subtitle">{{ emptySubtitle }}</div>
-        <button
-          v-if="listScope === 'private' && !hasToken"
-          class="app-primary-button asset-empty-action"
-          type="button"
-          @click="jumpHint = '请先登录后再查看私有资产。'"
-        >
-          去登录
-        </button>
-        <button
-          v-else
-          class="app-primary-button asset-empty-action"
-          type="button"
-          @click="jumpHint = '从左侧进入任意模块开始生成。'"
-        >
-          去生成
-        </button>
-      </div>
-      <div v-else-if="viewMode === 'assets'" class="app-file-list">
-        <div
-          v-for="asset in assets"
-          :id="assetRowDomId(asset.assetId)"
-          :key="asset.assetId"
-          class="app-file-item"
-          :class="{ 'asset-row-highlight': highlightedId === asset.assetId }"
-        >
-          <div class="asset-row-main">
-            <strong class="asset-row-title">{{ asset.fileName }}</strong>
-            <p class="asset-row-meta">
-              {{ asset.assetType }} · {{ formatFileSize(asset.fileSize) }} · {{ asset.sourceType }}
-              <template v-if="asset.createdAt">· {{ formatTime(asset.createdAt) }}</template>
-            </p>
-            <div class="asset-row-preview">
-              <template v-if="isImage(asset)">
-                <img :src="resolveFileUrl(asset.thumbnailUrl || asset.fileUrl)" alt="asset preview" />
-              </template>
-              <template v-else-if="isAudio(asset)">
-                <audio :src="resolveFileUrl(asset.fileUrl)" controls preload="none" />
-              </template>
-              <template v-else-if="isVideo(asset)">
-                <video :src="resolveFileUrl(asset.fileUrl)" controls preload="none" />
-              </template>
-              <template v-else>
-                <span class="app-muted">此类型建议点击“预览”查看。</span>
-              </template>
-            </div>
-          </div>
-          <div class="asset-row-actions">
-            <a class="app-secondary-button asset-open" :href="resolveFileUrl(asset.fileUrl)" target="_blank" rel="noreferrer">预览</a>
-            <button class="app-secondary-button" type="button" @click="copyLink(asset)">复制链接</button>
-            <button
-              v-if="listScope === 'global' && hasToken"
-              class="app-secondary-button"
-              type="button"
-              :disabled="loading"
-              @click="handleSave(asset)"
-            >
-              保存到私有
+    <div
+      v-if="activeCategory === 'voices' && voiceListScope === 'private' && !hasToken"
+      class="app-empty asset-empty"
+    >
+      <div class="asset-empty-title">请先登录</div>
+      <div class="asset-empty-subtitle">登录后可查看与管理私人音色库（与语音生成页同步）。</div>
+      <button class="app-primary-button asset-empty-action" type="button" @click="jumpHint = '请先登录后再查看私人音色库。'">
+        去登录
+      </button>
+    </div>
+
+    <div
+      v-else-if="activeCategory === 'voices' && filteredVoices.length === 0"
+      class="app-empty asset-empty"
+    >
+      <div class="asset-empty-title">暂无匹配音色</div>
+      <div class="asset-empty-subtitle">可换一个关键词搜索。</div>
+    </div>
+
+    <div v-else-if="activeCategory === 'voices'" class="voice-library-list">
+      <div v-for="voice in filteredVoices" :key="voice.voiceId" class="voice-library-item">
+        <div class="voice-library-main">
+          <strong>{{ voice.voiceName }}</strong>
+          <p>{{ voice.gender || '未知' }} · {{ voice.scene || '通用口播' }}</p>
+          <code>{{ voice.providerVoiceId }}</code>
+        </div>
+        <div class="asset-row-actions">
+          <button class="app-secondary-button" type="button" :disabled="loading" @click="playVoiceSample(voice)">试听</button>
+          <template v-if="voiceListScope === 'private'">
+            <button class="app-secondary-button" type="button" :disabled="loading" @click="goVoiceTtsWithPreset(voice)">
+              去声音生成
             </button>
             <button
-              v-if="listScope === 'private' && hasToken"
-              class="app-secondary-button"
-              type="button"
-              :disabled="loading"
-              @click="handlePublish(asset)"
-            >
-              发布到公共
-            </button>
-            <button
-              v-if="listScope === 'global' && hasToken && canUnpublish(asset)"
               class="app-secondary-button asset-danger"
               type="button"
               :disabled="loading"
-              @click="handleUnpublish(asset)"
-            >
-              下架
-            </button>
-            <button
-              v-if="asset.metadataJson"
-              class="app-secondary-button"
-              type="button"
-              @click="openMetadata(asset)"
-            >
-              metadata
-            </button>
-            <button
-              v-if="listScope === 'private' && asset.ownerUserId != null"
-              class="app-secondary-button asset-danger"
-              type="button"
-              title="删除该私有资产（不可恢复）"
-              :disabled="loading"
-              @click="handleDelete(asset)"
+              @click="handleRemoveVoiceFromLibrary(voice)"
             >
               删除
             </button>
-          </div>
+          </template>
+          <template v-else>
+            <button
+              v-if="hasToken"
+              class="app-secondary-button"
+              type="button"
+              :disabled="loading"
+              @click="handleAddVoiceToLibrary(voice)"
+            >
+              加入私人音色库
+            </button>
+            <button class="app-secondary-button" type="button" :disabled="loading" @click="goVoiceTtsWithPreset(voice)">
+              去声音生成
+            </button>
+          </template>
         </div>
       </div>
-      <div v-else-if="viewMode === 'templates' && templates.length === 0" class="app-empty asset-empty">
-        <div class="asset-empty-title">🧩 暂无模板</div>
-        <div class="asset-empty-subtitle">{{ templateEmptySubtitle }}</div>
-        <button
-          v-if="templateScope === 'private' && !hasToken"
-          class="app-primary-button asset-empty-action"
-          type="button"
-          @click="jumpHint = '请先登录后再查看私有模板。'"
-        >
-          去登录
-        </button>
-      </div>
-      <div v-else class="app-file-list">
-        <div v-for="tpl in templates" :key="tpl.templateId" class="app-file-item">
-          <div class="asset-row-main">
-            <strong class="asset-row-title">{{ tpl.title }}</strong>
-            <p class="asset-row-meta">
-              v{{ tpl.versionNo }} · {{ tpl.visibility }} · {{ tpl.assets.length }} 个附件
-              <template v-if="tpl.publishedAt">· {{ formatTime(tpl.publishedAt) }}</template>
-            </p>
-            <p v-if="tpl.description" class="app-muted" style="margin: 0;">{{ tpl.description }}</p>
-          </div>
-          <div class="asset-row-actions">
-            <button v-if="templateScope === 'public' && hasToken" class="app-secondary-button" type="button" :disabled="loading" @click="handleForkTemplate(tpl)">
-              复制为私有
-            </button>
-            <button v-if="templateScope === 'private' && hasToken" class="app-secondary-button" type="button" :disabled="loading" @click="handlePublishTemplate(tpl)">
-              发布到公共
-            </button>
-            <button v-if="tpl.metadataJson" class="app-secondary-button" type="button" @click="openTemplateMetadata(tpl)">
-              metadata
-            </button>
+    </div>
+
+    <div v-else-if="assets.length === 0" class="app-empty asset-empty">
+      <div class="asset-empty-title">暂无资产</div>
+      <div class="asset-empty-subtitle">{{ emptySubtitle }}</div>
+      <button
+        v-if="listScope === 'private' && !hasToken"
+        class="app-primary-button asset-empty-action"
+        type="button"
+        @click="jumpHint = '请先登录后再查看私有资产。'"
+      >
+        去登录
+      </button>
+    </div>
+
+    <div v-else class="app-file-list asset-file-list">
+      <div
+        v-for="asset in assets"
+        :id="assetRowDomId(asset.assetId)"
+        :key="asset.assetId"
+        class="app-file-item"
+        :class="{ 'asset-row-highlight': highlightedId === asset.assetId }"
+      >
+        <div class="asset-row-main">
+          <strong class="asset-row-title">{{ asset.fileName }}</strong>
+          <p class="asset-row-meta">
+            {{ asset.assetType }} · {{ formatFileSize(asset.fileSize) }} · {{ asset.sourceType }}
+            <template v-if="asset.createdAt"> · {{ formatTime(asset.createdAt) }}</template>
+          </p>
+          <div class="asset-row-preview">
+            <template v-if="isImage(asset)">
+              <img :src="resolveFileUrl(asset.thumbnailUrl || asset.fileUrl)" alt="asset preview" />
+            </template>
+            <template v-else-if="isAudio(asset)">
+              <audio :src="resolveFileUrl(asset.fileUrl)" controls preload="none" />
+            </template>
+            <template v-else-if="isVideo(asset)">
+              <video :src="resolveFileUrl(asset.fileUrl)" controls preload="none" />
+            </template>
+            <template v-else>
+              <span class="app-muted">此类型建议点击“预览”查看。</span>
+            </template>
           </div>
         </div>
+
+        <div class="asset-row-actions">
+          <a class="app-secondary-button asset-open" :href="resolveFileUrl(asset.fileUrl)" target="_blank" rel="noreferrer">预览</a>
+          <button class="app-secondary-button" type="button" @click="copyLink(asset)">复制链接</button>
+          <button
+            v-if="listScope === 'global' && hasToken"
+            class="app-secondary-button"
+            type="button"
+            :disabled="loading"
+            @click="handleSave(asset)"
+          >
+            保存到私有
+          </button>
+          <button
+            v-if="listScope === 'private' && hasToken"
+            class="app-secondary-button"
+            type="button"
+            :disabled="loading"
+            @click="handlePublish(asset)"
+          >
+            发布到公共
+          </button>
+          <button
+            v-if="listScope === 'global' && hasToken && canUnpublish(asset)"
+            class="app-secondary-button asset-danger"
+            type="button"
+            :disabled="loading"
+            @click="handleUnpublish(asset)"
+          >
+            下架
+          </button>
+          <button
+            v-if="asset.metadataJson"
+            class="app-secondary-button"
+            type="button"
+            @click="openMetadata(asset)"
+          >
+            metadata
+          </button>
+          <button
+            v-if="listScope === 'private' && asset.ownerUserId != null"
+            class="app-secondary-button asset-danger"
+            type="button"
+            title="删除该私有资产（不可恢复）"
+            :disabled="loading"
+            @click="handleDelete(asset)"
+          >
+            删除
+          </button>
+        </div>
       </div>
+    </div>
 
     <div v-if="metadataModalOpen" class="asset-modal-backdrop" @click.self="closeMetadata">
       <div class="asset-modal">
@@ -246,26 +313,38 @@
 
 <script setup lang="ts">
 import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue'
+import { useRouter } from 'vue-router'
 import { deleteAsset, getAssets, publishAsset, saveAsset, unpublishAsset } from '../../services/assetApi'
-import type { AssetListSort, AssetListScope } from '../../services/assetApi'
+import type { AssetListScope, AssetListSort } from '../../services/assetApi'
 import { API_ORIGIN, getAuthToken } from '../../services/request'
 import type { AssetItem, AssetType } from '../../types/assetTypes'
-import { forkTemplate, getTemplates, publishTemplate } from '../../services/templateApi'
-import type { TemplateItem } from '../../types/templateTypes'
+import {
+  addVoiceToMyLibrary,
+  createVoiceSampleTask,
+  getVoiceCatalog,
+  getVoicePresets,
+  removeVoiceFromMyLibrary,
+} from '../../services/voiceApi'
+import { getTaskDetail } from '../../services/taskApi'
+import { rememberSessionTaskId } from '../../services/sessionTaskStore'
+import { VOICE_PRESET_SELECTION_KEY, type VoicePresetItem } from '../../types/voiceTypes'
 
 const props = defineProps<{
-  /** 从任务中心等入口跳转时高亮并滚动到该资产 */
+  /** 从任务中心等入口跳转时，高亮并滚动到该资产 */
   highlightAssetId?: number | null
 }>()
 
 const emit = defineEmits<{
   highlightConsumed: []
+  voiceSelected: []
 }>()
+
+const router = useRouter()
 
 const KNOWN_SOURCE_TYPES = ['AI_GENERATED', 'DEMO', 'MANUAL_CREATED', 'SYSTEM_MOCK', 'USER_UPLOAD'] as const
 
 const assets = ref<AssetItem[]>([])
-const templates = ref<TemplateItem[]>([])
+const voices = ref<VoicePresetItem[]>([])
 const loading = ref(false)
 const errorMessage = ref('')
 const highlightedId = ref<number | null>(null)
@@ -275,9 +354,8 @@ const selectedSourceType = ref<string>('')
 const sortKey = ref<AssetListSort>('createdAtDesc')
 const keyword = ref('')
 const listScope = ref<AssetListScope>('global')
-const viewMode = ref<'assets' | 'templates'>('assets')
-const templateScope = ref<'public' | 'private'>('public')
-/** 每次 loadAssets 时从 localStorage 刷新，避免登录后仍显示未登录提示 */
+const activeCategory = ref<'materials' | 'voices'>('materials')
+const voiceListScope = ref<'private' | 'public'>('private')
 const hasToken = ref(false)
 let keywordReloadTimer: number | null = null
 let highlightClearTimer: number | null = null
@@ -287,54 +365,65 @@ const metadataPretty = ref('')
 const metadataTitle = ref('')
 const metadataLink = ref('#')
 
+const voicesHeadTitle = computed(() =>
+  activeCategory.value === 'voices'
+    ? voiceListScope.value === 'private'
+      ? '私人音色库'
+      : '公共音色库'
+    : '',
+)
+
+const voicesHeadSubtitle = computed(() =>
+  voiceListScope.value === 'private'
+    ? '与语音生成页列表一致；默认三条可在移除后从公共库再添加。'
+    : '浏览全部已启用音色，可加入私人库后在语音合成中使用。',
+)
+
 const emptySubtitle = computed(() => {
   if (listScope.value === 'private' && !hasToken.value) {
-    return '请先登录，再在资产中心查看与当前账号绑定的私有资产。'
+    return '请先登录，再查看与当前账号绑定的私有资产。'
   }
   if (listScope.value === 'private') {
-    return '当前账号下尚无私有资产，可在各模块上传或生成后在此查看。'
+    return '当前账号下尚无私有资产，可在各模块上传或生成后查看。'
   }
-  return '当前没有符合条件的公共资产，或可先在其他模块生成演示内容。'
-})
-
-const templateEmptySubtitle = computed(() => {
-  if (templateScope.value === 'private' && !hasToken.value) {
-    return '请先登录，再在资产中心查看与当前账号绑定的私有模板。'
-  }
-  if (templateScope.value === 'private') {
-    return '当前账号下尚无私有模板，可从公共模板复制或后续创建。'
-  }
-  return '当前没有公共模板，可先从私有模板发布沉淀。'
+  return '当前没有符合条件的公共素材。'
 })
 
 const sourceTypeOptions = computed(() => {
   const set = new Set<string>(KNOWN_SOURCE_TYPES)
-  for (const a of assets.value) {
-    if (a.sourceType) {
-      set.add(a.sourceType)
+  for (const asset of assets.value) {
+    if (asset.sourceType) {
+      set.add(asset.sourceType)
     }
   }
   return Array.from(set).sort((a, b) => a.localeCompare(b))
+})
+
+const filteredVoices = computed(() => {
+  const q = keyword.value.trim().toLowerCase()
+  if (!q) {
+    return voices.value
+  }
+  return voices.value.filter((voice) => {
+    return (
+      voice.voiceName.toLowerCase().includes(q) ||
+      voice.providerVoiceId.toLowerCase().includes(q) ||
+      (voice.gender || '').toLowerCase().includes(q) ||
+      (voice.scene || '').toLowerCase().includes(q)
+    )
+  })
 })
 
 onMounted(() => {
   void refreshCurrent()
 })
 
-watch(listScope, () => {
-  scheduleReload()
-})
-
-watch([selectedSourceType, sortKey], () => {
+watch([activeCategory, listScope, voiceListScope, selectedType, selectedSourceType, sortKey], () => {
   scheduleReload()
 })
 
 watch(keyword, () => {
   scheduleKeywordReload()
-})
-
-watch([viewMode, templateScope], () => {
-  scheduleReload()
 })
 
 watch(
@@ -373,6 +462,20 @@ async function loadAssets() {
   errorMessage.value = ''
   hasToken.value = !!getAuthToken()
   try {
+    if (activeCategory.value === 'voices') {
+      if (voiceListScope.value === 'private') {
+        if (!getAuthToken()) {
+          voices.value = []
+          return
+        }
+        const res = await getVoicePresets()
+        voices.value = res.records || []
+        return
+      }
+      const res = await getVoiceCatalog()
+      voices.value = res.records || []
+      return
+    }
     assets.value = await getAssets({
       scope: listScope.value,
       assetType: selectedType.value || undefined,
@@ -395,29 +498,8 @@ async function loadAssets() {
   }
 }
 
-async function loadTemplates() {
-  loading.value = true
-  errorMessage.value = ''
-  hasToken.value = !!getAuthToken()
-  try {
-    templates.value = await getTemplates({
-      scope: templateScope.value,
-      keyword: keyword.value || undefined,
-      sort: 'publishedAtDesc',
-    })
-  } catch (error) {
-    errorMessage.value = error instanceof Error ? error.message : '加载模板失败'
-  } finally {
-    loading.value = false
-  }
-}
-
 function refreshCurrent() {
-  if (viewMode.value === 'assets') {
-    void loadAssets()
-    return
-  }
-  void loadTemplates()
+  void loadAssets()
 }
 
 function clearKeywordReloadTimer() {
@@ -438,16 +520,13 @@ function applyHighlightWhenReady(assetId: number) {
   if (loading.value) {
     return
   }
-  if (viewMode.value !== 'assets') {
-    return
-  }
-  const found = assets.value.some((a) => a.assetId === assetId)
+  const found = assets.value.some((asset) => asset.assetId === assetId)
   if (!found) {
-    jumpHint.value = '该资产不在当前列表中，可点击刷新后再试。'
+    jumpHint.value = '该资产不在当前列表中，可切换范围或刷新后再试。'
     emit('highlightConsumed')
     return
   }
-  jumpHint.value = '已从任务跳转至对应资产。'
+  jumpHint.value = '已定位到任务产出的素材。'
   highlightedId.value = assetId
   clearHighlightTimer()
   void nextTick().then(() => {
@@ -495,7 +574,6 @@ function formatFileSize(size: number) {
 }
 
 function formatTime(value: string) {
-  // 后端是 ISO 或 LocalDateTime 默认序列化字符串，这里做轻量格式化展示即可
   return value.replace('T', ' ').slice(0, 19)
 }
 
@@ -526,7 +604,7 @@ async function handleDelete(asset: AssetItem) {
   errorMessage.value = ''
   try {
     await deleteAsset(asset.assetId)
-    assets.value = assets.value.filter((a) => a.assetId !== asset.assetId)
+    assets.value = assets.value.filter((item) => item.assetId !== asset.assetId)
     if (highlightedId.value === asset.assetId) {
       highlightedId.value = null
     }
@@ -538,7 +616,9 @@ async function handleDelete(asset: AssetItem) {
 }
 
 async function handleSave(asset: AssetItem) {
-  if (loading.value) return
+  if (loading.value) {
+    return
+  }
   loading.value = true
   errorMessage.value = ''
   try {
@@ -552,9 +632,13 @@ async function handleSave(asset: AssetItem) {
 }
 
 async function handlePublish(asset: AssetItem) {
-  if (loading.value) return
+  if (loading.value) {
+    return
+  }
   const ok = window.confirm(`确认发布到公共素材？\n${asset.fileName}`)
-  if (!ok) return
+  if (!ok) {
+    return
+  }
   loading.value = true
   errorMessage.value = ''
   try {
@@ -570,64 +654,27 @@ async function handlePublish(asset: AssetItem) {
 }
 
 function canUnpublish(asset: AssetItem) {
-  // MVP：仅允许创建者下架（后端也会校验）；前端用 createdByUserId 是否存在作为粗过滤。
   return asset.createdByUserId != null
 }
 
 async function handleUnpublish(asset: AssetItem) {
-  if (loading.value) return
+  if (loading.value) {
+    return
+  }
   const ok = window.confirm(`确认下架该公共素材？\n${asset.fileName}`)
-  if (!ok) return
+  if (!ok) {
+    return
+  }
   loading.value = true
   errorMessage.value = ''
   try {
     await unpublishAsset(asset.assetId)
-    assets.value = assets.value.filter((a) => a.assetId !== asset.assetId)
+    assets.value = assets.value.filter((item) => item.assetId !== asset.assetId)
   } catch (e) {
     errorMessage.value = e instanceof Error ? e.message : '下架失败'
   } finally {
     loading.value = false
   }
-}
-
-async function handlePublishTemplate(tpl: TemplateItem) {
-  if (loading.value) return
-  const ok = window.confirm(`确认发布到公共模板？\n${tpl.title}`)
-  if (!ok) return
-  loading.value = true
-  errorMessage.value = ''
-  try {
-    await publishTemplate(tpl.templateId)
-    templateScope.value = 'public'
-  } catch (e) {
-    errorMessage.value = e instanceof Error ? e.message : '发布失败'
-  } finally {
-    loading.value = false
-    void loadTemplates()
-  }
-}
-
-async function handleForkTemplate(tpl: TemplateItem) {
-  if (loading.value) return
-  loading.value = true
-  errorMessage.value = ''
-  try {
-    await forkTemplate(tpl.templateId)
-    templateScope.value = 'private'
-    jumpHint.value = '已复制为私有模板。'
-  } catch (e) {
-    errorMessage.value = e instanceof Error ? e.message : '复制失败'
-  } finally {
-    loading.value = false
-    void loadTemplates()
-  }
-}
-
-function openTemplateMetadata(tpl: TemplateItem) {
-  metadataModalOpen.value = true
-  metadataTitle.value = `${tpl.title}（模板 v${tpl.versionNo}）`
-  metadataLink.value = '#'
-  metadataPretty.value = prettyJson(tpl.metadataJson || '')
 }
 
 function openMetadata(asset: AssetItem) {
@@ -672,91 +719,174 @@ async function copyMetadata() {
     errorMessage.value = e instanceof Error ? e.message : '复制失败'
   }
 }
+
+async function goVoiceTtsWithPreset(voice: VoicePresetItem) {
+  if (getAuthToken()) {
+    loading.value = true
+    errorMessage.value = ''
+    try {
+      await addVoiceToMyLibrary(voice.voiceId)
+    } catch (e) {
+      errorMessage.value = e instanceof Error ? e.message : '加入私人音色库失败'
+      return
+    } finally {
+      loading.value = false
+    }
+  }
+  window.localStorage.setItem(VOICE_PRESET_SELECTION_KEY, voice.providerVoiceId)
+  emit('voiceSelected')
+  void router.push({ name: 'voice' })
+}
+
+async function handleAddVoiceToLibrary(voice: VoicePresetItem) {
+  if (!getAuthToken()) {
+    jumpHint.value = '请先登录后再加入私人音色库。'
+    return
+  }
+  loading.value = true
+  errorMessage.value = ''
+  try {
+    await addVoiceToMyLibrary(voice.voiceId)
+    jumpHint.value = `已将「${voice.voiceName}」加入私人音色库。`
+  } catch (e) {
+    errorMessage.value = e instanceof Error ? e.message : '加入失败'
+  } finally {
+    loading.value = false
+  }
+}
+
+async function handleRemoveVoiceFromLibrary(voice: VoicePresetItem) {
+  const ok = window.confirm(`从私人音色库移除「${voice.voiceName}」？`)
+  if (!ok) {
+    return
+  }
+  loading.value = true
+  errorMessage.value = ''
+  try {
+    await removeVoiceFromMyLibrary(voice.voiceId)
+    voices.value = voices.value.filter((v) => v.voiceId !== voice.voiceId)
+  } catch (e) {
+    errorMessage.value = e instanceof Error ? e.message : '删除失败'
+  } finally {
+    loading.value = false
+  }
+}
+
+async function playVoiceSample(voice: VoicePresetItem) {
+  try {
+    let sampleUrl = voice.sampleUrl
+    if (!sampleUrl) {
+      loading.value = true
+      errorMessage.value = ''
+      const created = await createVoiceSampleTask(voice.voiceId)
+      rememberSessionTaskId(created.taskId)
+      const maxAttempts = 40
+      for (let i = 0; i < maxAttempts; i++) {
+        const detail = await getTaskDetail(created.taskId)
+        if (detail.status === 'SUCCESS') {
+          if (detail.outputJson) {
+            try {
+              const parsed = JSON.parse(detail.outputJson) as { sampleUrl?: string; previewUrl?: string }
+              sampleUrl = parsed.sampleUrl || parsed.previewUrl || ''
+            } catch {
+              sampleUrl = ''
+            }
+          }
+          break
+        }
+        if (['FAILED', 'RETRYABLE', 'CANCELED'].includes(String(detail.status))) {
+          throw new Error(detail.errorMessage || '试听任务失败')
+        }
+        await new Promise((r) => window.setTimeout(r, 900))
+      }
+      loading.value = false
+      if (sampleUrl) {
+        const idx = voices.value.findIndex((v) => v.voiceId === voice.voiceId)
+        if (idx >= 0) {
+          voices.value[idx] = { ...voices.value[idx], sampleUrl }
+        }
+      }
+    }
+    if (!sampleUrl) {
+      return
+    }
+    const url = sampleUrl.startsWith('http') ? sampleUrl : `${API_ORIGIN}${sampleUrl}`
+    const a = new Audio(url)
+    void a.play().catch(() => {})
+  } catch (e) {
+    errorMessage.value = e instanceof Error ? e.message : '试听失败'
+  } finally {
+    loading.value = false
+  }
+}
 </script>
 
 <style scoped>
-section.app-card {
-  background: transparent;
+.asset-center-panel {
+  display: grid;
+  gap: 14px;
 }
 
-section.app-card > .app-card-header {
-  align-items: flex-start;
-  flex-wrap: wrap;
-  gap: 20px 24px;
+.asset-center-head {
+  display: grid;
+  grid-template-columns: minmax(220px, 0.6fr) minmax(0, 1.4fr);
+  gap: 18px;
+  align-items: start;
 }
 
-section.app-card > .app-card-header > :first-child {
-  flex: 1 1 360px;
-  min-width: min(360px, 100%);
+.asset-center-head h2 {
+  margin: 0 0 6px;
+  color: #151a2d;
+  font-size: 18px;
+  font-weight: 850;
 }
 
-.app-card-title {
-  font-size: 20px;
-  font-weight: 600;
-  color: #111827;
-}
-
-.app-muted {
-  max-width: 620px;
+.asset-center-head p {
+  margin: 0;
+  max-width: 360px;
+  color: #667085;
   font-size: 13px;
-  color: #6b7280;
-}
-
-.app-selected-project {
-  display: inline-flex;
-  align-items: center;
-  gap: 8px;
-  background: #f8f9fc;
-  border-radius: 10px;
-  padding: 12px 16px;
-  border: 1px solid #eef0f6;
-  color: #111827;
-}
-
-.asset-count {
-  margin-left: 6px;
-  font-size: 12px;
-  color: #6b7280;
+  line-height: 1.6;
 }
 
 .asset-header-actions {
   display: grid;
-  flex: 1 1 680px;
-  grid-template-columns: repeat(3, minmax(136px, 1fr)) minmax(190px, 1.25fr) auto;
-  align-items: stretch;
-  gap: 12px;
-  min-width: min(680px, 100%);
-  margin-left: auto;
+  grid-template-columns: repeat(3, minmax(118px, 1fr)) minmax(180px, 1.2fr) auto;
+  align-items: center;
+  gap: 10px;
 }
 
+.asset-category-segment,
 .asset-scope-segment {
   display: inline-flex;
-  margin-top: 12px;
+  grid-column: 1 / -1;
+  width: fit-content;
   padding: 3px;
+  border: 1px solid #e5e7eb;
   border-radius: 10px;
   background: #eef0f6;
-  border: 1px solid #e5e7eb;
   gap: 2px;
+}
+
+.asset-category-segment {
+  background: #f5f3ff;
+  border-color: #e2ddff;
 }
 
 .asset-scope-btn {
   border: none;
   border-radius: 8px;
   padding: 6px 14px;
-  font-size: 13px;
-  font-weight: 500;
-  color: #6b7280;
   background: transparent;
+  color: #6b7280;
+  font-size: 13px;
+  font-weight: 650;
   cursor: pointer;
-  transition:
-    background 120ms ease,
-    color 120ms ease,
-    box-shadow 120ms ease;
 }
 
 .asset-scope-btn:hover:not(:disabled) {
-  color: #111827;
   background: rgba(255, 255, 255, 0.65);
+  color: #111827;
 }
 
 .asset-scope-btn:disabled {
@@ -765,77 +895,154 @@ section.app-card > .app-card-header > :first-child {
 }
 
 .asset-scope-btn-active {
-  color: #111827;
   background: #ffffff;
   box-shadow: 0 1px 3px rgba(0, 0, 0, 0.06);
-}
-
-.asset-type-select {
-  width: 100%;
-  min-width: 0;
-  height: 36px;
-  border: 1px solid #e5e7eb;
-  background: #f5f6f8;
   color: #111827;
-  padding: 0 12px;
-  border-radius: 8px;
-  outline: none;
-  transition:
-    border-color 120ms ease,
-    box-shadow 120ms ease,
-    background 120ms ease;
 }
 
-.asset-type-select:focus {
-  border-color: #7c6cff;
-  box-shadow: 0 0 0 2px rgba(124, 108, 255, 0.1);
-  background: #ffffff;
-}
-
+.asset-type-select,
 .asset-search {
   width: 100%;
   min-width: 0;
   height: 36px;
   border: 1px solid #e5e7eb;
-  background: #f5f6f8;
-  color: #111827;
-  padding: 0 12px 0 36px;
   border-radius: 8px;
+  background-color: #f5f6f8;
+  color: #111827;
   outline: none;
+}
+
+.asset-type-select {
+  padding: 0 12px;
+}
+
+.asset-search {
+  padding: 0 12px 0 36px;
   background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='18' height='18' viewBox='0 0 24 24' fill='none'%3E%3Cpath d='M21 21l-4.35-4.35' stroke='%239CA3AF' stroke-width='2' stroke-linecap='round'/%3E%3Cpath d='M11 19a8 8 0 110-16 8 8 0 010 16z' stroke='%239CA3AF' stroke-width='2'/%3E%3C/svg%3E");
   background-repeat: no-repeat;
   background-position: 12px 50%;
-  transition:
-    border-color 120ms ease,
-    box-shadow 120ms ease,
-    background 120ms ease;
 }
 
+.asset-type-select:focus,
 .asset-search:focus {
   border-color: #7c6cff;
   box-shadow: 0 0 0 2px rgba(124, 108, 255, 0.1);
-  background: #ffffff;
+  background-color: #ffffff;
 }
 
 .asset-header-actions .app-secondary-button {
   min-width: 68px;
   height: 36px;
-  justify-content: center;
   white-space: nowrap;
 }
 
-.app-file-list {
-  background: #ffffff;
-  border-radius: 12px;
-  padding: 20px;
+.app-selected-project {
+  display: inline-flex;
+  width: fit-content;
+  align-items: center;
+  gap: 8px;
+  border: 1px solid #e2ddff;
+  border-radius: 10px;
+  background: #f5f3ff;
+  color: #635bff;
+  padding: 10px 14px;
+}
+
+.asset-count {
+  margin-left: 6px;
+  color: #6b7280;
+  font-size: 12px;
+}
+
+.asset-jump-hint {
+  margin: 0;
+  font-size: 13px;
+}
+
+.asset-file-list,
+.asset-empty,
+.voice-library-list {
   min-height: 300px;
+  border-radius: 12px;
+  background: #ffffff;
   box-shadow: 0 4px 20px rgba(0, 0, 0, 0.04);
 }
 
-.app-file-item {
+.asset-file-list {
+  display: grid;
+  gap: 12px;
+  padding: 16px;
+}
+
+.voice-library-list {
+  display: grid;
+  gap: 12px;
+  padding: 16px;
+}
+
+.voice-library-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  border: 1px solid #edf0f6;
   border-radius: 12px;
-  border: 1px solid #f0f1f3;
-  background: #fafafb;
+  background: #fbfcff;
+  padding: 14px 16px;
+}
+
+.voice-library-main {
+  min-width: 0;
+}
+
+.voice-library-main strong {
+  display: block;
+  color: #151a2d;
+  font-size: 15px;
+  font-weight: 850;
+}
+
+.voice-library-main p {
+  margin: 6px 0;
+  color: #667085;
+  font-size: 13px;
+}
+
+.voice-library-main code {
+  display: inline-block;
+  max-width: 100%;
+  overflow: hidden;
+  border-radius: 6px;
+  background: #f1efff;
+  color: #5e50df;
+  padding: 4px 8px;
+  text-overflow: ellipsis;
+  vertical-align: top;
+  white-space: nowrap;
+}
+
+.asset-empty {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: flex-start;
+  gap: 10px;
+  padding-top: 80px;
+}
+
+.asset-empty-title {
+  color: #111827;
+  font-size: 16px;
+  font-weight: 700;
+}
+
+.asset-empty-subtitle {
+  color: #9ca3af;
+  font-size: 12px;
+}
+
+.asset-empty-action {
+  margin-top: 12px;
 }
 
 .asset-row-main {
@@ -853,8 +1060,8 @@ section.app-card > .app-card-header > :first-child {
 
 .asset-row-meta {
   margin: 6px 0 10px;
-  font-size: 13px;
   color: #6b7280;
+  font-size: 13px;
 }
 
 .asset-row-actions {
@@ -869,8 +1076,8 @@ section.app-card > .app-card-header > :first-child {
   width: 240px;
   max-width: 100%;
   height: auto;
-  border-radius: 10px;
   border: 1px solid rgba(148, 163, 184, 0.2);
+  border-radius: 10px;
 }
 
 .asset-row-preview audio,
@@ -880,10 +1087,10 @@ section.app-card > .app-card-header > :first-child {
 }
 
 .asset-open {
-  text-decoration: none;
   display: inline-flex;
   align-items: center;
   justify-content: center;
+  text-decoration: none;
 }
 
 .asset-danger {
@@ -894,126 +1101,26 @@ section.app-card > .app-card-header > :first-child {
 .asset-row-highlight {
   outline: 2px solid #7c6cff;
   outline-offset: 2px;
-  border-radius: var(--app-radius-sm);
   background: rgba(124, 108, 255, 0.08);
-}
-
-.asset-jump-hint {
-  margin: 8px 0 0;
-  font-size: 13px;
-}
-
-.asset-empty {
-  background: #ffffff;
-  border-radius: 12px;
-  padding: 20px;
-  min-height: 300px;
-  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.04);
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  justify-content: flex-start;
-  margin-top: 0;
-  padding-top: 80px;
-  gap: 10px;
-}
-
-.asset-empty-title {
-  font-size: 16px;
-  font-weight: 600;
-  color: #111827;
-}
-
-.asset-empty-subtitle {
-  font-size: 12px;
-  color: #9ca3af;
-}
-
-.asset-empty-action {
-  margin-top: 12px;
-  height: 42px;
-  border-radius: 8px;
-  background: linear-gradient(135deg, #6c5ce7, #8a7cff);
-  font-size: 14px;
-  font-weight: 500;
-  color: #ffffff;
-  border: none;
-  cursor: pointer;
-  transition:
-    opacity 120ms ease,
-    transform 120ms ease,
-    box-shadow 120ms ease;
-}
-
-.asset-empty-action:hover {
-  opacity: 0.92;
-  transform: translateY(-1px);
-  box-shadow: 0 8px 18px rgba(124, 108, 255, 0.22);
-}
-
-@media (max-width: 1320px) {
-  section.app-card > .app-card-header {
-    display: grid;
-    grid-template-columns: minmax(0, 1fr);
-  }
-
-  section.app-card > .app-card-header > :first-child,
-  .asset-header-actions {
-    min-width: 0;
-    width: 100%;
-  }
-
-  .asset-header-actions {
-    margin-left: 0;
-  }
-}
-
-@media (max-width: 980px) {
-  .asset-header-actions {
-    grid-template-columns: repeat(2, minmax(0, 1fr));
-  }
-
-  .asset-header-actions .app-secondary-button {
-    width: 100%;
-  }
-}
-
-@media (max-width: 640px) {
-  section.app-card > .app-card-header {
-    gap: 16px;
-  }
-
-  .asset-header-actions {
-    grid-template-columns: minmax(0, 1fr);
-  }
-
-  .asset-scope-segment,
-  .app-selected-project {
-    width: 100%;
-  }
-
-  .asset-scope-btn {
-    flex: 1 1 0;
-  }
 }
 
 .asset-modal-backdrop {
   position: fixed;
   inset: 0;
-  background: rgba(2, 6, 23, 0.7);
+  z-index: 90;
   display: flex;
   align-items: center;
   justify-content: center;
+  background: rgba(2, 6, 23, 0.7);
   padding: 18px;
-  z-index: 60;
 }
 
 .asset-modal {
   width: min(920px, 100%);
   max-height: min(78vh, 720px);
   overflow: auto;
-  border-radius: 14px;
   border: 1px solid rgba(148, 163, 184, 0.25);
+  border-radius: 14px;
   background: rgba(15, 23, 42, 0.92);
   padding: 14px 14px 12px;
 }
@@ -1023,6 +1130,7 @@ section.app-card > .app-card-header > :first-child {
   align-items: center;
   justify-content: space-between;
   gap: 10px;
+  color: rgba(226, 232, 240, 0.95);
 }
 
 .asset-modal-subtitle {
@@ -1034,13 +1142,13 @@ section.app-card > .app-card-header > :first-child {
   margin: 0;
   white-space: pre-wrap;
   word-break: break-word;
-  font-size: 12px;
-  line-height: 1.5;
-  padding: 12px;
-  border-radius: 12px;
   border: 1px solid rgba(148, 163, 184, 0.25);
+  border-radius: 12px;
   background: rgba(2, 6, 23, 0.55);
   color: rgba(226, 232, 240, 0.95);
+  padding: 12px;
+  font-size: 12px;
+  line-height: 1.5;
 }
 
 .asset-modal-actions {
@@ -1048,5 +1156,45 @@ section.app-card > .app-card-header > :first-child {
   justify-content: flex-end;
   gap: 10px;
   margin-top: 12px;
+}
+
+@media (max-width: 980px) {
+  .asset-center-head {
+    grid-template-columns: 1fr;
+  }
+
+  .asset-header-actions {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .asset-header-actions .app-secondary-button {
+    width: 100%;
+  }
+}
+
+@media (max-width: 640px) {
+  .asset-header-actions {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .asset-scope-segment,
+  .asset-category-segment,
+  .app-selected-project {
+    width: 100%;
+  }
+
+  .asset-scope-btn {
+    flex: 1 1 0;
+  }
+
+  .asset-row-actions {
+    align-items: stretch;
+    width: 100%;
+  }
+
+  .voice-library-item {
+    align-items: stretch;
+    flex-direction: column;
+  }
 }
 </style>
