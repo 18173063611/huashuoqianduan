@@ -31,6 +31,20 @@ export function removeVoiceFromMyLibrary(voiceId: number) {
   return request<null>(`/voices/library/${voiceId}`, { method: 'DELETE' })
 }
 
+/** 获取/生成试听音频 GET /api/v1/voices/presets/{voiceId}/sample */
+export function getVoiceSample(voiceId: number, text?: string) {
+  const params = text ? `?text=${encodeURIComponent(text)}` : ''
+  return request<{ voiceId: number; sampleUrl: string }>(`/voices/presets/${voiceId}/sample${params}`)
+}
+
+/** 提交试听任务 POST /api/v1/voices/presets/{voiceId}/sample/tasks */
+export function createVoiceSampleTask(voiceId: number, text?: string) {
+  return request<{ taskId: number; status: string }>(`/voices/presets/${voiceId}/sample/tasks`, {
+    method: 'POST',
+    body: JSON.stringify(text ? { text } : {}),
+  })
+}
+
 /** 新增 / 更新火山音色 POST /api/v1/voices/presets */
 export function createVoicePreset(payload: VoicePresetCreateRequest) {
   return request<VoicePresetItem>('/voices/presets', {

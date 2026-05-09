@@ -36,6 +36,22 @@
         </div>
         <div class="app-topbar-actions">
           <button class="app-ghost-button" type="button" @click="$emit('openAssets')">资产中心</button>
+          <button
+            v-if="!authed"
+            class="app-ghost-button"
+            type="button"
+            @click="jumpToLogin"
+          >
+            登录
+          </button>
+          <button
+            v-else
+            class="app-ghost-button"
+            type="button"
+            @click="handleLogout"
+          >
+            退出登录
+          </button>
         </div>
       </header>
 
@@ -46,6 +62,9 @@
 
 <script setup lang="ts">
 import { computed } from 'vue'
+import { useRouter } from 'vue-router'
+import { logout, clearLogin } from '../../services/authApi'
+import { getAuthToken } from '../../services/request'
 
 const menuItems = [
   { key: 'video-parse', label: '爆款对标', icon: '◉' },
@@ -73,6 +92,25 @@ const flowSteps = [
   { key: 'avatar', label: '数字人形象生成' },
   { key: 'render', label: '视频制作生成' },
 ] as const
+
+const router = useRouter()
+
+const authed = computed(() => !!getAuthToken())
+
+function jumpToLogin() {
+  void router.push({ path: '/login', query: { redirect: router.currentRoute.value.fullPath } })
+}
+
+async function handleLogout() {
+  try {
+    await logout()
+  } catch {
+    // ignore: 即使后端 session 已失效，也应清理本地登录态
+  } finally {
+    clearLogin()
+    void router.push({ path: '/login' })
+  }
+}
 
 const stepIndexMap: Record<MenuKey, number> = {
   'video-parse': 0,

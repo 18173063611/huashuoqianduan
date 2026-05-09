@@ -40,6 +40,7 @@
           <option value="SCRIPT_REWRITE">文案改写</option>
           <option value="STORYBOARD_GENERATE">分镜生成</option>
           <option value="TTS_GENERATE">语音合成</option>
+          <option value="VOICE_SAMPLE">音色试听</option>
           <option value="AVATAR_GENERATE">形象生成</option>
         </select>
         <select v-model="statusFilter" class="asset-type-select" :disabled="loading" @change="loadData(false)">

@@ -167,6 +167,7 @@
           <code>{{ voice.providerVoiceId }}</code>
         </div>
         <div class="asset-row-actions">
+          <button class="app-secondary-button" type="button" :disabled="loading" @click="playVoiceSample(voice)">试听</button>
           <template v-if="voiceListScope === 'private'">
             <button class="app-secondary-button" type="button" :disabled="loading" @click="goVoiceTtsWithPreset(voice)">
               去声音生成
@@ -319,10 +320,13 @@ import { API_ORIGIN, getAuthToken } from '../../services/request'
 import type { AssetItem, AssetType } from '../../types/assetTypes'
 import {
   addVoiceToMyLibrary,
+  createVoiceSampleTask,
   getVoiceCatalog,
   getVoicePresets,
   removeVoiceFromMyLibrary,
 } from '../../services/voiceApi'
+import { getTaskDetail } from '../../services/taskApi'
+import { rememberSessionTaskId } from '../../services/sessionTaskStore'
 import { VOICE_PRESET_SELECTION_KEY, type VoicePresetItem } from '../../types/voiceTypes'
 
 const props = defineProps<{
@@ -763,6 +767,54 @@ async function handleRemoveVoiceFromLibrary(voice: VoicePresetItem) {
     voices.value = voices.value.filter((v) => v.voiceId !== voice.voiceId)
   } catch (e) {
     errorMessage.value = e instanceof Error ? e.message : '删除失败'
+  } finally {
+    loading.value = false
+  }
+}
+
+async function playVoiceSample(voice: VoicePresetItem) {
+  try {
+    let sampleUrl = voice.sampleUrl
+    if (!sampleUrl) {
+      loading.value = true
+      errorMessage.value = ''
+      const created = await createVoiceSampleTask(voice.voiceId)
+      rememberSessionTaskId(created.taskId)
+      const maxAttempts = 40
+      for (let i = 0; i < maxAttempts; i++) {
+        const detail = await getTaskDetail(created.taskId)
+        if (detail.status === 'SUCCESS') {
+          if (detail.outputJson) {
+            try {
+              const parsed = JSON.parse(detail.outputJson) as { sampleUrl?: string; previewUrl?: string }
+              sampleUrl = parsed.sampleUrl || parsed.previewUrl || ''
+            } catch {
+              sampleUrl = ''
+            }
+          }
+          break
+        }
+        if (['FAILED', 'RETRYABLE', 'CANCELED'].includes(String(detail.status))) {
+          throw new Error(detail.errorMessage || '试听任务失败')
+        }
+        await new Promise((r) => window.setTimeout(r, 900))
+      }
+      loading.value = false
+      if (sampleUrl) {
+        const idx = voices.value.findIndex((v) => v.voiceId === voice.voiceId)
+        if (idx >= 0) {
+          voices.value[idx] = { ...voices.value[idx], sampleUrl }
+        }
+      }
+    }
+    if (!sampleUrl) {
+      return
+    }
+    const url = sampleUrl.startsWith('http') ? sampleUrl : `${API_ORIGIN}${sampleUrl}`
+    const a = new Audio(url)
+    void a.play().catch(() => {})
+  } catch (e) {
+    errorMessage.value = e instanceof Error ? e.message : '试听失败'
   } finally {
     loading.value = false
   }

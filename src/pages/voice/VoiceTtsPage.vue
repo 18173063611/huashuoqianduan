@@ -60,7 +60,7 @@
               class="voice-preset-row"
               :class="{ selected: selectedVoiceId === v.voiceId }"
             >
-              <button type="button" class="voice-play" :disabled="!v.sampleUrl" @click="playSample(v)">▶</button>
+              <button type="button" class="voice-play" @click="playSample(v)">▶</button>
               <div class="voice-preset-meta">
                 <strong>{{ v.voiceName }}</strong>
                 <p class="app-muted">{{ v.providerVoiceId }}</p>
@@ -123,8 +123,16 @@
 <script setup lang="ts">
 import { computed, onBeforeUnmount, onMounted, ref } from 'vue'
 import { useSmoothTaskProgress } from '../../composables/useSmoothTaskProgress'
-import { generateTts, getTtsTask, getVoiceCatalog, getVoicePresets, removeVoiceFromMyLibrary } from '../../services/voiceApi'
+import {
+  generateTts,
+  getTtsTask,
+  getVoiceCatalog,
+  getVoicePresets,
+  createVoiceSampleTask,
+  removeVoiceFromMyLibrary,
+} from '../../services/voiceApi'
 import { getAuthToken } from '../../services/request'
+import { getTaskDetail } from '../../services/taskApi'
 import { rememberSessionTaskId } from '../../services/sessionTaskStore'
 import { VOICE_PRESET_SELECTION_KEY, type TtsGenerateRequest, type VoicePresetItem } from '../../types/voiceTypes'
 
@@ -243,12 +251,56 @@ async function loadAppliedRewriteScript() {
 }
 
 function playSample(v: VoicePresetItem) {
-  if (!v.sampleUrl) {
-    return
-  }
-  const url = v.sampleUrl.startsWith('http') ? v.sampleUrl : `${API_ORIGIN}${v.sampleUrl}`
-  const a = new Audio(url)
-  void a.play().catch(() => {})
+  void (async () => {
+    try {
+      let sampleUrl = v.sampleUrl
+      if (!sampleUrl) {
+        presetsLoading.value = true
+        presetsError.value = ''
+        const created = await createVoiceSampleTask(v.voiceId)
+        rememberSessionTaskId(created.taskId)
+        // 轮询任务完成后播放
+        const maxAttempts = 40
+        for (let i = 0; i < maxAttempts; i++) {
+          const detail = await getTaskDetail(created.taskId)
+          if (detail.status === 'SUCCESS') {
+            let url = ''
+            if (detail.outputJson) {
+              try {
+                const parsed = JSON.parse(detail.outputJson) as { sampleUrl?: string; previewUrl?: string }
+                url = parsed.sampleUrl || parsed.previewUrl || ''
+              } catch {
+                url = ''
+              }
+            }
+            sampleUrl = url
+            break
+          }
+          if (['FAILED', 'RETRYABLE', 'CANCELED'].includes(String(detail.status))) {
+            throw new Error(detail.errorMessage || '试听任务失败')
+          }
+          await new Promise((r) => window.setTimeout(r, 900))
+        }
+
+        if (sampleUrl) {
+          const idx = presets.value.findIndex((it) => it.voiceId === v.voiceId)
+          if (idx >= 0) {
+            presets.value[idx] = { ...presets.value[idx], sampleUrl }
+          }
+        }
+      }
+      if (!sampleUrl) {
+        return
+      }
+      const url = sampleUrl.startsWith('http') ? sampleUrl : `${API_ORIGIN}${sampleUrl}`
+      const a = new Audio(url)
+      void a.play().catch(() => {})
+    } catch (e) {
+      presetsError.value = e instanceof Error ? e.message : '试听失败'
+    } finally {
+      presetsLoading.value = false
+    }
+  })()
 }
 
 function resetTask() {
