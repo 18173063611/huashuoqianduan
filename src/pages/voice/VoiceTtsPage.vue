@@ -30,29 +30,15 @@
         <section class="app-card voice-panel voice-panel-wide">
           <div class="voice-library-head">
             <div>
-              <h3 class="voice-panel-title">火山音色库</h3>
-              <p class="app-muted voice-library-subtitle">将控制台里的 voice_type 保存到这里后即可选择使用。</p>
+              <h3 class="voice-panel-title">{{ loggedIn ? '私人音色库' : '公共音色目录' }}</h3>
+              <p class="app-muted voice-library-subtitle">
+                <template v-if="loggedIn">
+                  与资产中心「私人音色库」同步；默认含三条常用音色，可从列表移除或到公共库添加更多。
+                </template>
+                <template v-else> 登录后此处展示您的私人音色库；未登录时可从公共目录试听并合成。 </template>
+              </p>
             </div>
-            <button type="button" class="app-secondary-button" @click="addingVoice = !addingVoice">
-              {{ addingVoice ? '收起' : '新增音色' }}
-            </button>
           </div>
-
-          <form v-if="addingVoice" class="voice-add-form" @submit.prevent="submitVoicePreset">
-            <input v-model.trim="voiceForm.providerVoiceId" placeholder="voice_type，例如 zh_female_xxx_bigtts" />
-            <input v-model.trim="voiceForm.voiceName" placeholder="音色名称" />
-            <select v-model="voiceForm.gender">
-              <option value="未知">未知</option>
-              <option value="女声">女声</option>
-              <option value="男声">男声</option>
-              <option value="童声">童声</option>
-            </select>
-            <input v-model.trim="voiceForm.scene" placeholder="适用场景" />
-            <input v-model.trim="voiceForm.sampleUrl" class="voice-add-form-wide" placeholder="试听地址，可不填" />
-            <button class="app-primary-button" type="submit" :disabled="savingVoice">
-              {{ savingVoice ? '保存中…' : '保存音色' }}
-            </button>
-          </form>
 
           <div class="voice-filter-row">
             <input v-model.trim="voiceKeyword" placeholder="搜索音色名称或 voice_type" />
@@ -80,13 +66,24 @@
                 <p class="app-muted">{{ v.providerVoiceId }}</p>
                 <span>{{ v.gender || '未知' }} · {{ v.scene || '通用口播' }}</span>
               </div>
-              <button
-                type="button"
-                class="app-secondary-button voice-select-btn"
-                @click="selectedVoiceId = v.voiceId"
-              >
-                {{ selectedVoiceId === v.voiceId ? '已选择' : '选择' }}
-              </button>
+              <div class="voice-preset-actions">
+                <button
+                  type="button"
+                  class="app-secondary-button voice-select-btn"
+                  @click="selectedVoiceId = v.voiceId"
+                >
+                  {{ selectedVoiceId === v.voiceId ? '已选择' : '选择' }}
+                </button>
+                <button
+                  v-if="loggedIn"
+                  type="button"
+                  class="app-secondary-button voice-remove-btn"
+                  title="从私人音色库移除"
+                  @click="removeFromLibrary(v)"
+                >
+                  删除
+                </button>
+              </div>
             </div>
             <div v-if="!filteredPresets.length" class="app-empty-block">暂无匹配音色</div>
           </div>
@@ -126,27 +123,20 @@
 <script setup lang="ts">
 import { computed, onBeforeUnmount, onMounted, ref } from 'vue'
 import { useSmoothTaskProgress } from '../../composables/useSmoothTaskProgress'
-import { createVoicePreset, generateTts, getTtsTask, getVoicePresets } from '../../services/voiceApi'
+import { generateTts, getTtsTask, getVoiceCatalog, getVoicePresets, removeVoiceFromMyLibrary } from '../../services/voiceApi'
+import { getAuthToken } from '../../services/request'
 import { rememberSessionTaskId } from '../../services/sessionTaskStore'
-import type { TtsGenerateRequest, VoicePresetCreateRequest, VoicePresetItem } from '../../types/voiceTypes'
+import { VOICE_PRESET_SELECTION_KEY, type TtsGenerateRequest, type VoicePresetItem } from '../../types/voiceTypes'
 
 const API_ORIGIN = (import.meta.env.VITE_API_BASE_URL || '').replace(/\/api\/v1\/?$/, '')
 
 const presets = ref<VoicePresetItem[]>([])
 const presetsLoading = ref(false)
 const presetsError = ref('')
+const loggedIn = ref(false)
 const selectedVoiceId = ref<number | null>(null)
 const voiceKeyword = ref('')
 const voiceGenderFilter = ref('')
-const addingVoice = ref(false)
-const savingVoice = ref(false)
-const voiceForm = ref<VoicePresetCreateRequest>({
-  providerVoiceId: '',
-  voiceName: '',
-  gender: '未知',
-  scene: '通用口播',
-  sampleUrl: '',
-})
 
 const scriptText = ref('')
 /** 仅当文案来自 `script_version` 表时传给后端 scriptId；writer 已应用文案只用 text，避免 ID 混用 */
@@ -195,9 +185,20 @@ onBeforeUnmount(() => {
 async function loadPresets() {
   presetsLoading.value = true
   presetsError.value = ''
+  loggedIn.value = !!getAuthToken()
   try {
-    const res = await getVoicePresets()
+    const res = loggedIn.value ? await getVoicePresets() : await getVoiceCatalog()
     presets.value = res.records || []
+    const pendingVoiceId = window.localStorage.getItem(VOICE_PRESET_SELECTION_KEY)
+    if (pendingVoiceId) {
+      const matched = presets.value.find((item) => item.providerVoiceId === pendingVoiceId)
+      if (matched) {
+        selectedVoiceId.value = matched.voiceId
+        voiceKeyword.value = matched.voiceName
+        window.localStorage.removeItem(VOICE_PRESET_SELECTION_KEY)
+        return
+      }
+    }
     if (presets.value.length > 0 && selectedVoiceId.value == null) {
       selectedVoiceId.value = presets.value[0].voiceId
     }
@@ -208,35 +209,23 @@ async function loadPresets() {
   }
 }
 
-async function submitVoicePreset() {
-  if (!voiceForm.value.providerVoiceId || !voiceForm.value.voiceName) {
-    presetsError.value = '请填写 voice_type 和音色名称'
+async function removeFromLibrary(v: VoicePresetItem) {
+  const ok = window.confirm(`从私人音色库移除「${v.voiceName}」？\n可在资产中心「公共音色库」再次加入。`)
+  if (!ok) {
     return
   }
-  savingVoice.value = true
+  presetsLoading.value = true
   presetsError.value = ''
   try {
-    const item = await createVoicePreset({
-      providerVoiceId: voiceForm.value.providerVoiceId,
-      voiceName: voiceForm.value.voiceName,
-      gender: voiceForm.value.gender || '未知',
-      scene: voiceForm.value.scene || '通用口播',
-      sampleUrl: voiceForm.value.sampleUrl || undefined,
-    })
+    await removeVoiceFromMyLibrary(v.voiceId)
     await loadPresets()
-    selectedVoiceId.value = item.voiceId
-    addingVoice.value = false
-    voiceForm.value = {
-      providerVoiceId: '',
-      voiceName: '',
-      gender: '未知',
-      scene: '通用口播',
-      sampleUrl: '',
+    if (selectedVoiceId.value === v.voiceId) {
+      selectedVoiceId.value = presets.value[0]?.voiceId ?? null
     }
   } catch (e) {
-    presetsError.value = e instanceof Error ? e.message : '保存音色失败'
+    presetsError.value = e instanceof Error ? e.message : '移除失败'
   } finally {
-    savingVoice.value = false
+    presetsLoading.value = false
   }
 }
 
@@ -538,8 +527,23 @@ async function pollOnce(taskId: number) {
   font-weight: 700;
 }
 
+.voice-preset-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 8px;
+  flex: 0 0 auto;
+}
+
 .voice-select-btn {
   flex: 0 0 auto;
+}
+
+.voice-remove-btn {
+  flex: 0 0 auto;
+  border-color: #fecaca;
+  color: var(--app-danger, #d64c4c);
 }
 
 .voice-task-card {

@@ -2,12 +2,67 @@
   <section class="asset-center-panel">
     <div class="asset-center-head">
       <div>
-        <h2>素材资产</h2>
-        <p>筛选公共或私有素材，预览、复制链接，并管理当前账号下的资产。</p>
+        <h2>{{ activeCategory === 'materials' ? '素材资产' : voicesHeadTitle }}</h2>
+        <p>{{ activeCategory === 'materials' ? '筛选公共或私有素材，预览、复制链接，并管理当前账号下的资产。' : voicesHeadSubtitle }}</p>
       </div>
 
       <div class="asset-header-actions">
-        <div class="asset-scope-segment" role="tablist" aria-label="资产范围">
+        <div class="asset-category-segment" role="tablist" aria-label="资产分类">
+          <button
+            type="button"
+            class="asset-scope-btn"
+            :class="{ 'asset-scope-btn-active': activeCategory === 'materials' }"
+            role="tab"
+            :aria-selected="activeCategory === 'materials'"
+            :disabled="loading"
+            @click="activeCategory = 'materials'"
+          >
+            素材资产
+          </button>
+          <button
+            type="button"
+            class="asset-scope-btn"
+            :class="{ 'asset-scope-btn-active': activeCategory === 'voices' }"
+            role="tab"
+            :aria-selected="activeCategory === 'voices'"
+            :disabled="loading"
+            @click="activeCategory = 'voices'"
+          >
+            音色库
+          </button>
+        </div>
+
+        <div
+          v-if="activeCategory === 'voices'"
+          class="asset-scope-segment"
+          role="tablist"
+          aria-label="音色库范围"
+        >
+          <button
+            type="button"
+            class="asset-scope-btn"
+            :class="{ 'asset-scope-btn-active': voiceListScope === 'private' }"
+            role="tab"
+            :aria-selected="voiceListScope === 'private'"
+            :disabled="loading"
+            @click="voiceListScope = 'private'"
+          >
+            私人音色库
+          </button>
+          <button
+            type="button"
+            class="asset-scope-btn"
+            :class="{ 'asset-scope-btn-active': voiceListScope === 'public' }"
+            role="tab"
+            :aria-selected="voiceListScope === 'public'"
+            :disabled="loading"
+            @click="voiceListScope = 'public'"
+          >
+            公共音色库
+          </button>
+        </div>
+
+        <div v-if="activeCategory === 'materials'" class="asset-scope-segment" role="tablist" aria-label="资产范围">
           <button
             type="button"
             class="asset-scope-btn"
@@ -32,7 +87,7 @@
           </button>
         </div>
 
-        <select v-model="selectedType" class="asset-type-select" :disabled="loading">
+        <select v-if="activeCategory === 'materials'" v-model="selectedType" class="asset-type-select" :disabled="loading">
           <option value="">全部类型</option>
           <option value="TEXT">TEXT 文本</option>
           <option value="IMAGE">IMAGE 图片</option>
@@ -41,11 +96,11 @@
           <option value="COVER">COVER 封面</option>
           <option value="JSON">JSON 数据</option>
         </select>
-        <select v-model="selectedSourceType" class="asset-type-select" :disabled="loading">
+        <select v-if="activeCategory === 'materials'" v-model="selectedSourceType" class="asset-type-select" :disabled="loading">
           <option value="">全部来源</option>
           <option v-for="item in sourceTypeOptions" :key="item" :value="item">{{ item }}</option>
         </select>
-        <select v-model="sortKey" class="asset-type-select" :disabled="loading">
+        <select v-if="activeCategory === 'materials'" v-model="sortKey" class="asset-type-select" :disabled="loading">
           <option value="createdAtDesc">按时间（新到旧）</option>
           <option value="createdAtAsc">按时间（旧到新）</option>
           <option value="fileNameAsc">按文件名（A到Z）</option>
@@ -56,7 +111,7 @@
           class="asset-search"
           type="search"
           :disabled="loading"
-          placeholder="搜索文件名..."
+          :placeholder="activeCategory === 'materials' ? '搜索文件名...' : '搜索音色名称或 voice_type...'"
         />
         <button class="app-secondary-button" type="button" :disabled="loading" @click="refreshCurrent">
           {{ loading ? '加载中...' : '刷新' }}
@@ -65,19 +120,85 @@
     </div>
 
     <div class="app-selected-project">
-      <template v-if="listScope === 'global'">
+      <template v-if="activeCategory === 'voices' && voiceListScope === 'private'">
+        私人音色库 · <strong>当前账号</strong>
+        <span class="asset-count">共 {{ filteredVoices.length }} 条</span>
+      </template>
+      <template v-else-if="activeCategory === 'voices'">
+        公共音色库 · <strong>浏览并加入私人库</strong>
+        <span class="asset-count">共 {{ filteredVoices.length }} 条</span>
+      </template>
+      <template v-else-if="listScope === 'global'">
         公共素材 · <strong>全员可见</strong>
       </template>
-      <template v-else>
+      <template v-else-if="activeCategory === 'materials'">
         私有素材 · <strong>当前账号下上传/生成</strong>
       </template>
-      <span class="asset-count">共 {{ assets.length }} 条</span>
+      <span v-if="activeCategory === 'materials'" class="asset-count">共 {{ assets.length }} 条</span>
     </div>
 
     <p v-if="jumpHint" class="asset-jump-hint app-muted">{{ jumpHint }}</p>
     <p v-if="errorMessage" class="app-error">{{ errorMessage }}</p>
 
-    <div v-if="assets.length === 0" class="app-empty asset-empty">
+    <div
+      v-if="activeCategory === 'voices' && voiceListScope === 'private' && !hasToken"
+      class="app-empty asset-empty"
+    >
+      <div class="asset-empty-title">请先登录</div>
+      <div class="asset-empty-subtitle">登录后可查看与管理私人音色库（与语音生成页同步）。</div>
+      <button class="app-primary-button asset-empty-action" type="button" @click="jumpHint = '请先登录后再查看私人音色库。'">
+        去登录
+      </button>
+    </div>
+
+    <div
+      v-else-if="activeCategory === 'voices' && filteredVoices.length === 0"
+      class="app-empty asset-empty"
+    >
+      <div class="asset-empty-title">暂无匹配音色</div>
+      <div class="asset-empty-subtitle">可换一个关键词搜索。</div>
+    </div>
+
+    <div v-else-if="activeCategory === 'voices'" class="voice-library-list">
+      <div v-for="voice in filteredVoices" :key="voice.voiceId" class="voice-library-item">
+        <div class="voice-library-main">
+          <strong>{{ voice.voiceName }}</strong>
+          <p>{{ voice.gender || '未知' }} · {{ voice.scene || '通用口播' }}</p>
+          <code>{{ voice.providerVoiceId }}</code>
+        </div>
+        <div class="asset-row-actions">
+          <template v-if="voiceListScope === 'private'">
+            <button class="app-secondary-button" type="button" :disabled="loading" @click="goVoiceTtsWithPreset(voice)">
+              去声音生成
+            </button>
+            <button
+              class="app-secondary-button asset-danger"
+              type="button"
+              :disabled="loading"
+              @click="handleRemoveVoiceFromLibrary(voice)"
+            >
+              删除
+            </button>
+          </template>
+          <template v-else>
+            <button
+              v-if="hasToken"
+              class="app-secondary-button"
+              type="button"
+              :disabled="loading"
+              @click="handleAddVoiceToLibrary(voice)"
+            >
+              加入私人音色库
+            </button>
+            <button class="app-secondary-button" type="button" :disabled="loading" @click="goVoiceTtsWithPreset(voice)">
+              去声音生成
+            </button>
+          </template>
+        </div>
+      </div>
+    </div>
+
+    <div v-else-if="assets.length === 0" class="app-empty asset-empty">
       <div class="asset-empty-title">暂无资产</div>
       <div class="asset-empty-subtitle">{{ emptySubtitle }}</div>
       <button
@@ -191,10 +312,18 @@
 
 <script setup lang="ts">
 import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue'
+import { useRouter } from 'vue-router'
 import { deleteAsset, getAssets, publishAsset, saveAsset, unpublishAsset } from '../../services/assetApi'
 import type { AssetListScope, AssetListSort } from '../../services/assetApi'
 import { API_ORIGIN, getAuthToken } from '../../services/request'
 import type { AssetItem, AssetType } from '../../types/assetTypes'
+import {
+  addVoiceToMyLibrary,
+  getVoiceCatalog,
+  getVoicePresets,
+  removeVoiceFromMyLibrary,
+} from '../../services/voiceApi'
+import { VOICE_PRESET_SELECTION_KEY, type VoicePresetItem } from '../../types/voiceTypes'
 
 const props = defineProps<{
   /** 从任务中心等入口跳转时，高亮并滚动到该资产 */
@@ -203,11 +332,15 @@ const props = defineProps<{
 
 const emit = defineEmits<{
   highlightConsumed: []
+  voiceSelected: []
 }>()
+
+const router = useRouter()
 
 const KNOWN_SOURCE_TYPES = ['AI_GENERATED', 'DEMO', 'MANUAL_CREATED', 'SYSTEM_MOCK', 'USER_UPLOAD'] as const
 
 const assets = ref<AssetItem[]>([])
+const voices = ref<VoicePresetItem[]>([])
 const loading = ref(false)
 const errorMessage = ref('')
 const highlightedId = ref<number | null>(null)
@@ -217,6 +350,8 @@ const selectedSourceType = ref<string>('')
 const sortKey = ref<AssetListSort>('createdAtDesc')
 const keyword = ref('')
 const listScope = ref<AssetListScope>('global')
+const activeCategory = ref<'materials' | 'voices'>('materials')
+const voiceListScope = ref<'private' | 'public'>('private')
 const hasToken = ref(false)
 let keywordReloadTimer: number | null = null
 let highlightClearTimer: number | null = null
@@ -225,6 +360,20 @@ const metadataModalOpen = ref(false)
 const metadataPretty = ref('')
 const metadataTitle = ref('')
 const metadataLink = ref('#')
+
+const voicesHeadTitle = computed(() =>
+  activeCategory.value === 'voices'
+    ? voiceListScope.value === 'private'
+      ? '私人音色库'
+      : '公共音色库'
+    : '',
+)
+
+const voicesHeadSubtitle = computed(() =>
+  voiceListScope.value === 'private'
+    ? '与语音生成页列表一致；默认三条可在移除后从公共库再添加。'
+    : '浏览全部已启用音色，可加入私人库后在语音合成中使用。',
+)
 
 const emptySubtitle = computed(() => {
   if (listScope.value === 'private' && !hasToken.value) {
@@ -246,11 +395,26 @@ const sourceTypeOptions = computed(() => {
   return Array.from(set).sort((a, b) => a.localeCompare(b))
 })
 
+const filteredVoices = computed(() => {
+  const q = keyword.value.trim().toLowerCase()
+  if (!q) {
+    return voices.value
+  }
+  return voices.value.filter((voice) => {
+    return (
+      voice.voiceName.toLowerCase().includes(q) ||
+      voice.providerVoiceId.toLowerCase().includes(q) ||
+      (voice.gender || '').toLowerCase().includes(q) ||
+      (voice.scene || '').toLowerCase().includes(q)
+    )
+  })
+})
+
 onMounted(() => {
   void refreshCurrent()
 })
 
-watch([listScope, selectedType, selectedSourceType, sortKey], () => {
+watch([activeCategory, listScope, voiceListScope, selectedType, selectedSourceType, sortKey], () => {
   scheduleReload()
 })
 
@@ -294,6 +458,20 @@ async function loadAssets() {
   errorMessage.value = ''
   hasToken.value = !!getAuthToken()
   try {
+    if (activeCategory.value === 'voices') {
+      if (voiceListScope.value === 'private') {
+        if (!getAuthToken()) {
+          voices.value = []
+          return
+        }
+        const res = await getVoicePresets()
+        voices.value = res.records || []
+        return
+      }
+      const res = await getVoiceCatalog()
+      voices.value = res.records || []
+      return
+    }
     assets.value = await getAssets({
       scope: listScope.value,
       assetType: selectedType.value || undefined,
@@ -537,6 +715,58 @@ async function copyMetadata() {
     errorMessage.value = e instanceof Error ? e.message : '复制失败'
   }
 }
+
+async function goVoiceTtsWithPreset(voice: VoicePresetItem) {
+  if (getAuthToken()) {
+    loading.value = true
+    errorMessage.value = ''
+    try {
+      await addVoiceToMyLibrary(voice.voiceId)
+    } catch (e) {
+      errorMessage.value = e instanceof Error ? e.message : '加入私人音色库失败'
+      return
+    } finally {
+      loading.value = false
+    }
+  }
+  window.localStorage.setItem(VOICE_PRESET_SELECTION_KEY, voice.providerVoiceId)
+  emit('voiceSelected')
+  void router.push({ name: 'voice' })
+}
+
+async function handleAddVoiceToLibrary(voice: VoicePresetItem) {
+  if (!getAuthToken()) {
+    jumpHint.value = '请先登录后再加入私人音色库。'
+    return
+  }
+  loading.value = true
+  errorMessage.value = ''
+  try {
+    await addVoiceToMyLibrary(voice.voiceId)
+    jumpHint.value = `已将「${voice.voiceName}」加入私人音色库。`
+  } catch (e) {
+    errorMessage.value = e instanceof Error ? e.message : '加入失败'
+  } finally {
+    loading.value = false
+  }
+}
+
+async function handleRemoveVoiceFromLibrary(voice: VoicePresetItem) {
+  const ok = window.confirm(`从私人音色库移除「${voice.voiceName}」？`)
+  if (!ok) {
+    return
+  }
+  loading.value = true
+  errorMessage.value = ''
+  try {
+    await removeVoiceFromMyLibrary(voice.voiceId)
+    voices.value = voices.value.filter((v) => v.voiceId !== voice.voiceId)
+  } catch (e) {
+    errorMessage.value = e instanceof Error ? e.message : '删除失败'
+  } finally {
+    loading.value = false
+  }
+}
 </script>
 
 <style scoped>
@@ -574,6 +804,7 @@ async function copyMetadata() {
   gap: 10px;
 }
 
+.asset-category-segment,
 .asset-scope-segment {
   display: inline-flex;
   grid-column: 1 / -1;
@@ -583,6 +814,11 @@ async function copyMetadata() {
   border-radius: 10px;
   background: #eef0f6;
   gap: 2px;
+}
+
+.asset-category-segment {
+  background: #f5f3ff;
+  border-color: #e2ddff;
 }
 
 .asset-scope-btn {
@@ -672,7 +908,8 @@ async function copyMetadata() {
 }
 
 .asset-file-list,
-.asset-empty {
+.asset-empty,
+.voice-library-list {
   min-height: 300px;
   border-radius: 12px;
   background: #ffffff;
@@ -683,6 +920,53 @@ async function copyMetadata() {
   display: grid;
   gap: 12px;
   padding: 16px;
+}
+
+.voice-library-list {
+  display: grid;
+  gap: 12px;
+  padding: 16px;
+}
+
+.voice-library-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  border: 1px solid #edf0f6;
+  border-radius: 12px;
+  background: #fbfcff;
+  padding: 14px 16px;
+}
+
+.voice-library-main {
+  min-width: 0;
+}
+
+.voice-library-main strong {
+  display: block;
+  color: #151a2d;
+  font-size: 15px;
+  font-weight: 850;
+}
+
+.voice-library-main p {
+  margin: 6px 0;
+  color: #667085;
+  font-size: 13px;
+}
+
+.voice-library-main code {
+  display: inline-block;
+  max-width: 100%;
+  overflow: hidden;
+  border-radius: 6px;
+  background: #f1efff;
+  color: #5e50df;
+  padding: 4px 8px;
+  text-overflow: ellipsis;
+  vertical-align: top;
+  white-space: nowrap;
 }
 
 .asset-empty {
@@ -842,6 +1126,7 @@ async function copyMetadata() {
   }
 
   .asset-scope-segment,
+  .asset-category-segment,
   .app-selected-project {
     width: 100%;
   }
@@ -853,6 +1138,11 @@ async function copyMetadata() {
   .asset-row-actions {
     align-items: stretch;
     width: 100%;
+  }
+
+  .voice-library-item {
+    align-items: stretch;
+    flex-direction: column;
   }
 }
 </style>

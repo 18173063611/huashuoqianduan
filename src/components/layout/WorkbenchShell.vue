@@ -25,6 +25,7 @@
             <AssetCenter
               :highlight-asset-id="assetHighlightId"
               @highlight-consumed="handleHighlightConsumed"
+              @voice-selected="closeAssetCenter"
             />
           </div>
         </section>

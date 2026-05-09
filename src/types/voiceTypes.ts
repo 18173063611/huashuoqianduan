@@ -2,6 +2,8 @@
 
 import type { AssetItem } from './assetTypes'
 
+export const VOICE_PRESET_SELECTION_KEY = 'huashuo_selected_voice_provider_id'
+
 export interface VoicePresetItem {
   voiceId: number
   provider: string

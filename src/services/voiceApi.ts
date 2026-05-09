@@ -8,9 +8,27 @@ import type {
   VoicePresetListResponse,
 } from '../types/voiceTypes'
 
-/** 可用音色列表 GET /api/v1/voices/presets */
+/** 已登录时为私人音色库；未登录时为公共目录（与 catalog 相同）。GET /api/v1/voices/presets */
 export function getVoicePresets() {
   return request<VoicePresetListResponse>('/voices/presets')
+}
+
+/** 公共音色目录（资产中心「公共音色库」）GET /api/v1/voices/catalog */
+export function getVoiceCatalog() {
+  return request<VoicePresetListResponse>('/voices/catalog')
+}
+
+/** 加入私人音色库 POST /api/v1/voices/library */
+export function addVoiceToMyLibrary(voiceId: number) {
+  return request<null>('/voices/library', {
+    method: 'POST',
+    body: JSON.stringify({ voiceId }),
+  })
+}
+
+/** 从私人音色库移除 DELETE /api/v1/voices/library/{voiceId} */
+export function removeVoiceFromMyLibrary(voiceId: number) {
+  return request<null>(`/voices/library/${voiceId}`, { method: 'DELETE' })
 }
 
 /** 新增 / 更新火山音色 POST /api/v1/voices/presets */
