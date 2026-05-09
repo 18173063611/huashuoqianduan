@@ -5,6 +5,7 @@ import type { AssetItem } from './assetTypes'
 export interface VoicePresetItem {
   voiceId: number
   provider: string
+  providerVoiceId: string
   voiceName: string
   gender: string
   scene: string | null
@@ -13,6 +14,14 @@ export interface VoicePresetItem {
 
 export interface VoicePresetListResponse {
   records: VoicePresetItem[]
+}
+
+export interface VoicePresetCreateRequest {
+  providerVoiceId: string
+  voiceName: string
+  gender?: string
+  scene?: string
+  sampleUrl?: string
 }
 
 export interface TtsGenerateRequest {

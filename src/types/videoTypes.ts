@@ -61,6 +61,27 @@ export interface VideoTaskVO {
   errorMessage: string | null
 }
 
+export interface DigitalHumanGenerateResponse {
+  taskId: number
+  projectId: number | null
+  taskType: string
+  status: string
+}
+
+export interface DigitalHumanTaskDetailResponse {
+  taskId: number
+  projectId: number | null
+  taskType: string
+  status: string
+  progress: number | null
+  errorMessage: string | null
+  model: string | null
+  videoUrl: string | null
+  resultAssetId: number | null
+  coverUrl: string | null
+  credits: number | null
+}
+
 export interface DigitalHumanVideoRequest {
   projectId?: number | null
   imageUrl: string

@@ -51,81 +51,103 @@
 
       <div class="render-form">
         <template v-if="mainTab === 'digitalHuman'">
-          <div class="render-digital-section">
-            <AssetPicker
-              title="从资产中心选择主播图"
-              asset-type="IMAGE"
-              :selected-url="digitalHumanImage"
-              placeholder="搜索图片资产..."
-              @select="digitalHumanImage = $event.url"
-            />
-            <ImageInput
-              label="或粘贴 / 上传主播图片"
-              :busy="busy"
-              :value="digitalHumanImage"
-              placeholder="https://xxx.tos-cn-guangzhou.volces.com/avatar.png"
-              @update="digitalHumanImage = $event"
-            />
+          <div class="digital-human-guide" aria-label="数字人口播流程">
+            <div class="digital-human-guide-item" :class="{ done: digitalHumanImage }">
+              <span>1</span>
+              <strong>主播图</strong>
+            </div>
+            <div
+              class="digital-human-guide-item"
+              :class="{ done: digitalHumanAudioReady }"
+            >
+              <span>2</span>
+              <strong>口播内容</strong>
+            </div>
+            <div class="digital-human-guide-item" :class="{ done: canSubmit }">
+              <span>3</span>
+              <strong>生成视频</strong>
+            </div>
           </div>
 
-          <div class="render-digital-section">
-            <div class="render-tabs render-tabs-sub" role="tablist">
-              <button
-                v-for="tab in digitalHumanAudioTabs"
-                :key="tab.key"
-                type="button"
-                role="tab"
-                :class="{ active: digitalHumanAudioMode === tab.key }"
-                :aria-selected="digitalHumanAudioMode === tab.key"
-                :disabled="busy"
-                @click="digitalHumanAudioMode = tab.key"
-              >
-                {{ tab.label }}
-              </button>
-            </div>
-
-            <AssetPicker
-              v-if="digitalHumanAudioMode === 'asset'"
-              title="从资产中心选择口播音频"
-              asset-type="AUDIO"
-              :selected-url="digitalHumanAudio"
-              placeholder="搜索音频资产..."
-              @select="digitalHumanAudio = $event.url"
-            />
-
-            <div v-else-if="digitalHumanAudioMode === 'upload'" class="render-form-field">
-              <label>上传本地口播音频</label>
-              <label class="render-upload-audio" :class="{ disabled: busy || digitalHumanAudioUploading }">
-                <input
-                  type="file"
-                  accept="audio/*"
-                  :disabled="busy || digitalHumanAudioUploading"
-                  @change="handleDigitalHumanAudioUpload"
-                />
-                <span>{{ digitalHumanAudioUploading ? '上传中...' : '选择音频文件' }}</span>
-                <small>{{ digitalHumanAudioUploadName || '支持 mp3 / wav / m4a 等音频' }}</small>
-              </label>
-              <p v-if="digitalHumanAudio" class="app-muted render-ref-tip">{{ digitalHumanAudio }}</p>
-            </div>
-
-            <div v-else-if="digitalHumanAudioMode === 'url'" class="render-form-field">
-              <label>口播音频 URL</label>
-              <input v-model.trim="digitalHumanAudio" type="url" :disabled="busy" placeholder="https://xxx/tts.mp3" />
-            </div>
-
-            <div v-else class="render-form-field">
-              <label>口播文本</label>
-              <textarea
-                v-model="digitalHumanText"
-                :disabled="busy"
-                rows="4"
-                maxlength="2000"
-                placeholder="输入文本后由 Vidu 使用指定音色生成口播。"
+          <div class="render-digital-workspace">
+            <section class="render-digital-section">
+              <h3>主播图</h3>
+              <AssetPicker
+                title="从资产中心选择主播图"
+                asset-type="IMAGE"
+                :selected-url="digitalHumanImage"
+                placeholder="搜索图片资产..."
+                @select="digitalHumanImage = $event.url"
               />
-            </div>
+              <ImageInput
+                label="粘贴 / 上传主播图片"
+                :busy="busy"
+                :value="digitalHumanImage"
+                placeholder="https://xxx.tos-cn-guangzhou.volces.com/avatar.png"
+                @update="digitalHumanImage = $event"
+              />
+            </section>
+
+            <section class="render-digital-section">
+              <h3>口播内容</h3>
+              <div class="render-tabs render-tabs-sub" role="tablist">
+                <button
+                  v-for="tab in digitalHumanAudioTabs"
+                  :key="tab.key"
+                  type="button"
+                  role="tab"
+                  :class="{ active: digitalHumanAudioMode === tab.key }"
+                  :aria-selected="digitalHumanAudioMode === tab.key"
+                  :disabled="busy"
+                  @click="digitalHumanAudioMode = tab.key"
+                >
+                  {{ tab.label }}
+                </button>
+              </div>
+
+              <AssetPicker
+                v-if="digitalHumanAudioMode === 'asset'"
+                title="从资产中心选择口播音频"
+                asset-type="AUDIO"
+                :selected-url="digitalHumanAudio"
+                placeholder="搜索音频资产..."
+                @select="digitalHumanAudio = $event.url"
+              />
+
+              <div v-else-if="digitalHumanAudioMode === 'upload'" class="render-form-field">
+                <label>上传本地口播音频</label>
+                <label class="render-upload-audio" :class="{ disabled: busy || digitalHumanAudioUploading }">
+                  <input
+                    type="file"
+                    accept="audio/*"
+                    :disabled="busy || digitalHumanAudioUploading"
+                    @change="handleDigitalHumanAudioUpload"
+                  />
+                  <span>{{ digitalHumanAudioUploading ? '上传中...' : '选择音频文件' }}</span>
+                  <small>{{ digitalHumanAudioUploadName || '支持 mp3 / wav / m4a 等音频' }}</small>
+                </label>
+                <p v-if="digitalHumanAudio" class="app-muted render-ref-tip">{{ digitalHumanAudio }}</p>
+              </div>
+
+              <div v-else-if="digitalHumanAudioMode === 'url'" class="render-form-field">
+                <label>口播音频 URL</label>
+                <input v-model.trim="digitalHumanAudio" type="url" :disabled="busy" placeholder="https://xxx/tts.mp3" />
+              </div>
+
+              <div v-else class="render-form-field">
+                <label>口播文本</label>
+                <textarea
+                  v-model="digitalHumanText"
+                  :disabled="busy"
+                  rows="4"
+                  maxlength="2000"
+                  placeholder="输入文本后由 Vidu 使用指定音色生成口播。"
+                />
+              </div>
+            </section>
           </div>
 
-          <div class="render-grid-two">
+          <div class="render-grid-two render-digital-options">
             <div v-if="digitalHumanAudioMode === 'text'" class="render-form-field">
               <label>Vidu 音色 ID</label>
               <input v-model.trim="digitalHumanVoiceId" :disabled="busy" placeholder="例如 Vidu 提供的 voice_id" />
@@ -276,6 +298,20 @@
         正在生成视频，预计 1~3 分钟，期间请勿关闭页面…
       </div>
 
+      <div v-if="showDigitalHumanProgress" class="render-digital-progress">
+        <div
+          class="render-progress-track"
+          role="progressbar"
+          :aria-valuemin="0"
+          :aria-valuemax="100"
+          :aria-valuenow="barProgressPercent"
+        >
+          <div class="render-progress-fill" :style="{ width: `${barProgressPercent}%` }" />
+        </div>
+        <span>{{ barProgressPercent }}%</span>
+      </div>
+      <p v-if="digitalHumanTaskError" class="app-error">{{ digitalHumanTaskError }}</p>
+
       <div v-if="!busy && !result" class="app-empty render-empty">
         生成完成后，视频会自动展示在这里。
       </div>
@@ -314,10 +350,12 @@
 </template>
 
 <script setup lang="ts">
-import { computed, ref, watch } from 'vue'
+import { computed, onBeforeUnmount, ref, watch } from 'vue'
 import AssetPicker from './AssetPicker.vue'
 import ImageInput from './ImageInput.vue'
+import { useSmoothTaskProgress } from '../../composables/useSmoothTaskProgress'
 import { API_ORIGIN } from '../../services/request'
+import { rememberSessionTaskId } from '../../services/sessionTaskStore'
 import { uploadFile } from '../../services/uploadApi'
 import {
   generateDigitalHumanVideo,
@@ -325,8 +363,9 @@ import {
   generateFirstLastFrameVideo,
   generateReferenceVideo,
   generateTextToVideo,
+  getDigitalHumanVideoTask,
 } from '../../services/videoApi'
-import type { VideoTaskVO } from '../../types/videoTypes'
+import type { DigitalHumanTaskDetailResponse, VideoTaskVO } from '../../types/videoTypes'
 
 
 type MainTab = 'text' | 'image' | 'digitalHuman'
@@ -374,6 +413,18 @@ const digitalHumanAudioUploadName = ref('')
 const busy = ref(false)
 const errorMessage = ref('')
 const result = ref<VideoTaskVO | null>(null)
+const taskStatus = ref('')
+const taskProgress = ref<number | null>(null)
+const activeDigitalHumanTaskId = ref<number | null>(null)
+const digitalHumanTaskError = ref('')
+const { showTaskProgressBar, barProgressPercent, reset: resetSmoothProgress } = useSmoothTaskProgress(
+  taskStatus,
+  taskProgress,
+)
+const showDigitalHumanProgress = computed(
+  () => mainTab.value === 'digitalHuman' && (showTaskProgressBar.value || !!activeDigitalHumanTaskId.value),
+)
+let digitalHumanPollTimer: number | null = null
 
 // Seedance 1.5 pro 支持 [4, 12]，参照图（lite i2v）支持 [2, 12]
 const durationOptions = computed(() => {
@@ -398,6 +449,13 @@ const promptPlaceholder = computed(() => {
     return '可使用 [图1]xxx，[图2]xxx 形式指代参照图，例如：[图1]戴眼镜穿蓝色T恤的男生在[图2]的篮球场上'
   }
   return '可选，描述视频中的运动 / 风格 / 镜头，例如：360 度环绕运镜，电影感'
+})
+
+const digitalHumanAudioReady = computed(() => {
+  if (digitalHumanAudioMode.value === 'text') {
+    return digitalHumanText.value.trim().length > 0
+  }
+  return digitalHumanAudio.value.trim().length > 0
 })
 
 // 切换模式时重置错误与结果，避免误展示其它模式产物
@@ -449,6 +507,12 @@ function updateReferenceImage(idx: number, value: string) {
 }
 
 function resetResult() {
+  stopDigitalHumanPoll()
+  activeDigitalHumanTaskId.value = null
+  taskStatus.value = ''
+  taskProgress.value = null
+  digitalHumanTaskError.value = ''
+  resetSmoothProgress()
   result.value = null
   errorMessage.value = ''
 }
@@ -499,18 +563,26 @@ async function handleGenerate() {
   busy.value = true
   errorMessage.value = ''
   result.value = null
+  digitalHumanTaskError.value = ''
 
   try {
     let task: VideoTaskVO
     if (mainTab.value === 'digitalHuman') {
       const useText = digitalHumanAudioMode.value === 'text'
-      task = await generateDigitalHumanVideo({
+      const submitted = await generateDigitalHumanVideo({
         imageUrl: digitalHumanImage.value.trim(),
         audioUrl: useText ? undefined : digitalHumanAudio.value.trim(),
         text: useText ? digitalHumanText.value.trim() : undefined,
         voiceId: useText ? digitalHumanVoiceId.value.trim() || undefined : undefined,
         resolution: digitalHumanResolution.value,
       })
+      rememberSessionTaskId(submitted.taskId)
+      activeDigitalHumanTaskId.value = submitted.taskId
+      taskStatus.value = submitted.status
+      taskProgress.value = 0
+      resetSmoothProgress()
+      startDigitalHumanPoll(submitted.taskId)
+      return
     } else if (mainTab.value === 'text') {
       task = await generateTextToVideo({
         prompt: prompt.value.trim(),
@@ -541,9 +613,69 @@ async function handleGenerate() {
   } catch (error) {
     errorMessage.value = error instanceof Error ? error.message : '视频生成失败'
   } finally {
-    busy.value = false
+    if (mainTab.value !== 'digitalHuman') {
+      busy.value = false
+    }
   }
 }
+
+function startDigitalHumanPoll(taskId: number) {
+  stopDigitalHumanPoll()
+  void pollDigitalHumanOnce(taskId)
+  digitalHumanPollTimer = window.setInterval(() => {
+    void pollDigitalHumanOnce(taskId)
+  }, 2000)
+}
+
+function stopDigitalHumanPoll() {
+  if (digitalHumanPollTimer != null) {
+    window.clearInterval(digitalHumanPollTimer)
+    digitalHumanPollTimer = null
+  }
+}
+
+async function pollDigitalHumanOnce(taskId: number) {
+  try {
+    const detail = await getDigitalHumanVideoTask(taskId)
+    taskStatus.value = detail.status
+    taskProgress.value = detail.progress
+    digitalHumanTaskError.value = detail.errorMessage || ''
+    if (['SUCCESS', 'FAILED', 'RETRYABLE', 'CANCELED'].includes(detail.status)) {
+      stopDigitalHumanPoll()
+      busy.value = false
+      if (detail.status === 'SUCCESS' && detail.videoUrl) {
+        result.value = digitalHumanDetailToVideoResult(detail)
+      } else if (detail.errorMessage) {
+        errorMessage.value = detail.errorMessage
+      }
+    }
+  } catch (error) {
+    stopDigitalHumanPoll()
+    busy.value = false
+    errorMessage.value = error instanceof Error ? error.message : '数字人口播任务查询失败'
+  }
+}
+
+function digitalHumanDetailToVideoResult(detail: DigitalHumanTaskDetailResponse): VideoTaskVO {
+  const now = Math.floor(Date.now() / 1000)
+  return {
+    taskId: String(detail.taskId),
+    model: detail.model || 'viduq2-turbo',
+    status: 'succeeded',
+    createdAt: now,
+    updatedAt: now,
+    videoUrl: detail.videoUrl || '',
+    resultAssetId: detail.resultAssetId,
+    lastFrameUrl: detail.coverUrl,
+    completionTokens: detail.credits || 0,
+    errorCode: null,
+    errorMessage: null,
+  }
+}
+
+onBeforeUnmount(() => {
+  stopDigitalHumanPoll()
+})
 </script>
 
 <style scoped>
@@ -625,9 +757,77 @@ async function handleGenerate() {
   gap: 16px;
 }
 
+.digital-human-guide {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 10px;
+  border: 1px solid #e7eaf2;
+  border-radius: 8px;
+  background: #fbfcff;
+  padding: 10px;
+}
+
+.digital-human-guide-item {
+  display: flex;
+  min-width: 0;
+  align-items: center;
+  gap: 8px;
+  border-radius: 8px;
+  color: #667085;
+  padding: 8px 10px;
+  font-size: 13px;
+  font-weight: 800;
+}
+
+.digital-human-guide-item span {
+  display: inline-grid;
+  width: 22px;
+  height: 22px;
+  flex: 0 0 auto;
+  place-items: center;
+  border-radius: 999px;
+  background: #eef0f6;
+  color: #98a2b3;
+  font-size: 12px;
+  font-weight: 900;
+}
+
+.digital-human-guide-item.done {
+  background: #f5f3ff;
+  color: #5e50df;
+}
+
+.digital-human-guide-item.done span {
+  background: #635bff;
+  color: #fff;
+}
+
+.render-digital-workspace {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  gap: 16px;
+  align-items: start;
+}
+
 .render-digital-section {
   display: grid;
   gap: 12px;
+  align-content: start;
+  border: 1px solid #e7eaf2;
+  border-radius: 8px;
+  background: #fbfcff;
+  padding: 14px;
+}
+
+.render-digital-section h3 {
+  margin: 0;
+  color: #2d3446;
+  font-size: 14px;
+  font-weight: 850;
+}
+
+.render-digital-options {
+  align-items: end;
 }
 
 .render-grid-two {
@@ -637,6 +837,11 @@ async function handleGenerate() {
 }
 
 @media (max-width: 720px) {
+  .digital-human-guide,
+  .render-digital-workspace {
+    grid-template-columns: 1fr;
+  }
+
   .render-grid-two {
     grid-template-columns: 1fr;
   }
@@ -844,6 +1049,34 @@ async function handleGenerate() {
   color: #5e50df;
   font-size: 13px;
   font-weight: 750;
+}
+
+.render-digital-progress {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  border: 1px solid #e3dcff;
+  border-radius: 8px;
+  background: #fbfaff;
+  padding: 10px 12px;
+  color: #5e50df;
+  font-size: 13px;
+  font-weight: 800;
+}
+
+.render-progress-track {
+  flex: 1;
+  height: 8px;
+  overflow: hidden;
+  border-radius: 999px;
+  background: #e8ecf4;
+}
+
+.render-progress-fill {
+  height: 100%;
+  border-radius: 999px;
+  background: linear-gradient(90deg, #635bff 0%, #8b7cf6 100%);
+  transition: width 0.35s ease;
 }
 
 .render-status-dot {
