@@ -9,8 +9,10 @@
     "preview": "vite preview"
   },
   "dependencies": {
+    "@element-plus/icons-vue": "^2.3.2",
     "@microsoft/fetch-event-source": "^2.0.1",
     "@vitejs/plugin-vue": "latest",
+    "element-plus": "^2.14.0",
     "typescript": "latest",
     "vite": "latest",
     "vue": "latest",

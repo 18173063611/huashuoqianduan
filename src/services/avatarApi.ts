@@ -1,10 +1,19 @@
 import { request } from './request'
+import { newIdempotencyKey } from './taskApi'
 import type {
   AvatarGenerateRequest,
   AvatarGenerateResponse,
   AvatarItem,
   AvatarUpdateRequest,
 } from '../types/avatarTypes'
+
+function idempotencyHeaders(explicitKey?: string | null): Record<string, string> {
+  const key =
+    explicitKey != null && String(explicitKey).trim().length > 0
+      ? String(explicitKey).trim()
+      : newIdempotencyKey()
+  return { 'Idempotency-Key': key }
+}
 
 export function uploadAvatar(avatarName: string, file: File) {
   const formData = new FormData()
@@ -16,10 +25,11 @@ export function uploadAvatar(avatarName: string, file: File) {
   })
 }
 
-export function generateAvatar(payload: AvatarGenerateRequest) {
+export function generateAvatar(payload: AvatarGenerateRequest, idempotencyKey?: string | null) {
   return request<AvatarGenerateResponse>('/avatars/generate', {
     method: 'POST',
     body: JSON.stringify(payload),
+    headers: idempotencyHeaders(idempotencyKey),
   })
 }
 

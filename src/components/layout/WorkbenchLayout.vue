@@ -35,6 +35,13 @@
           </div>
         </div>
         <div class="app-topbar-actions">
+          <div v-if="authed && currentUser" class="app-user-summary" title="当前账号积分">
+            <span>{{ currentUser.displayName || currentUser.username }}</span>
+            <strong>积分 {{ currentUser.creditBalance ?? 0 }}</strong>
+            <small v-if="(currentUser.creditFrozenBalance ?? 0) > 0" class="app-user-credit-sub">
+              冻结 {{ currentUser.creditFrozenBalance }}
+            </small>
+          </div>
           <button class="app-ghost-button" type="button" @click="$emit('openAssets')">资产中心</button>
           <button
             v-if="!authed"
@@ -61,10 +68,13 @@
 </template>
 
 <script setup lang="ts">
-import { computed } from 'vue'
-import { useRouter } from 'vue-router'
-import { logout, clearLogin } from '../../services/authApi'
+import { computed, onMounted, onUnmounted, ref, watch } from 'vue'
+import { useRoute, useRouter } from 'vue-router'
+import { logout, clearLogin, me, setAuthUser } from '../../services/authApi'
+import { subscribeAuthRefresh } from '../../services/authRefreshHub'
+import { getAuthUser } from '../../services/authSession'
 import { getAuthToken } from '../../services/request'
+import type { UserMe } from '../../types/userTypes'
 
 const menuItems = [
   { key: 'video-parse', label: '爆款对标', icon: '◉' },
@@ -72,6 +82,7 @@ const menuItems = [
   { key: 'voice', label: '声音生成', icon: '♬' },
   { key: 'avatar', label: '数字人形象', icon: '◎' },
   { key: 'render', label: '视频制作', icon: '▻' },
+  { key: 'account', label: '账户中心', icon: '◆' },
 ] as const
 
 type MenuKey = (typeof menuItems)[number]['key']
@@ -94,8 +105,24 @@ const flowSteps = [
 ] as const
 
 const router = useRouter()
+const route = useRoute()
+const currentUser = ref<UserMe | null>(getAuthUser())
 
 const authed = computed(() => !!getAuthToken())
+
+async function refreshCurrentUser() {
+  if (!getAuthToken()) {
+    currentUser.value = null
+    return
+  }
+  try {
+    const user = await me()
+    setAuthUser(user)
+    currentUser.value = user
+  } catch {
+    currentUser.value = getAuthUser()
+  }
+}
 
 function jumpToLogin() {
   void router.push({ path: '/login', query: { redirect: router.currentRoute.value.fullPath } })
@@ -118,7 +145,71 @@ const stepIndexMap: Record<MenuKey, number> = {
   voice: 2,
   avatar: 3,
   render: 4,
+  account: -1,
 }
 
-const activeStepIndex = computed(() => stepIndexMap[props.activeKey] ?? 0)
+const activeStepIndex = computed(() => stepIndexMap[props.activeKey])
+
+let unsubscribeAuthRefresh: (() => void) | null = null
+
+onMounted(() => {
+  void refreshCurrentUser()
+  unsubscribeAuthRefresh = subscribeAuthRefresh(() => {
+    void refreshCurrentUser()
+  })
+})
+
+onUnmounted(() => {
+  unsubscribeAuthRefresh?.()
+  unsubscribeAuthRefresh = null
+})
+
+watch(
+  () => route.fullPath,
+  () => {
+    void refreshCurrentUser()
+  },
+)
 </script>
+
+<style scoped>
+.app-user-summary {
+  display: inline-flex;
+  min-height: 34px;
+  max-width: 220px;
+  align-items: center;
+  gap: 8px;
+  overflow: hidden;
+  border: 1px solid #e6e8f0;
+  border-radius: 10px;
+  background: #f8fafc;
+  color: #334155;
+  padding: 0 12px;
+  font-size: 13px;
+}
+
+.app-user-summary span {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.app-user-summary strong {
+  flex: 0 0 auto;
+  color: #111827;
+  font-size: 12px;
+}
+
+.app-user-credit-sub {
+  flex: 0 0 auto;
+  font-size: 11px;
+  color: #64748b;
+}
+
+@media (max-width: 860px) {
+  .app-user-summary {
+    display: none;
+  }
+}
+</style>

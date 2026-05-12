@@ -1,4 +1,5 @@
 import { request } from './request'
+import { newIdempotencyKey } from './taskApi'
 import type {
   DigitalHumanGenerateResponse,
   DigitalHumanTaskDetailResponse,
@@ -12,6 +13,14 @@ import type {
   VideoParseSubmitResponse,
 } from '../types/videoTypes'
 import type { TaskItem } from '../types/taskTypes'
+
+function idempotencyHeaders(explicitKey?: string | null): Record<string, string> {
+  const key =
+    explicitKey != null && String(explicitKey).trim().length > 0
+      ? String(explicitKey).trim()
+      : newIdempotencyKey()
+  return { 'Idempotency-Key': key }
+}
 
 /** 提交视频源解析任务。 */
 export function parseVideoSource(payload: ParseVideoSourceRequest) {
@@ -78,10 +87,11 @@ export function generateReferenceVideo(payload: ReferenceVideoRequest) {
   })
 }
 
-export function generateDigitalHumanVideo(payload: DigitalHumanVideoRequest) {
+export function generateDigitalHumanVideo(payload: DigitalHumanVideoRequest, idempotencyKey?: string | null) {
   return request<DigitalHumanGenerateResponse>('/video/generate/digital-human', {
     method: 'POST',
     body: JSON.stringify(payload),
+    headers: idempotencyHeaders(idempotencyKey),
   })
 }
 

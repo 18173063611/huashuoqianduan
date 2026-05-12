@@ -48,6 +48,7 @@
           <option value="SEEDANCE_FIRST_FRAME_VIDEO">首帧图生视频</option>
           <option value="SEEDANCE_FIRST_LAST_FRAME_VIDEO">首尾帧图生视频</option>
           <option value="SEEDANCE_REFERENCE_VIDEO">参照图生视频</option>
+          <option value="DIGITAL_HUMAN_GENERATE">数字人口播</option>
         </select>
         <select v-model="statusFilter" class="asset-type-select" :disabled="loading" @change="loadData(false)">
           <option value="">全部状态</option>
@@ -72,6 +73,14 @@
               :status="task.status"
               :progress="task.progress"
             />
+            <p class="task-row-meta task-row-meta-primary">
+              {{ taskLabel(task.taskType) }}
+              <template v-if="task.modelCode"> · 模型 {{ compactModel(task.modelCode) }}</template>
+              <template v-if="(task.creditCost ?? 0) > 0"> · 预扣 {{ task.creditCost }} 积分</template>
+              <template v-if="formatWhen(task.createdAt)"> · 创建 {{ formatWhen(task.createdAt) }}</template>
+              <span v-if="task.status === 'RETRYABLE'" class="task-retry-chip">可重试</span>
+              <template v-if="creditRefundHint(task)"> · {{ creditRefundHint(task) }}</template>
+            </p>
             <p class="task-row-meta">
               状态 {{ task.status }} · 重试 {{ task.retryCount ?? 0 }} 次
               <template v-if="task.errorCode"> · {{ task.errorCode }} </template>
@@ -106,7 +115,7 @@
               "
               type="button"
               class="app-secondary-button task-retry"
-              :disabled="loading"
+              :disabled="loading || retryingTaskId === task.taskId"
               @click="handleRetry(task.taskId)"
             >
               重试
@@ -242,6 +251,8 @@ const hasToken = ref(false)
 const tasks = ref<TaskItem[]>([])
 const summary = ref<TaskSummaryResponse | null>(null)
 const loading = ref(false)
+/** 重试请求进行中时记录 taskId，用于仅禁用对应行的重试按钮 */
+const retryingTaskId = ref<number | null>(null)
 const errorMessage = ref('')
 const taskTypeFilter = ref('')
 const statusFilter = ref('')
@@ -380,9 +391,10 @@ async function loadData(silent: boolean) {
 }
 
 async function handleRetry(taskId: number) {
-  if (loading.value) {
+  if (loading.value || retryingTaskId.value !== null) {
     return
   }
+  retryingTaskId.value = taskId
   loading.value = true
   errorMessage.value = ''
   try {
@@ -392,6 +404,7 @@ async function handleRetry(taskId: number) {
     errorMessage.value = error instanceof Error ? error.message : '重试失败'
   } finally {
     loading.value = false
+    retryingTaskId.value = null
   }
 }
 
@@ -452,6 +465,12 @@ function taskLabel(taskType: string) {
   if (taskType === 'SEEDANCE_REFERENCE_VIDEO') {
     return '参照图生视频'
   }
+  if (taskType === 'VOICE_SAMPLE') {
+    return '音色试听'
+  }
+  if (taskType === 'DIGITAL_HUMAN_GENERATE') {
+    return '数字人口播'
+  }
   return taskType
 }
 
@@ -462,6 +481,30 @@ function isSeedanceVideoTask(taskType: string | undefined) {
     taskType === 'SEEDANCE_FIRST_LAST_FRAME_VIDEO' ||
     taskType === 'SEEDANCE_REFERENCE_VIDEO'
   )
+}
+
+function compactModel(code: string | null | undefined) {
+  if (!code) return '—'
+  return code.length > 36 ? `${code.slice(0, 18)}…${code.slice(-8)}` : code
+}
+
+/** 与后端退款策略大致对齐：未开始执行即失败/取消多已退；已开始执行后失败默认未自动退。 */
+function creditRefundHint(task: TaskItem): string | null {
+  const cost = task.creditCost ?? 0
+  if (cost <= 0) {
+    return null
+  }
+  const s = String(task.status || '')
+  if (s === 'SUCCESS' || s === 'QUEUED' || s === 'RUNNING') {
+    return null
+  }
+  if (s === 'CANCELED') {
+    return '已退款'
+  }
+  if (s === 'FAILED' || s === 'RETRYABLE') {
+    return task.startedAt ? '未退款' : '已退款'
+  }
+  return null
 }
 
 function taskRowProgressEligible(task: TaskItem) {
@@ -779,6 +822,23 @@ section.app-card.app-page-stack {
   color: #6b7280;
   font-size: 12px;
   line-height: 1.55;
+}
+
+.task-row-meta-primary {
+  margin: 6px 0 0;
+  color: #475569;
+  font-weight: 500;
+}
+
+.task-retry-chip {
+  display: inline-block;
+  margin-left: 6px;
+  padding: 1px 8px;
+  border-radius: 999px;
+  background: rgba(245, 158, 11, 0.15);
+  color: #b45309;
+  font-size: 11px;
+  font-weight: 600;
 }
 
 .task-row-err {

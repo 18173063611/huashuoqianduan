@@ -7,6 +7,11 @@ export interface AuthUser {
   userId: number
   username: string
   displayName: string
+  role?: 'USER' | 'ADMIN'
+  status?: 'ENABLED' | 'DISABLED' | 'LOCKED'
+  creditBalance?: number
+  creditFrozenBalance?: number
+  creditTotalConsumed?: number
 }
 
 function storageAvailable() {

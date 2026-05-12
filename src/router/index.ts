@@ -1,8 +1,16 @@
 import { createRouter, createWebHistory, type RouteRecordRaw } from 'vue-router'
 import WorkbenchShell from '../components/layout/WorkbenchShell.vue'
+import { clearAuthSession, setAuthUser } from '../services/authSession'
+import { me } from '../services/authApi'
 import { getAuthToken } from '../services/request'
 
-export type WorkbenchRouteName = 'video-parse' | 'storyboard' | 'voice' | 'avatar' | 'render'
+export type WorkbenchRouteName =
+  | 'video-parse'
+  | 'storyboard'
+  | 'voice'
+  | 'avatar'
+  | 'render'
+  | 'account'
 
 const businessRouteMeta = {
   requiresAuth: true,
@@ -22,6 +30,65 @@ const routes: RouteRecordRaw[] = [
     component: () => import('../pages/auth/LoginPage.vue'),
     props: { initialMode: 'register' },
     meta: { public: true },
+  },
+  {
+    path: '/admin/login',
+    name: 'admin-login',
+    component: () => import('../pages/admin/AdminLoginPage.vue'),
+    meta: { public: true },
+  },
+  {
+    path: '/admin',
+    component: () => import('../pages/admin/AdminLayout.vue'),
+    meta: { requiresAuth: true, requiresAdmin: true },
+    children: [
+      {
+        path: '',
+        redirect: '/admin/dashboard',
+      },
+      {
+        path: 'dashboard',
+        name: 'admin-dashboard',
+        component: () => import('../pages/admin/AdminDashboardPage.vue'),
+        meta: { requiresAuth: true, requiresAdmin: true, title: '运营概览' },
+      },
+      {
+        path: 'users',
+        name: 'admin-users',
+        component: () => import('../pages/admin/AdminUsersPage.vue'),
+        meta: { requiresAuth: true, requiresAdmin: true, title: '用户管理' },
+      },
+      {
+        path: 'users/:userId',
+        name: 'admin-user-detail',
+        component: () => import('../pages/admin/AdminUserDetailPage.vue'),
+        meta: { requiresAuth: true, requiresAdmin: true, title: '用户详情' },
+      },
+      {
+        path: 'models',
+        name: 'admin-models',
+        component: () => import('../pages/admin/AdminModelsPage.vue'),
+        meta: { requiresAuth: true, requiresAdmin: true, title: '模型配置' },
+      },
+      {
+        path: 'tasks',
+        name: 'admin-tasks',
+        component: () => import('../pages/admin/AdminTasksPage.vue'),
+        meta: { requiresAuth: true, requiresAdmin: true, title: '任务管理' },
+      },
+      {
+        path: 'credit-logs',
+        name: 'admin-credit-logs',
+        component: () => import('../pages/admin/AdminCreditLogsPage.vue'),
+        meta: { requiresAuth: true, requiresAdmin: true, title: '积分流水' },
+      },
+      {
+        path: 'operation-logs',
+        name: 'admin-operation-logs',
+        component: () => import('../pages/admin/AdminOperationLogsPage.vue'),
+        meta: { requiresAuth: true, requiresAdmin: true, title: '操作日志' },
+      },
+    ],
   },
   {
     path: '/',
@@ -62,6 +129,12 @@ const routes: RouteRecordRaw[] = [
         meta: { ...businessRouteMeta, menuKey: 'render' },
       },
       {
+        path: 'account',
+        name: 'account',
+        component: () => import('../pages/user/UserCenter.vue'),
+        meta: { ...businessRouteMeta, menuKey: 'account' },
+      },
+      {
         path: 'assets',
         redirect: { name: 'video-parse' },
       },
@@ -74,18 +147,40 @@ const router = createRouter({
   routes,
 })
 
-router.beforeEach((to) => {
+router.beforeEach(async (to) => {
   if (!to.matched.some((record) => record.meta.requiresAuth)) {
     return true
   }
 
-  if (getAuthToken()) {
-    return true
+  const token = getAuthToken()
+  const needsAdmin = to.matched.some((record) => record.meta.requiresAdmin)
+  const loginPath = to.path.startsWith('/admin') ? '/admin/login' : '/login'
+  const redirectToLogin = () => ({
+    path: loginPath,
+    query: { redirect: to.fullPath },
+  })
+
+  if (!token) {
+    return redirectToLogin()
   }
 
-  return {
-    path: '/login',
-    query: { redirect: to.fullPath },
+  try {
+    const user = await me()
+    setAuthUser(user)
+    if (user.status && user.status !== 'ENABLED') {
+      clearAuthSession()
+      return redirectToLogin()
+    }
+    if (needsAdmin && user.role !== 'ADMIN') {
+      return {
+        path: '/admin/login',
+        query: { redirect: to.fullPath },
+      }
+    }
+    return true
+  } catch {
+    clearAuthSession()
+    return redirectToLogin()
   }
 })
 

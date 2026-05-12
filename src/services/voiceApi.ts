@@ -1,4 +1,5 @@
 import { request } from './request'
+import { newIdempotencyKey } from './taskApi'
 import type {
   TtsGenerateRequest,
   TtsGenerateResponse,
@@ -6,6 +7,14 @@ import type {
   VoicePresetItem,
   VoicePresetListResponse,
 } from '../types/voiceTypes'
+
+function idempotencyHeaders(explicitKey?: string | null): Record<string, string> {
+  const key =
+    explicitKey != null && String(explicitKey).trim().length > 0
+      ? String(explicitKey).trim()
+      : newIdempotencyKey()
+  return { 'Idempotency-Key': key }
+}
 
 /** 已登录时为私人音色库；未登录时为公共目录（与 catalog 相同）。GET /api/v1/voices/presets */
 export function getVoicePresets() {
@@ -36,11 +45,30 @@ export function getVoiceSample(voiceId: number, text?: string) {
   return request<{ voiceId: number; sampleUrl: string }>(`/voices/presets/${voiceId}/sample${params}`)
 }
 
-/** 提交试听任务 POST /api/v1/voices/presets/{voiceId}/sample/tasks */
-export function createVoiceSampleTask(voiceId: number, text?: string) {
+export type CreateVoiceSampleTaskOptions = {
+  text?: string
+  idempotencyKey?: string | null
+}
+
+/** 第二参数可为试听文案字符串，或 { text, idempotencyKey }（兼容仅 voiceId） */
+export function createVoiceSampleTask(
+  voiceId: number,
+  second?: string | CreateVoiceSampleTaskOptions,
+) {
+  let text: string | undefined
+  let idempotencyKey: string | null | undefined
+  if (typeof second === 'string') {
+    text = second
+  } else if (second && typeof second === 'object') {
+    text = second.text
+    idempotencyKey = second.idempotencyKey
+  }
+  const body =
+    text != null && String(text).trim().length > 0 ? JSON.stringify({ text: String(text).trim() }) : JSON.stringify({})
   return request<{ taskId: number; status: string }>(`/voices/presets/${voiceId}/sample/tasks`, {
     method: 'POST',
-    body: JSON.stringify(text ? { text } : {}),
+    body,
+    headers: idempotencyHeaders(idempotencyKey),
   })
 }
 
@@ -52,11 +80,12 @@ export function createVoicePreset(payload: VoicePresetCreateRequest) {
   })
 }
 
-/** 提交文案转音频 POST /api/v1/voices/tts */
-export function generateTts(payload: TtsGenerateRequest) {
+/** @param idempotencyKey 同一次用户操作内复用；不传则每次请求自动生成 */
+export function generateTts(payload: TtsGenerateRequest, idempotencyKey?: string | null) {
   return request<TtsGenerateResponse>('/voices/tts', {
     method: 'POST',
     body: JSON.stringify(payload),
+    headers: idempotencyHeaders(idempotencyKey),
   })
 }
 
