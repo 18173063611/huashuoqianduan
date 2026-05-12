@@ -3,7 +3,6 @@ import type {
   AvatarGenerateRequest,
   AvatarGenerateResponse,
   AvatarItem,
-  AvatarTaskDetailResponse,
   AvatarUpdateRequest,
 } from '../types/avatarTypes'
 
@@ -22,10 +21,6 @@ export function generateAvatar(payload: AvatarGenerateRequest) {
     method: 'POST',
     body: JSON.stringify(payload),
   })
-}
-
-export function getAvatarGenerateTask(taskId: number) {
-  return request<AvatarTaskDetailResponse>(`/avatars/generate/${taskId}`)
 }
 
 export function getAvatars() {

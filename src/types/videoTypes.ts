@@ -51,14 +51,18 @@ export interface VideoTaskVO {
   taskId: string
   model: string
   status: string
-  createdAt: number
-  updatedAt: number
+  createdAt?: number
+  updatedAt?: number
   videoUrl: string
   resultAssetId?: number | null
   lastFrameUrl: string | null
   completionTokens: number
   errorCode: string | null
   errorMessage: string | null
+}
+
+export interface VideoScriptAnalyzeResult {
+  scripts: VideoScriptShotItem[]
 }
 
 export interface DigitalHumanGenerateResponse {

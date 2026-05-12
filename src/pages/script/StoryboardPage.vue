@@ -65,7 +65,7 @@
           <label class="storyboard-file-picker" :class="{ 'is-disabled': busy }">
             <input type="file" accept="video/*" :disabled="busy" @change="handleFileChange" />
             <span class="storyboard-file-cta">选择视频文件</span>
-            <span class="storyboard-file-meta">
+            <span class="storyboard-file-meta" :title="selectedFile ? selectedFile.name : ''">
               {{ selectedFile ? `${selectedFile.name}（${formatFileSize(selectedFile.size)}）` : '尚未选择文件' }}
             </span>
           </label>
@@ -191,10 +191,14 @@
 </template>
 
 <script setup lang="ts">
-import { computed, ref } from 'vue'
+import { computed, onBeforeUnmount, ref } from 'vue'
 import { uploadFile } from '../../services/uploadApi'
 import { analyzeVideoScript, analyzeVideoScriptByUrl } from '../../services/videoApi'
-import type { VideoScriptShotItem } from '../../types/videoTypes'
+import { API_ORIGIN } from '../../services/request'
+import { rememberSessionTaskId } from '../../services/sessionTaskStore'
+import { trackTaskResult } from '../../services/taskRealtime'
+import type { VideoScriptAnalyzeResult, VideoScriptShotItem } from '../../types/videoTypes'
+import type { TaskItem } from '../../types/taskTypes'
 
 type SourceMode = 'url' | 'file'
 
@@ -208,6 +212,11 @@ const shots = ref<VideoScriptShotItem[]>([])
 const errorMessage = ref('')
 const stage = ref('')
 const busy = ref(false)
+let stopAnalyzeTracking: (() => void) | null = null
+
+onBeforeUnmount(() => {
+  stopAnalyzeTask()
+})
 
 const busyLabel = computed(() => {
   if (!busy.value) {
@@ -288,29 +297,87 @@ function handleFileChange(event: Event) {
 }
 
 function resetResult() {
+  stopAnalyzeTask()
   shots.value = []
   errorMessage.value = ''
   stage.value = ''
   analyzedVideoUrl.value = ''
 }
 
-async function runAnalyze(analyze: () => Promise<VideoScriptShotItem[]>, targetUrl: string) {
+async function runAnalyze(submit: () => Promise<TaskItem>, targetUrl: string) {
+  stopAnalyzeTask()
   busy.value = true
   errorMessage.value = ''
   shots.value = []
   analyzedVideoUrl.value = ''
 
   try {
-    stage.value = '解析分镜中…'
-    const list = await analyze()
-    shots.value = [...list].sort((a, b) => a.order - b.order)
-    analyzedVideoUrl.value = targetUrl
+    stage.value = '提交解析任务中…'
+    const task = await submit()
+    rememberSessionTaskId(task.taskId)
+    stage.value = statusStage(task.status, task.progress)
+    await new Promise<void>((resolve) => {
+      stopAnalyzeTracking = trackTaskResult<VideoScriptAnalyzeResult>(task.taskId, {
+        onStatus(message) {
+          stage.value = statusStage(message.status, message.progress)
+        },
+        onResult(taskResult) {
+          const list = taskResult.result?.scripts || []
+          shots.value = [...list].sort((a, b) => a.order - b.order)
+          analyzedVideoUrl.value = targetUrl
+          busy.value = false
+          stage.value = ''
+          resolve()
+        },
+        onFailure(message) {
+          errorMessage.value = message.errorMessage || '分镜解析任务失败'
+          busy.value = false
+          stage.value = ''
+          resolve()
+        },
+        onError(error) {
+          errorMessage.value = error.message
+          busy.value = false
+          stage.value = ''
+          resolve()
+        },
+      })
+    })
   } catch (error) {
     errorMessage.value = error instanceof Error ? error.message : '解析失败'
-  } finally {
     busy.value = false
     stage.value = ''
   }
+}
+
+function stopAnalyzeTask() {
+  if (stopAnalyzeTracking) {
+    stopAnalyzeTracking()
+    stopAnalyzeTracking = null
+  }
+}
+
+function statusStage(status: string, progress: number | null) {
+  if (status === 'QUEUED') {
+    return '排队中…'
+  }
+  if (status === 'RUNNING') {
+    return progress != null ? `解析分镜中… ${progress}%` : '解析分镜中…'
+  }
+  return '解析分镜中…'
+}
+
+function publicVideoUrl(url: string) {
+  if (!url) {
+    return ''
+  }
+  if (url.startsWith('http')) {
+    return url
+  }
+  if (url.startsWith('/')) {
+    return `${API_ORIGIN}${url}`
+  }
+  return `${API_ORIGIN}/${url}`
 }
 
 async function handleAnalyzeUrl() {
@@ -343,7 +410,7 @@ async function handleAnalyzeFile() {
         : `${uploaded.previewUrl}`
     }
 
-    const targetUrl = uploadedPreviewUrl.value
+    const targetUrl = publicVideoUrl(uploadedPreviewUrl.value)
     if (!targetUrl) {
       throw new Error('请选择本地视频文件')
     }
@@ -351,7 +418,6 @@ async function handleAnalyzeFile() {
     await runAnalyze(() => analyzeVideoScript(targetUrl), targetUrl)
   } catch (error) {
     errorMessage.value = error instanceof Error ? error.message : '解析失败'
-  } finally {
     busy.value = false
     stage.value = ''
   }
@@ -361,9 +427,12 @@ async function handleAnalyzeFile() {
 <style scoped>
 .storyboard-page {
   display: grid;
-  grid-template-columns: minmax(360px, 420px) minmax(620px, 1fr);
+  width: 98%;
+  grid-template-columns: minmax(340px, 420px) minmax(0, 1fr);
   align-items: start;
-  gap: 24px;
+  gap: 16px;
+  margin-right: 10px;
+  margin-left: 10px;
 }
 
 .storyboard-head h1 {
@@ -383,6 +452,7 @@ async function handleAnalyzeFile() {
 .storyboard-input,
 .storyboard-result {
   display: grid;
+  min-width: 0;
   gap: 16px;
 }
 
@@ -393,6 +463,7 @@ async function handleAnalyzeFile() {
 
 .storyboard-result {
   min-height: 520px;
+  width: auto;
 }
 
 .storyboard-tabs {
@@ -425,6 +496,7 @@ async function handleAnalyzeFile() {
 
 .storyboard-source {
   display: grid;
+  min-width: 0;
   gap: 8px;
 }
 
@@ -446,6 +518,8 @@ async function handleAnalyzeFile() {
 
 .storyboard-file-picker {
   display: flex;
+  min-width: 0;
+  max-width: 100%;
   align-items: center;
   justify-content: space-between;
   gap: 12px;
@@ -455,6 +529,7 @@ async function handleAnalyzeFile() {
   background: #fbfaff;
   cursor: pointer;
   width: 100%;
+  overflow: hidden;
 }
 
 .storyboard-file-picker.is-disabled {
@@ -468,6 +543,7 @@ async function handleAnalyzeFile() {
 
 .storyboard-file-cta {
   display: inline-flex;
+  flex: 0 0 auto;
   align-items: center;
   height: 32px;
   padding: 0 14px;
@@ -476,10 +552,14 @@ async function handleAnalyzeFile() {
   color: #fff;
   font-size: 13px;
   font-weight: 800;
+  white-space: nowrap;
 }
 
 .storyboard-file-meta {
+  display: block;
+  flex: 1 1 auto;
   min-width: 0;
+  max-width: 100%;
   color: #5c6477;
   font-size: 13px;
   font-weight: 700;
@@ -611,6 +691,8 @@ async function handleAnalyzeFile() {
 }
 
 .storyboard-table-wrap {
+  min-width: 0;
+  max-width: 100%;
   overflow-x: auto;
   border: 1px solid #edf0f6;
   border-radius: 12px;
@@ -619,6 +701,7 @@ async function handleAnalyzeFile() {
 
 .storyboard-table {
   width: 100%;
+  min-width: 880px;
   border-collapse: collapse;
   table-layout: fixed;
   font-size: 13.5px;

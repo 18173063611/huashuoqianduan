@@ -213,10 +213,11 @@
 </template>
 
 <script setup lang="ts">
-import { computed, ref } from 'vue'
+import { computed, onBeforeUnmount, ref } from 'vue'
 import { rewriteDouyinCopywriting, startDouyinParseWithTranscript } from '../../services/writerDouyinApi'
-import type { DouyinParseStage, DouyinVideoParseResponse } from '../../types/writerDouyinTypes'
+import type { DouyinParseStage, DouyinVideoParseResponse, DouyinRewriteWriterVO } from '../../types/writerDouyinTypes'
 import { rememberSessionTaskId } from '../../services/sessionTaskStore'
+import { trackTaskResult } from '../../services/taskRealtime'
 
 const emit = defineEmits<{
   continue: []
@@ -237,6 +238,12 @@ const sourceText = ref('')
 const rewrittenText = ref('')
 const applyMessage = ref('')
 const parseAbort = ref<AbortController | null>(null)
+let stopRewriteTracking: (() => void) | null = null
+
+onBeforeUnmount(() => {
+  parseAbort.value?.abort()
+  stopRewriteTask()
+})
 
 const transcriptLoading = computed(
   () => parsing.value && (parseStage.value === 'parsed' || parseStage.value === 'transcribing'),
@@ -390,16 +397,44 @@ async function handleDouyinRewrite() {
   rewrittenText.value = ''
 
   try {
-    const data = await rewriteDouyinCopywriting({
+    const task = await rewriteDouyinCopywriting({
       originalText,
       style: rewriteStyle.value.trim() || undefined,
       introduce: rewriteIntroduce.value.trim() || undefined,
     })
-    rewrittenText.value = data.translatedText ?? ''
+    rememberSessionTaskId(task.taskId)
+    await new Promise<void>((resolve) => {
+      stopRewriteTask()
+      stopRewriteTracking = trackTaskResult<DouyinRewriteWriterVO>(task.taskId, {
+        onResult(taskResult) {
+          rewrittenText.value = taskResult.result?.translatedText ?? ''
+          rewriteLoading.value = false
+          resolve()
+        },
+        onFailure(message) {
+          rewriteError.value = message.errorMessage || '改写任务失败'
+          rewriteLoading.value = false
+          resolve()
+        },
+        onError(error) {
+          rewriteError.value = error.message
+          rewriteLoading.value = false
+          resolve()
+        },
+      })
+    })
   } catch (e) {
     rewriteError.value = e instanceof Error ? e.message : '请求失败'
-  } finally {
     rewriteLoading.value = false
+  } finally {
+    stopRewriteTask()
+  }
+}
+
+function stopRewriteTask() {
+  if (stopRewriteTracking) {
+    stopRewriteTracking()
+    stopRewriteTracking = null
   }
 }
 

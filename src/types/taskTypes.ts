@@ -31,6 +31,28 @@ export interface TaskItem {
   finishedAt?: string | null
 }
 
+export interface TaskStatusMessage {
+  taskId: number
+  ownerUserId?: number | null
+  taskType: string
+  status: TaskStatus | string
+  progress: number | null
+  errorMessage: string | null
+}
+
+export interface TaskResultItem<T = unknown> {
+  taskId: number
+  projectId: number | null
+  ownerUserId?: number | null
+  taskType: string
+  taskTitle?: string
+  status: TaskStatus | string
+  progress: number | null
+  errorCode: string | null
+  errorMessage: string | null
+  result: T
+}
+
 export interface TaskSummaryResponse {
   processingCount: number
   successCount: number

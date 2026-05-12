@@ -3,11 +3,12 @@ import type { ApiResponse } from '../types/apiTypes'
 import type {
   DouyinParseWithTranscriptEventPayload,
   DouyinRewriteRequest,
-  DouyinRewriteWriterVO,
 } from '../types/writerDouyinTypes'
 import { API_BASE_URL, getAuthToken, request } from './request'
+import type { TaskItem } from '../types/taskTypes'
 
 export interface StartDouyinParseWithTranscriptOptions {
+  projectId?: number | null
   url: string
   signal?: AbortSignal
   onParsed?: (payload: ApiResponse<DouyinParseWithTranscriptEventPayload>) => void
@@ -32,7 +33,10 @@ export async function startDouyinParseWithTranscript(options: StartDouyinParseWi
       Accept: 'text/event-stream',
       ...(token ? { Authorization: `Bearer ${token}` } : {}),
     },
-    body: JSON.stringify({ url: options.url }),
+    body: JSON.stringify({
+      ...(options.projectId != null ? { projectId: options.projectId } : {}),
+      url: options.url,
+    }),
     signal: options.signal,
     openWhenHidden: true,
     async onopen(response) {
@@ -97,7 +101,7 @@ export function rewriteDouyinCopywriting(body: DouyinRewriteRequest) {
   if (body.introduce?.trim()) {
     payload.introduce = body.introduce.trim()
   }
-  return request<DouyinRewriteWriterVO>('/writer/douyin/rewrite', {
+  return request<TaskItem>('/writer/douyin/rewrite', {
     method: 'POST',
     body: JSON.stringify(payload),
   })

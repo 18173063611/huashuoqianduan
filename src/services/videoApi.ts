@@ -10,9 +10,8 @@ import type {
   TextToVideoRequest,
   VideoParseQueryResponse,
   VideoParseSubmitResponse,
-  VideoScriptShotItem,
-  VideoTaskVO,
 } from '../types/videoTypes'
+import type { TaskItem } from '../types/taskTypes'
 
 /** 提交视频源解析任务。 */
 export function parseVideoSource(payload: ParseVideoSourceRequest) {
@@ -31,7 +30,7 @@ export function getVideoParseResult(taskId: number) {
 export function analyzeVideoScript(videoUrl: string) {
   // 链接里可能含有 ? 与中文，必须先 encodeURIComponent，否则后端接到的 url 会被截断
   const qs = `url=${encodeURIComponent(videoUrl)}`
-  return request<VideoScriptShotItem[]>(`/video/script/analy?${qs}`, {
+  return request<TaskItem>(`/video/script/analy?${qs}`, {
     method: 'POST',
   })
 }
@@ -39,7 +38,7 @@ export function analyzeVideoScript(videoUrl: string) {
 /** 视频链接分镜解析：后端先解析分享链接，再对真实播放地址做分镜分析。 */
 export function analyzeVideoScriptByUrl(videoUrl: string) {
   const qs = `url=${encodeURIComponent(videoUrl)}`
-  return request<VideoScriptShotItem[]>(`/video/script/url?${qs}`, {
+  return request<TaskItem>(`/video/script/url?${qs}`, {
     method: 'POST',
   })
 }
@@ -49,7 +48,7 @@ export function analyzeVideoScriptByUrl(videoUrl: string) {
  * 仅传必填字段，其它分辨率/比例/水印等参数由后端按文档默认值固定。
  */
 export function generateTextToVideo(payload: TextToVideoRequest) {
-  return request<VideoTaskVO>('/video/generate/text', {
+  return request<TaskItem>('/video/generate/text', {
     method: 'POST',
     body: JSON.stringify(payload),
   })
@@ -57,7 +56,7 @@ export function generateTextToVideo(payload: TextToVideoRequest) {
 
 /** 图生视频 - 首帧生成。仅支持公网 URL / Base64 / asset:// 三种 imageUrl 取值。 */
 export function generateFirstFrameVideo(payload: FirstFrameVideoRequest) {
-  return request<VideoTaskVO>('/video/generate/image/first-frame', {
+  return request<TaskItem>('/video/generate/image/first-frame', {
     method: 'POST',
     body: JSON.stringify(payload),
   })
@@ -65,7 +64,7 @@ export function generateFirstFrameVideo(payload: FirstFrameVideoRequest) {
 
 /** 图生视频 - 首尾帧生成。模型以首帧为主，尾帧自动居中裁剪适配。 */
 export function generateFirstLastFrameVideo(payload: FirstLastFrameVideoRequest) {
-  return request<VideoTaskVO>('/video/generate/image/first-last-frame', {
+  return request<TaskItem>('/video/generate/image/first-last-frame', {
     method: 'POST',
     body: JSON.stringify(payload),
   })
@@ -73,7 +72,7 @@ export function generateFirstLastFrameVideo(payload: FirstLastFrameVideoRequest)
 
 /** 图生视频 - 参照图生成。imageUrls 长度 1~9，lite i2v 实际支持 1~4。 */
 export function generateReferenceVideo(payload: ReferenceVideoRequest) {
-  return request<VideoTaskVO>('/video/generate/image/reference', {
+  return request<TaskItem>('/video/generate/image/reference', {
     method: 'POST',
     body: JSON.stringify(payload),
   })

@@ -125,18 +125,21 @@ import { computed, onBeforeUnmount, onMounted, ref } from 'vue'
 import { useSmoothTaskProgress } from '../../composables/useSmoothTaskProgress'
 import {
   generateTts,
-  getTtsTask,
   getVoiceCatalog,
   getVoicePresets,
   createVoiceSampleTask,
   removeVoiceFromMyLibrary,
 } from '../../services/voiceApi'
-import { getAuthToken } from '../../services/request'
-import { getTaskDetail } from '../../services/taskApi'
+import { API_ORIGIN, getAuthToken } from '../../services/request'
+import { getTaskDetail, getTaskResult } from '../../services/taskApi'
+import { trackTaskResult } from '../../services/taskRealtime'
 import { rememberSessionTaskId } from '../../services/sessionTaskStore'
-import { VOICE_PRESET_SELECTION_KEY, type TtsGenerateRequest, type VoicePresetItem } from '../../types/voiceTypes'
-
-const API_ORIGIN = (import.meta.env.VITE_API_BASE_URL || '').replace(/\/api\/v1\/?$/, '')
+import {
+  VOICE_PRESET_SELECTION_KEY,
+  type TtsGenerateRequest,
+  type TtsTaskResult,
+  type VoicePresetItem,
+} from '../../types/voiceTypes'
 
 const presets = ref<VoicePresetItem[]>([])
 const presetsLoading = ref(false)
@@ -157,7 +160,7 @@ const activeTaskId = ref<number | null>(null)
 const taskStatus = ref('')
 const taskProgress = ref<number | null>(null)
 const taskError = ref('')
-const pollTimer = ref<number | null>(null)
+let stopTaskTracking: (() => void) | null = null
 
 const { showTaskProgressBar, barProgressPercent, reset: resetSmoothProgress } = useSmoothTaskProgress(
   taskStatus,
@@ -259,21 +262,12 @@ function playSample(v: VoicePresetItem) {
         presetsError.value = ''
         const created = await createVoiceSampleTask(v.voiceId)
         rememberSessionTaskId(created.taskId)
-        // 轮询任务完成后播放
         const maxAttempts = 40
         for (let i = 0; i < maxAttempts; i++) {
           const detail = await getTaskDetail(created.taskId)
           if (detail.status === 'SUCCESS') {
-            let url = ''
-            if (detail.outputJson) {
-              try {
-                const parsed = JSON.parse(detail.outputJson) as { sampleUrl?: string; previewUrl?: string }
-                url = parsed.sampleUrl || parsed.previewUrl || ''
-              } catch {
-                url = ''
-              }
-            }
-            sampleUrl = url
+            const result = await getTaskResult<{ sampleUrl?: string; previewUrl?: string }>(created.taskId)
+            sampleUrl = result.result?.sampleUrl || result.result?.previewUrl || ''
             break
           }
           if (['FAILED', 'RETRYABLE', 'CANCELED'].includes(String(detail.status))) {
@@ -315,10 +309,7 @@ function resetTask() {
 }
 
 function stopPoll() {
-  if (pollTimer.value != null) {
-    window.clearInterval(pollTimer.value)
-    pollTimer.value = null
-  }
+  stopTracking()
 }
 
 async function submitTts() {
@@ -345,7 +336,7 @@ async function submitTts() {
     activeTaskId.value = res.taskId
     taskStatus.value = res.status
     taskProgress.value = 0
-    startPoll(res.taskId)
+    startTaskTracking(res.taskId)
   } catch (e) {
     taskError.value = e instanceof Error ? e.message : '提交失败'
     activeTaskId.value = null
@@ -354,33 +345,37 @@ async function submitTts() {
   }
 }
 
-function startPoll(taskId: number) {
-  stopPoll()
-  void pollOnce(taskId)
-  pollTimer.value = window.setInterval(() => {
-    void pollOnce(taskId)
-  }, 2000)
+function startTaskTracking(taskId: number) {
+  stopTracking()
+  stopTaskTracking = trackTaskResult<TtsTaskResult>(taskId, {
+    onStatus(message) {
+      taskStatus.value = String(message.status)
+      taskProgress.value = message.progress
+      taskError.value = message.errorMessage || ''
+    },
+    onResult(taskResult) {
+      taskStatus.value = String(taskResult.status)
+      taskProgress.value = taskResult.progress ?? 100
+      taskError.value = taskResult.errorMessage || ''
+      const previewUrl = taskResult.result?.previewUrl || taskResult.result?.remoteAudioUrl || ''
+      if (previewUrl) {
+        audioAssetUrl.value = previewUrl.startsWith('http') ? previewUrl : `${API_ORIGIN}${previewUrl}`
+      }
+      audioAssetId.value = taskResult.result?.resultAssetId ?? null
+    },
+    onFailure(message) {
+      taskError.value = message.errorMessage || '语音合成任务失败'
+    },
+    onError(error) {
+      taskError.value = error.message
+    },
+  })
 }
 
-async function pollOnce(taskId: number) {
-  try {
-    const detail = await getTtsTask(taskId)
-    taskStatus.value = detail.status
-    taskProgress.value = detail.progress
-    taskError.value = detail.errorMessage || ''
-    if (detail.audioAsset?.fileUrl) {
-      const u = detail.audioAsset.fileUrl
-      audioAssetUrl.value = u.startsWith('http') ? u : `${API_ORIGIN}${u}`
-      audioAssetId.value = detail.audioAsset.assetId
-    }
-    if (['SUCCESS', 'FAILED', 'RETRYABLE', 'CANCELED'].includes(detail.status)) {
-      stopPoll()
-      if (detail.status === 'SUCCESS') {
-        taskProgress.value = detail.progress ?? 100
-      }
-    }
-  } catch (e) {
-    taskError.value = e instanceof Error ? e.message : '查询任务失败'
+function stopTracking() {
+  if (stopTaskTracking) {
+    stopTaskTracking()
+    stopTaskTracking = null
   }
 }
 

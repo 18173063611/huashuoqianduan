@@ -37,11 +37,17 @@
           <option value="">全部类型</option>
           <option value="VIDEO_PARSE">视频解析（旧接口）</option>
           <option value="DOUYIN_PARSE_TRANSCRIPT">抖音对标解析与转写</option>
-          <option value="SCRIPT_REWRITE">文案改写</option>
-          <option value="STORYBOARD_GENERATE">分镜生成</option>
+          <option value="DOUYIN_REWRITE">抖音文案改写</option>
+          <option value="DOUYIN_TRANSCRIPT">抖音视频转写</option>
+          <option value="VIDEO_SCRIPT_ANALYZE">视频分镜解析</option>
+          <option value="VIDEO_SCRIPT_URL_ANALYZE">抖音分镜解析</option>
           <option value="TTS_GENERATE">语音合成</option>
           <option value="VOICE_SAMPLE">音色试听</option>
           <option value="AVATAR_GENERATE">形象生成</option>
+          <option value="SEEDANCE_TEXT_VIDEO">文生视频</option>
+          <option value="SEEDANCE_FIRST_FRAME_VIDEO">首帧图生视频</option>
+          <option value="SEEDANCE_FIRST_LAST_FRAME_VIDEO">首尾帧图生视频</option>
+          <option value="SEEDANCE_REFERENCE_VIDEO">参照图生视频</option>
         </select>
         <select v-model="statusFilter" class="asset-type-select" :disabled="loading" @change="loadData(false)">
           <option value="">全部状态</option>
@@ -106,27 +112,107 @@
               重试
             </button>
             <button
-              v-if="task.status === 'SUCCESS' && resultAssetId(task)"
+              v-if="task.status === 'SUCCESS'"
               type="button"
               class="app-secondary-button task-open-asset"
+              :disabled="resultLoading"
               @click="openResult(task)"
             >
-              查看资产
+              {{ resultLoading && selectedTaskId === task.taskId ? '加载中...' : '查看结果' }}
             </button>
           </div>
         </div>
       </div>
     </template>
+
+    <div v-if="resultModalOpen" class="task-result-mask" @click.self="closeResultModal">
+      <section class="task-result-modal" role="dialog" aria-modal="true" aria-label="任务结果">
+        <header class="task-result-head">
+          <div>
+            <h3>{{ selectedResultTask ? displayTitle(selectedResultTask) : '任务结果' }}</h3>
+            <p v-if="selectedResultTask" class="app-muted">
+              {{ selectedResultTask.taskType }} · 任务 ID {{ selectedResultTask.taskId }}
+            </p>
+          </div>
+          <button type="button" class="task-result-close" aria-label="关闭" @click="closeResultModal">×</button>
+        </header>
+
+        <p v-if="resultError" class="app-error">{{ resultError }}</p>
+
+        <div v-else-if="isSeedanceVideoTask(selectedResultTask?.taskType)" class="task-result-video">
+          <video v-if="seedanceVideoUrl" :src="seedanceVideoUrl" controls preload="metadata" />
+          <div v-else class="task-result-empty">未找到视频地址。</div>
+        </div>
+
+        <div v-else-if="selectedResultTask?.taskType === 'TTS_GENERATE'" class="task-result-audio">
+          <audio v-if="ttsAudioUrl" :src="normalizePreviewUrl(ttsAudioUrl)" controls preload="metadata" />
+          <div v-else class="task-result-empty">未找到音频地址。</div>
+        </div>
+
+        <div v-else-if="selectedResultTask?.taskType === 'VIDEO_SCRIPT_ANALYZE'" class="task-result-storyboard">
+          <div v-if="scriptShots.length" class="task-result-table-wrap">
+            <table class="task-result-storyboard-table">
+              <thead>
+                <tr>
+                  <th class="result-col-order">场景序号</th>
+                  <th class="result-col-time">时间</th>
+                  <th class="result-col-summary">场景概述</th>
+                  <th class="result-col-dialogue">台词</th>
+                  <th class="result-col-tips">拍摄技巧</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr v-for="shot in scriptShots" :key="`${shot.order}-${shot.time}`">
+                  <td class="result-col-order">场景{{ orderLabel(shot.order) }}</td>
+                  <td class="result-col-time">{{ shot.time || '-' }}</td>
+                  <td class="result-col-summary">
+                    <div class="task-result-shot-text">{{ shot.page || '-' }}</div>
+                    <p v-if="shot.backgroundMusic && shot.backgroundMusic !== '无'" class="task-result-bgm">
+                      {{ shot.backgroundMusic }}
+                    </p>
+                  </td>
+                  <td class="result-col-dialogue">{{ shot.content || '-' }}</td>
+                  <td class="result-col-tips">{{ shot.highlight || '-' }}</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+          <div v-else class="task-result-empty">未找到分镜脚本数据。</div>
+        </div>
+
+        <div v-else-if="selectedResultTask?.taskType === 'DOUYIN_REWRITE'" class="task-result-text">
+          {{ douyinRewriteText || '未找到改写文案。' }}
+        </div>
+
+        <div v-else-if="selectedResultTask?.taskType === 'AVATAR_GENERATE'" class="task-result-avatar-grid">
+          <img
+            v-for="url in avatarPreviewUrls"
+            :key="url"
+            :src="normalizePreviewUrl(url)"
+            alt="生成形象"
+          />
+          <div v-if="!avatarPreviewUrls.length" class="task-result-empty">未找到图片预览地址。</div>
+        </div>
+
+        <div v-else-if="selectedResultTask?.taskType === 'DOUYIN_PARSE_TRANSCRIPT'" class="task-result-text">
+          {{ douyinTranscriptText || '未找到转写原文。' }}
+        </div>
+
+        <pre v-else class="task-result-json">{{ resultJsonText }}</pre>
+      </section>
+    </div>
   </section>
 </template>
 
 <script setup lang="ts">
+
 import { computed, ref, watch, watchEffect } from 'vue'
 import TaskRowSmoothProgress from '../../components/TaskRowSmoothProgress.vue'
-import { getAuthToken } from '../../services/request'
+import { API_ORIGIN, getAuthToken } from '../../services/request'
 import {
   cancelTask,
   getTaskDetail,
+  getTaskResult,
   getTaskSummary,
   listTasks,
   markTaskViewed,
@@ -134,6 +220,15 @@ import {
 } from '../../services/taskApi'
 import { getSessionTaskIds } from '../../services/sessionTaskStore'
 import type { TaskItem, TaskSummaryResponse } from '../../types/taskTypes'
+
+interface ScriptShot {
+  order: number
+  time: string
+  content: string
+  backgroundMusic: string
+  page: string
+  highlight: string
+}
 
 const props = withDefaults(
   defineProps<{
@@ -143,10 +238,6 @@ const props = withDefaults(
   { panelActive: true },
 )
 
-const emit = defineEmits<{
-  openAsset: [assetId: number]
-}>()
-
 const hasToken = ref(false)
 const tasks = ref<TaskItem[]>([])
 const summary = ref<TaskSummaryResponse | null>(null)
@@ -154,9 +245,41 @@ const loading = ref(false)
 const errorMessage = ref('')
 const taskTypeFilter = ref('')
 const statusFilter = ref('')
+const resultModalOpen = ref(false)
+const resultLoading = ref(false)
+const resultError = ref('')
+const selectedTaskId = ref<number | null>(null)
+const selectedResultTask = ref<TaskItem | null>(null)
+const selectedTaskResult = ref<unknown>(null)
+const selectedOutputJson = ref<unknown>(null)
 
 const canQuery = computed(() => hasToken.value)
 const hasSessionTasks = computed(() => getSessionTaskIds().length > 0)
+const resultObject = computed(() => (isRecord(selectedTaskResult.value) ? selectedTaskResult.value : null))
+const outputObject = computed(() => (isRecord(selectedOutputJson.value) ? selectedOutputJson.value : null))
+const seedanceVideoUrl = computed(() => stringField(resultObject.value, 'videoUrl'))
+const ttsAudioUrl = computed(() => stringField(resultObject.value, 'previewUrl'))
+const scriptShots = computed<ScriptShot[]>(() => {
+  const scripts = resultObject.value?.scripts
+  return Array.isArray(scripts) ? scripts.filter(isScriptShot) : []
+})
+const douyinRewriteText = computed(() => stringField(resultObject.value, 'translatedText'))
+const avatarPreviewUrls = computed(() => {
+  const fromOutput = arrayStringField(outputObject.value, 'previewUrls')
+  if (fromOutput.length) {
+    return fromOutput
+  }
+  return arrayStringField(resultObject.value, 'previewUrls')
+})
+const douyinTranscriptText = computed(() => {
+  const transcriptResult = isRecord(resultObject.value?.transcriptResult)
+    ? resultObject.value.transcriptResult
+    : isRecord(outputObject.value?.transcriptResult)
+      ? outputObject.value.transcriptResult
+      : null
+  return stringField(transcriptResult, 'originalText')
+})
+const resultJsonText = computed(() => JSON.stringify(selectedTaskResult.value ?? selectedOutputJson.value ?? {}, null, 2))
 
 function refreshAuthState() {
   hasToken.value = !!getAuthToken()
@@ -305,16 +428,40 @@ function taskLabel(taskType: string) {
   if (taskType === 'DOUYIN_PARSE_TRANSCRIPT') {
     return '抖音对标解析与转写'
   }
-  if (taskType === 'VIDEO_PARSE') {
-    return '视频解析'
+  if (taskType === 'DOUYIN_REWRITE') {
+    return '抖音文案改写'
   }
-  if (taskType === 'SCRIPT_REWRITE') {
-    return '文案改写'
+  if (taskType === 'DOUYIN_TRANSCRIPT') {
+    return '抖音视频转写'
   }
-  if (taskType === 'STORYBOARD_GENERATE') {
-    return '分镜生成'
+  if (taskType === 'VIDEO_SCRIPT_ANALYZE') {
+    return '视频分镜解析'
+  }
+  if (taskType === 'VIDEO_SCRIPT_URL_ANALYZE') {
+    return '抖音分镜解析'
+  }
+  if (taskType === 'SEEDANCE_TEXT_VIDEO') {
+    return '文生视频'
+  }
+  if (taskType === 'SEEDANCE_FIRST_FRAME_VIDEO') {
+    return '首帧图生视频'
+  }
+  if (taskType === 'SEEDANCE_FIRST_LAST_FRAME_VIDEO') {
+    return '首尾帧图生视频'
+  }
+  if (taskType === 'SEEDANCE_REFERENCE_VIDEO') {
+    return '参照图生视频'
   }
   return taskType
+}
+
+function isSeedanceVideoTask(taskType: string | undefined) {
+  return (
+    taskType === 'SEEDANCE_TEXT_VIDEO' ||
+    taskType === 'SEEDANCE_FIRST_FRAME_VIDEO' ||
+    taskType === 'SEEDANCE_FIRST_LAST_FRAME_VIDEO' ||
+    taskType === 'SEEDANCE_REFERENCE_VIDEO'
+  )
 }
 
 function taskRowProgressEligible(task: TaskItem) {
@@ -325,21 +472,6 @@ function resultAssetId(task: TaskItem): number | null {
   const rid = task.resultAssetId
   if (typeof rid === 'number' && rid > 0) {
     return rid
-  }
-  if (!task.outputJson) {
-    return null
-  }
-  try {
-    const o = JSON.parse(task.outputJson) as { resultAssetId?: number; assetIds?: number[] }
-    if (typeof o.resultAssetId === 'number' && o.resultAssetId > 0) {
-      return o.resultAssetId
-    }
-    const first = o.assetIds?.[0]
-    if (typeof first === 'number' && first > 0) {
-      return first
-    }
-  } catch {
-    /* ignore */
   }
   return null
 }
@@ -364,17 +496,79 @@ function statusPillClass(status: string) {
 }
 
 async function openResult(task: TaskItem) {
-  const id = resultAssetId(task)
-  if (id == null) {
-    return
-  }
+  resultLoading.value = true
+  selectedTaskId.value = task.taskId
+  resultError.value = ''
+  selectedTaskResult.value = null
+  selectedOutputJson.value = parseJsonObject(task.outputJson)
+  selectedResultTask.value = task
+  resultModalOpen.value = true
+
   try {
+    const [detail, taskResult] = await Promise.all([
+      getTaskDetail(task.taskId).catch(() => task),
+      getTaskResult<unknown>(task.taskId),
+    ])
+    selectedResultTask.value = detail
+    selectedTaskResult.value = taskResult.result
+    selectedOutputJson.value = parseJsonObject(detail.outputJson) ?? selectedOutputJson.value
     await markTaskViewed(task.taskId)
     void loadData(true)
-  } catch {
-    /* 标记已读失败不阻断跳转 */
+  } catch (error) {
+    resultError.value = error instanceof Error ? error.message : '查询任务结果失败'
+  } finally {
+    resultLoading.value = false
+    selectedTaskId.value = null
   }
-  emit('openAsset', id)
+}
+
+function closeResultModal() {
+  resultModalOpen.value = false
+  resultError.value = ''
+}
+
+function parseJsonObject(value: string | null | undefined) {
+  if (!value) {
+    return null
+  }
+  try {
+    return JSON.parse(value) as unknown
+  } catch {
+    return null
+  }
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === 'object' && value !== null && !Array.isArray(value)
+}
+
+function stringField(value: Record<string, unknown> | null | undefined, field: string) {
+  const raw = value?.[field]
+  return typeof raw === 'string' ? raw : ''
+}
+
+function arrayStringField(value: Record<string, unknown> | null | undefined, field: string) {
+  const raw = value?.[field]
+  return Array.isArray(raw) ? raw.filter((item): item is string => typeof item === 'string' && item.length > 0) : []
+}
+
+function isScriptShot(value: unknown): value is ScriptShot {
+  return isRecord(value) && typeof value.order === 'number'
+}
+
+function orderLabel(order: number) {
+  const labels = ['一', '二', '三', '四', '五', '六', '七', '八', '九', '十']
+  if (order >= 1 && order <= labels.length) {
+    return labels[order - 1]
+  }
+  return String(order)
+}
+
+function normalizePreviewUrl(url: string) {
+  if (!url) {
+    return ''
+  }
+  return url.startsWith('http') ? url : `${API_ORIGIN}${url.startsWith('/') ? url : `/${url}`}`
 }
 </script>
 
@@ -385,6 +579,7 @@ section.app-card.app-page-stack {
   /* 与全局 .app-page-stack / .app-hero 同宽且水平居中，禁止 margin 简写顶掉 margin: auto */
   box-sizing: border-box;
   width: min(var(--app-content-width), calc(100% - 76px));
+  max-width: 100%;
   margin-top: 0;
   margin-bottom: 24px;
   margin-left: auto;
@@ -446,6 +641,8 @@ section.app-card.app-page-stack {
 
 /* 当前范围：轻量信息卡 */
 .app-selected-project {
+  box-sizing: border-box;
+  width: 100%;
   margin-top: 0;
   margin-bottom: 24px;
   padding: 12px 16px;
@@ -471,8 +668,8 @@ section.app-card.app-page-stack {
 
 /* 筛选：轻工具栏 */
 .task-toolbar {
-  display: flex;
-  flex-wrap: wrap;
+  display: grid;
+  grid-template-columns: repeat(2, minmax(180px, 240px));
   align-items: center;
   gap: 12px;
   margin-top: 0;
@@ -480,6 +677,9 @@ section.app-card.app-page-stack {
 }
 
 .task-toolbar .asset-type-select {
+  box-sizing: border-box;
+  width: 100%;
+  min-width: 0;
   height: 36px;
   padding: 0 10px;
   border: 1px solid #e5e7eb;
@@ -522,13 +722,22 @@ section.app-card.app-page-stack {
 }
 
 .app-file-list {
+  display: grid;
+  width: 100%;
+  min-width: 0;
   gap: 12px;
   margin-top: 8px;
 }
 
 /* 任务卡片 */
 .app-file-item.task-row {
+  box-sizing: border-box;
+  display: grid;
+  width: 100%;
+  min-width: 0;
+  grid-template-columns: minmax(0, 1fr) auto;
   align-items: flex-start;
+  gap: 16px;
   margin-bottom: 0;
   padding: 16px;
   border: 1px solid #f0f1f3;
@@ -630,10 +839,11 @@ section.app-card.app-page-stack {
 }
 
 .task-row-actions {
-  display: flex;
+  display: grid;
+  min-width: 112px;
   flex-shrink: 0;
-  flex-direction: column;
   align-items: flex-end;
+  justify-items: end;
   gap: 10px;
 }
 
@@ -667,5 +877,262 @@ section.app-card.app-page-stack {
 .task-retry,
 .task-cancel {
   white-space: nowrap;
+}
+
+@media (max-width: 760px) {
+  section.app-card.app-page-stack {
+    width: calc(100% - 24px);
+    padding: 18px;
+  }
+
+  .task-toolbar {
+    grid-template-columns: 1fr;
+  }
+
+  .app-file-item.task-row {
+    grid-template-columns: 1fr;
+  }
+
+  .task-row-actions {
+    width: 100%;
+    min-width: 0;
+    grid-template-columns: auto auto;
+    align-items: center;
+    justify-items: start;
+  }
+
+  .task-row-actions .app-task-status {
+    justify-self: start;
+  }
+
+  .task-row-actions .app-secondary-button {
+    justify-self: end;
+  }
+}
+
+.task-result-mask {
+  position: fixed;
+  z-index: 80;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  padding: 32px;
+  background: rgba(15, 23, 42, 0.42);
+}
+
+.task-result-modal {
+  display: grid;
+  width: min(1100px, 100%);
+  max-height: min(760px, calc(100vh - 64px));
+  gap: 16px;
+  overflow: hidden;
+  border-radius: 12px;
+  background: #fff;
+  box-shadow: 0 24px 72px rgba(15, 23, 42, 0.22);
+  padding: 20px;
+}
+
+.task-result-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px;
+  border-bottom: 1px solid #edf0f6;
+  padding-bottom: 14px;
+}
+
+.task-result-head h3 {
+  margin: 0 0 6px;
+  color: #111827;
+  font-size: 18px;
+  font-weight: 650;
+}
+
+.task-result-head p {
+  margin: 0;
+  font-size: 12px;
+}
+
+.task-result-close {
+  display: grid;
+  width: 34px;
+  height: 34px;
+  flex: 0 0 auto;
+  place-items: center;
+  border: 1px solid #e5e7eb;
+  border-radius: 8px;
+  background: #f8f9fc;
+  color: #374151;
+  font-size: 20px;
+  line-height: 1;
+  cursor: pointer;
+}
+
+.task-result-close:hover {
+  background: #eef0f3;
+}
+
+.task-result-video,
+.task-result-audio,
+.task-result-storyboard,
+.task-result-avatar-grid,
+.task-result-text,
+.task-result-json {
+  min-height: 0;
+  overflow: auto;
+}
+
+.task-result-video video {
+  display: block;
+  width: 100%;
+  max-height: 600px;
+  border-radius: 10px;
+  background: #111827;
+}
+
+.task-result-audio {
+  display: grid;
+  min-height: 180px;
+  align-items: center;
+  border: 1px solid #edf0f6;
+  border-radius: 10px;
+  background: #fbfcff;
+  padding: 24px;
+}
+
+.task-result-audio audio {
+  width: 100%;
+}
+
+.task-result-table-wrap {
+  overflow: auto;
+  border: 1px solid #edf0f6;
+  border-radius: 10px;
+  background: #fff;
+}
+
+.task-result-storyboard-table {
+  width: 100%;
+  min-width: 920px;
+  border-collapse: collapse;
+  table-layout: fixed;
+  color: #2d3446;
+  font-size: 13px;
+}
+
+.task-result-storyboard-table th {
+  padding: 12px 14px;
+  border-bottom: 1px solid #edf0f6;
+  background: #f5f6fa;
+  color: #5c6477;
+  font-weight: 750;
+  text-align: left;
+}
+
+.task-result-storyboard-table td {
+  padding: 14px;
+  border-bottom: 1px solid #edf0f6;
+  line-height: 1.7;
+  vertical-align: top;
+}
+
+.task-result-storyboard-table tbody tr:last-child td {
+  border-bottom: 0;
+}
+
+.result-col-order {
+  width: 96px;
+  font-weight: 700;
+}
+
+.result-col-time {
+  width: 138px;
+  color: #6b7280;
+}
+
+.result-col-summary {
+  width: 320px;
+}
+
+.result-col-dialogue {
+  width: 240px;
+}
+
+.result-col-tips {
+  width: auto;
+}
+
+.task-result-shot-text {
+  white-space: pre-wrap;
+}
+
+.task-result-bgm {
+  display: inline-flex;
+  margin: 10px 0 0;
+  border-radius: 999px;
+  background: #f1efff;
+  color: #5e50df;
+  padding: 4px 9px;
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.task-result-text {
+  min-height: 220px;
+  border: 1px solid #edf0f6;
+  border-radius: 10px;
+  background: #fbfcff;
+  color: #2d3446;
+  padding: 16px;
+  line-height: 1.8;
+  white-space: pre-wrap;
+}
+
+.task-result-avatar-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
+  gap: 14px;
+}
+
+.task-result-avatar-grid img {
+  width: 100%;
+  aspect-ratio: 1 / 1;
+  border: 1px solid #edf0f6;
+  border-radius: 10px;
+  background: #f8f9fc;
+  object-fit: contain;
+}
+
+.task-result-json {
+  margin: 0;
+  border: 1px solid #edf0f6;
+  border-radius: 10px;
+  background: #111827;
+  color: #f9fafb;
+  padding: 16px;
+  font-size: 12px;
+  line-height: 1.6;
+}
+
+.task-result-empty {
+  display: grid;
+  min-height: 180px;
+  place-items: center;
+  border: 1px dashed #d8dce8;
+  border-radius: 10px;
+  background: #fbfcff;
+  color: #6b7280;
+  font-size: 13px;
+}
+
+@media (max-width: 720px) {
+  .task-result-mask {
+    padding: 14px;
+  }
+
+  .task-result-modal {
+    max-height: calc(100vh - 28px);
+    padding: 16px;
+  }
 }
 </style>

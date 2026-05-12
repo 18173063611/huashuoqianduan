@@ -298,7 +298,7 @@
         正在生成视频，预计 1~3 分钟，期间请勿关闭页面…
       </div>
 
-      <div v-if="showDigitalHumanProgress" class="render-digital-progress">
+      <div v-if="showTaskProgress" class="render-digital-progress">
         <div
           class="render-progress-track"
           role="progressbar"
@@ -356,6 +356,7 @@ import ImageInput from './ImageInput.vue'
 import { useSmoothTaskProgress } from '../../composables/useSmoothTaskProgress'
 import { API_ORIGIN } from '../../services/request'
 import { rememberSessionTaskId } from '../../services/sessionTaskStore'
+import { trackTaskResult } from '../../services/taskRealtime'
 import { uploadFile } from '../../services/uploadApi'
 import {
   generateDigitalHumanVideo,
@@ -416,15 +417,17 @@ const result = ref<VideoTaskVO | null>(null)
 const taskStatus = ref('')
 const taskProgress = ref<number | null>(null)
 const activeDigitalHumanTaskId = ref<number | null>(null)
+const activeSeedanceTaskId = ref<number | null>(null)
 const digitalHumanTaskError = ref('')
 const { showTaskProgressBar, barProgressPercent, reset: resetSmoothProgress } = useSmoothTaskProgress(
   taskStatus,
   taskProgress,
 )
-const showDigitalHumanProgress = computed(
-  () => mainTab.value === 'digitalHuman' && (showTaskProgressBar.value || !!activeDigitalHumanTaskId.value),
+const showTaskProgress = computed(
+  () => showTaskProgressBar.value || !!activeDigitalHumanTaskId.value || !!activeSeedanceTaskId.value,
 )
 let digitalHumanPollTimer: number | null = null
+let stopSeedanceTaskTracking: (() => void) | null = null
 
 // Seedance 1.5 pro 支持 [4, 12]，参照图（lite i2v）支持 [2, 12]
 const durationOptions = computed(() => {
@@ -508,7 +511,9 @@ function updateReferenceImage(idx: number, value: string) {
 
 function resetResult() {
   stopDigitalHumanPoll()
+  stopSeedanceTracking()
   activeDigitalHumanTaskId.value = null
+  activeSeedanceTaskId.value = null
   taskStatus.value = ''
   taskProgress.value = null
   digitalHumanTaskError.value = ''
@@ -517,7 +522,7 @@ function resetResult() {
   errorMessage.value = ''
 }
 
-function formatTimestamp(seconds: number) {
+function formatTimestamp(seconds: number | null | undefined) {
   if (!seconds) {
     return '-'
   }
@@ -566,7 +571,8 @@ async function handleGenerate() {
   digitalHumanTaskError.value = ''
 
   try {
-    let task: VideoTaskVO
+    let submittedTaskId = 0
+    let submittedStatus = 'QUEUED'
     if (mainTab.value === 'digitalHuman') {
       const useText = digitalHumanAudioMode.value === 'text'
       const submitted = await generateDigitalHumanVideo({
@@ -584,38 +590,90 @@ async function handleGenerate() {
       startDigitalHumanPoll(submitted.taskId)
       return
     } else if (mainTab.value === 'text') {
-      task = await generateTextToVideo({
+      const submitted = await generateTextToVideo({
         prompt: prompt.value.trim(),
         duration: duration.value,
       })
+      submittedTaskId = submitted.taskId
+      submittedStatus = String(submitted.status)
     } else if (imageSubTab.value === 'first') {
-      task = await generateFirstFrameVideo({
+      const submitted = await generateFirstFrameVideo({
         imageUrl: firstFrame.value.trim(),
         prompt: prompt.value.trim() || undefined,
         duration: duration.value,
       })
+      submittedTaskId = submitted.taskId
+      submittedStatus = String(submitted.status)
     } else if (imageSubTab.value === 'firstLast') {
-      task = await generateFirstLastFrameVideo({
+      const submitted = await generateFirstLastFrameVideo({
         firstFrameUrl: firstFrame.value.trim(),
         lastFrameUrl: lastFrame.value.trim(),
         prompt: prompt.value.trim() || undefined,
         duration: duration.value,
       })
+      submittedTaskId = submitted.taskId
+      submittedStatus = String(submitted.status)
     } else {
       const urls = referenceImages.value.map((u) => u.trim()).filter((u) => u.length > 0)
-      task = await generateReferenceVideo({
+      const submitted = await generateReferenceVideo({
         imageUrls: urls,
         prompt: prompt.value.trim() || undefined,
         duration: duration.value,
       })
+      submittedTaskId = submitted.taskId
+      submittedStatus = String(submitted.status)
     }
-    result.value = task
+    rememberSessionTaskId(submittedTaskId)
+    activeSeedanceTaskId.value = submittedTaskId
+    taskStatus.value = submittedStatus
+    taskProgress.value = 0
+    resetSmoothProgress()
+    startSeedanceTaskTracking(submittedTaskId)
   } catch (error) {
     errorMessage.value = error instanceof Error ? error.message : '视频生成失败'
+    busy.value = false
   } finally {
-    if (mainTab.value !== 'digitalHuman') {
+    if (mainTab.value !== 'digitalHuman' && activeSeedanceTaskId.value == null) {
       busy.value = false
     }
+  }
+}
+
+function startSeedanceTaskTracking(taskId: number) {
+  stopSeedanceTracking()
+  stopSeedanceTaskTracking = trackTaskResult<VideoTaskVO>(taskId, {
+    onStatus(message) {
+      taskStatus.value = String(message.status)
+      taskProgress.value = message.progress
+      digitalHumanTaskError.value = message.errorMessage || ''
+    },
+    onResult(taskResult) {
+      taskStatus.value = String(taskResult.status)
+      taskProgress.value = taskResult.progress ?? 100
+      result.value = taskResult.result
+      busy.value = false
+      activeSeedanceTaskId.value = null
+      digitalHumanTaskError.value = taskResult.errorMessage || ''
+    },
+    onFailure(message) {
+      errorMessage.value = message.errorMessage || '视频生成任务失败'
+      digitalHumanTaskError.value = errorMessage.value
+      busy.value = false
+      activeSeedanceTaskId.value = null
+    },
+    onError(error) {
+      errorMessage.value = error.message
+      digitalHumanTaskError.value = error.message
+      busy.value = false
+      activeSeedanceTaskId.value = null
+    },
+  })
+}
+
+function stopSeedanceTracking() {
+  if (stopSeedanceTaskTracking) {
+    stopSeedanceTaskTracking()
+    stopSeedanceTaskTracking = null
   }
 }
 
@@ -675,6 +733,7 @@ function digitalHumanDetailToVideoResult(detail: DigitalHumanTaskDetailResponse)
 
 onBeforeUnmount(() => {
   stopDigitalHumanPoll()
+  stopSeedanceTracking()
 })
 </script>
 

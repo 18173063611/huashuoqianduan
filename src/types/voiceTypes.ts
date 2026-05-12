@@ -54,3 +54,10 @@ export interface TtsTaskDetailResponse {
   errorMessage: string | null
   audioAsset: AssetItem | null
 }
+
+export interface TtsTaskResult {
+  resultAssetId: number | null
+  previewUrl: string
+  volcTaskId?: string | null
+  remoteAudioUrl?: string | null
+}

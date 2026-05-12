@@ -171,13 +171,13 @@ import { API_ORIGIN } from '../../services/request'
 import { rememberSessionTaskId } from '../../services/sessionTaskStore'
 import {
   generateAvatar,
-  getAvatarGenerateTask,
   getAvatars,
   updateAvatar,
   uploadAvatar,
 } from '../../services/avatarApi'
+import { trackTaskResult } from '../../services/taskRealtime'
 import type { AssetItem } from '../../types/assetTypes'
-import type { AvatarGenerateRequest, AvatarItem } from '../../types/avatarTypes'
+import type { AvatarGenerateRequest, AvatarGenerateTaskResult, AvatarItem } from '../../types/avatarTypes'
 
 const sourceMode = ref<'AI' | 'UPLOAD'>('AI')
 const form = reactive<AvatarGenerateRequest>({
@@ -203,7 +203,7 @@ const taskError = ref('')
 const saveMessage = ref('')
 const taskStatus = ref('')
 const taskProgress = ref<number | null>(null)
-const pollTimer = ref<number | null>(null)
+let stopTaskTracking: (() => void) | null = null
 const deletingAssetId = ref<number | null>(null)
 
 const { showTaskProgressBar, barProgressPercent, reset: resetSmoothProgress } = useSmoothTaskProgress(
@@ -307,7 +307,7 @@ async function submitGenerate() {
     resetSmoothProgress()
     taskStatus.value = res.status
     taskProgress.value = 0
-    startPoll(res.taskId)
+    startTaskTracking(res.taskId)
   } catch (e) {
     errorMessage.value = e instanceof Error ? e.message : '提交生成失败'
   } finally {
@@ -315,33 +315,28 @@ async function submitGenerate() {
   }
 }
 
-function startPoll(taskId: number) {
-  stopPoll()
-  void pollOnce(taskId)
-  pollTimer.value = window.setInterval(() => {
-    void pollOnce(taskId)
-  }, 2000)
-}
-
-async function pollOnce(taskId: number) {
-  try {
-    const detail = await getAvatarGenerateTask(taskId)
-    taskStatus.value = detail.status
-    taskProgress.value = detail.progress
-    taskError.value = detail.errorMessage || ''
-    if (detail.avatars?.length) {
-      generatedAvatars.value = detail.avatars
-    }
-    if (['SUCCESS', 'FAILED', 'RETRYABLE', 'CANCELED'].includes(detail.status)) {
-      stopPoll()
-      if (detail.status === 'SUCCESS') {
-        taskProgress.value = detail.progress ?? 100
-      }
-      await Promise.all([loadAvatars(), loadReferenceAssets()])
-    }
-  } catch (e) {
-    taskError.value = e instanceof Error ? e.message : '查询生成任务失败'
-  }
+function startTaskTracking(taskId: number) {
+  stopTracking()
+  stopTaskTracking = trackTaskResult<AvatarGenerateTaskResult>(taskId, {
+    onStatus(message) {
+      taskStatus.value = String(message.status)
+      taskProgress.value = message.progress
+      taskError.value = message.errorMessage || ''
+    },
+    async onResult(taskResult) {
+      taskStatus.value = String(taskResult.status)
+      taskProgress.value = taskResult.progress ?? 100
+      taskError.value = taskResult.errorMessage || ''
+      await applyAvatarResult(taskResult.result)
+      saveMessage.value = '生成完成，形象已自动保存到资产中心。'
+    },
+    onFailure(message) {
+      taskError.value = message.errorMessage || '形象生成任务失败'
+    },
+    onError(error) {
+      taskError.value = error.message
+    },
+  })
 }
 
 async function setAsDefault(avatar: AvatarItem) {
@@ -359,9 +354,43 @@ async function setAsDefault(avatar: AvatarItem) {
 }
 
 function stopPoll() {
-  if (pollTimer.value != null) {
-    window.clearInterval(pollTimer.value)
-    pollTimer.value = null
+  stopTracking()
+}
+
+function stopTracking() {
+  if (stopTaskTracking) {
+    stopTaskTracking()
+    stopTaskTracking = null
+  }
+}
+
+async function applyAvatarResult(result: AvatarGenerateTaskResult) {
+  await Promise.all([loadAvatars(), loadReferenceAssets()])
+  const ids = new Set(result.avatarIds || [])
+  const matched = avatars.value.filter((item) => ids.has(item.avatarId))
+  if (matched.length) {
+    generatedAvatars.value = matched
+    return
+  }
+
+  const urls = result.previewUrls?.length ? result.previewUrls : result.remoteImageUrls || []
+  generatedAvatars.value = urls.map((url, index) => ({
+    avatarId: result.avatarIds?.[index] ?? -(index + 1),
+    projectId: null,
+    taskId: null,
+    assetId: result.assetIds?.[index] ?? null,
+    avatarName: `${form.avatarName || 'AI 形象'} ${index + 1}`,
+    sourceType: 'AI_GENERATED',
+    prompt: form.prompt,
+    referenceAssetIds: null,
+    previewUrl: url,
+    metadataJson: null,
+    defaultAvatar: false,
+    createdAt: '',
+    updatedAt: '',
+  }))
+  if (!generatedAvatars.value.length) {
+    await loadAvatars()
   }
 }
 

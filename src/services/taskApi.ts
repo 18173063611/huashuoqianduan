@@ -1,5 +1,5 @@
 import { request } from './request'
-import type { CreateTaskRequest, TaskItem, TaskSummaryResponse } from '../types/taskTypes'
+import type { CreateTaskRequest, TaskItem, TaskResultItem, TaskSummaryResponse } from '../types/taskTypes'
 
 export interface ListTasksParams {
   /** 不传或 null：当前登录用户的跨项目任务（须已登录） */
@@ -49,4 +49,8 @@ export function markTaskViewed(taskId: number) {
 
 export function getTaskDetail(taskId: number) {
   return request<TaskItem>(`/tasks/${taskId}`)
+}
+
+export function getTaskResult<T = unknown>(taskId: number) {
+  return request<TaskResultItem<T>>(`/tasks/${taskId}/result`)
 }

@@ -2,7 +2,6 @@ import { request } from './request'
 import type {
   TtsGenerateRequest,
   TtsGenerateResponse,
-  TtsTaskDetailResponse,
   VoicePresetCreateRequest,
   VoicePresetItem,
   VoicePresetListResponse,
@@ -61,7 +60,3 @@ export function generateTts(payload: TtsGenerateRequest) {
   })
 }
 
-/** 查询 TTS 任务 GET /api/v1/voices/tts/{taskId} */
-export function getTtsTask(taskId: number) {
-  return request<TtsTaskDetailResponse>(`/voices/tts/${taskId}`)
-}

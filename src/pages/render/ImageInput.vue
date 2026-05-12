@@ -41,9 +41,6 @@ const emit = defineEmits<{
   (e: 'update', value: string): void
 }>()
 
-// 上传接口返回的 previewUrl 是相对路径，需要拼上 TOS 桶域名才是公网可访问地址
-const TOS_BUCKET_ORIGIN = 'https://ceshichucun.tos-cn-guangzhou.volces.com'
-
 const uploading = ref(false)
 const errorMessage = ref('')
 const lastFileName = ref('')

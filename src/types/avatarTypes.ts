@@ -44,6 +44,13 @@ export interface AvatarTaskDetailResponse {
   avatars: AvatarItem[]
 }
 
+export interface AvatarGenerateTaskResult {
+  assetIds: number[]
+  avatarIds: number[]
+  previewUrls: string[]
+  remoteImageUrls?: string[]
+}
+
 export interface AvatarUpdateRequest {
   avatarName?: string
   defaultAvatar?: boolean

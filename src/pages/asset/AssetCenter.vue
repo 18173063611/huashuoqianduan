@@ -325,7 +325,7 @@ import {
   getVoicePresets,
   removeVoiceFromMyLibrary,
 } from '../../services/voiceApi'
-import { getTaskDetail } from '../../services/taskApi'
+import { getTaskDetail, getTaskResult } from '../../services/taskApi'
 import { rememberSessionTaskId } from '../../services/sessionTaskStore'
 import { VOICE_PRESET_SELECTION_KEY, type VoicePresetItem } from '../../types/voiceTypes'
 
@@ -784,14 +784,8 @@ async function playVoiceSample(voice: VoicePresetItem) {
       for (let i = 0; i < maxAttempts; i++) {
         const detail = await getTaskDetail(created.taskId)
         if (detail.status === 'SUCCESS') {
-          if (detail.outputJson) {
-            try {
-              const parsed = JSON.parse(detail.outputJson) as { sampleUrl?: string; previewUrl?: string }
-              sampleUrl = parsed.sampleUrl || parsed.previewUrl || ''
-            } catch {
-              sampleUrl = ''
-            }
-          }
+          const result = await getTaskResult<{ sampleUrl?: string; previewUrl?: string }>(created.taskId)
+          sampleUrl = result.result?.sampleUrl || result.result?.previewUrl || ''
           break
         }
         if (['FAILED', 'RETRYABLE', 'CANCELED'].includes(String(detail.status))) {
