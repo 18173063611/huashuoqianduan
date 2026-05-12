@@ -259,11 +259,21 @@
         </div>
       </div>
 
+      <div v-if="mainTab === 'digitalHuman'" class="render-digital-credit">
+        <p v-if="dhQuoteLoading" class="app-muted">加载积分说明中…</p>
+        <p v-else-if="dhEstimatedCost > 0" class="render-credit-line">
+          数字人口播预计消耗 <strong>{{ dhEstimatedCost }}</strong> 积分
+          <template v-if="loggedIn && localBalance != null"> · 当前余额 {{ localBalance }}</template>
+        </p>
+        <p v-else class="app-muted">本任务类型当前配置为不扣积分。</p>
+        <p v-if="digitalHumanCreditInsufficient" class="app-error">积分不足，无法提交当前任务。</p>
+      </div>
+
       <div class="render-actions">
         <button
           class="app-primary-button"
           type="button"
-          :disabled="!canSubmit || busy"
+          :disabled="!canSubmit || busy || digitalHumanCreditInsufficient"
           @click="handleGenerate"
         >
           {{ busy ? '生成中…' : '开始生成视频' }}
@@ -350,12 +360,17 @@
 </template>
 
 <script setup lang="ts">
-import { computed, onBeforeUnmount, ref, watch } from 'vue'
+import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
+import { ElMessage } from 'element-plus'
 import AssetPicker from './AssetPicker.vue'
 import ImageInput from './ImageInput.vue'
 import { useSmoothTaskProgress } from '../../composables/useSmoothTaskProgress'
-import { API_ORIGIN } from '../../services/request'
+import { API_ORIGIN, getAuthToken } from '../../services/request'
+import { me, setAuthUser } from '../../services/authApi'
+import { getAuthUser } from '../../services/authSession'
+import { getTaskCreditQuote } from '../../services/creditApi'
 import { rememberSessionTaskId } from '../../services/sessionTaskStore'
+import { newIdempotencyKey } from '../../services/taskApi'
 import { uploadFile } from '../../services/uploadApi'
 import {
   generateDigitalHumanVideo,
@@ -410,6 +425,48 @@ const digitalHumanAudioMode = ref<DigitalHumanAudioMode>('asset')
 const digitalHumanAudioUploading = ref(false)
 const digitalHumanAudioUploadName = ref('')
 
+const loggedIn = ref(false)
+const dhEstimatedCost = ref(0)
+const dhQuoteLoading = ref(false)
+const localBalance = ref<number | null>(null)
+
+const digitalHumanCreditInsufficient = computed(() => {
+  if (mainTab.value !== 'digitalHuman' || !loggedIn.value || dhEstimatedCost.value <= 0) {
+    return false
+  }
+  const b = localBalance.value
+  if (b == null) {
+    return false
+  }
+  return b < dhEstimatedCost.value
+})
+
+async function loadDigitalHumanCreditQuote() {
+  dhQuoteLoading.value = true
+  try {
+    const q = await getTaskCreditQuote('DIGITAL_HUMAN_GENERATE')
+    dhEstimatedCost.value = q.creditCost ?? 0
+  } catch {
+    dhEstimatedCost.value = 0
+  } finally {
+    dhQuoteLoading.value = false
+  }
+}
+
+async function refreshLocalBalance() {
+  if (!getAuthToken()) {
+    localBalance.value = null
+    return
+  }
+  try {
+    const u = await me()
+    setAuthUser(u)
+    localBalance.value = u.creditBalance ?? 0
+  } catch {
+    localBalance.value = getAuthUser()?.creditBalance ?? null
+  }
+}
+
 const busy = ref(false)
 const errorMessage = ref('')
 const result = ref<VideoTaskVO | null>(null)
@@ -417,6 +474,8 @@ const taskStatus = ref('')
 const taskProgress = ref<number | null>(null)
 const activeDigitalHumanTaskId = ref<number | null>(null)
 const digitalHumanTaskError = ref('')
+/** 单次数字人口播提交周期内复用 Idempotency-Key */
+const digitalHumanIdempotencyKey = ref<string | null>(null)
 const { showTaskProgressBar, barProgressPercent, reset: resetSmoothProgress } = useSmoothTaskProgress(
   taskStatus,
   taskProgress,
@@ -512,6 +571,7 @@ function resetResult() {
   taskStatus.value = ''
   taskProgress.value = null
   digitalHumanTaskError.value = ''
+  digitalHumanIdempotencyKey.value = null
   resetSmoothProgress()
   result.value = null
   errorMessage.value = ''
@@ -568,20 +628,34 @@ async function handleGenerate() {
   try {
     let task: VideoTaskVO
     if (mainTab.value === 'digitalHuman') {
+      if (!digitalHumanIdempotencyKey.value) {
+        digitalHumanIdempotencyKey.value = newIdempotencyKey()
+      }
       const useText = digitalHumanAudioMode.value === 'text'
-      const submitted = await generateDigitalHumanVideo({
-        imageUrl: digitalHumanImage.value.trim(),
-        audioUrl: useText ? undefined : digitalHumanAudio.value.trim(),
-        text: useText ? digitalHumanText.value.trim() : undefined,
-        voiceId: useText ? digitalHumanVoiceId.value.trim() || undefined : undefined,
-        resolution: digitalHumanResolution.value,
-      })
+      const submitted = await generateDigitalHumanVideo(
+        {
+          imageUrl: digitalHumanImage.value.trim(),
+          audioUrl: useText ? undefined : digitalHumanAudio.value.trim(),
+          text: useText ? digitalHumanText.value.trim() : undefined,
+          voiceId: useText ? digitalHumanVoiceId.value.trim() || undefined : undefined,
+          resolution: digitalHumanResolution.value,
+        },
+        digitalHumanIdempotencyKey.value,
+      )
+      digitalHumanIdempotencyKey.value = null
       rememberSessionTaskId(submitted.taskId)
       activeDigitalHumanTaskId.value = submitted.taskId
       taskStatus.value = submitted.status
       taskProgress.value = 0
       resetSmoothProgress()
       startDigitalHumanPoll(submitted.taskId)
+      await refreshLocalBalance()
+      const cost = dhEstimatedCost.value
+      if (cost > 0) {
+        ElMessage.success(`任务已提交，已预扣 ${cost} 积分`)
+      } else {
+        ElMessage.success('任务已提交')
+      }
       return
     } else if (mainTab.value === 'text') {
       task = await generateTextToVideo({
@@ -611,7 +685,14 @@ async function handleGenerate() {
     }
     result.value = task
   } catch (error) {
-    errorMessage.value = error instanceof Error ? error.message : '视频生成失败'
+    const msg = error instanceof Error ? error.message : '视频生成失败'
+    errorMessage.value = msg
+    if (mainTab.value === 'digitalHuman') {
+      digitalHumanIdempotencyKey.value = null
+      if (msg.includes('积分余额不足') || msg.includes('40900')) {
+        ElMessage.error('积分余额不足，无法提交当前任务')
+      }
+    }
   } finally {
     if (mainTab.value !== 'digitalHuman') {
       busy.value = false
@@ -672,6 +753,12 @@ function digitalHumanDetailToVideoResult(detail: DigitalHumanTaskDetailResponse)
     errorMessage: null,
   }
 }
+
+onMounted(async () => {
+  loggedIn.value = !!getAuthToken()
+  await loadDigitalHumanCreditQuote()
+  await refreshLocalBalance()
+})
 
 onBeforeUnmount(() => {
   stopDigitalHumanPoll()
@@ -1029,6 +1116,31 @@ onBeforeUnmount(() => {
 .render-ref-tip {
   margin: 4px 0 0;
   font-size: 12.5px;
+}
+
+.render-digital-credit {
+  margin: 0;
+  padding: 10px 12px;
+  border-radius: 8px;
+  background: rgba(248, 250, 252, 0.95);
+  border: 1px solid #e5e7eb;
+}
+
+.render-digital-credit p {
+  margin: 0 0 6px;
+  font-size: 14px;
+}
+
+.render-digital-credit p:last-child {
+  margin-bottom: 0;
+}
+
+.render-credit-line {
+  color: #374151;
+}
+
+.render-credit-line strong {
+  color: #111827;
 }
 
 .render-actions {

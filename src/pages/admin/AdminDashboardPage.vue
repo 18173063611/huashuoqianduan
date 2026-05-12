@@ -1,7 +1,17 @@
 <template>
   <section class="admin-dashboard">
+    <div class="page-heading">
+      <div>
+        <h2>运营概览</h2>
+        <p>快速了解用户、任务、积分和模型的当前运营状态。</p>
+      </div>
+      <el-button :icon="Refresh" :loading="loading" @click="loadDashboard">刷新</el-button>
+    </div>
+
+    <el-alert v-if="error" :title="error" type="warning" show-icon :closable="false" />
+
     <el-row :gutter="16">
-      <el-col v-for="card in statCards" :key="card.label" :xs="24" :sm="12" :lg="6">
+      <el-col v-for="card in statCards" :key="card.label" :xs="24" :sm="12" :lg="8">
         <el-card shadow="never" class="admin-stat-card">
           <span>{{ card.label }}</span>
           <strong>{{ card.value }}</strong>
@@ -9,80 +19,145 @@
       </el-col>
     </el-row>
 
-    <el-card class="admin-dashboard-panel" shadow="never">
-      <template #header>
-        <div class="admin-panel-header">
-          <span>下一步联调重点</span>
-          <el-button type="primary" link :loading="loading" @click="loadSummary">刷新概览</el-button>
-        </div>
-      </template>
+    <el-row :gutter="16">
+      <el-col :xs="24" :lg="14">
+        <el-card shadow="never" class="admin-dashboard-panel">
+          <template #header>最近任务</template>
+          <el-table v-loading="loading" :data="recentTasks" row-key="taskId" border empty-text="暂无任务记录">
+            <el-table-column prop="taskId" label="任务ID" width="92" />
+            <el-table-column label="任务类型" min-width="140">
+              <template #default="{ row }">{{ getTaskTypeLabel(row.taskType) }}</template>
+            </el-table-column>
+            <el-table-column label="状态" width="110">
+              <template #default="{ row }">
+                <el-tag :type="getTagTypeByStatus(row.status)">{{ getTaskStatusLabel(row.status) }}</el-tag>
+              </template>
+            </el-table-column>
+            <el-table-column label="创建时间" min-width="170">
+              <template #default="{ row }">{{ formatDateTime(row.createdAt) }}</template>
+            </el-table-column>
+          </el-table>
+        </el-card>
+      </el-col>
+      <el-col :xs="24" :lg="10">
+        <el-card shadow="never" class="admin-dashboard-panel">
+          <template #header>异常提醒</template>
+          <el-empty v-if="alerts.length === 0" description="暂无异常提醒" />
+          <el-alert v-for="alert in alerts" v-else :key="alert" class="dashboard-alert" :title="alert" type="warning" show-icon />
+        </el-card>
+      </el-col>
+    </el-row>
 
-      <el-alert
-        v-if="error"
-        :title="error"
-        type="warning"
-        show-icon
-        :closable="false"
-      />
-
-      <el-timeline>
-        <el-timeline-item timestamp="账号权限" type="primary">
-          管理员登录后只进入后台，普通账号访问后台会被路由拦截。
-        </el-timeline-item>
-        <el-timeline-item timestamp="用户管理" type="success">
-          用户列表、创建、编辑、启用、禁用、删除和重置密码走 `/api/v1/admin/users`。
-        </el-timeline-item>
-        <el-timeline-item timestamp="积分展示" type="warning">
-          管理后台已接入积分余额与流水，普通工作台顶部会显示当前账号积分。
-        </el-timeline-item>
-      </el-timeline>
+    <el-card shadow="never" class="admin-dashboard-panel">
+      <template #header>最近积分流水</template>
+      <el-table v-loading="loading" :data="recentCreditLogs" row-key="creditLogId" border empty-text="暂无积分流水">
+        <el-table-column label="时间" min-width="170">
+          <template #default="{ row }">{{ formatDateTime(row.createdAt) }}</template>
+        </el-table-column>
+        <el-table-column label="类型" min-width="140">
+          <template #default="{ row }">{{ getCreditChangeTypeLabel(row.changeType) }}</template>
+        </el-table-column>
+        <el-table-column label="变动" width="110">
+          <template #default="{ row }">
+            <span :class="['credit-change', Number(row.changeAmount) >= 0 ? 'is-positive' : 'is-negative']">
+              {{ formatCreditChange(row.changeAmount) }}
+            </span>
+          </template>
+        </el-table-column>
+        <el-table-column label="用户" width="100">
+          <template #default="{ row }">{{ formatEmpty(row.userId) }}</template>
+        </el-table-column>
+        <el-table-column label="备注" min-width="200" show-overflow-tooltip>
+          <template #default="{ row }">{{ formatEmpty(row.remark, '暂无备注') }}</template>
+        </el-table-column>
+      </el-table>
     </el-card>
   </section>
 </template>
 
 <script setup lang="ts">
 import { computed, onMounted, ref } from 'vue'
-import { getAdminDashboardSummary } from '../../services/adminApi'
-import type { AdminDashboardSummary } from '../../types/adminTypes'
+import { Refresh } from '@element-plus/icons-vue'
+import { getAdminDashboardSummary, listAdminCreditLogs, listAdminModels, listAdminTasks } from '../../services/adminApi'
+import type { AdminCreditLogItem, AdminDashboardSummary, AdminTaskItem } from '../../types/adminTypes'
+import {
+  formatCreditAmount,
+  formatCreditChange,
+  formatDateTime,
+  formatEmpty,
+  getCreditChangeTypeLabel,
+  getTagTypeByStatus,
+  getTaskStatusLabel,
+  getTaskTypeLabel,
+} from '../../utils/adminDisplay'
 
 const loading = ref(false)
 const error = ref('')
-const summary = ref<AdminDashboardSummary>({
-  userCount: 0,
-  todayTaskCount: 0,
-  todayCreditConsumed: 0,
-  failedTaskCount: 0,
-  queueBacklog: 0,
-})
+const summary = ref<AdminDashboardSummary | null>(null)
+const enabledModelCount = ref<number | null>(null)
+const recentTasks = ref<AdminTaskItem[]>([])
+const recentCreditLogs = ref<AdminCreditLogItem[]>([])
 
 const statCards = computed(() => [
-  { label: '用户总数', value: summary.value.userCount },
-  { label: '今日任务', value: summary.value.todayTaskCount },
-  { label: '今日积分消耗', value: summary.value.todayCreditConsumed },
-  { label: '失败任务', value: summary.value.failedTaskCount },
+  { label: '用户总数', value: summary.value?.userCount ?? '暂无统计数据' },
+  { label: '今日新增用户', value: '暂无统计数据' },
+  { label: '今日任务数', value: summary.value?.todayTaskCount ?? '暂无统计数据' },
+  { label: '今日积分消耗', value: summary.value ? formatCreditAmount(summary.value.todayCreditConsumed) : '暂无统计数据' },
+  { label: '失败任务数', value: summary.value?.failedTaskCount ?? '暂无统计数据' },
+  { label: '当前启用模型数', value: enabledModelCount.value ?? '暂无统计数据' },
 ])
 
-async function loadSummary() {
+const alerts = computed(() => {
+  const items: string[] = []
+  if ((summary.value?.failedTaskCount ?? 0) > 0) items.push('当前存在失败任务，请关注任务异常原因')
+  if ((summary.value?.queueBacklog ?? 0) > 0) items.push(`当前有 ${summary.value?.queueBacklog} 个任务排队中`)
+  return items
+})
+
+async function loadDashboard() {
   loading.value = true
   error.value = ''
   try {
-    summary.value = await getAdminDashboardSummary()
-  } catch {
-    error.value = '概览接口尚未联调完成，页面结构已就绪。'
+    const [summaryResult, taskPage, creditPage, modelPage] = await Promise.allSettled([
+      getAdminDashboardSummary(),
+      listAdminTasks({ pageNo: 1, pageSize: 6 }),
+      listAdminCreditLogs({ pageNo: 1, pageSize: 6 }),
+      listAdminModels({ enabled: true, pageNo: 1, pageSize: 1 }),
+    ])
+    summary.value = summaryResult.status === 'fulfilled' ? summaryResult.value : null
+    recentTasks.value = taskPage.status === 'fulfilled' ? taskPage.value.records : []
+    recentCreditLogs.value = creditPage.status === 'fulfilled' ? creditPage.value.records : []
+    enabledModelCount.value = modelPage.status === 'fulfilled' ? modelPage.value.total : null
+    if (summaryResult.status === 'rejected') error.value = '部分概览统计暂不可用，已展示可获取的数据'
   } finally {
     loading.value = false
   }
 }
 
-onMounted(() => {
-  void loadSummary()
-})
+onMounted(loadDashboard)
 </script>
 
 <style scoped>
-.admin-dashboard {
+.admin-dashboard,
+.page-heading {
   display: grid;
   gap: 16px;
+}
+
+.page-heading {
+  grid-template-columns: 1fr auto;
+  align-items: center;
+}
+
+.page-heading h2 {
+  margin: 0;
+  color: #111827;
+  font-size: 22px;
+}
+
+.page-heading p {
+  margin: 6px 0 0;
+  color: #6b7280;
 }
 
 .admin-stat-card {
@@ -99,17 +174,27 @@ onMounted(() => {
 }
 
 .admin-stat-card strong {
-  font-size: 30px;
   color: #111827;
+  font-size: 26px;
 }
 
 .admin-dashboard-panel {
   border-radius: 8px;
 }
 
-.admin-panel-header {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
+.dashboard-alert + .dashboard-alert {
+  margin-top: 10px;
+}
+
+.credit-change {
+  font-weight: 700;
+}
+
+.credit-change.is-positive {
+  color: #16a34a;
+}
+
+.credit-change.is-negative {
+  color: #dc2626;
 }
 </style>

@@ -40,6 +40,8 @@ export function applyLogin(res: LoginResponse, persist = true) {
     role: res.role,
     status: res.status,
     creditBalance: res.creditBalance,
+    creditFrozenBalance: res.creditFrozenBalance,
+    creditTotalConsumed: res.creditTotalConsumed,
   })
 }
 

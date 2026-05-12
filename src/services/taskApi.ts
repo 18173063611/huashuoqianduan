@@ -1,6 +1,19 @@
 import { request } from './request'
 import type { CreateTaskRequest, TaskItem, TaskSummaryResponse } from '../types/taskTypes'
 
+/** 生成一次提交用的幂等键（页面在「一次点击」内应复用同一值）。 */
+export function newIdempotencyKey(): string {
+  if (typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function') {
+    return crypto.randomUUID()
+  }
+  return `idem-${Date.now()}-${Math.random().toString(36).slice(2, 14)}`
+}
+
+export interface CreateTaskCallOptions {
+  /** 不传则本请求内自动生成 UUID（防连点请由页面传入并在同一次提交中复用） */
+  idempotencyKey?: string | null
+}
+
 export interface ListTasksParams {
   /** 不传或 null：当前登录用户的跨项目任务（须已登录） */
   taskType?: string
@@ -9,10 +22,15 @@ export interface ListTasksParams {
   pageSize?: number
 }
 
-export function createTask(payload: CreateTaskRequest) {
+export function createTask(payload: CreateTaskRequest, options?: CreateTaskCallOptions) {
+  const headerKey =
+    options?.idempotencyKey != null && String(options.idempotencyKey).trim().length > 0
+      ? String(options.idempotencyKey).trim()
+      : newIdempotencyKey()
   return request<TaskItem>('/tasks', {
     method: 'POST',
     body: JSON.stringify(payload),
+    headers: { 'Idempotency-Key': headerKey },
   })
 }
 

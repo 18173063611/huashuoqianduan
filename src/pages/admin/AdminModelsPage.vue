@@ -1,26 +1,30 @@
 <template>
   <section class="admin-page">
-    <el-card shadow="never">
-      <template #header>
-        <div class="admin-page-header">
-          <span>模型展示、成本和启停配置</span>
-          <el-button type="primary" :icon="Plus" @click="openCreate">新增模型</el-button>
-        </div>
-      </template>
+    <div class="page-heading">
+      <div>
+        <h2>模型配置</h2>
+        <p>管理模型启用状态、默认模型和每次任务消耗积分。</p>
+      </div>
+      <div class="page-actions">
+        <el-button :icon="Refresh" :loading="loading" @click="loadModels">刷新</el-button>
+        <el-button type="primary" :icon="Plus" @click="openCreate">新增模型</el-button>
+      </div>
+    </div>
 
+    <el-card shadow="never">
       <el-form class="admin-filter" :model="filters" inline>
-        <el-form-item label="类型">
+        <el-form-item label="模型类型">
           <el-select v-model="filters.modelType" clearable placeholder="全部类型" style="width: 140px">
-            <el-option label="IMAGE" value="IMAGE" />
-            <el-option label="VIDEO" value="VIDEO" />
-            <el-option label="TTS" value="TTS" />
-            <el-option label="TEXT" value="TEXT" />
+            <el-option label="图片生成" value="IMAGE" />
+            <el-option label="视频生成" value="VIDEO" />
+            <el-option label="语音合成" value="TTS" />
+            <el-option label="文本生成" value="TEXT" />
           </el-select>
         </el-form-item>
         <el-form-item label="供应商">
-          <el-input v-model="filters.provider" clearable placeholder="VOLCENGINE / VIDU" />
+          <el-input v-model="filters.provider" clearable placeholder="输入供应商" />
         </el-form-item>
-        <el-form-item label="状态">
+        <el-form-item label="启用状态">
           <el-select v-model="filters.enabled" clearable placeholder="全部状态" style="width: 140px">
             <el-option label="启用" :value="true" />
             <el-option label="禁用" :value="false" />
@@ -34,32 +38,39 @@
 
       <el-alert v-if="error" class="admin-page-alert" :title="error" type="warning" show-icon :closable="false" />
 
-      <el-table v-loading="loading" :data="records" row-key="modelId" border>
+      <el-table v-loading="loading" :data="records" row-key="modelId" border :empty-text="emptyText">
         <el-table-column prop="modelCode" label="模型编码" min-width="180" />
-        <el-table-column prop="modelName" label="展示名" min-width="160" />
-        <el-table-column label="类型" width="110">
-          <template #default="{ row }">{{ modelTypeText(row.modelType) }}</template>
+        <el-table-column label="模型名称" min-width="160">
+          <template #default="{ row }">{{ formatEmpty(row.modelName) }}</template>
+        </el-table-column>
+        <el-table-column label="模型类型" width="120">
+          <template #default="{ row }">{{ getModelTypeLabel(row.modelType) }}</template>
         </el-table-column>
         <el-table-column label="供应商" width="130">
-          <template #default="{ row }">{{ providerText(row.provider) }}</template>
+          <template #default="{ row }">{{ getProviderLabel(row.provider) }}</template>
         </el-table-column>
-        <el-table-column prop="creditCost" label="积分成本" width="110" />
-        <el-table-column label="状态" width="90">
+        <el-table-column label="每次消耗积分" width="130">
+          <template #default="{ row }">{{ formatCreditAmount(row.creditCost, '积分/次') }}</template>
+        </el-table-column>
+        <el-table-column label="是否默认" width="110">
           <template #default="{ row }">
-            <el-tag :type="row.enabled ? 'success' : 'info'">{{ row.enabled ? '启用' : '禁用' }}</el-tag>
+            <el-tag v-if="row.defaultModel" type="warning">默认模型</el-tag>
+            <el-tag v-else type="info" effect="plain">否</el-tag>
           </template>
         </el-table-column>
-        <el-table-column label="默认" width="90">
+        <el-table-column label="启用状态" width="110">
           <template #default="{ row }">
-            <el-tag v-if="row.defaultModel" type="warning">默认</el-tag>
-            <span v-else>-</span>
+            <el-tag :type="getTagTypeByStatus(row.enabled)">{{ row.enabled ? '启用' : '禁用' }}</el-tag>
           </template>
+        </el-table-column>
+        <el-table-column label="更新时间" min-width="170">
+          <template #default="{ row }">{{ formatDateTime(row.updatedAt) }}</template>
         </el-table-column>
         <el-table-column label="操作" width="240" fixed="right">
           <template #default="{ row }">
             <el-button link type="primary" @click="openEdit(row)">编辑</el-button>
             <el-button link type="primary" :disabled="row.defaultModel || !row.enabled" @click="makeDefault(row)">
-              设默认
+              设为默认
             </el-button>
             <el-button link :type="row.enabled ? 'warning' : 'success'" @click="toggleEnabled(row)">
               {{ row.enabled ? '禁用' : '启用' }}
@@ -83,48 +94,28 @@
     <el-dialog v-model="editorVisible" :title="editingModelId ? '编辑模型' : '新增模型'" width="680px">
       <el-form :model="form" label-position="top">
         <el-row :gutter="14">
+          <el-col :span="12"><el-form-item label="模型编码"><el-input v-model="form.modelCode" /></el-form-item></el-col>
+          <el-col :span="12"><el-form-item label="模型名称"><el-input v-model="form.modelName" /></el-form-item></el-col>
           <el-col :span="12">
-            <el-form-item label="模型编码">
-              <el-input v-model="form.modelCode" />
-            </el-form-item>
-          </el-col>
-          <el-col :span="12">
-            <el-form-item label="展示名">
-              <el-input v-model="form.modelName" />
-            </el-form-item>
-          </el-col>
-          <el-col :span="12">
-            <el-form-item label="类型">
+            <el-form-item label="模型类型">
               <el-select v-model="form.modelType" style="width: 100%">
-                <el-option label="IMAGE" value="IMAGE" />
-                <el-option label="VIDEO" value="VIDEO" />
-                <el-option label="TTS" value="TTS" />
-                <el-option label="TEXT" value="TEXT" />
+                <el-option label="图片生成" value="IMAGE" />
+                <el-option label="视频生成" value="VIDEO" />
+                <el-option label="语音合成" value="TTS" />
+                <el-option label="文本生成" value="TEXT" />
               </el-select>
             </el-form-item>
           </el-col>
+          <el-col :span="12"><el-form-item label="供应商"><el-input v-model="form.provider" /></el-form-item></el-col>
+          <el-col :span="12"><el-form-item label="供应商模型"><el-input v-model="form.providerModel" /></el-form-item></el-col>
           <el-col :span="12">
-            <el-form-item label="供应商">
-              <el-input v-model="form.provider" />
-            </el-form-item>
-          </el-col>
-          <el-col :span="12">
-            <el-form-item label="供应商模型">
-              <el-input v-model="form.providerModel" />
-            </el-form-item>
-          </el-col>
-          <el-col :span="12">
-            <el-form-item label="积分成本">
+            <el-form-item label="每次消耗积分">
               <el-input-number v-model="form.creditCost" :min="0" :precision="0" style="width: 100%" />
             </el-form-item>
           </el-col>
         </el-row>
-        <el-form-item label="能力 JSON">
-          <el-input v-model="form.capabilityJson" type="textarea" :rows="3" />
-        </el-form-item>
-        <el-form-item label="默认参数 JSON">
-          <el-input v-model="form.defaultParamsJson" type="textarea" :rows="3" />
-        </el-form-item>
+        <el-form-item label="能力 JSON"><el-input v-model="form.capabilityJson" type="textarea" :rows="3" /></el-form-item>
+        <el-form-item label="默认参数 JSON"><el-input v-model="form.defaultParamsJson" type="textarea" :rows="3" /></el-form-item>
         <el-row :gutter="14">
           <el-col :span="12">
             <el-form-item label="每分钟限流">
@@ -149,7 +140,7 @@
 </template>
 
 <script setup lang="ts">
-import { onMounted, reactive, ref } from 'vue'
+import { computed, onMounted, reactive, ref } from 'vue'
 import { ElMessage } from 'element-plus'
 import { Plus, Refresh, Search } from '@element-plus/icons-vue'
 import {
@@ -161,7 +152,15 @@ import {
   updateAdminModel,
 } from '../../services/adminApi'
 import type { AdminModelItem, AdminModelQuery, AdminModelSaveRequest } from '../../types/adminTypes'
-import { modelTypeText, providerText } from './adminDisplay'
+import {
+  formatCreditAmount,
+  formatDateTime,
+  formatEmpty,
+  getEmptyText,
+  getModelTypeLabel,
+  getProviderLabel,
+  getTagTypeByStatus,
+} from '../../utils/adminDisplay'
 
 const filters = reactive<AdminModelQuery>({ modelType: '', provider: '', enabled: '', pageNo: 1, pageSize: 10 })
 const records = ref<AdminModelItem[]>([])
@@ -172,6 +171,7 @@ const editorVisible = ref(false)
 const saving = ref(false)
 const editingModelId = ref<number | null>(null)
 const form = reactive<AdminModelSaveRequest>(emptyForm())
+const emptyText = computed(() => getEmptyText(loading.value, total.value, hasFilter(), '暂无模型配置'))
 
 function emptyForm(): AdminModelSaveRequest {
   return {
@@ -198,14 +198,10 @@ async function loadModels() {
   } catch (unknownError) {
     records.value = []
     total.value = 0
-    error.value = requestErrorMessage(unknownError)
+    error.value = unknownError instanceof Error ? unknownError.message : '管理员接口请求失败'
   } finally {
     loading.value = false
   }
-}
-
-function requestErrorMessage(unknownError: unknown) {
-  return unknownError instanceof Error ? unknownError.message : '管理员接口请求失败'
 }
 
 function handleSearch() {
@@ -216,6 +212,10 @@ function handleSearch() {
 function resetFilters() {
   Object.assign(filters, { modelType: '', provider: '', enabled: '', pageNo: 1, pageSize: 10 })
   void loadModels()
+}
+
+function hasFilter() {
+  return Boolean(filters.modelType || filters.provider || filters.enabled !== '')
 }
 
 function openCreate() {
@@ -259,6 +259,7 @@ async function saveModel() {
 async function toggleEnabled(row: AdminModelItem) {
   if (row.enabled) await disableAdminModel(row.modelId)
   else await enableAdminModel(row.modelId)
+  ElMessage.success('模型状态已更新')
   await loadModels()
 }
 
@@ -273,14 +274,30 @@ onMounted(loadModels)
 
 <style scoped>
 .admin-page,
-.admin-page-header {
+.page-heading {
   display: grid;
   gap: 16px;
 }
 
-.admin-page-header {
+.page-heading {
   grid-template-columns: 1fr auto;
   align-items: center;
+}
+
+.page-heading h2 {
+  margin: 0;
+  color: #111827;
+  font-size: 22px;
+}
+
+.page-heading p {
+  margin: 6px 0 0;
+  color: #6b7280;
+}
+
+.page-actions {
+  display: flex;
+  gap: 10px;
 }
 
 .admin-filter {

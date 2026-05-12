@@ -8,6 +8,8 @@ export interface UserMe {
   role?: UserRole
   status?: UserStatus
   creditBalance?: number
+  creditFrozenBalance?: number
+  creditTotalConsumed?: number
 }
 
 export interface LoginResponse extends UserMe {

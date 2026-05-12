@@ -38,11 +38,12 @@
       <el-header class="admin-header">
         <div>
           <h1>{{ pageTitle }}</h1>
-          <p>账号、积分、任务和模型的运营后台</p>
+          <p>面向运营人员的账号、积分、任务和模型管理后台</p>
         </div>
         <div class="admin-header-actions">
-          <el-tag type="success" effect="plain">{{ currentUser?.displayName || currentUser?.username || '管理员' }}</el-tag>
-          <el-button :icon="SwitchButton" @click="handleLogout">退出</el-button>
+          <span class="admin-user-name">{{ currentUser?.displayName || currentUser?.username || '管理员' }}</span>
+          <el-tag type="success" effect="plain">系统管理员</el-tag>
+          <el-button :icon="SwitchButton" @click="handleLogout">退出登录</el-button>
         </div>
       </el-header>
 
@@ -100,13 +101,14 @@ function handleLogout() {
 }
 
 .admin-brand strong {
-  font-size: 20px;
   color: #1f2937;
+  font-size: 20px;
 }
 
-.admin-brand span {
-  font-size: 13px;
+.admin-brand span,
+.admin-header p {
   color: #8a94a6;
+  font-size: 13px;
 }
 
 .admin-menu {
@@ -124,20 +126,23 @@ function handleLogout() {
 
 .admin-header h1 {
   margin: 0;
-  font-size: 20px;
   color: #111827;
+  font-size: 20px;
 }
 
 .admin-header p {
   margin: 6px 0 0;
-  font-size: 13px;
-  color: #8a94a6;
 }
 
 .admin-header-actions {
   display: flex;
   align-items: center;
   gap: 12px;
+}
+
+.admin-user-name {
+  color: #374151;
+  font-weight: 600;
 }
 
 .admin-main {

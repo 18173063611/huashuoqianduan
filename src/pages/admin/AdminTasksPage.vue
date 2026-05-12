@@ -1,31 +1,41 @@
 <template>
   <section class="admin-page">
-    <el-card shadow="never">
-      <template #header>
-        <div class="admin-page-header">
-          <span>全站任务查询</span>
-        </div>
-      </template>
+    <div class="page-heading">
+      <div>
+        <h2>任务管理</h2>
+        <p>查询全站 AI 任务执行情况，快速定位失败原因和异常任务。</p>
+      </div>
+      <el-button :icon="Refresh" :loading="loading" @click="loadTasks">刷新</el-button>
+    </div>
 
+    <el-card shadow="never">
       <el-form class="admin-filter" :model="filters" inline>
         <el-form-item label="用户ID">
           <el-input-number v-model="filters.ownerUserId" :min="1" :precision="0" controls-position="right" />
         </el-form-item>
         <el-form-item label="任务类型">
-          <el-input v-model="filters.taskType" clearable placeholder="语音合成 / 形象生成" />
+          <el-select v-model="filters.taskType" clearable placeholder="全部任务类型" style="width: 170px">
+            <el-option label="语音合成" value="TTS_GENERATE" />
+            <el-option label="形象生成" value="AVATAR_GENERATE" />
+            <el-option label="数字人口播" value="DIGITAL_HUMAN_GENERATE" />
+            <el-option label="视频解析转写" value="DOUYIN_PARSE_TRANSCRIPT" />
+          </el-select>
         </el-form-item>
-        <el-form-item label="状态">
-          <el-select v-model="filters.status" clearable placeholder="全部状态" style="width: 150px">
+        <el-form-item label="任务状态">
+          <el-select v-model="filters.status" clearable placeholder="全部状态" style="width: 140px">
             <el-option label="排队中" value="QUEUED" />
-            <el-option label="运行中" value="RUNNING" />
+            <el-option label="执行中" value="RUNNING" />
             <el-option label="成功" value="SUCCESS" />
             <el-option label="失败" value="FAILED" />
             <el-option label="可重试" value="RETRYABLE" />
             <el-option label="已取消" value="CANCELED" />
           </el-select>
         </el-form-item>
-        <el-form-item label="模型">
-          <el-input v-model="filters.modelCode" clearable placeholder="模型编码" />
+        <el-form-item label="模型编码">
+          <el-input v-model="filters.modelCode" clearable placeholder="输入模型编码" />
+        </el-form-item>
+        <el-form-item label="时间范围">
+          <el-date-picker type="daterange" start-placeholder="开始日期" end-placeholder="结束日期" disabled />
         </el-form-item>
         <el-form-item>
           <el-button type="primary" :icon="Search" @click="handleSearch">查询</el-button>
@@ -35,26 +45,52 @@
 
       <el-alert v-if="error" class="admin-page-alert" :title="error" type="warning" show-icon :closable="false" />
 
-      <el-table v-loading="loading" :data="records" row-key="taskId" border>
+      <el-table v-loading="loading" :data="records" row-key="taskId" border :empty-text="emptyText">
         <el-table-column prop="taskId" label="任务ID" width="95" />
-        <el-table-column prop="ownerUserId" label="用户ID" width="95" />
-        <el-table-column label="类型" min-width="170">
-          <template #default="{ row }">{{ taskTypeText(row.taskType) }}</template>
+        <el-table-column label="用户" width="100">
+          <template #default="{ row }">{{ formatEmpty(row.ownerUserId) }}</template>
         </el-table-column>
-        <el-table-column label="状态" width="115">
-          <template #default="{ row }">{{ taskStatusText(row.status) }}</template>
+        <el-table-column label="任务类型" min-width="150">
+          <template #default="{ row }">{{ getTaskTypeLabel(row.taskType) }}</template>
         </el-table-column>
-        <el-table-column prop="progress" label="进度" width="90" />
-        <el-table-column prop="modelCode" label="模型" min-width="150">
+        <el-table-column label="当前状态" width="110">
+          <template #default="{ row }">
+            <el-tag :type="getTagTypeByStatus(row.status)" effect="light">{{ getTaskStatusLabel(row.status) }}</el-tag>
+          </template>
+        </el-table-column>
+        <el-table-column label="进度" width="100">
+          <template #default="{ row }">{{ Number(row.progress ?? 0) }}%</template>
+        </el-table-column>
+        <el-table-column label="使用模型" min-width="150">
           <template #default="{ row }">{{ compactCode(row.modelCode) }}</template>
         </el-table-column>
-        <el-table-column prop="creditCost" label="积分" width="90" />
-        <el-table-column prop="creditLogId" label="流水" width="100">
-          <template #default="{ row }">{{ row.creditLogId || '-' }}</template>
+        <el-table-column label="消耗积分" width="110">
+          <template #default="{ row }">{{ formatCreditAmount(row.creditCost) }}</template>
         </el-table-column>
-        <el-table-column prop="errorMessage" label="错误" min-width="220" show-overflow-tooltip />
-        <el-table-column prop="traceId" label="TraceId" min-width="180" show-overflow-tooltip />
-        <el-table-column prop="createdAt" label="创建时间" min-width="170" />
+        <el-table-column label="错误摘要" min-width="220" show-overflow-tooltip>
+          <template #default="{ row }">
+            <span :class="{ 'error-text': row.status === 'FAILED' || row.status === 'RETRYABLE' }">
+              {{ formatEmpty(row.errorMessage) }}
+            </span>
+          </template>
+        </el-table-column>
+        <el-table-column label="创建时间" min-width="170">
+          <template #default="{ row }">{{ formatDateTime(row.createdAt) }}</template>
+        </el-table-column>
+        <el-table-column label="操作" width="170" fixed="right">
+          <template #default="{ row }">
+            <el-button link type="primary" @click="showTaskDetail(row)">查看详情</el-button>
+            <el-button v-if="row.status === 'RETRYABLE'" link type="warning" @click="handleRetry(row)">重试</el-button>
+            <el-button
+              v-if="row.status === 'QUEUED' || row.status === 'RUNNING'"
+              link
+              type="danger"
+              @click="handleCancel(row)"
+            >
+              取消
+            </el-button>
+          </template>
+        </el-table-column>
       </el-table>
 
       <el-pagination
@@ -72,12 +108,23 @@
 </template>
 
 <script setup lang="ts">
-import { onMounted, reactive, ref } from 'vue'
+import { computed, onMounted, reactive, ref } from 'vue'
 import { useRoute } from 'vue-router'
+import { ElMessage, ElMessageBox } from 'element-plus'
 import { Refresh, Search } from '@element-plus/icons-vue'
 import { listAdminTasks } from '../../services/adminApi'
+import { cancelTask, retryTask } from '../../services/taskApi'
 import type { AdminTaskItem, AdminTaskQuery } from '../../types/adminTypes'
-import { compactCode, taskStatusText, taskTypeText } from './adminDisplay'
+import {
+  compactCode,
+  formatCreditAmount,
+  formatDateTime,
+  formatEmpty,
+  getEmptyText,
+  getTagTypeByStatus,
+  getTaskStatusLabel,
+  getTaskTypeLabel,
+} from '../../utils/adminDisplay'
 
 const route = useRoute()
 const filters = reactive<AdminTaskQuery>({
@@ -92,6 +139,7 @@ const records = ref<AdminTaskItem[]>([])
 const total = ref(0)
 const loading = ref(false)
 const error = ref('')
+const emptyText = computed(() => getEmptyText(loading.value, total.value, hasFilter(), '暂无任务记录'))
 
 async function loadTasks() {
   loading.value = true
@@ -103,14 +151,10 @@ async function loadTasks() {
   } catch (unknownError) {
     records.value = []
     total.value = 0
-    error.value = requestErrorMessage(unknownError)
+    error.value = unknownError instanceof Error ? unknownError.message : '管理员接口请求失败'
   } finally {
     loading.value = false
   }
-}
-
-function requestErrorMessage(unknownError: unknown) {
-  return unknownError instanceof Error ? unknownError.message : '管理员接口请求失败'
 }
 
 function handleSearch() {
@@ -123,14 +167,50 @@ function resetFilters() {
   void loadTasks()
 }
 
+function showTaskDetail(row: AdminTaskItem) {
+  ElMessageBox.alert(
+    [
+      `任务ID：${row.taskId}`,
+      `用户ID：${formatEmpty(row.ownerUserId)}`,
+      `任务类型：${getTaskTypeLabel(row.taskType)}`,
+      `当前状态：${getTaskStatusLabel(row.status)}`,
+      `使用模型：${compactCode(row.modelCode)}`,
+      `消耗积分：${formatCreditAmount(row.creditCost)}`,
+      `创建时间：${formatDateTime(row.createdAt)}`,
+      row.errorMessage ? `错误信息：${row.errorMessage}` : '',
+      row.traceId ? `TraceId：${row.traceId}` : '',
+    ]
+      .filter(Boolean)
+      .join('\n'),
+    '任务详情',
+    { confirmButtonText: '知道了' },
+  )
+}
+
+async function handleRetry(row: AdminTaskItem) {
+  await retryTask(row.taskId)
+  ElMessage.success('任务已提交重试')
+  await loadTasks()
+}
+
+async function handleCancel(row: AdminTaskItem) {
+  await ElMessageBox.confirm(`确认取消任务 ${row.taskId}？`, '取消任务', { type: 'warning' })
+  await cancelTask(row.taskId)
+  ElMessage.success('任务已取消')
+  await loadTasks()
+}
+
+function hasFilter() {
+  return Boolean(filters.ownerUserId || filters.taskType || filters.status || filters.modelCode)
+}
+
 function stringFromQuery(value: unknown) {
   const raw = Array.isArray(value) ? value[0] : value
   return typeof raw === 'string' ? raw : ''
 }
 
 function numberFromQuery(value: unknown) {
-  const raw = stringFromQuery(value)
-  const parsed = Number(raw)
+  const parsed = Number(stringFromQuery(value))
   return Number.isFinite(parsed) && parsed > 0 ? parsed : undefined
 }
 
@@ -139,9 +219,25 @@ onMounted(loadTasks)
 
 <style scoped>
 .admin-page,
-.admin-page-header {
+.page-heading {
   display: grid;
   gap: 16px;
+}
+
+.page-heading {
+  grid-template-columns: 1fr auto;
+  align-items: center;
+}
+
+.page-heading h2 {
+  margin: 0;
+  color: #111827;
+  font-size: 22px;
+}
+
+.page-heading p {
+  margin: 6px 0 0;
+  color: #6b7280;
 }
 
 .admin-filter {
@@ -155,5 +251,10 @@ onMounted(loadTasks)
 .admin-pagination {
   justify-content: flex-end;
   margin-top: 16px;
+}
+
+.error-text {
+  color: #dc2626;
+  font-weight: 600;
 }
 </style>

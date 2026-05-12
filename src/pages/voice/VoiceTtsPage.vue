@@ -10,6 +10,13 @@
               粘贴或编辑文案，选择右侧火山音色后生成音频。
             </p>
             <p v-if="scriptLoadMessage" class="voice-script-load-msg app-muted">{{ scriptLoadMessage }}</p>
+            <p v-if="quoteLoading" class="app-muted voice-credit-line">加载积分说明中…</p>
+            <p v-else-if="estimatedCreditCost > 0" class="voice-credit-line">
+              预计消耗 <strong>{{ estimatedCreditCost }}</strong> 积分
+              <template v-if="loggedIn && localBalance != null"> · 当前余额 {{ localBalance }}</template>
+            </p>
+            <p v-else class="app-muted voice-credit-line">本任务类型当前配置为不扣积分。</p>
+            <p v-if="creditInsufficient" class="app-error voice-credit-line">积分不足，无法提交当前任务。</p>
             <textarea v-model.trim="scriptText" class="voice-textarea" rows="8" placeholder="在此粘贴或编辑口播文案…" />
             <div class="voice-script-actions">
               <button class="app-secondary-button" type="button" :disabled="loadingScripts" @click="loadAppliedRewriteScript">
@@ -18,7 +25,7 @@
               <button
                 class="app-primary-button"
                 type="button"
-                :disabled="submitting || !scriptText || !selectedVoiceId"
+                :disabled="submitting || !scriptText || !selectedVoiceId || creditInsufficient"
                 @click="submitTts"
               >
                 {{ submitting ? '提交中…' : '生成口播' }}
@@ -122,6 +129,7 @@
 
 <script setup lang="ts">
 import { computed, onBeforeUnmount, onMounted, ref } from 'vue'
+import { ElMessage } from 'element-plus'
 import { useSmoothTaskProgress } from '../../composables/useSmoothTaskProgress'
 import {
   generateTts,
@@ -132,19 +140,63 @@ import {
   removeVoiceFromMyLibrary,
 } from '../../services/voiceApi'
 import { getAuthToken } from '../../services/request'
-import { getTaskDetail } from '../../services/taskApi'
+import { getTaskDetail, newIdempotencyKey } from '../../services/taskApi'
 import { rememberSessionTaskId } from '../../services/sessionTaskStore'
+import { me, setAuthUser } from '../../services/authApi'
+import { getAuthUser } from '../../services/authSession'
+import { getTaskCreditQuote } from '../../services/creditApi'
 import { VOICE_PRESET_SELECTION_KEY, type TtsGenerateRequest, type VoicePresetItem } from '../../types/voiceTypes'
 
 const API_ORIGIN = (import.meta.env.VITE_API_BASE_URL || '').replace(/\/api\/v1\/?$/, '')
 
-const presets = ref<VoicePresetItem[]>([])
 const presetsLoading = ref(false)
 const presetsError = ref('')
+const presets = ref<VoicePresetItem[]>([])
 const loggedIn = ref(false)
 const selectedVoiceId = ref<number | null>(null)
 const voiceKeyword = ref('')
 const voiceGenderFilter = ref('')
+
+const estimatedCreditCost = ref(0)
+const quoteLoading = ref(false)
+const localBalance = ref<number | null>(null)
+
+const creditInsufficient = computed(() => {
+  if (!loggedIn.value || estimatedCreditCost.value <= 0) {
+    return false
+  }
+  const b = localBalance.value
+  if (b == null) {
+    return false
+  }
+  return b < estimatedCreditCost.value
+})
+
+async function loadCreditQuote() {
+  quoteLoading.value = true
+  try {
+    const q = await getTaskCreditQuote('TTS_GENERATE')
+    estimatedCreditCost.value = q.creditCost ?? 0
+  } catch {
+    estimatedCreditCost.value = 0
+  } finally {
+    quoteLoading.value = false
+  }
+}
+
+async function refreshLocalBalance() {
+  if (!getAuthToken()) {
+    localBalance.value = null
+    return
+  }
+  try {
+    const u = await me()
+    setAuthUser(u)
+    localBalance.value = u.creditBalance ?? 0
+  } catch {
+    localBalance.value = getAuthUser()?.creditBalance ?? null
+  }
+}
 
 const scriptText = ref('')
 /** 仅当文案来自 `script_version` 表时传给后端 scriptId；writer 已应用文案只用 text，避免 ID 混用 */
@@ -153,6 +205,8 @@ const loadingScripts = ref(false)
 const scriptLoadMessage = ref('')
 
 const submitting = ref(false)
+/** 同一次「生成口播」点击周期内复用，成功或失败后清空 */
+const ttsSubmitIdempotencyKey = ref<string | null>(null)
 const activeTaskId = ref<number | null>(null)
 const taskStatus = ref('')
 const taskProgress = ref<number | null>(null)
@@ -183,7 +237,8 @@ const audioAssetId = ref<number | null>(null)
 
 onMounted(async () => {
   resetTask()
-  await loadPresets()
+  await Promise.all([loadPresets(), loadCreditQuote()])
+  await refreshLocalBalance()
 })
 
 onBeforeUnmount(() => {
@@ -252,12 +307,16 @@ async function loadAppliedRewriteScript() {
 
 function playSample(v: VoicePresetItem) {
   void (async () => {
+    if (presetsLoading.value) {
+      return
+    }
     try {
       let sampleUrl = v.sampleUrl
       if (!sampleUrl) {
         presetsLoading.value = true
         presetsError.value = ''
-        const created = await createVoiceSampleTask(v.voiceId)
+        const sampleIdem = newIdempotencyKey()
+        const created = await createVoiceSampleTask(v.voiceId, { idempotencyKey: sampleIdem })
         rememberSessionTaskId(created.taskId)
         // 轮询任务完成后播放
         const maxAttempts = 40
@@ -312,6 +371,7 @@ function resetTask() {
   taskError.value = ''
   audioAssetUrl.value = ''
   audioAssetId.value = null
+  ttsSubmitIdempotencyKey.value = null
 }
 
 function stopPoll() {
@@ -322,8 +382,14 @@ function stopPoll() {
 }
 
 async function submitTts() {
+  if (submitting.value) {
+    return
+  }
   if (!selectedVoiceId.value || !scriptText.value) {
     return
+  }
+  if (!ttsSubmitIdempotencyKey.value) {
+    ttsSubmitIdempotencyKey.value = newIdempotencyKey()
   }
   submitting.value = true
   taskError.value = ''
@@ -339,16 +405,29 @@ async function submitTts() {
     if (loadedScriptVersionId.value != null) {
       body.scriptId = loadedScriptVersionId.value
     }
-    const res = await generateTts(body)
+    const res = await generateTts(body, ttsSubmitIdempotencyKey.value)
+    ttsSubmitIdempotencyKey.value = null
     rememberSessionTaskId(res.taskId)
     resetSmoothProgress()
     activeTaskId.value = res.taskId
     taskStatus.value = res.status
     taskProgress.value = 0
     startPoll(res.taskId)
+    await refreshLocalBalance()
+    const cost = estimatedCreditCost.value
+    if (cost > 0) {
+      ElMessage.success(`任务已提交，已预扣 ${cost} 积分`)
+    } else {
+      ElMessage.success('任务已提交')
+    }
   } catch (e) {
-    taskError.value = e instanceof Error ? e.message : '提交失败'
+    const msg = e instanceof Error ? e.message : '提交失败'
+    taskError.value = msg
     activeTaskId.value = null
+    ttsSubmitIdempotencyKey.value = null
+    if (msg.includes('积分余额不足') || msg.includes('40900')) {
+      ElMessage.error('积分余额不足，无法提交当前任务')
+    }
   } finally {
     submitting.value = false
   }

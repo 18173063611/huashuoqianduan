@@ -4,7 +4,13 @@ import { clearAuthSession, setAuthUser } from '../services/authSession'
 import { me } from '../services/authApi'
 import { getAuthToken } from '../services/request'
 
-export type WorkbenchRouteName = 'video-parse' | 'storyboard' | 'voice' | 'avatar' | 'render'
+export type WorkbenchRouteName =
+  | 'video-parse'
+  | 'storyboard'
+  | 'voice'
+  | 'avatar'
+  | 'render'
+  | 'account'
 
 const businessRouteMeta = {
   requiresAuth: true,
@@ -121,6 +127,12 @@ const routes: RouteRecordRaw[] = [
         name: 'render',
         component: () => import('../pages/render/RenderVideoPage.vue'),
         meta: { ...businessRouteMeta, menuKey: 'render' },
+      },
+      {
+        path: 'account',
+        name: 'account',
+        component: () => import('../pages/user/UserCenter.vue'),
+        meta: { ...businessRouteMeta, menuKey: 'account' },
       },
       {
         path: 'assets',

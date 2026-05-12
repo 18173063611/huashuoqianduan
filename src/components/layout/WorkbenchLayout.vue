@@ -35,9 +35,12 @@
           </div>
         </div>
         <div class="app-topbar-actions">
-          <div v-if="authed && currentUser" class="app-user-summary" title="当前账号积分余额">
+          <div v-if="authed && currentUser" class="app-user-summary" title="当前账号积分">
             <span>{{ currentUser.displayName || currentUser.username }}</span>
             <strong>积分 {{ currentUser.creditBalance ?? 0 }}</strong>
+            <small v-if="(currentUser.creditFrozenBalance ?? 0) > 0" class="app-user-credit-sub">
+              冻结 {{ currentUser.creditFrozenBalance }}
+            </small>
           </div>
           <button class="app-ghost-button" type="button" @click="$emit('openAssets')">资产中心</button>
           <button
@@ -65,9 +68,10 @@
 </template>
 
 <script setup lang="ts">
-import { computed, onMounted, ref, watch } from 'vue'
+import { computed, onMounted, onUnmounted, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { logout, clearLogin, me, setAuthUser } from '../../services/authApi'
+import { subscribeAuthRefresh } from '../../services/authRefreshHub'
 import { getAuthUser } from '../../services/authSession'
 import { getAuthToken } from '../../services/request'
 import type { UserMe } from '../../types/userTypes'
@@ -78,6 +82,7 @@ const menuItems = [
   { key: 'voice', label: '声音生成', icon: '♬' },
   { key: 'avatar', label: '数字人形象', icon: '◎' },
   { key: 'render', label: '视频制作', icon: '▻' },
+  { key: 'account', label: '账户中心', icon: '◆' },
 ] as const
 
 type MenuKey = (typeof menuItems)[number]['key']
@@ -140,12 +145,23 @@ const stepIndexMap: Record<MenuKey, number> = {
   voice: 2,
   avatar: 3,
   render: 4,
+  account: -1,
 }
 
-const activeStepIndex = computed(() => stepIndexMap[props.activeKey] ?? 0)
+const activeStepIndex = computed(() => stepIndexMap[props.activeKey])
+
+let unsubscribeAuthRefresh: (() => void) | null = null
 
 onMounted(() => {
   void refreshCurrentUser()
+  unsubscribeAuthRefresh = subscribeAuthRefresh(() => {
+    void refreshCurrentUser()
+  })
+})
+
+onUnmounted(() => {
+  unsubscribeAuthRefresh?.()
+  unsubscribeAuthRefresh = null
 })
 
 watch(
@@ -183,6 +199,12 @@ watch(
   flex: 0 0 auto;
   color: #111827;
   font-size: 12px;
+}
+
+.app-user-credit-sub {
+  flex: 0 0 auto;
+  font-size: 11px;
+  color: #64748b;
 }
 
 @media (max-width: 860px) {

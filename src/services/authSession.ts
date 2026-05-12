@@ -10,6 +10,8 @@ export interface AuthUser {
   role?: 'USER' | 'ADMIN'
   status?: 'ENABLED' | 'DISABLED' | 'LOCKED'
   creditBalance?: number
+  creditFrozenBalance?: number
+  creditTotalConsumed?: number
 }
 
 function storageAvailable() {

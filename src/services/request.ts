@@ -1,4 +1,6 @@
 import type { ApiResponse } from '../types/apiTypes'
+import { formatApiBusinessError } from './apiErrorMessages'
+import { notifyAuthRefresh } from './authRefreshHub'
 import {
   clearAuthSession,
   getAuthToken as readAuthToken,
@@ -33,6 +35,27 @@ function redirectToLogin() {
   const params = new URLSearchParams({ redirect: currentPath })
   const loginPath = pathname.startsWith('/admin') ? '/admin/login' : '/login'
   window.location.assign(`${loginPath}?${params.toString()}`)
+}
+
+function shouldNotifyAuthRefreshAfterSuccess(method: string | undefined, apiPath: string): boolean {
+  const m = (method || 'GET').toUpperCase()
+  if (m === 'GET' || m === 'HEAD' || m === 'OPTIONS') {
+    return false
+  }
+  const p = apiPath.startsWith('/') ? apiPath : `/${apiPath}`
+  if (p.startsWith('/admin/') || p.startsWith('/auth/')) {
+    return false
+  }
+  return (
+    p.startsWith('/tasks') ||
+    p.startsWith('/voices/tts') ||
+    p.startsWith('/voices/presets/') ||
+    p.startsWith('/avatars/') ||
+    p.startsWith('/video/generate') ||
+    p.startsWith('/video-sources/parse') ||
+    p.startsWith('/scripts/rewrite') ||
+    p.startsWith('/storyboards/')
+  )
 }
 
 export async function request<T>(path: string, init?: RequestInit): Promise<T> {
@@ -93,8 +116,11 @@ export async function request<T>(path: string, init?: RequestInit): Promise<T> {
     redirectToLogin()
   }
   if (payload.code !== 0) {
-    // 统一把后端 message 和 traceId 抛给页面，方便联调时快速定位问题。
-    throw new Error(`${payload.message || '请求失败'}${payload.traceId ? `，traceId：${payload.traceId}` : ''}`)
+    const detail = formatApiBusinessError(payload.code, payload.message || '')
+    throw new Error(`${detail}${payload.traceId ? `，traceId：${payload.traceId}` : ''}`)
+  }
+  if (shouldNotifyAuthRefreshAfterSuccess(requestInit.method, path)) {
+    notifyAuthRefresh()
   }
   return payload.data
 }

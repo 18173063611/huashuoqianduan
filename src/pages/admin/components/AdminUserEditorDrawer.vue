@@ -1,27 +1,33 @@
 <template>
   <el-drawer v-model="drawerVisible" :title="editingUserId ? '编辑账号' : '新增账号'" size="440px">
     <el-form ref="formRef" :model="form" :rules="rules" label-position="top">
-      <el-form-item label="账号" prop="username">
+      <el-form-item label="登录账号" prop="username">
         <el-input v-model="form.username" :disabled="!!editingUserId" maxlength="60" />
       </el-form-item>
       <el-form-item label="初始密码" prop="password">
         <el-input v-model="form.password" maxlength="60" show-password type="password" />
       </el-form-item>
-      <el-form-item label="展示名" prop="displayName">
+      <el-form-item label="用户昵称" prop="displayName">
         <el-input v-model="form.displayName" maxlength="80" />
       </el-form-item>
       <el-form-item label="角色" prop="role">
         <el-radio-group v-model="form.role" :disabled="protectedUser">
           <el-radio-button label="USER">普通用户</el-radio-button>
-          <el-radio-button label="ADMIN">管理员</el-radio-button>
+          <el-radio-button label="ADMIN">系统管理员</el-radio-button>
         </el-radio-group>
       </el-form-item>
-      <el-form-item label="状态" prop="status">
+      <el-form-item label="账号状态" prop="status">
         <el-select v-model="form.status" :disabled="protectedUser" style="width: 100%">
-          <el-option label="启用" value="ENABLED" />
-          <el-option label="禁用" value="DISABLED" />
-          <el-option label="锁定" value="LOCKED" />
+          <el-option label="正常" value="ENABLED" />
+          <el-option label="已禁用" value="DISABLED" />
+          <el-option label="已锁定" value="LOCKED" />
         </el-select>
+      </el-form-item>
+      <el-form-item label="手机号">
+        <el-input v-model="form.phone" maxlength="30" placeholder="未填写" />
+      </el-form-item>
+      <el-form-item label="邮箱">
+        <el-input v-model="form.email" maxlength="120" placeholder="未填写" />
       </el-form-item>
       <el-form-item label="备注">
         <el-input v-model="form.remark" maxlength="500" show-word-limit type="textarea" />
@@ -59,6 +65,8 @@ const form = reactive<AdminUserSaveRequest>({
   displayName: '',
   role: 'USER',
   status: 'ENABLED',
+  phone: '',
+  email: '',
   remark: '',
 })
 
@@ -69,8 +77,8 @@ const drawerVisible = computed({
 const protectedUser = computed(() => Boolean(props.protectedUser))
 
 const rules: FormRules<AdminUserSaveRequest> = {
-  username: [{ required: true, message: '请输入账号', trigger: 'blur' }],
-  displayName: [{ required: true, message: '请输入展示名', trigger: 'blur' }],
+  username: [{ required: true, message: '请输入登录账号', trigger: 'blur' }],
+  displayName: [{ required: true, message: '请输入用户昵称', trigger: 'blur' }],
   password: [
     {
       validator: (_rule, value: string, callback) => {

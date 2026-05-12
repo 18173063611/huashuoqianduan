@@ -1,29 +1,36 @@
 <template>
   <section class="admin-users-page">
-    <el-card shadow="never">
-      <template #header>
-        <div class="admin-users-header">
-          <span>账号增删改查与积分入口</span>
-          <el-button type="primary" :icon="Plus" @click="openCreate">新增账号</el-button>
-        </div>
-      </template>
+    <div class="page-heading">
+      <div>
+        <h2>用户管理</h2>
+        <p>查找用户、查看积分状态，并执行启用禁用、重置密码和积分调整。</p>
+      </div>
+      <div class="page-actions">
+        <el-button :icon="Refresh" :loading="loading" @click="loadUsers">刷新</el-button>
+        <el-button type="primary" :icon="Plus" @click="openCreate">新增账号</el-button>
+      </div>
+    </div>
 
+    <el-card shadow="never">
       <el-form class="admin-users-filter" :model="filters" inline>
-        <el-form-item label="关键词">
-          <el-input v-model="filters.keyword" clearable placeholder="用户名 / 展示名" />
+        <el-form-item label="账号/昵称">
+          <el-input v-model="filters.keyword" clearable placeholder="输入账号或昵称" />
         </el-form-item>
         <el-form-item label="角色">
           <el-select v-model="filters.role" clearable placeholder="全部角色" style="width: 140px">
             <el-option label="普通用户" value="USER" />
-            <el-option label="管理员" value="ADMIN" />
+            <el-option label="系统管理员" value="ADMIN" />
           </el-select>
         </el-form-item>
         <el-form-item label="状态">
           <el-select v-model="filters.status" clearable placeholder="全部状态" style="width: 140px">
-            <el-option label="启用" value="ENABLED" />
-            <el-option label="禁用" value="DISABLED" />
-            <el-option label="锁定" value="LOCKED" />
+            <el-option label="正常" value="ENABLED" />
+            <el-option label="已禁用" value="DISABLED" />
+            <el-option label="已锁定" value="LOCKED" />
           </el-select>
+        </el-form-item>
+        <el-form-item label="创建时间">
+          <el-date-picker type="daterange" start-placeholder="开始日期" end-placeholder="结束日期" disabled />
         </el-form-item>
         <el-form-item>
           <el-button type="primary" :icon="Search" @click="handleSearch">查询</el-button>
@@ -33,35 +40,42 @@
 
       <el-alert v-if="error" class="admin-users-alert" :title="error" type="warning" show-icon :closable="false" />
 
-      <el-table v-loading="loading" :data="users" row-key="userId" border>
-        <el-table-column prop="userId" label="ID" width="86" />
-        <el-table-column prop="username" label="账号" min-width="140" />
-        <el-table-column prop="displayName" label="展示名" min-width="140" />
-        <el-table-column label="角色" width="110">
+      <el-table v-loading="loading" :data="users" row-key="userId" border :empty-text="emptyText">
+        <el-table-column prop="userId" label="用户ID" width="92" />
+        <el-table-column label="登录账号" min-width="140">
+          <template #default="{ row }">{{ formatEmpty(row.username) }}</template>
+        </el-table-column>
+        <el-table-column label="用户昵称" min-width="140">
+          <template #default="{ row }">{{ formatEmpty(row.displayName) }}</template>
+        </el-table-column>
+        <el-table-column label="角色" width="120">
           <template #default="{ row }">
-            <el-tag :type="row.role === 'ADMIN' ? 'danger' : 'info'" effect="plain">
-              {{ row.role === 'ADMIN' ? '管理员' : '普通用户' }}
-            </el-tag>
+            <el-tag :type="row.role === 'ADMIN' ? 'danger' : 'info'" effect="plain">{{ getRoleLabel(row.role) }}</el-tag>
           </template>
         </el-table-column>
         <el-table-column label="状态" width="110">
           <template #default="{ row }">
-            <el-tag :type="statusTagType(row.status)">{{ statusText(row.status) }}</el-tag>
+            <el-tag :type="getTagTypeByStatus(row.status)">{{ getUserStatusLabel(row.status) }}</el-tag>
           </template>
         </el-table-column>
-        <el-table-column label="积分" width="110">
-          <template #default="{ row }">{{ row.creditBalance ?? '-' }}</template>
+        <el-table-column label="当前积分" width="120">
+          <template #default="{ row }">{{ formatCreditAmount(row.creditBalance) }}</template>
         </el-table-column>
-        <el-table-column prop="createdAt" label="创建时间" min-width="170" />
-        <el-table-column label="操作" width="410" fixed="right">
+        <el-table-column label="最近登录时间" min-width="170">
+          <template #default="{ row }">{{ formatDateTime(row.lastLoginAt, '暂无登录记录') }}</template>
+        </el-table-column>
+        <el-table-column label="创建时间" min-width="170">
+          <template #default="{ row }">{{ formatDateTime(row.createdAt) }}</template>
+        </el-table-column>
+        <el-table-column label="操作" width="390" fixed="right">
           <template #default="{ row }">
-            <el-button link type="primary" @click="openDetail(row)">详情</el-button>
+            <el-button link type="primary" @click="openDetail(row)">查看详情</el-button>
             <el-button link type="primary" @click="openEdit(row)">编辑</el-button>
-            <el-button link type="primary" @click="openCredit(row)">积分</el-button>
-            <el-button link type="warning" :disabled="isBuiltinAdmin(row)" @click="toggleStatus(row)">
+            <el-button link :type="row.status === 'ENABLED' ? 'warning' : 'success'" :disabled="isBuiltinAdmin(row)" @click="toggleStatus(row)">
               {{ row.status === 'ENABLED' ? '禁用' : '启用' }}
             </el-button>
             <el-button link type="primary" @click="resetPassword(row)">重置密码</el-button>
+            <el-button link type="primary" @click="openCredit(row)">调整积分</el-button>
             <el-button link type="danger" :disabled="isBuiltinAdmin(row)" @click="removeUser(row)">删除</el-button>
           </template>
         </el-table-column>
@@ -101,7 +115,7 @@
 </template>
 
 <script setup lang="ts">
-import { onMounted, reactive, ref } from 'vue'
+import { computed, onMounted, reactive, ref } from 'vue'
 import { useRouter } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { Plus, Refresh, Search } from '@element-plus/icons-vue'
@@ -125,6 +139,15 @@ import type {
   AdminUserQuery,
   AdminUserSaveRequest,
 } from '../../types/adminTypes'
+import {
+  formatCreditAmount,
+  formatDateTime,
+  formatEmpty,
+  getEmptyText,
+  getRoleLabel,
+  getTagTypeByStatus,
+  getUserStatusLabel,
+} from '../../utils/adminDisplay'
 import AdminCreditAdjustDialog from './components/AdminCreditAdjustDialog.vue'
 import AdminUserEditorDrawer from './components/AdminUserEditorDrawer.vue'
 
@@ -142,6 +165,7 @@ const loading = ref(false)
 const saving = ref(false)
 const error = ref('')
 const protectedEditingUser = ref(false)
+const emptyText = computed(() => getEmptyText(loading.value, total.value, hasFilter(), '暂无用户记录'))
 
 const editorVisible = ref(false)
 const editingUserId = ref<number | null>(null)
@@ -161,16 +185,6 @@ const creditAccount = ref<AdminCreditAccount | null>(null)
 const creditLogs = ref<AdminCreditLogItem[]>([])
 const creditLogsLoading = ref(false)
 
-function statusText(status: string) {
-  return status === 'ENABLED' ? '启用' : status === 'DISABLED' ? '禁用' : '锁定'
-}
-
-function statusTagType(status: string) {
-  if (status === 'ENABLED') return 'success'
-  if (status === 'DISABLED') return 'info'
-  return 'warning'
-}
-
 async function loadUsers() {
   loading.value = true
   error.value = ''
@@ -181,14 +195,10 @@ async function loadUsers() {
   } catch (unknownError) {
     users.value = []
     total.value = 0
-    error.value = requestErrorMessage(unknownError)
+    error.value = unknownError instanceof Error ? unknownError.message : '管理员接口请求失败'
   } finally {
     loading.value = false
   }
-}
-
-function requestErrorMessage(unknownError: unknown) {
-  return unknownError instanceof Error ? unknownError.message : '管理员接口请求失败'
 }
 
 function handleSearch() {
@@ -199,6 +209,10 @@ function handleSearch() {
 function resetFilters() {
   Object.assign(filters, { keyword: '', role: '', status: '', pageNo: 1, pageSize: 10 })
   void loadUsers()
+}
+
+function hasFilter() {
+  return Boolean(filters.keyword || filters.role || filters.status)
 }
 
 function openCreate() {
@@ -221,6 +235,8 @@ function openEdit(row: AdminUserItem) {
     displayName: row.displayName,
     role: row.role,
     status: row.status,
+    phone: row.phone || '',
+    email: row.email || '',
     remark: row.remark || '',
   })
   editorVisible.value = true
@@ -252,9 +268,11 @@ async function toggleStatus(row: AdminUserItem) {
 
 async function resetPassword(row: AdminUserItem) {
   const result = await ElMessageBox.prompt(`为 ${row.username} 设置新密码`, '重置密码', {
+    confirmButtonText: '确认重置',
+    cancelButtonText: '取消',
     inputType: 'password',
     inputPattern: /^.{6,60}$/,
-    inputErrorMessage: '密码长度需为 6 到 60 位',
+    inputErrorMessage: '密码长度需要为 6 到 60 位',
   })
   await resetAdminUserPassword(row.userId, { password: result.value })
   ElMessage.success('密码已重置')
@@ -275,7 +293,7 @@ async function openCredit(row: AdminUserItem) {
   try {
     creditAccount.value = await getAdminUserCreditAccount(row.userId)
   } catch {
-    ElMessage.warning('积分账户接口尚未联调完成')
+    ElMessage.warning('加载积分账户失败，请稍后重试')
   }
   await loadCreditLogs(row.userId)
 }
@@ -305,21 +323,35 @@ async function loadCreditLogs(userId: number) {
   }
 }
 
-onMounted(() => {
-  void loadUsers()
-})
+onMounted(loadUsers)
 </script>
 
 <style scoped>
 .admin-users-page,
-.admin-users-header {
+.page-heading {
   display: grid;
   gap: 16px;
 }
 
-.admin-users-header {
+.page-heading {
   grid-template-columns: 1fr auto;
   align-items: center;
+}
+
+.page-heading h2 {
+  margin: 0;
+  color: #111827;
+  font-size: 22px;
+}
+
+.page-heading p {
+  margin: 6px 0 0;
+  color: #6b7280;
+}
+
+.page-actions {
+  display: flex;
+  gap: 10px;
 }
 
 .admin-users-filter {

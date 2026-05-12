@@ -80,7 +80,22 @@
               </div>
             </div>
 
-            <button class="app-primary-button" type="button" :disabled="submitting || !canGenerate" @click="submitGenerate">
+            <template v-if="sourceMode === 'AI'">
+              <p v-if="quoteLoading" class="app-muted avatar-small">加载积分说明中…</p>
+              <p v-else-if="estimatedCreditCost > 0" class="avatar-credit-line">
+                预计消耗 <strong>{{ estimatedCreditCost }}</strong> 积分
+                <template v-if="loggedIn && localBalance != null"> · 当前余额 {{ localBalance }}</template>
+              </p>
+              <p v-else class="app-muted avatar-small">本任务类型当前配置为不扣积分。</p>
+              <p v-if="creditInsufficient" class="app-error avatar-small">积分不足，无法提交当前任务。</p>
+            </template>
+
+            <button
+              class="app-primary-button"
+              type="button"
+              :disabled="submitting || !canGenerate || (sourceMode === 'AI' && creditInsufficient)"
+              @click="submitGenerate"
+            >
               {{ submitting ? '提交中…' : '生成形象' }}
             </button>
           </div>
@@ -165,10 +180,15 @@
 
 <script setup lang="ts">
 import { computed, onBeforeUnmount, onMounted, reactive, ref } from 'vue'
+import { ElMessage } from 'element-plus'
 import { useSmoothTaskProgress } from '../../composables/useSmoothTaskProgress'
 import { deleteAsset, getAssets } from '../../services/assetApi'
-import { API_ORIGIN } from '../../services/request'
+import { API_ORIGIN, getAuthToken } from '../../services/request'
+import { me, setAuthUser } from '../../services/authApi'
+import { getAuthUser } from '../../services/authSession'
+import { getTaskCreditQuote } from '../../services/creditApi'
 import { rememberSessionTaskId } from '../../services/sessionTaskStore'
+import { newIdempotencyKey } from '../../services/taskApi'
 import {
   generateAvatar,
   getAvatarGenerateTask,
@@ -180,6 +200,48 @@ import type { AssetItem } from '../../types/assetTypes'
 import type { AvatarGenerateRequest, AvatarItem } from '../../types/avatarTypes'
 
 const sourceMode = ref<'AI' | 'UPLOAD'>('AI')
+const loggedIn = ref(false)
+const estimatedCreditCost = ref(0)
+const quoteLoading = ref(false)
+const localBalance = ref<number | null>(null)
+
+const creditInsufficient = computed(() => {
+  if (sourceMode.value !== 'AI' || !loggedIn.value || estimatedCreditCost.value <= 0) {
+    return false
+  }
+  const b = localBalance.value
+  if (b == null) {
+    return false
+  }
+  return b < estimatedCreditCost.value
+})
+
+async function loadCreditQuote() {
+  quoteLoading.value = true
+  try {
+    const q = await getTaskCreditQuote('AVATAR_GENERATE')
+    estimatedCreditCost.value = q.creditCost ?? 0
+  } catch {
+    estimatedCreditCost.value = 0
+  } finally {
+    quoteLoading.value = false
+  }
+}
+
+async function refreshLocalBalance() {
+  if (!getAuthToken()) {
+    localBalance.value = null
+    return
+  }
+  try {
+    const u = await me()
+    setAuthUser(u)
+    localBalance.value = u.creditBalance ?? 0
+  } catch {
+    localBalance.value = getAuthUser()?.creditBalance ?? null
+  }
+}
+
 const form = reactive<AvatarGenerateRequest>({
   avatarName: '',
   prompt: '生成一位适合知识口播的数字人形象，干净背景，正面半身，商业摄影质感',
@@ -197,6 +259,8 @@ const generatedAvatars = ref<AvatarItem[]>([])
 const loadingAssets = ref(false)
 const loadingAvatars = ref(false)
 const submitting = ref(false)
+/** 单次「生成形象」提交周期内复用 Idempotency-Key */
+const avatarGenIdempotencyKey = ref<string | null>(null)
 const uploading = ref(false)
 const errorMessage = ref('')
 const taskError = ref('')
@@ -214,7 +278,9 @@ const { showTaskProgressBar, barProgressPercent, reset: resetSmoothProgress } = 
 const canGenerate = computed(() => Boolean(form.avatarName && form.prompt && form.imageCount >= 1))
 
 onMounted(async () => {
-  await Promise.all([loadReferenceAssets(), loadAvatars()])
+  loggedIn.value = !!getAuthToken()
+  await Promise.all([loadReferenceAssets(), loadAvatars(), loadCreditQuote()])
+  await refreshLocalBalance()
 })
 
 onBeforeUnmount(() => {
@@ -296,20 +362,39 @@ async function submitGenerate() {
   if (!canGenerate.value) {
     return
   }
+  if (submitting.value) {
+    return
+  }
+  if (!avatarGenIdempotencyKey.value) {
+    avatarGenIdempotencyKey.value = newIdempotencyKey()
+  }
   submitting.value = true
   errorMessage.value = ''
   taskError.value = ''
   saveMessage.value = ''
   generatedAvatars.value = []
   try {
-    const res = await generateAvatar({ ...form })
+    const res = await generateAvatar({ ...form }, avatarGenIdempotencyKey.value)
+    avatarGenIdempotencyKey.value = null
     rememberSessionTaskId(res.taskId)
     resetSmoothProgress()
     taskStatus.value = res.status
     taskProgress.value = 0
     startPoll(res.taskId)
+    await refreshLocalBalance()
+    const cost = estimatedCreditCost.value
+    if (cost > 0) {
+      ElMessage.success(`任务已提交，已预扣 ${cost} 积分`)
+    } else {
+      ElMessage.success('任务已提交')
+    }
   } catch (e) {
-    errorMessage.value = e instanceof Error ? e.message : '提交生成失败'
+    const msg = e instanceof Error ? e.message : '提交生成失败'
+    errorMessage.value = msg
+    avatarGenIdempotencyKey.value = null
+    if (msg.includes('积分余额不足') || msg.includes('40900')) {
+      ElMessage.error('积分余额不足，无法提交当前任务')
+    }
   } finally {
     submitting.value = false
   }
@@ -427,6 +512,16 @@ function assetUrl(url?: string | null) {
 .avatar-hero-card strong {
   display: block;
   margin-top: 6px;
+}
+
+.avatar-credit-line {
+  margin: 0 0 8px;
+  font-size: 14px;
+  color: #374151;
+}
+
+.avatar-credit-line strong {
+  color: #111827;
 }
 
 .avatar-content {

@@ -325,7 +325,7 @@ import {
   getVoicePresets,
   removeVoiceFromMyLibrary,
 } from '../../services/voiceApi'
-import { getTaskDetail } from '../../services/taskApi'
+import { getTaskDetail, newIdempotencyKey } from '../../services/taskApi'
 import { rememberSessionTaskId } from '../../services/sessionTaskStore'
 import { VOICE_PRESET_SELECTION_KEY, type VoicePresetItem } from '../../types/voiceTypes'
 
@@ -773,12 +773,16 @@ async function handleRemoveVoiceFromLibrary(voice: VoicePresetItem) {
 }
 
 async function playVoiceSample(voice: VoicePresetItem) {
+  if (loading.value) {
+    return
+  }
   try {
     let sampleUrl = voice.sampleUrl
     if (!sampleUrl) {
       loading.value = true
       errorMessage.value = ''
-      const created = await createVoiceSampleTask(voice.voiceId)
+      const sampleIdem = newIdempotencyKey()
+      const created = await createVoiceSampleTask(voice.voiceId, { idempotencyKey: sampleIdem })
       rememberSessionTaskId(created.taskId)
       const maxAttempts = 40
       for (let i = 0; i < maxAttempts; i++) {
