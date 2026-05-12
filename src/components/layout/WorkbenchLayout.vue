@@ -35,6 +35,10 @@
           </div>
         </div>
         <div class="app-topbar-actions">
+          <div v-if="authed && currentUser" class="app-user-summary" title="当前账号积分余额">
+            <span>{{ currentUser.displayName || currentUser.username }}</span>
+            <strong>积分 {{ currentUser.creditBalance ?? 0 }}</strong>
+          </div>
           <button class="app-ghost-button" type="button" @click="$emit('openAssets')">资产中心</button>
           <button
             v-if="!authed"
@@ -61,10 +65,12 @@
 </template>
 
 <script setup lang="ts">
-import { computed } from 'vue'
-import { useRouter } from 'vue-router'
-import { logout, clearLogin } from '../../services/authApi'
+import { computed, onMounted, ref, watch } from 'vue'
+import { useRoute, useRouter } from 'vue-router'
+import { logout, clearLogin, me, setAuthUser } from '../../services/authApi'
+import { getAuthUser } from '../../services/authSession'
 import { getAuthToken } from '../../services/request'
+import type { UserMe } from '../../types/userTypes'
 
 const menuItems = [
   { key: 'video-parse', label: '爆款对标', icon: '◉' },
@@ -94,8 +100,24 @@ const flowSteps = [
 ] as const
 
 const router = useRouter()
+const route = useRoute()
+const currentUser = ref<UserMe | null>(getAuthUser())
 
 const authed = computed(() => !!getAuthToken())
+
+async function refreshCurrentUser() {
+  if (!getAuthToken()) {
+    currentUser.value = null
+    return
+  }
+  try {
+    const user = await me()
+    setAuthUser(user)
+    currentUser.value = user
+  } catch {
+    currentUser.value = getAuthUser()
+  }
+}
 
 function jumpToLogin() {
   void router.push({ path: '/login', query: { redirect: router.currentRoute.value.fullPath } })
@@ -121,4 +143,51 @@ const stepIndexMap: Record<MenuKey, number> = {
 }
 
 const activeStepIndex = computed(() => stepIndexMap[props.activeKey] ?? 0)
+
+onMounted(() => {
+  void refreshCurrentUser()
+})
+
+watch(
+  () => route.fullPath,
+  () => {
+    void refreshCurrentUser()
+  },
+)
 </script>
+
+<style scoped>
+.app-user-summary {
+  display: inline-flex;
+  min-height: 34px;
+  max-width: 220px;
+  align-items: center;
+  gap: 8px;
+  overflow: hidden;
+  border: 1px solid #e6e8f0;
+  border-radius: 10px;
+  background: #f8fafc;
+  color: #334155;
+  padding: 0 12px;
+  font-size: 13px;
+}
+
+.app-user-summary span {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.app-user-summary strong {
+  flex: 0 0 auto;
+  color: #111827;
+  font-size: 12px;
+}
+
+@media (max-width: 860px) {
+  .app-user-summary {
+    display: none;
+  }
+}
+</style>

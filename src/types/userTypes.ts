@@ -1,7 +1,13 @@
+export type UserRole = 'USER' | 'ADMIN'
+export type UserStatus = 'ENABLED' | 'DISABLED' | 'LOCKED'
+
 export interface UserMe {
   userId: number
   username: string
   displayName: string
+  role?: UserRole
+  status?: UserStatus
+  creditBalance?: number
 }
 
 export interface LoginResponse extends UserMe {
@@ -19,4 +25,3 @@ export interface LoginRequest {
   username: string
   password: string
 }
-

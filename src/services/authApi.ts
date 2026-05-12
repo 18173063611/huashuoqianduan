@@ -37,6 +37,9 @@ export function applyLogin(res: LoginResponse, persist = true) {
     userId: res.userId,
     username: res.username,
     displayName: res.displayName,
+    role: res.role,
+    status: res.status,
+    creditBalance: res.creditBalance,
   })
 }
 
@@ -45,4 +48,3 @@ export function clearLogin() {
 }
 
 export { clearAuthUser, getAuthUser, setAuthUser }
-

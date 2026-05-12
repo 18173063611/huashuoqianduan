@@ -27,11 +27,12 @@ function redirectToLogin() {
   if (typeof window === 'undefined') return
 
   const { pathname, search, hash } = window.location
-  if (pathname === '/login' || pathname === '/register') return
+  if (pathname === '/login' || pathname === '/register' || pathname === '/admin/login') return
 
   const currentPath = `${pathname}${search}${hash}`
   const params = new URLSearchParams({ redirect: currentPath })
-  window.location.assign(`/login?${params.toString()}`)
+  const loginPath = pathname.startsWith('/admin') ? '/admin/login' : '/login'
+  window.location.assign(`${loginPath}?${params.toString()}`)
 }
 
 export async function request<T>(path: string, init?: RequestInit): Promise<T> {
