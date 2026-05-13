@@ -80,20 +80,19 @@
               </div>
             </div>
 
-            <template v-if="sourceMode === 'AI'">
-              <p v-if="quoteLoading" class="app-muted avatar-small">加载积分说明中…</p>
-              <p v-else-if="estimatedCreditCost > 0" class="avatar-credit-line">
-                预计消耗 <strong>{{ estimatedCreditCost }}</strong> 积分
-                <template v-if="loggedIn && localBalance != null"> · 当前余额 {{ localBalance }}</template>
-              </p>
-              <p v-else class="app-muted avatar-small">本任务类型当前配置为不扣积分。</p>
-              <p v-if="creditInsufficient" class="app-error avatar-small">积分不足，无法提交当前任务。</p>
-            </template>
+            <BillingEstimateBanner
+              v-if="sourceMode === 'AI'"
+              :estimated-credit-cost="avatarEstimate.estimatedCreditCost.value"
+              :balance="avatarEstimate.balance.value"
+              :loading="avatarEstimate.loading.value"
+              :steps="avatarEstimate.steps.value"
+            />
 
             <button
               class="app-primary-button"
               type="button"
-              :disabled="submitting || !canGenerate || (sourceMode === 'AI' && creditInsufficient)"
+              :disabled="submitting || !canGenerate || (sourceMode === 'AI' && !!avatarEstimate.insufficientHint.value)"
+              :title="sourceMode === 'AI' ? (avatarEstimate.insufficientHint.value ?? '') : ''"
               @click="submitGenerate"
             >
               {{ submitting ? '提交中…' : '生成形象' }}
@@ -184,9 +183,8 @@ import { ElMessage } from 'element-plus'
 import { useSmoothTaskProgress } from '../../composables/useSmoothTaskProgress'
 import { deleteAsset, getAssets } from '../../services/assetApi'
 import { API_ORIGIN, getAuthToken } from '../../services/request'
-import { me, setAuthUser } from '../../services/authApi'
-import { getAuthUser } from '../../services/authSession'
-import { getTaskCreditQuote } from '../../services/creditApi'
+import BillingEstimateBanner from '../../components/business/BillingEstimateBanner.vue'
+import { useBillingEstimate } from '../../composables/useBillingEstimate'
 import { rememberSessionTaskId } from '../../services/sessionTaskStore'
 import { newIdempotencyKey } from '../../services/taskApi'
 import {
@@ -201,45 +199,11 @@ import type { AvatarGenerateRequest, AvatarItem } from '../../types/avatarTypes'
 
 const sourceMode = ref<'AI' | 'UPLOAD'>('AI')
 const loggedIn = ref(false)
-const estimatedCreditCost = ref(0)
-const quoteLoading = ref(false)
-const localBalance = ref<number | null>(null)
-
-const creditInsufficient = computed(() => {
-  if (sourceMode.value !== 'AI' || !loggedIn.value || estimatedCreditCost.value <= 0) {
-    return false
-  }
-  const b = localBalance.value
-  if (b == null) {
-    return false
-  }
-  return b < estimatedCreditCost.value
-})
-
-async function loadCreditQuote() {
-  quoteLoading.value = true
-  try {
-    const q = await getTaskCreditQuote('AVATAR_GENERATE')
-    estimatedCreditCost.value = q.creditCost ?? 0
-  } catch {
-    estimatedCreditCost.value = 0
-  } finally {
-    quoteLoading.value = false
-  }
-}
+// 与后端 createTask 实际预扣金额完全一致；自带 balance/enoughBalance/insufficientHint。
+const avatarEstimate = useBillingEstimate({ taskType: 'AVATAR_GENERATE' })
 
 async function refreshLocalBalance() {
-  if (!getAuthToken()) {
-    localBalance.value = null
-    return
-  }
-  try {
-    const u = await me()
-    setAuthUser(u)
-    localBalance.value = u.creditBalance ?? 0
-  } catch {
-    localBalance.value = getAuthUser()?.creditBalance ?? null
-  }
+  await avatarEstimate.refresh()
 }
 
 const form = reactive<AvatarGenerateRequest>({
@@ -279,8 +243,7 @@ const canGenerate = computed(() => Boolean(form.avatarName && form.prompt && for
 
 onMounted(async () => {
   loggedIn.value = !!getAuthToken()
-  await Promise.all([loadReferenceAssets(), loadAvatars(), loadCreditQuote()])
-  await refreshLocalBalance()
+  await Promise.all([loadReferenceAssets(), loadAvatars(), avatarEstimate.refresh()])
 })
 
 onBeforeUnmount(() => {
@@ -382,7 +345,7 @@ async function submitGenerate() {
     taskProgress.value = 0
     startPoll(res.taskId)
     await refreshLocalBalance()
-    const cost = estimatedCreditCost.value
+    const cost = avatarEstimate.estimatedCreditCost.value
     if (cost > 0) {
       ElMessage.success(`任务已提交，已预扣 ${cost} 积分`)
     } else {

@@ -259,21 +259,19 @@
         </div>
       </div>
 
-      <div v-if="mainTab === 'digitalHuman'" class="render-digital-credit">
-        <p v-if="dhQuoteLoading" class="app-muted">加载积分说明中…</p>
-        <p v-else-if="dhEstimatedCost > 0" class="render-credit-line">
-          数字人口播预计消耗 <strong>{{ dhEstimatedCost }}</strong> 积分
-          <template v-if="loggedIn && localBalance != null"> · 当前余额 {{ localBalance }}</template>
-        </p>
-        <p v-else class="app-muted">本任务类型当前配置为不扣积分。</p>
-        <p v-if="digitalHumanCreditInsufficient" class="app-error">积分不足，无法提交当前任务。</p>
-      </div>
+      <BillingEstimateBanner
+        :estimated-credit-cost="renderEstimate.estimatedCreditCost.value"
+        :balance="renderEstimate.balance.value"
+        :loading="renderEstimate.loading.value"
+        :steps="renderEstimate.steps.value"
+      />
 
       <div class="render-actions">
         <button
           class="app-primary-button"
           type="button"
-          :disabled="!canSubmit || busy || digitalHumanCreditInsufficient"
+          :disabled="!canSubmit || busy || !!renderEstimate.insufficientHint.value"
+          :title="renderEstimate.insufficientHint.value ?? ''"
           @click="handleGenerate"
         >
           {{ busy ? '生成中…' : '开始生成视频' }}
@@ -366,9 +364,8 @@ import AssetPicker from './AssetPicker.vue'
 import ImageInput from './ImageInput.vue'
 import { useSmoothTaskProgress } from '../../composables/useSmoothTaskProgress'
 import { API_ORIGIN, getAuthToken } from '../../services/request'
-import { me, setAuthUser } from '../../services/authApi'
-import { getAuthUser } from '../../services/authSession'
-import { getTaskCreditQuote } from '../../services/creditApi'
+import BillingEstimateBanner from '../../components/business/BillingEstimateBanner.vue'
+import { useBillingEstimate } from '../../composables/useBillingEstimate'
 import { rememberSessionTaskId } from '../../services/sessionTaskStore'
 import { newIdempotencyKey } from '../../services/taskApi'
 import { uploadFile } from '../../services/uploadApi'
@@ -426,45 +423,27 @@ const digitalHumanAudioUploading = ref(false)
 const digitalHumanAudioUploadName = ref('')
 
 const loggedIn = ref(false)
-const dhEstimatedCost = ref(0)
-const dhQuoteLoading = ref(false)
-const localBalance = ref<number | null>(null)
 
-const digitalHumanCreditInsufficient = computed(() => {
-  if (mainTab.value !== 'digitalHuman' || !loggedIn.value || dhEstimatedCost.value <= 0) {
-    return false
-  }
-  const b = localBalance.value
-  if (b == null) {
-    return false
-  }
-  return b < dhEstimatedCost.value
+/**
+ * 当前 Tab 对应的预扣 task_type：
+ *   文生视频 → TEXT_TO_VIDEO_SEEDANCE_1_5（默认主力模型；2.0 价格不同，但前端展示以 1.5 为基线，
+ *              提交时后端 createTask 会按真实 request 的 modelCode 重新解析，依旧能保证"前后一致"）
+ *   图生视频（首帧 / 首尾帧） → IMAGE_TO_VIDEO_SEEDANCE_1_5
+ *   图生视频（参照图）         → IMAGE_TO_VIDEO_SEEDANCE_2_0_FAST
+ *   数字人口播                 → DIGITAL_HUMAN_GENERATE
+ */
+const currentRenderTaskType = computed(() => {
+  if (mainTab.value === 'digitalHuman') return 'DIGITAL_HUMAN_GENERATE'
+  if (mainTab.value === 'text') return 'TEXT_TO_VIDEO_SEEDANCE_1_5'
+  if (imageSubTab.value === 'reference') return 'IMAGE_TO_VIDEO_SEEDANCE_2_0_FAST'
+  return 'IMAGE_TO_VIDEO_SEEDANCE_1_5'
 })
 
-async function loadDigitalHumanCreditQuote() {
-  dhQuoteLoading.value = true
-  try {
-    const q = await getTaskCreditQuote('DIGITAL_HUMAN_GENERATE')
-    dhEstimatedCost.value = q.creditCost ?? 0
-  } catch {
-    dhEstimatedCost.value = 0
-  } finally {
-    dhQuoteLoading.value = false
-  }
-}
+// 一份预估 + Tab 切换自动重取；与后端 createTask 实际预扣金额保持一致，不允许任何前端写死。
+const renderEstimate = useBillingEstimate({ taskType: () => currentRenderTaskType.value })
 
 async function refreshLocalBalance() {
-  if (!getAuthToken()) {
-    localBalance.value = null
-    return
-  }
-  try {
-    const u = await me()
-    setAuthUser(u)
-    localBalance.value = u.creditBalance ?? 0
-  } catch {
-    localBalance.value = getAuthUser()?.creditBalance ?? null
-  }
+  await renderEstimate.refresh()
 }
 
 const busy = ref(false)
@@ -650,7 +629,7 @@ async function handleGenerate() {
       resetSmoothProgress()
       startDigitalHumanPoll(submitted.taskId)
       await refreshLocalBalance()
-      const cost = dhEstimatedCost.value
+      const cost = renderEstimate.estimatedCreditCost.value
       if (cost > 0) {
         ElMessage.success(`任务已提交，已预扣 ${cost} 积分`)
       } else {
@@ -756,8 +735,7 @@ function digitalHumanDetailToVideoResult(detail: DigitalHumanTaskDetailResponse)
 
 onMounted(async () => {
   loggedIn.value = !!getAuthToken()
-  await loadDigitalHumanCreditQuote()
-  await refreshLocalBalance()
+  await renderEstimate.refresh()
 })
 
 onBeforeUnmount(() => {

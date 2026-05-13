@@ -10,13 +10,12 @@
               粘贴或编辑文案，选择右侧火山音色后生成音频。
             </p>
             <p v-if="scriptLoadMessage" class="voice-script-load-msg app-muted">{{ scriptLoadMessage }}</p>
-            <p v-if="quoteLoading" class="app-muted voice-credit-line">加载积分说明中…</p>
-            <p v-else-if="estimatedCreditCost > 0" class="voice-credit-line">
-              预计消耗 <strong>{{ estimatedCreditCost }}</strong> 积分
-              <template v-if="loggedIn && localBalance != null"> · 当前余额 {{ localBalance }}</template>
-            </p>
-            <p v-else class="app-muted voice-credit-line">本任务类型当前配置为不扣积分。</p>
-            <p v-if="creditInsufficient" class="app-error voice-credit-line">积分不足，无法提交当前任务。</p>
+            <BillingEstimateBanner
+              :estimated-credit-cost="ttsEstimate.estimatedCreditCost.value"
+              :balance="ttsEstimate.balance.value"
+              :loading="ttsEstimate.loading.value"
+              :steps="ttsEstimate.steps.value"
+            />
             <textarea v-model.trim="scriptText" class="voice-textarea" rows="8" placeholder="在此粘贴或编辑口播文案…" />
             <div class="voice-script-actions">
               <button class="app-secondary-button" type="button" :disabled="loadingScripts" @click="loadAppliedRewriteScript">
@@ -25,7 +24,8 @@
               <button
                 class="app-primary-button"
                 type="button"
-                :disabled="submitting || !scriptText || !selectedVoiceId || creditInsufficient"
+                :disabled="submitting || !scriptText || !selectedVoiceId || !!ttsEstimate.insufficientHint.value"
+                :title="ttsEstimate.insufficientHint.value ?? ''"
                 @click="submitTts"
               >
                 {{ submitting ? '提交中…' : '生成口播' }}
@@ -142,9 +142,8 @@ import {
 import { getAuthToken } from '../../services/request'
 import { getTaskDetail, newIdempotencyKey } from '../../services/taskApi'
 import { rememberSessionTaskId } from '../../services/sessionTaskStore'
-import { me, setAuthUser } from '../../services/authApi'
-import { getAuthUser } from '../../services/authSession'
-import { getTaskCreditQuote } from '../../services/creditApi'
+import BillingEstimateBanner from '../../components/business/BillingEstimateBanner.vue'
+import { useBillingEstimate } from '../../composables/useBillingEstimate'
 import { VOICE_PRESET_SELECTION_KEY, type TtsGenerateRequest, type VoicePresetItem } from '../../types/voiceTypes'
 
 const API_ORIGIN = (import.meta.env.VITE_API_BASE_URL || '').replace(/\/api\/v1\/?$/, '')
@@ -157,45 +156,12 @@ const selectedVoiceId = ref<number | null>(null)
 const voiceKeyword = ref('')
 const voiceGenderFilter = ref('')
 
-const estimatedCreditCost = ref(0)
-const quoteLoading = ref(false)
-const localBalance = ref<number | null>(null)
-
-const creditInsufficient = computed(() => {
-  if (!loggedIn.value || estimatedCreditCost.value <= 0) {
-    return false
-  }
-  const b = localBalance.value
-  if (b == null) {
-    return false
-  }
-  return b < estimatedCreditCost.value
-})
-
-async function loadCreditQuote() {
-  quoteLoading.value = true
-  try {
-    const q = await getTaskCreditQuote('TTS_GENERATE')
-    estimatedCreditCost.value = q.creditCost ?? 0
-  } catch {
-    estimatedCreditCost.value = 0
-  } finally {
-    quoteLoading.value = false
-  }
-}
+// 统一预估：与后端 createTask 预扣金额严格一致；自带 balance / enoughBalance / insufficientHint。
+const ttsEstimate = useBillingEstimate({ taskType: 'TTS_GENERATE' })
 
 async function refreshLocalBalance() {
-  if (!getAuthToken()) {
-    localBalance.value = null
-    return
-  }
-  try {
-    const u = await me()
-    setAuthUser(u)
-    localBalance.value = u.creditBalance ?? 0
-  } catch {
-    localBalance.value = getAuthUser()?.creditBalance ?? null
-  }
+  // 兼容旧代码路径：触发 estimate 重取以刷新 balance / enoughBalance。
+  await ttsEstimate.refresh()
 }
 
 const scriptText = ref('')
@@ -237,8 +203,7 @@ const audioAssetId = ref<number | null>(null)
 
 onMounted(async () => {
   resetTask()
-  await Promise.all([loadPresets(), loadCreditQuote()])
-  await refreshLocalBalance()
+  await Promise.all([loadPresets(), ttsEstimate.refresh()])
 })
 
 onBeforeUnmount(() => {
@@ -414,7 +379,7 @@ async function submitTts() {
     taskProgress.value = 0
     startPoll(res.taskId)
     await refreshLocalBalance()
-    const cost = estimatedCreditCost.value
+    const cost = ttsEstimate.estimatedCreditCost.value
     if (cost > 0) {
       ElMessage.success(`任务已提交，已预扣 ${cost} 积分`)
     } else {
