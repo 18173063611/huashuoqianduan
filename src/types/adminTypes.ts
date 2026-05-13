@@ -174,8 +174,133 @@ export interface AdminOperationLogQuery {
   pageSize?: number
 }
 
+export interface AdminBillingStepItem {
+  stepId: number
+  taskType: string
+  functionModule?: string
+  stepName: string
+  provider?: string
+  modelCode?: string
+  usageUnit?: string
+  callCount?: string
+  costText?: string
+  creditCost: number
+  enabled: boolean
+  sortOrder?: number
+  remark?: string
+  createdAt?: string
+  updatedAt?: string
+}
+
+export interface AdminBillingStepQuery {
+  taskType?: string
+  functionModule?: string
+  enabled?: boolean | ''
+  pageNo?: number
+  pageSize?: number
+}
+
+export interface AdminBillingStepSaveRequest {
+  taskType: string
+  functionModule?: string
+  stepName: string
+  provider?: string
+  modelCode?: string
+  usageUnit?: string
+  callCount?: string
+  costText?: string
+  creditCost?: number
+  enabled?: boolean
+  sortOrder?: number
+  remark?: string
+}
+
+export interface AdminModelPriceItem {
+  priceId: number
+  provider: string
+  modelCode: string
+  modelName?: string
+  taskType?: string
+  usageUnit?: string
+  inputCreditPer1k?: number
+  outputCreditPer1k?: number
+  unitCreditPrice?: number
+  estimateOutputRatio?: number
+  estimateBufferRatio?: number
+  enabled: boolean
+  createdAt?: string
+  updatedAt?: string
+}
+
+export interface AdminModelPriceQuery {
+  provider?: string
+  taskType?: string
+  enabled?: boolean | ''
+  pageNo?: number
+  pageSize?: number
+}
+
+export type AdminUsageSummaryDimension =
+  | 'DATE'
+  | 'FUNCTION_MODULE'
+  | 'TASK_TYPE'
+  | 'PROVIDER'
+  | 'MODEL_CODE'
+  | 'USAGE_UNIT'
+
+export interface AdminUsageSummaryRow {
+  groupKey: string
+  groupLabel: string
+  callCount: number
+  estimatedCreditCost: number
+  actualCreditCost: number
+  finalCreditCost: number
+  promptTokens: number
+  completionTokens: number
+  totalTokens: number
+  characterCount: number
+  imageCount: number
+  durationSeconds: number | string
+  providerCredits: number | string
+}
+
+export interface AdminUsageSummaryResponse {
+  dimension: AdminUsageSummaryDimension
+  from: string
+  to: string
+  rows: AdminUsageSummaryRow[]
+  total: AdminUsageSummaryRow
+}
+
+export interface AdminUsageSummaryQuery {
+  dimension?: AdminUsageSummaryDimension
+  from?: string
+  to?: string
+  taskType?: string
+  functionModule?: string
+  provider?: string
+  modelCode?: string
+  usageUnit?: string
+}
+
+export interface AdminModelPriceSaveRequest {
+  provider: string
+  modelCode: string
+  modelName?: string
+  taskType?: string
+  usageUnit?: string
+  inputCreditPer1k?: number
+  outputCreditPer1k?: number
+  unitCreditPrice?: number
+  estimateOutputRatio?: number
+  estimateBufferRatio?: number
+  enabled?: boolean
+}
+
 export type AdminUserPage = PageResult<AdminUserItem>
 export type AdminCreditLogPage = PageResult<AdminCreditLogItem>
 export type AdminModelPage = PageResult<AdminModelItem>
 export type AdminTaskPage = PageResult<AdminTaskItem>
 export type AdminOperationLogPage = PageResult<AdminOperationLogItem>
+export type AdminBillingStepPage = PageResult<AdminBillingStepItem>
+export type AdminModelPricePage = PageResult<AdminModelPriceItem>

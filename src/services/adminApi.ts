@@ -1,11 +1,19 @@
-import { request } from './request'
+import { API_BASE_URL, getAuthToken, request } from './request'
 import type {
+  AdminBillingStepItem,
+  AdminBillingStepPage,
+  AdminBillingStepQuery,
+  AdminBillingStepSaveRequest,
   AdminCreditAccount,
   AdminCreditAdjustRequest,
   AdminCreditLogPage,
   AdminDashboardSummary,
   AdminModelItem,
   AdminModelPage,
+  AdminModelPriceItem,
+  AdminModelPricePage,
+  AdminModelPriceQuery,
+  AdminModelPriceSaveRequest,
   AdminModelQuery,
   AdminModelSaveRequest,
   AdminOperationLogPage,
@@ -13,6 +21,8 @@ import type {
   AdminPasswordResetRequest,
   AdminTaskPage,
   AdminTaskQuery,
+  AdminUsageSummaryQuery,
+  AdminUsageSummaryResponse,
   AdminUserItem,
   AdminUserPage,
   AdminUserQuery,
@@ -170,6 +180,125 @@ export function listAdminCreditLogs(params: {
       pageSize: params.pageSize,
     })}`,
   )
+}
+
+export function listAdminBillingSteps(params: AdminBillingStepQuery) {
+  return request<AdminBillingStepPage>(
+    `/admin/billing/steps${toQuery({
+      taskType: params.taskType?.trim(),
+      functionModule: params.functionModule?.trim(),
+      enabled: params.enabled === '' ? undefined : String(params.enabled),
+      pageNo: params.pageNo,
+      pageSize: params.pageSize,
+    })}`,
+  )
+}
+
+export function createAdminBillingStep(payload: AdminBillingStepSaveRequest) {
+  return request<AdminBillingStepItem>('/admin/billing/steps', {
+    method: 'POST',
+    body: JSON.stringify(payload),
+  })
+}
+
+export function updateAdminBillingStep(stepId: number, payload: AdminBillingStepSaveRequest) {
+  return request<AdminBillingStepItem>(`/admin/billing/steps/${stepId}`, {
+    method: 'PUT',
+    body: JSON.stringify(payload),
+  })
+}
+
+export function enableAdminBillingStep(stepId: number) {
+  return request<AdminBillingStepItem>(`/admin/billing/steps/${stepId}/enable`, { method: 'POST' })
+}
+
+export function disableAdminBillingStep(stepId: number) {
+  return request<AdminBillingStepItem>(`/admin/billing/steps/${stepId}/disable`, { method: 'POST' })
+}
+
+export function listAdminModelPrices(params: AdminModelPriceQuery) {
+  return request<AdminModelPricePage>(
+    `/admin/billing/prices${toQuery({
+      provider: params.provider?.trim(),
+      taskType: params.taskType?.trim(),
+      enabled: params.enabled === '' ? undefined : String(params.enabled),
+      pageNo: params.pageNo,
+      pageSize: params.pageSize,
+    })}`,
+  )
+}
+
+export function createAdminModelPrice(payload: AdminModelPriceSaveRequest) {
+  return request<AdminModelPriceItem>('/admin/billing/prices', {
+    method: 'POST',
+    body: JSON.stringify(payload),
+  })
+}
+
+export function updateAdminModelPrice(priceId: number, payload: AdminModelPriceSaveRequest) {
+  return request<AdminModelPriceItem>(`/admin/billing/prices/${priceId}`, {
+    method: 'PUT',
+    body: JSON.stringify(payload),
+  })
+}
+
+export function enableAdminModelPrice(priceId: number) {
+  return request<AdminModelPriceItem>(`/admin/billing/prices/${priceId}/enable`, { method: 'POST' })
+}
+
+export function disableAdminModelPrice(priceId: number) {
+  return request<AdminModelPriceItem>(`/admin/billing/prices/${priceId}/disable`, { method: 'POST' })
+}
+
+function usageSummaryQuery(params: AdminUsageSummaryQuery) {
+  return toQuery({
+    dimension: params.dimension,
+    from: params.from,
+    to: params.to,
+    taskType: params.taskType?.trim(),
+    functionModule: params.functionModule?.trim(),
+    provider: params.provider?.trim(),
+    modelCode: params.modelCode?.trim(),
+    usageUnit: params.usageUnit?.trim(),
+  })
+}
+
+export function getAdminUsageSummary(params: AdminUsageSummaryQuery) {
+  return request<AdminUsageSummaryResponse>(`/admin/billing/usage-summary${usageSummaryQuery(params)}`)
+}
+
+/**
+ * 触发 CSV 下载：服务端附带 Content-Disposition，所以直接走 fetch+blob+a 标签即可，避免 request 把 text/csv 当 JSON 解析失败。
+ */
+export async function downloadAdminUsageSummaryCsv(params: AdminUsageSummaryQuery) {
+  const url = `${API_BASE_URL}/admin/billing/usage-summary.csv${usageSummaryQuery(params)}`
+  const token = getAuthToken()
+  const response = await fetch(url, {
+    method: 'GET',
+    headers: token ? { Authorization: `Bearer ${token}` } : undefined,
+  })
+  if (!response.ok) {
+    throw new Error(`下载失败：HTTP ${response.status}`)
+  }
+  const disposition = response.headers.get('Content-Disposition') || ''
+  let fileName = 'ai-usage-summary.csv'
+  const match = disposition.match(/filename\*?="?([^";]+)"?/i)
+  if (match && match[1]) {
+    try {
+      fileName = decodeURIComponent(match[1].replace(/^UTF-8''/i, ''))
+    } catch {
+      fileName = match[1]
+    }
+  }
+  const blob = await response.blob()
+  const objectUrl = URL.createObjectURL(blob)
+  const link = document.createElement('a')
+  link.href = objectUrl
+  link.download = fileName
+  document.body.appendChild(link)
+  link.click()
+  document.body.removeChild(link)
+  URL.revokeObjectURL(objectUrl)
 }
 
 export function listAdminOperationLogs(params: AdminOperationLogQuery) {

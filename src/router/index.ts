@@ -71,6 +71,12 @@ const routes: RouteRecordRaw[] = [
         meta: { requiresAuth: true, requiresAdmin: true, title: '模型配置' },
       },
       {
+        path: 'billing-config',
+        name: 'admin-billing-config',
+        component: () => import('../pages/admin/AdminBillingConfigPage.vue'),
+        meta: { requiresAuth: true, requiresAdmin: true, title: 'AI 计费配置' },
+      },
+      {
         path: 'tasks',
         name: 'admin-tasks',
         component: () => import('../pages/admin/AdminTasksPage.vue'),
