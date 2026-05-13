@@ -84,6 +84,20 @@
             </span>
           </label>
 
+          <label v-if="authMode === 'register'" class="auth-field">
+            <span>激活码</span>
+            <span class="auth-input-wrap">
+              <span class="auth-input-icon" aria-hidden="true">◈</span>
+              <input
+                v-model="authForm.key"
+                type="text"
+                autocomplete="off"
+                maxlength="64"
+                placeholder="请输入激活码"
+              />
+            </span>
+          </label>
+
           <div v-if="authMode === 'login'" class="auth-row">
             <label class="auth-check">
               <input v-model="rememberMe" type="checkbox" />
@@ -140,7 +154,7 @@ const route = useRoute()
 const router = useRouter()
 
 const authMode = ref<AuthMode>(props.initialMode)
-const authForm = ref({ username: '', password: '', displayName: '' })
+const authForm = ref({ username: '', password: '', displayName: '', key: '' })
 const rememberMe = ref(true)
 const passwordVisible = ref(false)
 const loading = ref(false)
@@ -180,6 +194,7 @@ async function handleSubmit() {
   const username = authForm.value.username.trim()
   const password = authForm.value.password.trim()
   const displayName = authForm.value.displayName.trim()
+  const key = authForm.value.key.trim()
 
   if (!username || !password) {
     showError('请输入账号和密码')
@@ -204,14 +219,38 @@ async function handleSubmit() {
     const res =
       authMode.value === 'login'
         ? await login({ username, password })
-        : await register({ username, password, displayName: displayName || undefined })
+        : await register({
+            username,
+            password,
+            displayName: displayName || undefined,
+            key: key || undefined,
+          })
     applyLogin(res, rememberMe.value)
     emit('success', { userId: res.userId, username: res.username, displayName: res.displayName })
   } catch (e) {
-    showError(authMode.value === 'login' ? '账号或密码错误，请重新输入' : '注册失败')
+    console.log(e)
+    if (authMode.value === 'login') {
+      showError('账号或密码错误，请重新输入')
+    } else {
+      showError(extractErrorMessage(e) || '注册失败')
+    }
   } finally {
     loading.value = false
   }
+}
+
+function extractErrorMessage(e: unknown): string {
+  const raw = e instanceof Error ? e.message : String(e)
+  const jsonStart = raw.indexOf('{')
+  if (jsonStart >= 0) {
+    try {
+      const body = JSON.parse(raw.slice(jsonStart)) as { message?: string }
+      if (body?.message) return body.message
+    } catch {
+      // ignore parse errors and fall through
+    }
+  }
+  return raw
 }
 </script>
 
