@@ -124,6 +124,13 @@ export interface AdminTaskItem {
   status: string
   progress?: number
   modelCode?: string
+  provider?: string
+  usageUnit?: string
+  estimatedUsage?: number
+  actualUsage?: number
+  estimatedCreditCost?: number
+  actualCreditCost?: number
+  settlementStatus?: string
   creditCost?: number
   creditLogId?: number
   queueName?: string

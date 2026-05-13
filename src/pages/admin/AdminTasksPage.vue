@@ -64,8 +64,17 @@
         <el-table-column label="使用模型" min-width="150">
           <template #default="{ row }">{{ compactCode(row.modelCode) }}</template>
         </el-table-column>
-        <el-table-column label="消耗积分" width="110">
-          <template #default="{ row }">{{ formatCreditAmount(row.creditCost) }}</template>
+        <el-table-column label="用量单位" width="110">
+          <template #default="{ row }">{{ formatEmpty(row.usageUnit) }}</template>
+        </el-table-column>
+        <el-table-column label="预估/实际用量" width="140">
+          <template #default="{ row }">{{ formatUsagePair(row.estimatedUsage, row.actualUsage) }}</template>
+        </el-table-column>
+        <el-table-column label="预扣/实扣" width="130">
+          <template #default="{ row }">{{ formatCreditPair(row.estimatedCreditCost ?? row.creditCost, row.actualCreditCost) }}</template>
+        </el-table-column>
+        <el-table-column label="结算状态" width="120">
+          <template #default="{ row }">{{ getSettlementStatusLabel(row.settlementStatus) }}</template>
         </el-table-column>
         <el-table-column label="错误摘要" min-width="220" show-overflow-tooltip>
           <template #default="{ row }">
@@ -175,7 +184,11 @@ function showTaskDetail(row: AdminTaskItem) {
       `任务类型：${getTaskTypeLabel(row.taskType)}`,
       `当前状态：${getTaskStatusLabel(row.status)}`,
       `使用模型：${compactCode(row.modelCode)}`,
-      `消耗积分：${formatCreditAmount(row.creditCost)}`,
+      `供应商：${formatEmpty(row.provider)}`,
+      `用量单位：${formatEmpty(row.usageUnit)}`,
+      `预估/实际用量：${formatUsagePair(row.estimatedUsage, row.actualUsage)}`,
+      `预扣/实扣积分：${formatCreditPair(row.estimatedCreditCost ?? row.creditCost, row.actualCreditCost)}`,
+      `结算状态：${getSettlementStatusLabel(row.settlementStatus)}`,
       `创建时间：${formatDateTime(row.createdAt)}`,
       row.errorMessage ? `错误信息：${row.errorMessage}` : '',
       row.traceId ? `TraceId：${row.traceId}` : '',
@@ -202,6 +215,31 @@ async function handleCancel(row: AdminTaskItem) {
 
 function hasFilter() {
   return Boolean(filters.ownerUserId || filters.taskType || filters.status || filters.modelCode)
+}
+
+function formatUsagePair(estimated?: number | null, actual?: number | null) {
+  return `${formatNumber(estimated)} / ${formatNumber(actual)}`
+}
+
+function formatCreditPair(estimated?: number | null, actual?: number | null) {
+  return `${formatCreditAmount(estimated)} / ${formatCreditAmount(actual)}`
+}
+
+function formatNumber(value?: number | null) {
+  if (value === null || value === undefined) return '—'
+  return Number(value).toLocaleString()
+}
+
+function getSettlementStatusLabel(status?: string | null) {
+  const map: Record<string, string> = {
+    NONE: '未计费',
+    PRECHARGED: '已预扣',
+    SETTLED: '已结算',
+    REFUNDED: '已全退',
+    PARTIAL_REFUNDED: '已退差额',
+    SETTLE_FAILED: '结算失败',
+  }
+  return status ? map[status] || status : '—'
 }
 
 function stringFromQuery(value: unknown) {
