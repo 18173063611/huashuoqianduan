@@ -11,6 +11,13 @@
           </div>
         </div>
 
+        <BillingEstimateBanner
+          :estimated-credit-cost="storyboardEstimate.estimatedCreditCost.value"
+          :balance="storyboardEstimate.balance.value"
+          :loading="storyboardEstimate.loading.value"
+          :steps="storyboardEstimate.steps.value"
+        />
+
         <div class="storyboard-tabs" role="tablist">
           <button
             type="button"
@@ -44,7 +51,8 @@
             <button
               class="app-primary-button"
               type="button"
-              :disabled="!canAnalyzeUrl || busy"
+              :disabled="!canAnalyzeUrl || busy || !!storyboardEstimate.insufficientHint.value"
+              :title="storyboardEstimate.insufficientHint.value ?? ''"
               @click="handleAnalyzeUrl"
             >
               {{ busyLabel }}
@@ -74,7 +82,8 @@
             <button
               class="app-primary-button"
               type="button"
-              :disabled="!canAnalyzeFile || busy"
+              :disabled="!canAnalyzeFile || busy || !!storyboardEstimate.insufficientHint.value"
+              :title="storyboardEstimate.insufficientHint.value ?? ''"
               @click="handleAnalyzeFile"
             >
               {{ busyLabel }}
@@ -199,6 +208,12 @@ import { rememberSessionTaskId } from '../../services/sessionTaskStore'
 import { trackTaskResult } from '../../services/taskRealtime'
 import type { VideoScriptAnalyzeResult, VideoScriptShotItem } from '../../types/videoTypes'
 import type { TaskItem } from '../../types/taskTypes'
+import BillingEstimateBanner from '../../components/business/BillingEstimateBanner.vue'
+import { useBillingEstimate } from '../../composables/useBillingEstimate'
+
+// 分镜生成 task_type 与后端 ai_billing_step_config 种子一致：VIDEO_SCRIPT_ANALYZE / VIDEO_SCRIPT_URL_ANALYZE。
+// 两条种子积分一致，预估只读 URL 版即可，提交时后端会按实际入口预扣。
+const storyboardEstimate = useBillingEstimate({ taskType: 'VIDEO_SCRIPT_URL_ANALYZE' })
 
 type SourceMode = 'url' | 'file'
 

@@ -4,9 +4,21 @@
       <aside class="analysis-card">
         <section class="panel-block">
           <h2>1. 输入对标视频链接</h2>
+          <BillingEstimateBanner
+            :estimated-credit-cost="parseEstimate.estimatedCreditCost.value"
+            :balance="parseEstimate.balance.value"
+            :loading="parseEstimate.loading.value"
+            :steps="parseEstimate.steps.value"
+          />
           <div class="parse-row">
             <input v-model.trim="videoUrl" placeholder="https://v.douyin.com/xxxxxx/" />
-            <button class="primary-button" type="button" :disabled="parsing || !videoUrl" @click="handleParseVideo">
+            <button
+              class="primary-button"
+              type="button"
+              :disabled="parsing || !videoUrl || !!parseEstimate.insufficientHint.value"
+              :title="parseEstimate.insufficientHint.value ?? ''"
+              @click="handleParseVideo"
+            >
               {{ parsing ? '解析中' : '解析' }}
             </button>
           </div>
@@ -218,6 +230,11 @@ import { rewriteDouyinCopywriting, startDouyinParseWithTranscript } from '../../
 import type { DouyinParseStage, DouyinVideoParseResponse, DouyinRewriteWriterVO } from '../../types/writerDouyinTypes'
 import { rememberSessionTaskId } from '../../services/sessionTaskStore'
 import { trackTaskResult } from '../../services/taskRealtime'
+import BillingEstimateBanner from '../../components/business/BillingEstimateBanner.vue'
+import { useBillingEstimate } from '../../composables/useBillingEstimate'
+
+// 抖音解析 / 爆款对标：核心计费动作是 VIDEO_PARSE（视频理解）。
+const parseEstimate = useBillingEstimate({ taskType: 'VIDEO_PARSE' })
 
 const emit = defineEmits<{
   continue: []
