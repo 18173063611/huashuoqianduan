@@ -257,6 +257,43 @@
           </select>
           <span class="app-muted render-duration-hint">{{ durationHint }}</span>
         </div>
+
+        <div
+          v-if="showModelSelector"
+          class="render-form-field render-form-field-inline"
+        >
+          <label>生成模型</label>
+          <div
+            class="render-model-dropdown"
+            :class="{ open: modelDropdownOpen, disabled: busy }"
+            @mouseleave="closeModelDropdown"
+          >
+            <button
+              type="button"
+              class="render-model-trigger"
+              :disabled="busy"
+              :aria-expanded="modelDropdownOpen"
+              @click="modelDropdownOpen = !modelDropdownOpen"
+            >
+              <span>{{ selectedModelLabel }}</span>
+              <span class="render-model-caret" aria-hidden="true">▾</span>
+            </button>
+            <ul v-if="modelDropdownOpen" class="render-model-options" role="listbox">
+              <li
+                v-for="opt in seedanceModelOptions"
+                :key="opt.value"
+                class="render-model-option"
+                :class="{ active: selectedModel === opt.value, 'has-tip': !!opt.tip }"
+                role="option"
+                :aria-selected="selectedModel === opt.value"
+                :data-tip="opt.tip || null"
+                @click="selectModel(opt.value)"
+              >
+                <span>{{ opt.label }}</span>
+              </li>
+            </ul>
+          </div>
+        </div>
       </div>
 
       <div v-if="mainTab === 'digitalHuman'" class="render-digital-credit">
@@ -387,8 +424,18 @@ import type { DigitalHumanTaskDetailResponse, VideoTaskVO } from '../../types/vi
 type MainTab = 'text' | 'image' | 'digitalHuman'
 type ImageSubTab = 'first' | 'firstLast' | 'reference'
 type DigitalHumanAudioMode = 'asset' | 'upload' | 'url' | 'text'
+type SeedanceModelValue = 'doubao-seedance-1-5-pro-251215' | 'ep-20260512233524-85r4g'
 
 const MAX_REFERENCE = 9
+
+const seedanceModelOptions: Array<{
+  value: SeedanceModelValue
+  label: string
+  tip?: string
+}> = [
+  { value: 'doubao-seedance-1-5-pro-251215', label: 'seedance1.5' },
+  { value: 'ep-20260512233524-85r4g', label: 'seedance2.0', tip: '不支持上传人脸' },
+]
 
 const mainTabs: Array<{ key: MainTab; label: string }> = [
   { key: 'text', label: '文生视频' },
@@ -411,6 +458,8 @@ const digitalHumanAudioTabs: Array<{ key: DigitalHumanAudioMode; label: string }
 
 const mainTab = ref<MainTab>('text')
 const imageSubTab = ref<ImageSubTab>('first')
+const selectedModel = ref<SeedanceModelValue>('doubao-seedance-1-5-pro-251215')
+const modelDropdownOpen = ref(false)
 
 const prompt = ref('')
 const duration = ref<number>(5)
@@ -502,6 +551,29 @@ const durationHint = computed(() => {
   }
   return 'Seedance 1.5 pro 支持 4 ~ 12 秒'
 })
+
+const showModelSelector = computed(() => {
+  if (mainTab.value === 'text') {
+    return true
+  }
+  if (mainTab.value === 'image') {
+    return imageSubTab.value === 'first' || imageSubTab.value === 'firstLast'
+  }
+  return false
+})
+
+const selectedModelLabel = computed(
+  () => seedanceModelOptions.find((o) => o.value === selectedModel.value)?.label ?? '',
+)
+
+function selectModel(value: SeedanceModelValue) {
+  selectedModel.value = value
+  modelDropdownOpen.value = false
+}
+
+function closeModelDropdown() {
+  modelDropdownOpen.value = false
+}
 
 const promptPlaceholder = computed(() => {
   if (mainTab.value === 'text') {
@@ -667,6 +739,7 @@ async function handleGenerate() {
       const submitted = await generateTextToVideo({
         prompt: prompt.value.trim(),
         duration: duration.value,
+        model: selectedModel.value,
       })
       submittedTaskId = submitted.taskId
       submittedStatus = String(submitted.status)
@@ -675,6 +748,7 @@ async function handleGenerate() {
         imageUrl: firstFrame.value.trim(),
         prompt: prompt.value.trim() || undefined,
         duration: duration.value,
+        model: selectedModel.value,
       })
       submittedTaskId = submitted.taskId
       submittedStatus = String(submitted.status)
@@ -684,6 +758,7 @@ async function handleGenerate() {
         lastFrameUrl: lastFrame.value.trim(),
         prompt: prompt.value.trim() || undefined,
         duration: duration.value,
+        model: selectedModel.value,
       })
       submittedTaskId = submitted.taskId
       submittedStatus = String(submitted.status)
@@ -1117,6 +1192,124 @@ onBeforeUnmount(() => {
 
 .render-duration-hint {
   font-size: 12.5px;
+}
+
+.render-model-dropdown {
+  position: relative;
+  display: inline-block;
+  min-width: 160px;
+}
+
+.render-model-trigger {
+  display: inline-flex;
+  width: 100%;
+  height: 36px;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  border: 1px solid #e3e7ef;
+  border-radius: 8px;
+  background: #fff;
+  color: #232838;
+  padding: 0 12px;
+  font-size: 13px;
+  font-weight: 700;
+  cursor: pointer;
+  outline: none;
+}
+
+.render-model-trigger:hover:not(:disabled) {
+  border-color: #c8bfff;
+}
+
+.render-model-trigger:focus,
+.render-model-dropdown.open .render-model-trigger {
+  border-color: #8f81ff;
+  box-shadow: 0 0 0 3px rgba(99, 91, 255, 0.12);
+}
+
+.render-model-trigger:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+.render-model-caret {
+  color: #98a2b3;
+  font-size: 12px;
+  transition: transform 0.18s ease;
+}
+
+.render-model-dropdown.open .render-model-caret {
+  transform: rotate(180deg);
+}
+
+.render-model-options {
+  position: absolute;
+  top: calc(100% + 4px);
+  left: 0;
+  z-index: 20;
+  min-width: 100%;
+  margin: 0;
+  padding: 4px;
+  list-style: none;
+  border: 1px solid #e3e7ef;
+  border-radius: 8px;
+  background: #fff;
+  box-shadow: 0 8px 24px rgba(15, 23, 42, 0.08);
+}
+
+.render-model-option {
+  position: relative;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 8px 12px;
+  border-radius: 6px;
+  color: #232838;
+  font-size: 13px;
+  font-weight: 700;
+  cursor: pointer;
+  white-space: nowrap;
+}
+
+.render-model-option:hover {
+  background: #f5f3ff;
+  color: #5e50df;
+}
+
+.render-model-option.active {
+  background: #faf9ff;
+  color: #5e50df;
+}
+
+.render-model-option.has-tip:hover::after {
+  content: attr(data-tip);
+  position: absolute;
+  top: 50%;
+  left: calc(100% + 8px);
+  transform: translateY(-50%);
+  padding: 6px 10px;
+  border-radius: 6px;
+  background: #1f2230;
+  color: #fff;
+  font-size: 12px;
+  font-weight: 700;
+  white-space: nowrap;
+  box-shadow: 0 4px 12px rgba(15, 23, 42, 0.18);
+  pointer-events: none;
+  z-index: 30;
+}
+
+.render-model-option.has-tip:hover::before {
+  content: '';
+  position: absolute;
+  top: 50%;
+  left: 100%;
+  transform: translateY(-50%);
+  border: 5px solid transparent;
+  border-right-color: #1f2230;
+  pointer-events: none;
+  z-index: 30;
 }
 
 .render-field-head {
