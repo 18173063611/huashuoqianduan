@@ -19,6 +19,10 @@
           <el-icon><Setting /></el-icon>
           <span>模型配置</span>
         </el-menu-item>
+        <el-menu-item index="/admin/billing-config">
+          <el-icon><PriceTag /></el-icon>
+          <span>AI 计费配置</span>
+        </el-menu-item>
         <el-menu-item index="/admin/tasks">
           <el-icon><Tickets /></el-icon>
           <span>任务管理</span>
@@ -57,7 +61,7 @@
 <script setup lang="ts">
 import { computed } from 'vue'
 import { RouterView, useRoute, useRouter } from 'vue-router'
-import { Coin, DataLine, Memo, Setting, SwitchButton, Tickets, User } from '@element-plus/icons-vue'
+import { Coin, DataLine, Memo, PriceTag, Setting, SwitchButton, Tickets, User } from '@element-plus/icons-vue'
 import { clearLogin, getAuthUser } from '../../services/authApi'
 
 const route = useRoute()
@@ -68,6 +72,7 @@ const titleMap: Record<string, string> = {
   '/admin/dashboard': '运营概览',
   '/admin/users': '用户管理',
   '/admin/models': '模型配置',
+  '/admin/billing-config': 'AI 计费配置',
   '/admin/tasks': '任务管理',
   '/admin/credit-logs': '积分流水',
   '/admin/operation-logs': '操作日志',

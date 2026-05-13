@@ -55,6 +55,14 @@ const operationTypeMap: Record<string, string> = {
   MODEL_DISABLE: '禁用模型',
   MODEL_SET_DEFAULT: '设为默认模型',
   MODEL_SAVE: '保存模型',
+  BILLING_STEP_CREATE: '新增计费步骤',
+  BILLING_STEP_UPDATE: '编辑计费步骤',
+  BILLING_STEP_ENABLE: '启用计费步骤',
+  BILLING_STEP_DISABLE: '禁用计费步骤',
+  BILLING_PRICE_CREATE: '新增模型单价',
+  BILLING_PRICE_UPDATE: '编辑模型单价',
+  BILLING_PRICE_ENABLE: '启用模型单价',
+  BILLING_PRICE_DISABLE: '禁用模型单价',
 }
 
 const operationTargetTypeMap: Record<string, string> = {
@@ -62,6 +70,8 @@ const operationTargetTypeMap: Record<string, string> = {
   CREDIT: '积分账户',
   MODEL: '模型',
   TASK: '任务',
+  BILLING_STEP: '计费步骤',
+  BILLING_PRICE: '模型单价',
 }
 
 const modelTypeMap: Record<string, string> = {
