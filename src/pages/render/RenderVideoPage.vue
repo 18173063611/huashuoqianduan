@@ -21,7 +21,7 @@
 
       <div class="render-tabs render-tabs-main" role="tablist">
         <button
-          v-for="tab in mainTabs"
+          v-for="tab in visibleMainTabs"
           :key="tab.key"
           type="button"
           role="tab"
@@ -440,6 +440,13 @@ const mainTabs: Array<{ key: MainTab; label: string }> = [
   { key: 'digitalHuman', label: '数字人口播' },
 ]
 
+/** 临时开关：设为 true 可恢复「数字人口播」主 Tab 入口（不删逻辑与数据结构） */
+const ENABLE_DIGITAL_HUMAN_TAB = false
+
+const visibleMainTabs = computed(() =>
+  ENABLE_DIGITAL_HUMAN_TAB ? mainTabs : mainTabs.filter((t) => t.key !== 'digitalHuman'),
+)
+
 const imageSubTabs: Array<{ key: ImageSubTab; label: string }> = [
   { key: 'first', label: '首帧生成' },
   { key: 'firstLast', label: '首尾帧生成' },
@@ -455,6 +462,17 @@ const digitalHumanAudioTabs: Array<{ key: DigitalHumanAudioMode; label: string }
 
 const mainTab = ref<MainTab>('text')
 const imageSubTab = ref<ImageSubTab>('first')
+
+watch(
+  () => mainTab.value,
+  (tab) => {
+    if (!ENABLE_DIGITAL_HUMAN_TAB && tab === 'digitalHuman') {
+      mainTab.value = 'text'
+    }
+  },
+  { immediate: true },
+)
+
 const selectedModel = ref<SeedanceModelValue>('doubao-seedance-1-5-pro-251215')
 const modelDropdownOpen = ref(false)
 
