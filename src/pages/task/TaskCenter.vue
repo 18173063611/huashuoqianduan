@@ -181,33 +181,69 @@
         </div>
 
         <div v-else-if="isStoryboardScriptTask(selectedResultTask?.taskType)" class="task-result-storyboard">
-          <div v-if="scriptShots.length" class="task-result-table-wrap">
-            <table class="task-result-storyboard-table">
-              <thead>
-                <tr>
-                  <th class="result-col-order">场景序号</th>
-                  <th class="result-col-time">时间</th>
-                  <th class="result-col-summary">场景概述</th>
-                  <th class="result-col-dialogue">台词</th>
-                  <th class="result-col-tips">拍摄技巧</th>
-                </tr>
-              </thead>
-              <tbody>
-                <tr v-for="shot in scriptShots" :key="`${shot.order}-${shot.time}`">
-                  <td class="result-col-order">场景{{ orderLabel(shot.order) }}</td>
-                  <td class="result-col-time">{{ shot.time || '-' }}</td>
-                  <td class="result-col-summary">
-                    <div class="task-result-shot-text">{{ shot.page || '-' }}</div>
-                    <p v-if="shot.backgroundMusic && shot.backgroundMusic !== '无'" class="task-result-bgm">
-                      {{ shot.backgroundMusic }}
-                    </p>
-                  </td>
-                  <td class="result-col-dialogue">{{ shot.content || '-' }}</td>
-                  <td class="result-col-tips">{{ shot.highlight || '-' }}</td>
-                </tr>
-              </tbody>
-            </table>
-          </div>
+          <template v-if="scriptShots.length">
+            <div class="storyboard-toolbar">
+              <label class="storyboard-toolbar-label" for="storyboard-shot-select">查看场景</label>
+              <select
+                id="storyboard-shot-select"
+                v-model.number="selectedShotIndex"
+                class="storyboard-shot-select"
+              >
+                <option :value="-1">全部场景（共 {{ scriptShots.length }} 个）</option>
+                <option v-for="(shot, index) in scriptShots" :key="shot.order" :value="index">
+                  场景{{ orderLabel(shot.order) }}{{ shot.time ? ` · ${shot.time}` : '' }}
+                </option>
+              </select>
+              <div class="storyboard-toolbar-nav" v-if="selectedShotIndex !== -1">
+                <button
+                  type="button"
+                  class="storyboard-nav-button"
+                  :disabled="selectedShotIndex <= 0"
+                  @click="selectedShotIndex = Math.max(0, selectedShotIndex - 1)"
+                >
+                  上一个
+                </button>
+                <span class="storyboard-nav-indicator">
+                  {{ selectedShotIndex + 1 }} / {{ scriptShots.length }}
+                </span>
+                <button
+                  type="button"
+                  class="storyboard-nav-button"
+                  :disabled="selectedShotIndex >= scriptShots.length - 1"
+                  @click="selectedShotIndex = Math.min(scriptShots.length - 1, selectedShotIndex + 1)"
+                >
+                  下一个
+                </button>
+              </div>
+            </div>
+            <div class="task-result-table-wrap">
+              <table class="task-result-storyboard-table">
+                <thead>
+                  <tr>
+                    <th class="result-col-order">场景序号</th>
+                    <th class="result-col-time">时间</th>
+                    <th class="result-col-summary">场景概述</th>
+                    <th class="result-col-dialogue">台词</th>
+                    <th class="result-col-tips">拍摄技巧</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  <tr v-for="shot in displayedShots" :key="`${shot.order}-${shot.time}`">
+                    <td class="result-col-order">场景{{ orderLabel(shot.order) }}</td>
+                    <td class="result-col-time">{{ shot.time || '-' }}</td>
+                    <td class="result-col-summary">
+                      <div class="task-result-shot-text">{{ shot.page || '-' }}</div>
+                      <p v-if="shot.backgroundMusic && shot.backgroundMusic !== '无'" class="task-result-bgm">
+                        {{ shot.backgroundMusic }}
+                      </p>
+                    </td>
+                    <td class="result-col-dialogue">{{ shot.content || '-' }}</td>
+                    <td class="result-col-tips">{{ shot.highlight || '-' }}</td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+          </template>
           <div v-else class="task-result-empty">未找到分镜脚本数据。</div>
         </div>
 
@@ -288,6 +324,7 @@ const selectedTaskId = ref<number | null>(null)
 const selectedResultTask = ref<TaskItem | null>(null)
 const selectedTaskResult = ref<unknown>(null)
 const selectedOutputJson = ref<unknown>(null)
+const selectedShotIndex = ref(-1)
 
 const canQuery = computed(() => hasToken.value)
 const hasSessionTasks = computed(() => getSessionTaskIds().length > 0)
@@ -298,6 +335,14 @@ const ttsAudioUrl = computed(() => stringField(resultObject.value, 'previewUrl')
 const scriptShots = computed<ScriptShot[]>(() => {
   const scripts = resultObject.value?.scripts
   return Array.isArray(scripts) ? scripts.filter(isScriptShot) : []
+})
+const displayedShots = computed<ScriptShot[]>(() => {
+  const list = scriptShots.value
+  const index = selectedShotIndex.value
+  if (index < 0 || index >= list.length) {
+    return list
+  }
+  return [list[index]]
 })
 const douyinRewriteText = computed(() => stringField(resultObject.value, 'translatedText'))
 const avatarPreviewUrls = computed(() => {
@@ -507,6 +552,7 @@ async function openResult(task: TaskItem) {
   selectedTaskResult.value = null
   selectedOutputJson.value = parseJsonObject(task.outputJson)
   selectedResultTask.value = task
+  selectedShotIndex.value = -1
   resultModalOpen.value = true
 
   try {
@@ -954,8 +1000,9 @@ section.app-card.app-page-stack {
 
 .task-result-modal {
   display: grid;
+  grid-template-rows: auto minmax(0, 1fr);
   width: min(1100px, 100%);
-  max-height: min(760px, calc(100vh - 64px));
+  height: min(760px, calc(100vh - 64px));
   gap: 16px;
   overflow: hidden;
   border-radius: 12px;
@@ -1036,7 +1083,96 @@ section.app-card.app-page-stack {
   width: 100%;
 }
 
+.task-result-storyboard {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  overflow: hidden;
+}
+
+.storyboard-toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 12px;
+  border: 1px solid #edf0f6;
+  border-radius: 10px;
+  background: #fbfcff;
+  flex-shrink: 0;
+}
+
+.storyboard-toolbar-label {
+  flex-shrink: 0;
+  color: #5c6477;
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.storyboard-shot-select {
+  flex: 1 1 220px;
+  min-width: 180px;
+  height: 34px;
+  padding: 0 12px;
+  border: 1px solid #d8dce8;
+  border-radius: 8px;
+  background: #ffffff;
+  color: #2d3446;
+  font-size: 13px;
+  outline: none;
+  cursor: pointer;
+}
+
+.storyboard-shot-select:hover {
+  border-color: #7c6cff;
+}
+
+.storyboard-shot-select:focus {
+  border-color: #7c6cff;
+  box-shadow: 0 0 0 2px rgba(124, 108, 255, 0.15);
+}
+
+.storyboard-toolbar-nav {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  margin-left: auto;
+}
+
+.storyboard-nav-button {
+  min-height: 30px;
+  padding: 0 12px;
+  border: 1px solid #d8dce8;
+  border-radius: 8px;
+  background: #ffffff;
+  color: #374151;
+  font-size: 12px;
+  font-weight: 500;
+  cursor: pointer;
+}
+
+.storyboard-nav-button:hover:not(:disabled) {
+  background: #eef0f3;
+  border-color: #7c6cff;
+  color: #111827;
+}
+
+.storyboard-nav-button:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
+.storyboard-nav-indicator {
+  color: #6b7280;
+  font-size: 12px;
+  font-weight: 600;
+  min-width: 48px;
+  text-align: center;
+}
+
 .task-result-table-wrap {
+  flex: 1;
+  min-height: 0;
   overflow: auto;
   border: 1px solid #edf0f6;
   border-radius: 10px;
@@ -1053,6 +1189,9 @@ section.app-card.app-page-stack {
 }
 
 .task-result-storyboard-table th {
+  position: sticky;
+  top: 0;
+  z-index: 1;
   padding: 12px 14px;
   border-bottom: 1px solid #edf0f6;
   background: #f5f6fa;

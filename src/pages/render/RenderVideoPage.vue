@@ -405,7 +405,6 @@ import BillingEstimateBanner from '../../components/business/BillingEstimateBann
 import { useBillingEstimate } from '../../composables/useBillingEstimate'
 import { rememberSessionTaskId } from '../../services/sessionTaskStore'
 import { trackTaskResult } from '../../services/taskRealtime'
-import { newIdempotencyKey } from '../../services/taskApi'
 import { uploadFile } from '../../services/uploadApi'
 import {
   generateDigitalHumanVideo,
@@ -414,6 +413,7 @@ import {
   generateReferenceVideo,
   generateTextToVideo,
   getDigitalHumanVideoTask,
+  newVideoIdempotencyKey,
 } from '../../services/videoApi'
 import type { DigitalHumanTaskDetailResponse, VideoTaskVO } from '../../types/videoTypes'
 
@@ -704,7 +704,7 @@ async function handleGenerate() {
     let submittedStatus = 'QUEUED'
     if (mainTab.value === 'digitalHuman') {
       if (!digitalHumanIdempotencyKey.value) {
-        digitalHumanIdempotencyKey.value = newIdempotencyKey()
+        digitalHumanIdempotencyKey.value = newVideoIdempotencyKey()
       }
       const useText = digitalHumanAudioMode.value === 'text'
       const submitted = await generateDigitalHumanVideo(

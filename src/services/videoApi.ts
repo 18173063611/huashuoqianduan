@@ -18,8 +18,17 @@ function idempotencyHeaders(explicitKey?: string | null): Record<string, string>
   const key =
     explicitKey != null && String(explicitKey).trim().length > 0
       ? String(explicitKey).trim()
-      : newIdempotencyKey()
+      : newVideoIdempotencyKey()
   return { 'Idempotency-Key': key }
+}
+
+/** 生成视频请求使用的幂等键，格式为 video:<uuid>。 */
+export function newVideoIdempotencyKey(): string {
+  return `video:${newIdempotencyKey()}`
+}
+
+function videoGenerateHeaders(): Record<string, string> {
+  return idempotencyHeaders()
 }
 
 /** 提交视频源解析任务。 */
@@ -60,6 +69,7 @@ export function generateTextToVideo(payload: TextToVideoRequest) {
   return request<TaskItem>('/video/generate/text', {
     method: 'POST',
     body: JSON.stringify(payload),
+    headers: videoGenerateHeaders(),
   })
 }
 
@@ -68,6 +78,7 @@ export function generateFirstFrameVideo(payload: FirstFrameVideoRequest) {
   return request<TaskItem>('/video/generate/image/first-frame', {
     method: 'POST',
     body: JSON.stringify(payload),
+    headers: videoGenerateHeaders(),
   })
 }
 
@@ -76,6 +87,7 @@ export function generateFirstLastFrameVideo(payload: FirstLastFrameVideoRequest)
   return request<TaskItem>('/video/generate/image/first-last-frame', {
     method: 'POST',
     body: JSON.stringify(payload),
+    headers: videoGenerateHeaders(),
   })
 }
 
@@ -84,6 +96,7 @@ export function generateReferenceVideo(payload: ReferenceVideoRequest) {
   return request<TaskItem>('/video/generate/image/reference', {
     method: 'POST',
     body: JSON.stringify(payload),
+    headers: videoGenerateHeaders(),
   })
 }
 
