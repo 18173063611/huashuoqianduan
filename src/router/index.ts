@@ -10,7 +10,7 @@ export type WorkbenchRouteName =
   | 'voice'
   | 'avatar'
   | 'render'
-  | 'account'
+  | 'AssetCenter'
 
 const businessRouteMeta = {
   requiresAuth: true,
@@ -136,13 +136,13 @@ const routes: RouteRecordRaw[] = [
       },
       {
         path: 'account',
-        name: 'account',
-        component: () => import('../pages/user/UserCenter.vue'),
-        meta: { ...businessRouteMeta, menuKey: 'account' },
+        redirect: '/assets',
       },
       {
         path: 'assets',
-        redirect: { name: 'video-parse' },
+        name: 'AssetCenter',
+        component: () => import('../pages/AssetCenterPage.vue'),
+        meta: { ...businessRouteMeta, menuKey: 'AssetCenter', title: '资产中心' },
       },
     ],
   },

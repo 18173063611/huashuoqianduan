@@ -14,6 +14,11 @@ export interface TaskItem {
   ownerUserId?: number | null
   taskType: string
   modelCode?: string | null
+  provider?: string | null
+  usageUnit?: string | null
+  estimatedCreditCost?: number | null
+  actualCreditCost?: number | null
+  settlementStatus?: string | null
   creditCost?: number | null
   creditLogId?: number | null
   /** 后端可能扩展新状态，展示时以字符串为准 */

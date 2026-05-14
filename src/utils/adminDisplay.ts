@@ -1,4 +1,5 @@
 import type { TagProps } from 'element-plus'
+import { taskTypeLabel } from './taskDisplay'
 
 type TagType = TagProps['type']
 
@@ -20,16 +21,6 @@ const taskStatusMap: Record<string, string> = {
   FAILED: '失败',
   RETRYABLE: '可重试',
   CANCELED: '已取消',
-}
-
-const taskTypeMap: Record<string, string> = {
-  TTS_GENERATE: '语音合成',
-  AVATAR_GENERATE: '形象生成',
-  DIGITAL_HUMAN_GENERATE: '数字人口播',
-  DOUYIN_PARSE_TRANSCRIPT: '视频解析转写',
-  VOICE_SAMPLE: '音色试听',
-  SCRIPT_REWRITE: '脚本改写',
-  STORYBOARD_GENERATE: '分镜生成',
 }
 
 const creditChangeTypeMap: Record<string, string> = {
@@ -118,7 +109,7 @@ export function getTaskStatusLabel(status?: string | null) {
 }
 
 export function getTaskTypeLabel(taskType?: string | null) {
-  return mapLabel(taskType, taskTypeMap)
+  return taskTypeLabel(taskType)
 }
 
 export function getCreditChangeTypeLabel(changeType?: string | null) {

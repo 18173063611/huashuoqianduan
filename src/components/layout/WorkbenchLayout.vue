@@ -35,28 +35,30 @@
           </div>
         </div>
         <div class="app-topbar-actions">
-          <div v-if="authed && currentUser" class="app-user-summary" title="当前账号积分">
-            <span>{{ currentUser.displayName || currentUser.username }}</span>
-            <strong>积分 {{ currentUser.creditBalance ?? 0 }}</strong>
-            <small v-if="(currentUser.creditFrozenBalance ?? 0) > 0" class="app-user-credit-sub">
+          <div v-if="authed && currentUser" class="app-credit-pill" title="当前账号积分">
+            <span class="app-credit-pill-label">积分</span>
+            <strong class="app-credit-pill-value">{{ currentUser.creditBalance ?? 0 }}</strong>
+            <span v-if="(currentUser.creditFrozenBalance ?? 0) > 0" class="app-credit-pill-frozen">
               冻结 {{ currentUser.creditFrozenBalance }}
-            </small>
+            </span>
           </div>
-          <button class="app-ghost-button" type="button" @click="$emit('openAssets')">资产中心</button>
+          <button
+            type="button"
+            class="app-assets-nav-btn"
+            :class="{ 'app-assets-nav-btn--active': assetHubActive }"
+            @click="$emit('openAssets')"
+          >
+            资产中心
+          </button>
           <button
             v-if="!authed"
-            class="app-ghost-button"
+            class="app-ghost-button app-topbar-ghost"
             type="button"
             @click="jumpToLogin"
           >
             登录
           </button>
-          <button
-            v-else
-            class="app-ghost-button"
-            type="button"
-            @click="handleLogout"
-          >
+          <button v-else class="app-ghost-button app-topbar-ghost" type="button" @click="handleLogout">
             退出登录
           </button>
         </div>
@@ -82,17 +84,19 @@ const menuItems = [
   { key: 'voice', label: '声音生成', icon: '♬' },
   { key: 'avatar', label: '数字人形象', icon: '◎' },
   { key: 'render', label: '视频制作', icon: '▻' },
-  { key: 'account', label: '账户中心', icon: '◆' },
 ] as const
 
-type MenuKey = (typeof menuItems)[number]['key']
+type MenuItemKey = (typeof menuItems)[number]['key']
 
 const props = defineProps<{
-  activeKey: MenuKey
+  /** 左侧高亮：与路由 menuKey 或流程页对应 */
+  activeKey: string
+  /** 当前在资产中心全页时为 true，用于顶部「资产中心」按钮高亮 */
+  assetHubActive: boolean
 }>()
 
 defineEmits<{
-  change: [key: MenuKey]
+  change: [key: MenuItemKey]
   openAssets: []
 }>()
 
@@ -139,16 +143,16 @@ async function handleLogout() {
   }
 }
 
-const stepIndexMap: Record<MenuKey, number> = {
+const stepIndexMap: Record<string, number> = {
   'video-parse': 0,
   storyboard: 1,
   voice: 2,
   avatar: 3,
   render: 4,
-  account: -1,
+  AssetCenter: -1,
 }
 
-const activeStepIndex = computed(() => stepIndexMap[props.activeKey])
+const activeStepIndex = computed(() => stepIndexMap[props.activeKey] ?? -1)
 
 let unsubscribeAuthRefresh: (() => void) | null = null
 
@@ -173,42 +177,75 @@ watch(
 </script>
 
 <style scoped>
-.app-user-summary {
+.app-credit-pill {
   display: inline-flex;
-  min-height: 34px;
-  max-width: 220px;
   align-items: center;
   gap: 8px;
-  overflow: hidden;
-  border: 1px solid #e6e8f0;
+  min-height: 36px;
+  padding: 0 14px;
   border-radius: 10px;
-  background: #f8fafc;
+  border: 1px solid #e2e8f0;
+  background: linear-gradient(180deg, #ffffff 0%, #f8fafc 100%);
   color: #334155;
-  padding: 0 12px;
   font-size: 13px;
+  box-shadow: 0 1px 2px rgba(15, 23, 42, 0.06);
 }
 
-.app-user-summary span {
-  min-width: 0;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.app-user-summary strong {
-  flex: 0 0 auto;
-  color: #111827;
+.app-credit-pill-label {
+  color: #64748b;
+  font-weight: 600;
   font-size: 12px;
 }
 
-.app-user-credit-sub {
-  flex: 0 0 auto;
+.app-credit-pill-value {
+  color: #0f172a;
+  font-size: 15px;
+  font-weight: 800;
+  letter-spacing: 0.02em;
+}
+
+.app-credit-pill-frozen {
   font-size: 11px;
-  color: #64748b;
+  color: #94a3b8;
+  margin-left: 4px;
+}
+
+.app-assets-nav-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 36px;
+  padding: 0 18px;
+  border-radius: 10px;
+  border: 1px solid rgba(79, 70, 229, 0.45);
+  background: linear-gradient(135deg, #4f46e5, #6366f1);
+  color: #fff;
+  font-size: 14px;
+  font-weight: 750;
+  cursor: pointer;
+  box-shadow: 0 6px 18px rgba(79, 70, 229, 0.28);
+  transition:
+    transform 0.15s ease,
+    box-shadow 0.15s ease,
+    filter 0.15s ease;
+}
+
+.app-assets-nav-btn:hover {
+  filter: brightness(1.06);
+  box-shadow: 0 8px 22px rgba(79, 70, 229, 0.38);
+  transform: translateY(-1px);
+}
+
+.app-assets-nav-btn--active {
+  box-shadow: 0 0 0 2px #fff, 0 0 0 4px rgba(99, 102, 241, 0.55), 0 8px 24px rgba(79, 70, 229, 0.42);
+}
+
+.app-topbar-ghost {
+  border-radius: 10px;
 }
 
 @media (max-width: 860px) {
-  .app-user-summary {
+  .app-credit-pill {
     display: none;
   }
 }

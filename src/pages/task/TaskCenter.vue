@@ -3,7 +3,11 @@
     <div class="app-card-header">
       <div>
         <h2 class="app-card-title">任务中心</h2>
-        <p class="app-muted">登录后查看与您账号相关的<strong>全部任务</strong>（含公共演示任务与本人任务）。</p>
+        <p class="app-muted">
+          登录后查看与您账号相关的<strong>全部任务</strong>（含公共演示任务与本人任务）。可在
+          <RouterLink class="task-hub-asset-link" to="/assets?tab=tasks">资产中心 · 最近任务</RouterLink>
+          查看预扣与积分详情。
+        </p>
       </div>
       <button
         class="app-secondary-button"
@@ -35,7 +39,7 @@
       <div class="task-toolbar">
         <select v-model="taskTypeFilter" class="asset-type-select" :disabled="loading" @change="loadData(false)">
           <option value="">全部类型</option>
-          <option value="VIDEO_PARSE">视频解析（旧接口）</option>
+          <option value="VIDEO_PARSE">视频理解</option>
           <option value="DOUYIN_PARSE_TRANSCRIPT">抖音对标解析与转写</option>
           <option value="DOUYIN_REWRITE">抖音文案改写</option>
           <option value="DOUYIN_TRANSCRIPT">抖音视频转写</option>
@@ -43,11 +47,16 @@
           <option value="VIDEO_SCRIPT_URL_ANALYZE">抖音分镜解析</option>
           <option value="TTS_GENERATE">语音合成</option>
           <option value="VOICE_SAMPLE">音色试听</option>
-          <option value="AVATAR_GENERATE">形象生成</option>
-          <option value="SEEDANCE_TEXT_VIDEO">文生视频</option>
-          <option value="SEEDANCE_FIRST_FRAME_VIDEO">首帧图生视频</option>
-          <option value="SEEDANCE_FIRST_LAST_FRAME_VIDEO">首尾帧图生视频</option>
-          <option value="SEEDANCE_REFERENCE_VIDEO">参照图生视频</option>
+          <option value="AVATAR_GENERATE">数字人形象生成</option>
+          <option value="TEXT_TO_VIDEO_SEEDANCE_1_5">文生视频（Seedance 1.5）</option>
+          <option value="TEXT_TO_VIDEO_SEEDANCE_2_0">文生视频（Seedance 2.0）</option>
+          <option value="IMAGE_TO_VIDEO_SEEDANCE_1_5">图生视频（Seedance 1.5）</option>
+          <option value="IMAGE_TO_VIDEO_SEEDANCE_2_0">图生视频（Seedance 2.0）</option>
+          <option value="IMAGE_TO_VIDEO_SEEDANCE_2_0_FAST">图生视频（Seedance 2.0 快速）</option>
+          <option value="SEEDANCE_TEXT_VIDEO">文生视频（旧）</option>
+          <option value="SEEDANCE_FIRST_FRAME_VIDEO">图生视频 · 首帧（旧）</option>
+          <option value="SEEDANCE_FIRST_LAST_FRAME_VIDEO">图生视频 · 首尾帧（旧）</option>
+          <option value="SEEDANCE_REFERENCE_VIDEO">图生视频 · 参照（旧）</option>
           <option value="DIGITAL_HUMAN_GENERATE">数字人口播</option>
         </select>
         <select v-model="statusFilter" class="asset-type-select" :disabled="loading" @change="loadData(false)">
@@ -70,25 +79,30 @@
             <strong>{{ displayTitle(task) }}</strong>
             <TaskRowSmoothProgress
               v-if="taskRowProgressEligible(task)"
+              :task-id="task.taskId"
+              :task-updated-at="task.updatedAt"
               :status="task.status"
               :progress="task.progress"
             />
             <p class="task-row-meta task-row-meta-primary">
-              {{ taskLabel(task.taskType) }}
+              <el-tooltip v-if="task.taskType" :content="task.taskType" placement="top">
+                <span>{{ taskTypeLabel(task.taskType) }}</span>
+              </el-tooltip>
+              <span v-else>{{ taskTypeLabel(task.taskType) }}</span>
               <template v-if="task.modelCode"> · 模型 {{ compactModel(task.modelCode) }}</template>
               <template v-if="(task.creditCost ?? 0) > 0"> · 预扣 {{ task.creditCost }} 积分</template>
-              <template v-if="formatWhen(task.createdAt)"> · 创建 {{ formatWhen(task.createdAt) }}</template>
+              <template v-if="task.createdAt"> · 创建 {{ formatFriendlyDateTime(task.createdAt) }}</template>
               <span v-if="task.status === 'RETRYABLE'" class="task-retry-chip">可重试</span>
               <template v-if="creditRefundHint(task)"> · {{ creditRefundHint(task) }}</template>
             </p>
             <p class="task-row-meta">
               状态 {{ task.status }} · 重试 {{ task.retryCount ?? 0 }} 次
               <template v-if="task.errorCode"> · {{ task.errorCode }} </template>
-              <template v-if="formatWhen(task.startedAt)">
-                · 开始 {{ formatWhen(task.startedAt) }}
+              <template v-if="task.startedAt">
+                · 开始 {{ formatFriendlyDateTime(task.startedAt) }}
               </template>
-              <template v-if="formatWhen(task.finishedAt)">
-                · 结束 {{ formatWhen(task.finishedAt) }}
+              <template v-if="task.finishedAt">
+                · 结束 {{ formatFriendlyDateTime(task.finishedAt) }}
               </template>
               <template v-if="task.status === 'SUCCESS' && task.resultViewed === false && resultAssetId(task)">
                 · <span class="task-unread">结果未读</span>
@@ -140,7 +154,15 @@
           <div>
             <h3>{{ selectedResultTask ? displayTitle(selectedResultTask) : '任务结果' }}</h3>
             <p v-if="selectedResultTask" class="app-muted">
-              {{ selectedResultTask.taskType }} · 任务 ID {{ selectedResultTask.taskId }}
+              <el-tooltip
+                v-if="selectedResultTask.taskType && selectedResultTask.taskType.trim()"
+                :content="selectedResultTask.taskType"
+                placement="top"
+              >
+                <span>{{ taskTypeLabel(selectedResultTask.taskType) }}</span>
+              </el-tooltip>
+              <span v-else>{{ taskTypeLabel(selectedResultTask.taskType) }}</span>
+              · 任务 ID {{ selectedResultTask.taskId }}
             </p>
           </div>
           <button type="button" class="task-result-close" aria-label="关闭" @click="closeResultModal">×</button>
@@ -148,7 +170,7 @@
 
         <p v-if="resultError" class="app-error">{{ resultError }}</p>
 
-        <div v-else-if="isSeedanceVideoTask(selectedResultTask?.taskType)" class="task-result-video">
+        <div v-else-if="isVideoResultTaskType(selectedResultTask?.taskType)" class="task-result-video">
           <video v-if="seedanceVideoUrl" :src="seedanceVideoUrl" controls preload="metadata" />
           <div v-else class="task-result-empty">未找到视频地址。</div>
         </div>
@@ -158,7 +180,7 @@
           <div v-else class="task-result-empty">未找到音频地址。</div>
         </div>
 
-        <div v-else-if="selectedResultTask?.taskType === 'VIDEO_SCRIPT_ANALYZE'" class="task-result-storyboard">
+        <div v-else-if="isStoryboardScriptTask(selectedResultTask?.taskType)" class="task-result-storyboard">
           <div v-if="scriptShots.length" class="task-result-table-wrap">
             <table class="task-result-storyboard-table">
               <thead>
@@ -216,6 +238,7 @@
 <script setup lang="ts">
 
 import { computed, ref, watch, watchEffect } from 'vue'
+import { RouterLink } from 'vue-router'
 import TaskRowSmoothProgress from '../../components/TaskRowSmoothProgress.vue'
 import { API_ORIGIN, getAuthToken } from '../../services/request'
 import {
@@ -229,6 +252,8 @@ import {
 } from '../../services/taskApi'
 import { getSessionTaskIds } from '../../services/sessionTaskStore'
 import type { TaskItem, TaskSummaryResponse } from '../../types/taskTypes'
+import { isStoryboardScriptTask, isVideoResultTaskType, taskTypeLabel } from '../../utils/taskDisplay'
+import { formatFriendlyDateTime } from '../../utils/timeFormat'
 
 interface ScriptShot {
   order: number
@@ -428,59 +453,7 @@ function displayTitle(task: TaskItem) {
   if (task.taskTitle && task.taskTitle.trim()) {
     return task.taskTitle
   }
-  return taskLabel(task.taskType)
-}
-
-function taskLabel(taskType: string) {
-  if (taskType === 'TTS_GENERATE') {
-    return '语音合成'
-  }
-  if (taskType === 'AVATAR_GENERATE') {
-    return '形象生成'
-  }
-  if (taskType === 'DOUYIN_PARSE_TRANSCRIPT') {
-    return '抖音对标解析与转写'
-  }
-  if (taskType === 'DOUYIN_REWRITE') {
-    return '抖音文案改写'
-  }
-  if (taskType === 'DOUYIN_TRANSCRIPT') {
-    return '抖音视频转写'
-  }
-  if (taskType === 'VIDEO_SCRIPT_ANALYZE') {
-    return '视频分镜解析'
-  }
-  if (taskType === 'VIDEO_SCRIPT_URL_ANALYZE') {
-    return '抖音分镜解析'
-  }
-  if (taskType === 'SEEDANCE_TEXT_VIDEO') {
-    return '文生视频'
-  }
-  if (taskType === 'SEEDANCE_FIRST_FRAME_VIDEO') {
-    return '首帧图生视频'
-  }
-  if (taskType === 'SEEDANCE_FIRST_LAST_FRAME_VIDEO') {
-    return '首尾帧图生视频'
-  }
-  if (taskType === 'SEEDANCE_REFERENCE_VIDEO') {
-    return '参照图生视频'
-  }
-  if (taskType === 'VOICE_SAMPLE') {
-    return '音色试听'
-  }
-  if (taskType === 'DIGITAL_HUMAN_GENERATE') {
-    return '数字人口播'
-  }
-  return taskType
-}
-
-function isSeedanceVideoTask(taskType: string | undefined) {
-  return (
-    taskType === 'SEEDANCE_TEXT_VIDEO' ||
-    taskType === 'SEEDANCE_FIRST_FRAME_VIDEO' ||
-    taskType === 'SEEDANCE_FIRST_LAST_FRAME_VIDEO' ||
-    taskType === 'SEEDANCE_REFERENCE_VIDEO'
-  )
+  return taskTypeLabel(task.taskType)
 }
 
 function compactModel(code: string | null | undefined) {
@@ -517,17 +490,6 @@ function resultAssetId(task: TaskItem): number | null {
     return rid
   }
   return null
-}
-
-function formatWhen(iso: string | null | undefined): string | null {
-  if (!iso) {
-    return null
-  }
-  const d = new Date(iso)
-  if (Number.isNaN(d.getTime())) {
-    return null
-  }
-  return d.toLocaleString()
 }
 
 function statusPillClass(status: string) {
@@ -937,6 +899,16 @@ section.app-card.app-page-stack {
 .task-retry,
 .task-cancel {
   white-space: nowrap;
+}
+
+.task-hub-asset-link {
+  color: #4f46e5;
+  font-weight: 650;
+  text-decoration: none;
+}
+
+.task-hub-asset-link:hover {
+  text-decoration: underline;
 }
 
 @media (max-width: 760px) {

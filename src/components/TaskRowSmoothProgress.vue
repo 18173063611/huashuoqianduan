@@ -13,16 +13,27 @@
 <script setup lang="ts">
 /**
  * 任务列表行内进度：与形象/语音生成页相同的平滑逻辑；仅当 QUEUED/RUNNING 或成功收尾闪动时显示。
+ * 虚拟进度持久化到 localStorage，关闭任务中心后面板后按时间补算，再打开不回到 0。
  */
 import { computed, onBeforeUnmount, ref, watch } from 'vue'
+import {
+  SMOOTH_PROGRESS_CEIL,
+  SMOOTH_TICK_MS,
+  catchUpSmoothProgress,
+  loadTaskSmoothProgressRecord,
+  removeTaskSmoothProgressRecord,
+  saveTaskSmoothProgressRecord,
+} from '../utils/taskSmoothProgressPersistence'
 
 const props = defineProps<{
+  taskId: number
+  taskUpdatedAt?: string
   status: string
   progress?: number | null
 }>()
 
-const CEIL = 92
-const TICK_MS = 280
+const CEIL = SMOOTH_PROGRESS_CEIL
+const TICK_MS = SMOOTH_TICK_MS
 const FLASH_MS = 650
 
 const smooth = ref(0)
@@ -30,6 +41,8 @@ const flash = ref(false)
 let tickId: number | null = null
 let flashTimer: number | null = null
 let prevStatus = ''
+/** 同一 taskId 只做一次从 localStorage 的补算，避免轮询反复覆盖 */
+const hydratedForTaskId = ref<number | null>(null)
 
 const visible = computed(
   () =>
@@ -79,13 +92,29 @@ function armFlash() {
 }
 
 watch(
-  () => [props.status, props.progress] as const,
-  () => {
-    const st = props.status
-    const pr = typeof props.progress === 'number' ? props.progress : 0
+  () => [props.taskId, props.status, props.progress] as const,
+  (val, oldVal) => {
+    const [tid, st, pr] = val
+    const server = typeof pr === 'number' ? pr : 0
+    const tidChanged = oldVal == null || oldVal[0] !== tid
+
+    if (tidChanged) {
+      smooth.value = 0
+      hydratedForTaskId.value = null
+    }
 
     if (st === 'RUNNING' || st === 'QUEUED') {
-      smooth.value = Math.max(smooth.value, pr)
+      if (hydratedForTaskId.value !== tid) {
+        hydratedForTaskId.value = tid
+        const row = loadTaskSmoothProgressRecord(tid)
+        if (row && (row.status === 'RUNNING' || row.status === 'QUEUED')) {
+          smooth.value = Math.max(server, catchUpSmoothProgress(row.progress, row.lastTickAt, server))
+        } else {
+          smooth.value = Math.max(smooth.value, server)
+        }
+      } else {
+        smooth.value = Math.max(smooth.value, server)
+      }
       startTick()
     } else {
       stopTick()
@@ -109,6 +138,31 @@ onBeforeUnmount(() => {
   stopTick()
   if (flashTimer != null) {
     window.clearTimeout(flashTimer)
+    flashTimer = null
+  }
+
+  const st = props.status
+  const tid = props.taskId
+  const ua = props.taskUpdatedAt ?? ''
+
+  if (st === 'RUNNING' || st === 'QUEUED') {
+    saveTaskSmoothProgressRecord({
+      taskId: tid,
+      progress: smooth.value,
+      status: st,
+      updatedAt: ua,
+      lastTickAt: Date.now(),
+    })
+  } else if (st === 'SUCCESS') {
+    removeTaskSmoothProgressRecord(tid)
+  } else if (['FAILED', 'RETRYABLE', 'CANCELED'].includes(st)) {
+    saveTaskSmoothProgressRecord({
+      taskId: tid,
+      progress: smooth.value,
+      status: st,
+      updatedAt: ua,
+      lastTickAt: Date.now(),
+    })
   }
 })
 </script>

@@ -16,7 +16,7 @@ export function formatApiBusinessError(code: number, message: string): string {
   const trimmed = (message || '').trim()
   if (code === 40900) {
     if (trimmed.includes('积分余额不足')) {
-      return '积分余额不足，无法完成本次操作。请到账户中心查看余额或联系管理员。'
+      return '积分余额不足，无法完成本次操作。请到资产中心查看余额或联系管理员。'
     }
     if (trimmed.includes('积分账户正在更新')) {
       return '积分处理中，请稍后重试。'

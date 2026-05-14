@@ -1,13 +1,13 @@
 <template>
-  <section class="asset-center-panel">
+  <section class="asset-center-panel" :class="{ 'asset-center-panel--embed': embedPanel }">
     <div class="asset-center-head">
       <div>
-        <h2>{{ activeCategory === 'materials' ? '素材资产' : voicesHeadTitle }}</h2>
-        <p>{{ activeCategory === 'materials' ? '筛选公共或私有素材，预览、复制链接，并管理当前账号下的资产。' : voicesHeadSubtitle }}</p>
+        <h2>{{ headTitle }}</h2>
+        <p>{{ headSubtitle }}</p>
       </div>
 
       <div class="asset-header-actions">
-        <div class="asset-category-segment" role="tablist" aria-label="资产分类">
+        <div v-if="showCategoryTabs" class="asset-category-segment" role="tablist" aria-label="资产分类">
           <button
             type="button"
             class="asset-scope-btn"
@@ -332,6 +332,11 @@ import { VOICE_PRESET_SELECTION_KEY, type VoicePresetItem } from '../../types/vo
 const props = defineProps<{
   /** 从任务中心等入口跳转时，高亮并滚动到该资产 */
   highlightAssetId?: number | null
+  /**
+   * full：保留「素材资产 / 音色库」一级切换。
+   * materials | voices：仅展示对应面板（用于资产中心页一级 Tab 内嵌）。
+   */
+  panelMode?: 'full' | 'materials' | 'voices'
 }>()
 
 const emit = defineEmits<{
@@ -340,6 +345,27 @@ const emit = defineEmits<{
 }>()
 
 const router = useRouter()
+
+const embedPanel = computed(() => props.panelMode === 'materials' || props.panelMode === 'voices')
+const showCategoryTabs = computed(() => !props.panelMode || props.panelMode === 'full')
+
+const headTitle = computed(() => {
+  if (props.panelMode === 'materials') return '素材资产'
+  if (props.panelMode === 'voices') return voicesHeadTitle.value
+  return activeCategory.value === 'materials' ? '素材资产' : voicesHeadTitle.value
+})
+
+const headSubtitle = computed(() => {
+  if (props.panelMode === 'materials') {
+    return '筛选公共或私有素材，预览、复制链接，并管理当前账号下的资产。'
+  }
+  if (props.panelMode === 'voices') {
+    return voicesHeadSubtitle.value
+  }
+  return activeCategory.value === 'materials'
+    ? '筛选公共或私有素材，预览、复制链接，并管理当前账号下的资产。'
+    : voicesHeadSubtitle.value
+})
 
 const KNOWN_SOURCE_TYPES = ['AI_GENERATED', 'DEMO', 'MANUAL_CREATED', 'SYSTEM_MOCK', 'USER_UPLOAD'] as const
 
@@ -359,6 +385,18 @@ const voiceListScope = ref<'private' | 'public'>('private')
 const hasToken = ref(false)
 let keywordReloadTimer: number | null = null
 let highlightClearTimer: number | null = null
+
+watch(
+  () => props.panelMode,
+  (m) => {
+    if (m === 'materials') {
+      activeCategory.value = 'materials'
+    } else if (m === 'voices') {
+      activeCategory.value = 'voices'
+    }
+  },
+  { immediate: true },
+)
 
 const metadataModalOpen = ref(false)
 const metadataPretty = ref('')
@@ -1194,5 +1232,13 @@ async function playVoiceSample(voice: VoicePresetItem) {
     align-items: stretch;
     flex-direction: column;
   }
+}
+
+.asset-center-panel--embed .asset-center-head h2 {
+  font-size: 17px;
+}
+
+.asset-center-panel--embed .asset-center-head p {
+  font-size: 12px;
 }
 </style>

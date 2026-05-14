@@ -118,7 +118,11 @@ select {
 
 .app-menu {
   display: grid;
-  gap: 6px;
+  flex: 1;
+  min-height: 0;
+  gap: 8px;
+  align-content: start;
+  overflow-y: auto;
 }
 
 .app-menu-item {
