@@ -210,14 +210,18 @@ import type { VideoScriptAnalyzeResult, VideoScriptShotItem } from '../../types/
 import type { TaskItem } from '../../types/taskTypes'
 import BillingEstimateBanner from '../../components/business/BillingEstimateBanner.vue'
 import { useBillingEstimate } from '../../composables/useBillingEstimate'
-
-// 分镜生成 task_type 与后端 ai_billing_step_config 种子一致：VIDEO_SCRIPT_ANALYZE / VIDEO_SCRIPT_URL_ANALYZE。
-// 两条种子积分一致，预估只读 URL 版即可，提交时后端会按实际入口预扣。
-const storyboardEstimate = useBillingEstimate({ taskType: 'VIDEO_SCRIPT_URL_ANALYZE' })
+import { notifyAuthRefresh } from '../../services/authRefreshHub'
 
 type SourceMode = 'url' | 'file'
 
 const sourceMode = ref<SourceMode>('url')
+
+// 与 WriterAsyncTaskService 一致：链接 -> VIDEO_SCRIPT_URL_ANALYZE，上传解析 -> VIDEO_SCRIPT_ANALYZE。
+const storyboardEstimate = useBillingEstimate({
+  taskType: () =>
+    sourceMode.value === 'url' ? 'VIDEO_SCRIPT_URL_ANALYZE' : 'VIDEO_SCRIPT_ANALYZE',
+  watchKeys: () => [sourceMode.value],
+})
 const videoUrl = ref('')
 const selectedFile = ref<File | null>(null)
 const uploadedPreviewUrl = ref('')
@@ -330,6 +334,8 @@ async function runAnalyze(submit: () => Promise<TaskItem>, targetUrl: string) {
     stage.value = '提交解析任务中…'
     const task = await submit()
     rememberSessionTaskId(task.taskId)
+    void storyboardEstimate.refresh()
+    notifyAuthRefresh()
     stage.value = statusStage(task.status, task.progress)
     await new Promise<void>((resolve) => {
       stopAnalyzeTracking = trackTaskResult<VideoScriptAnalyzeResult>(task.taskId, {
@@ -342,18 +348,24 @@ async function runAnalyze(submit: () => Promise<TaskItem>, targetUrl: string) {
           analyzedVideoUrl.value = targetUrl
           busy.value = false
           stage.value = ''
+          void storyboardEstimate.refresh()
+          notifyAuthRefresh()
           resolve()
         },
         onFailure(message) {
           errorMessage.value = message.errorMessage || '分镜解析任务失败'
           busy.value = false
           stage.value = ''
+          void storyboardEstimate.refresh()
+          notifyAuthRefresh()
           resolve()
         },
         onError(error) {
           errorMessage.value = error.message
           busy.value = false
           stage.value = ''
+          void storyboardEstimate.refresh()
+          notifyAuthRefresh()
           resolve()
         },
       })
