@@ -2,7 +2,7 @@
   <main class="auth-page">
     <section class="auth-shell" aria-label="登录与注册">
       <div class="auth-visual">
-        <img class="auth-visual-image" :src="welcomeIllustration" alt="登录欢迎插画" />
+        <img class="auth-visual-image"  alt="登录欢迎插画" />
       </div>
 
       <section class="auth-panel" aria-label="登录表单">
@@ -51,7 +51,9 @@
           <label class="auth-field">
             <span>密码</span>
             <span class="auth-input-wrap">
-              <span class="auth-input-icon" aria-hidden="true">▢</span>
+              <span class="auth-input-icon" aria-hidden="true">
+                <img :src="passwordIcon" alt="" class="auth-input-icon-image" />
+              </span>
               <input
                 v-model="authForm.password"
                 :type="passwordVisible ? 'text' : 'password'"
@@ -129,9 +131,9 @@
 </template>
 
 <script setup lang="ts">
+import passwordIcon from '../../assets/image.png'
 import { ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
-import welcomeIllustration from '../../assets/image.png'
 import { applyLogin, login, register } from '../../services/authApi'
 import type { UserMe } from '../../types/userTypes'
 
@@ -295,7 +297,9 @@ function extractErrorMessage(e: unknown): string {
   width: min(1110px, 100%);
   align-items: center;
   justify-content: center;
-  grid-template-columns: minmax(380px, 500px) minmax(420px, 560px);
+  grid-template-columns: minmax(550px, 550px);
+  justify-content: center;
+
 }
 
 .auth-visual {
@@ -588,4 +592,26 @@ function extractErrorMessage(e: unknown): string {
     flex-wrap: wrap;
   }
 }
+.login-illustration,
+.welcome-illustration,
+.illustration-panel,
+.login-aside,
+.auth-aside,
+.auth-visual,
+.login-visual,
+.welcome-panel {
+  display: none;
+}
+
+.auth-panel {
+  margin: auto;
+}
+
+.auth-input-icon-image {
+  display: block;
+  width: 1em;
+  height: 1em;
+  object-fit: contain;
+}
+
 </style>
