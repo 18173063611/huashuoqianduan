@@ -96,9 +96,16 @@ select {
   flex: 0 0 auto;
   place-items: center;
   border-radius: 12px;
-  background: linear-gradient(135deg, var(--app-primary), #7c3aed);
-  box-shadow: 0 10px 22px rgba(99, 91, 255, 0.35);
-  font-weight: 900;
+  background: linear-gradient(135deg, #7c3aed, #3b82f6);
+  box-shadow: 0 10px 22px rgba(99, 91, 255, 0.35), 0 0 16px rgba(124, 58, 237, 0.2);
+  overflow: visible;
+}
+
+.app-brand-mark svg {
+  display: block;
+  width: 34px;
+  height: 34px;
+  overflow: visible;
 }
 
 .app-brand strong {
@@ -143,10 +150,23 @@ select {
 
 .app-menu-icon {
   display: inline-grid;
-  width: 18px;
+  width: 24px;
+  height: 24px;
+  flex: 0 0 24px;
   place-items: center;
-  font-size: 15px;
-  opacity: 0.9;
+  opacity: 0.96;
+  transform-origin: center;
+  transition:
+    filter 0.2s ease,
+    opacity 0.2s ease,
+    transform 0.2s ease;
+}
+
+.app-menu-icon svg {
+  display: block;
+  width: 24px;
+  height: 24px;
+  overflow: visible;
 }
 
 .app-menu-item:hover {
@@ -154,9 +174,16 @@ select {
   color: #fff;
 }
 
+.app-menu-item:hover .app-menu-icon,
+.app-menu-item.active .app-menu-icon {
+  opacity: 1;
+  filter: drop-shadow(0 0 8px rgba(168, 85, 247, 0.68)) drop-shadow(0 0 10px rgba(59, 130, 246, 0.32));
+  transform: scale(1.05);
+}
+
 .app-menu-item.active {
-  background: linear-gradient(135deg, #3f3dc3, var(--app-primary));
-  box-shadow: 0 10px 22px rgba(79, 70, 229, 0.28);
+  background: linear-gradient(135deg, #4338ca 0%, #5b4bff 52%, #6d5cff 100%);
+  box-shadow: 0 10px 22px rgba(79, 70, 229, 0.3), inset 0 1px 0 rgba(255, 255, 255, 0.14);
   color: #fff;
 }
 

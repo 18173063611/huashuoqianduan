@@ -264,16 +264,18 @@
         >
           <label>生成模型</label>
           <div
+            ref="modelDropdownRef"
             class="render-model-dropdown"
             :class="{ open: modelDropdownOpen, disabled: busy }"
-            @mouseleave="closeModelDropdown"
           >
             <button
               type="button"
               class="render-model-trigger"
               :disabled="busy"
               :aria-expanded="modelDropdownOpen"
-              @click="modelDropdownOpen = !modelDropdownOpen"
+              aria-haspopup="listbox"
+              @click="toggleModelDropdown"
+              @keydown.esc.stop.prevent="closeModelDropdown"
             >
               <span>{{ selectedModelLabel }}</span>
               <span class="render-model-caret" aria-hidden="true">▾</span>
@@ -475,6 +477,7 @@ watch(
 
 const selectedModel = ref<SeedanceModelValue>('doubao-seedance-1-5-pro-251215')
 const modelDropdownOpen = ref(false)
+const modelDropdownRef = ref<HTMLElement | null>(null)
 
 const prompt = ref('')
 const duration = ref<number>(5)
@@ -568,8 +571,28 @@ function selectModel(value: SeedanceModelValue) {
   modelDropdownOpen.value = false
 }
 
+function toggleModelDropdown() {
+  if (busy.value) return
+  modelDropdownOpen.value = !modelDropdownOpen.value
+}
+
 function closeModelDropdown() {
   modelDropdownOpen.value = false
+}
+
+function handleModelDropdownPointerDown(event: PointerEvent) {
+  if (!modelDropdownOpen.value) return
+  const target = event.target
+  if (target instanceof Node && modelDropdownRef.value?.contains(target)) {
+    return
+  }
+  closeModelDropdown()
+}
+
+function handleModelDropdownKeydown(event: KeyboardEvent) {
+  if (event.key === 'Escape') {
+    closeModelDropdown()
+  }
 }
 
 const promptPlaceholder = computed(() => {
@@ -886,10 +909,14 @@ function digitalHumanDetailToVideoResult(detail: DigitalHumanTaskDetailResponse)
 
 onMounted(async () => {
   loggedIn.value = !!getAuthToken()
+  document.addEventListener('pointerdown', handleModelDropdownPointerDown, true)
+  document.addEventListener('keydown', handleModelDropdownKeydown)
   await renderEstimate.refresh()
 })
 
 onBeforeUnmount(() => {
+  document.removeEventListener('pointerdown', handleModelDropdownPointerDown, true)
+  document.removeEventListener('keydown', handleModelDropdownKeydown)
   stopDigitalHumanPoll()
   stopSeedanceTracking()
 })
@@ -1194,6 +1221,7 @@ onBeforeUnmount(() => {
   position: relative;
   display: inline-block;
   min-width: 160px;
+  z-index: 40;
 }
 
 .render-model-trigger {
@@ -1241,17 +1269,28 @@ onBeforeUnmount(() => {
 
 .render-model-options {
   position: absolute;
-  top: calc(100% + 4px);
+  top: calc(100% + 6px);
   left: 0;
-  z-index: 20;
+  z-index: 80;
   min-width: 100%;
   margin: 0;
-  padding: 4px;
+  padding: 6px;
+  max-height: 220px;
+  overflow-y: auto;
   list-style: none;
   border: 1px solid #e3e7ef;
-  border-radius: 8px;
+  border-radius: 10px;
   background: #fff;
-  box-shadow: 0 8px 24px rgba(15, 23, 42, 0.08);
+  box-shadow: 0 16px 38px rgba(15, 23, 42, 0.14), 0 0 0 1px rgba(99, 91, 255, 0.04);
+}
+
+.render-model-options::before {
+  position: absolute;
+  top: -8px;
+  right: 0;
+  left: 0;
+  height: 8px;
+  content: "";
 }
 
 .render-model-option {
@@ -1259,18 +1298,24 @@ onBeforeUnmount(() => {
   display: flex;
   align-items: center;
   gap: 6px;
-  padding: 8px 12px;
-  border-radius: 6px;
+  min-height: 38px;
+  padding: 9px 12px;
+  border-radius: 8px;
   color: #232838;
   font-size: 13px;
   font-weight: 700;
   cursor: pointer;
   white-space: nowrap;
+  transition:
+    background 0.16s ease,
+    color 0.16s ease,
+    transform 0.16s ease;
 }
 
 .render-model-option:hover {
   background: #f5f3ff;
   color: #5e50df;
+  transform: translateX(1px);
 }
 
 .render-model-option.active {
