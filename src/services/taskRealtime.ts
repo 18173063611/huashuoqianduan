@@ -187,6 +187,10 @@ function resolveWsUrl() {
   if (configured) {
     return configured
   }
+  if (typeof window !== 'undefined' && (!API_ORIGIN || API_ORIGIN.startsWith('/'))) {
+    const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:'
+    return `${protocol}//${window.location.host}/ws`
+  }
   const wsOrigin = API_ORIGIN.replace(/^https:/, 'wss:').replace(/^http:/, 'ws:')
   return `${wsOrigin}/ws`
 }
