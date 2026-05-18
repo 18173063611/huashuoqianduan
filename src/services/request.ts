@@ -7,10 +7,10 @@ import {
   setAuthToken as writeAuthToken,
 } from './authSession'
 
-/** 开发默认连本机；生产或未配置时使用线上占位，也可用环境变量覆盖。 */
+/** 开发默认连本机；生产未配置时走同域 /api/v1，也可用环境变量覆盖。 */
 export const API_BASE_URL =
   import.meta.env.VITE_API_BASE_URL ||
-  (import.meta.env.DEV ? 'http://127.0.0.1:8080/api/v1' : 'https://huashuohouduan.onrender.com/api/v1')
+  (import.meta.env.DEV ? 'http://127.0.0.1:8080/api/v1' : '/api/v1')
 
 /** 用于拼接 /uploads 等静态资源的绝对地址 */
 export const API_ORIGIN = API_BASE_URL.replace(/\/api\/v1\/?$/, '')
