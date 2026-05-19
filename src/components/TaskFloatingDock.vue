@@ -57,21 +57,28 @@ const emit = defineEmits<{
 const sheetOpen = ref(false)
 const processingCount = ref(0)
 let pollTimer: number | null = null
+let badgeRefreshInFlight = false
 
 function canPoll() {
   return !!getAuthToken()
 }
 
 async function refreshBadge() {
+  if (badgeRefreshInFlight) {
+    return
+  }
   if (!canPoll()) {
     processingCount.value = 0
     return
   }
+  badgeRefreshInFlight = true
   try {
     const sum = await getTaskSummary()
     processingCount.value = typeof sum.processingCount === 'number' ? sum.processingCount : 0
   } catch {
     /* 忽略轮询错误 */
+  } finally {
+    badgeRefreshInFlight = false
   }
 }
 

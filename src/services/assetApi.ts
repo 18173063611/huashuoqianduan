@@ -1,4 +1,4 @@
-import { request } from './request'
+import { API_BASE_URL, API_ORIGIN, getAuthToken, request } from './request'
 import type { AssetItem, AssetType } from '../types/assetTypes'
 
 export type AssetListSort = 'createdAtDesc' | 'createdAtAsc' | 'fileNameAsc' | 'fileSizeDesc'
@@ -46,6 +46,33 @@ export async function getAssets(params?: ListAssetsParams) {
 
 export function getAssetDetail(assetId: number) {
   return request<AssetItem>(`/assets/${assetId}`)
+}
+
+export async function getAssetTextContent(asset: AssetItem) {
+  const token = getAuthToken()
+  const headers = token ? { Authorization: `Bearer ${token}` } : undefined
+  const primaryUrl = `${API_BASE_URL}/assets/${asset.assetId}/content`
+
+  const primary = await fetch(primaryUrl, { headers })
+  if (primary.ok) {
+    return primary.text()
+  }
+
+  const fileUrl = asset.fileUrl || ''
+  const fallbackUrl = fileUrl.startsWith('http')
+    ? fileUrl
+    : `${API_ORIGIN}${fileUrl.startsWith('/') ? fileUrl : `/${fileUrl}`}`
+  if (!fallbackUrl || fallbackUrl === primaryUrl) {
+    const text = await primary.text().catch(() => '')
+    throw new Error(`HTTP ${primary.status}: ${text}`)
+  }
+
+  const fallback = await fetch(fallbackUrl, { headers })
+  const text = await fallback.text()
+  if (!fallback.ok) {
+    throw new Error(`HTTP ${fallback.status}: ${text}`)
+  }
+  return text
 }
 
 export function saveAsset(assetId: number) {
