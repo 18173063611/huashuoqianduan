@@ -70,8 +70,8 @@
         </div>
 
         <div v-else class="storyboard-source storyboard-source-file">
-          <label class="storyboard-file-picker" :class="{ 'is-disabled': busy }">
-            <input type="file" accept="video/*" :disabled="busy" @change="handleFileChange" />
+          <label class="storyboard-file-picker" :class="{ 'is-disabled': busy || uploadingFile }">
+            <input type="file" accept="video/*" :disabled="busy || uploadingFile" @change="handleFileChange" />
             <span class="storyboard-file-cta">选择视频文件</span>
             <span class="storyboard-file-meta" :title="selectedFile ? selectedFile.name : ''">
               {{ selectedFile ? `${selectedFile.name}（${formatFileSize(selectedFile.size)}）` : '尚未选择文件' }}
@@ -82,7 +82,7 @@
             <button
               class="app-primary-button"
               type="button"
-              :disabled="!canAnalyzeFile || busy || !!storyboardEstimate.insufficientHint.value"
+              :disabled="!canAnalyzeFile || busy || uploadingFile || !!storyboardEstimate.insufficientHint.value"
               :title="storyboardEstimate.insufficientHint.value ?? ''"
               @click="handleAnalyzeFile"
             >
@@ -112,7 +112,7 @@
           </div>
         </div>
 
-        <div v-if="busy && stage" class="storyboard-status">
+        <div v-if="(busy || uploadingFile) && stage" class="storyboard-status">
           <span class="storyboard-status-dot" />
           {{ stage }}
         </div>
@@ -231,13 +231,18 @@ const shots = ref<VideoScriptShotItem[]>([])
 const errorMessage = ref('')
 const stage = ref('')
 const busy = ref(false)
+const uploadingFile = ref(false)
 let stopAnalyzeTracking: (() => void) | null = null
+let uploadRequestId = 0
 
 onBeforeUnmount(() => {
   stopAnalyzeTask()
 })
 
 const busyLabel = computed(() => {
+  if (uploadingFile.value) {
+    return '上传中…'
+  }
   if (!busy.value) {
     return '开始解析'
   }
@@ -245,7 +250,7 @@ const busyLabel = computed(() => {
 })
 
 const canAnalyzeUrl = computed(() => Boolean(videoUrl.value))
-const canAnalyzeFile = computed(() => Boolean(selectedFile.value))
+const canAnalyzeFile = computed(() => Boolean(selectedFile.value && uploadedPreviewUrl.value))
 
 const ORDER_CN = ['一', '二', '三', '四', '五', '六', '七', '八', '九', '十']
 
@@ -308,11 +313,43 @@ function formatFileSize(size: number) {
   return `${(size / 1024 / 1024).toFixed(1)} MB`
 }
 
-function handleFileChange(event: Event) {
+async function handleFileChange(event: Event) {
   const input = event.target as HTMLInputElement
-  selectedFile.value = input.files?.[0] ?? null
+  const file = input.files?.[0] ?? null
+  const currentRequestId = ++uploadRequestId
+  selectedFile.value = file
   uploadedPreviewUrl.value = ''
   errorMessage.value = ''
+
+  if (!file) {
+    stage.value = ''
+    return
+  }
+
+  uploadingFile.value = true
+  stage.value = '上传视频中…'
+
+  try {
+    const uploaded = await uploadFile(file)
+    if (currentRequestId !== uploadRequestId) {
+      return
+    }
+    uploadedPreviewUrl.value = uploaded.previewUrl.startsWith('http')
+      ? uploaded.previewUrl
+      : `${uploaded.previewUrl}`
+    stage.value = ''
+  } catch (error) {
+    if (currentRequestId !== uploadRequestId) {
+      return
+    }
+    errorMessage.value = error instanceof Error ? error.message : '上传失败'
+    input.value = ''
+    stage.value = ''
+  } finally {
+    if (currentRequestId === uploadRequestId) {
+      uploadingFile.value = false
+    }
+  }
 }
 
 function resetResult() {
@@ -417,29 +454,14 @@ async function handleAnalyzeUrl() {
 }
 
 async function handleAnalyzeFile() {
-  if (!canAnalyzeFile.value || busy.value || !selectedFile.value) {
+  if (!canAnalyzeFile.value || busy.value || uploadingFile.value) {
     return
   }
 
-  busy.value = true
-  errorMessage.value = ''
-  shots.value = []
-  analyzedVideoUrl.value = ''
-
   try {
-    // 已经上传过同一个文件就直接复用 previewUrl，避免重复占用对象存储空间
-    if (!uploadedPreviewUrl.value) {
-      stage.value = '上传视频中…'
-      const uploaded = await uploadFile(selectedFile.value)
-      // 上传接口只返回对象存储里的相对路径
-      uploadedPreviewUrl.value = uploaded.previewUrl.startsWith('http')
-        ? uploaded.previewUrl
-        : `${uploaded.previewUrl}`
-    }
-
     const targetUrl = publicVideoUrl(uploadedPreviewUrl.value)
     if (!targetUrl) {
-      throw new Error('请选择本地视频文件')
+      throw new Error('请先选择并上传本地视频文件')
     }
 
     await runAnalyze(() => analyzeVideoScript(targetUrl), targetUrl)
