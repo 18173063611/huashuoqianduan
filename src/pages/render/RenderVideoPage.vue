@@ -431,9 +431,10 @@ const seedanceModelOptions: Array<{
   value: SeedanceModelValue
   label: string
   tip?: string
+  maxDuration: number
 }> = [
-  { value: 'doubao-seedance-1-5-pro-251215', label: 'seedance1.5' },
-  { value: 'ep-20260512233524-85r4g', label: 'seedance2.0', tip: '不支持上传人脸' },
+  { value: 'doubao-seedance-1-5-pro-251215', label: 'seedance1.5', maxDuration: 12 },
+  { value: 'ep-20260512233524-85r4g', label: 'seedance2.0', tip: '不支持上传人脸', maxDuration: 15 },
 ]
 
 const mainTabs: Array<{ key: MainTab; label: string }> = [
@@ -537,19 +538,26 @@ const showTaskProgress = computed(
 let digitalHumanPollTimer: number | null = null
 let stopSeedanceTaskTracking: (() => void) | null = null
 
-// Seedance 1.5 pro 支持 [4, 12]，参照图（lite i2v）支持 [2, 12]
+const selectedSeedanceModel = computed(
+  () => seedanceModelOptions.find((o) => o.value === selectedModel.value) ?? seedanceModelOptions[0],
+)
+
+// seedance1.5 支持 [4, 12]，seedance2.0 支持 [4, 15]，参照图（lite i2v）支持 [2, 12]
 const durationOptions = computed(() => {
   if (mainTab.value === 'image' && imageSubTab.value === 'reference') {
     return [2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12].map((v) => ({ value: v, label: `${v} 秒` }))
   }
-  return [4, 5, 6, 7, 8, 9, 10, 11, 12].map((v) => ({ value: v, label: `${v} 秒` }))
+  return Array.from({ length: selectedSeedanceModel.value.maxDuration - 3 }, (_, idx) => idx + 4).map((v) => ({
+    value: v,
+    label: `${v} 秒`,
+  }))
 })
 
 const durationHint = computed(() => {
   if (mainTab.value === 'image' && imageSubTab.value === 'reference') {
     return 'lite i2v 模型支持 2 ~ 12 秒'
   }
-  return 'Seedance 1.5 pro 支持 4 ~ 12 秒'
+  return `${selectedSeedanceModel.value.label} 支持 4 ~ ${selectedSeedanceModel.value.maxDuration} 秒`
 })
 
 const showModelSelector = computed(() => {
@@ -562,9 +570,7 @@ const showModelSelector = computed(() => {
   return false
 })
 
-const selectedModelLabel = computed(
-  () => seedanceModelOptions.find((o) => o.value === selectedModel.value)?.label ?? '',
-)
+const selectedModelLabel = computed(() => selectedSeedanceModel.value.label)
 
 function selectModel(value: SeedanceModelValue) {
   selectedModel.value = value
@@ -613,12 +619,17 @@ const digitalHumanAudioReady = computed(() => {
 })
 
 // 切换模式时重置错误与结果，避免误展示其它模式产物
-watch([mainTab, imageSubTab], () => {
+watch([mainTab, imageSubTab, selectedModel], () => {
   errorMessage.value = ''
-  // 调整时长到当前模式允许的最小值（5 秒兼容两种模式）
   const allowed = durationOptions.value.map((o) => o.value)
-  if (!allowed.includes(duration.value)) {
-    duration.value = allowed[0]
+  const min = allowed[0] ?? 4
+  const max = allowed[allowed.length - 1] ?? min
+  if (duration.value < min) {
+    duration.value = min
+  } else if (duration.value > max) {
+    duration.value = max
+  } else if (!allowed.includes(duration.value)) {
+    duration.value = min
   }
 })
 
