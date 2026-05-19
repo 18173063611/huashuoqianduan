@@ -55,9 +55,14 @@
                   {{ loadingAssets ? '刷新中…' : '刷新图片资产' }}
                 </button>
               </div>
-              <p class="app-muted avatar-small">
-                参考图需要是图片生成服务可访问的地址；本地开发未配置公网访问时，可不选参考图直接生成。仅您名下的私有图片可在此列表中删除。
-              </p>
+              <div class="avatar-reference-guide">
+                <strong>如何选择参考图</strong>
+                <ul>
+                  <li>优先选择正面或 3/4 侧脸、五官清晰、光线均匀的人像照。</li>
+                  <li>人物主体尽量完整，避免多人合照、夸张遮挡、过度滤镜或复杂背景。</li>
+                  <li>想保持同一人物风格时选 1 张最像目标形象的图；想融合造型时最多勾选 2-3 张。</li>
+                </ul>
+              </div>
               <p v-if="referenceAssets.length === 0" class="app-muted avatar-small">资产中心暂无图片资产，可先上传形象照或直接文生图。</p>
               <div v-else class="avatar-reference-list">
                 <div v-for="asset in referenceAssets" :key="asset.assetId" class="avatar-reference-item">
@@ -586,6 +591,29 @@ function assetUrl(url?: string | null) {
   border: 1px solid var(--app-border);
   border-radius: var(--app-radius-md);
   background: var(--app-surface-soft);
+}
+
+.avatar-reference-guide {
+  margin: 12px 0;
+  padding: 12px;
+  border: 1px solid rgba(99, 102, 241, 0.18);
+  border-radius: var(--app-radius-sm);
+  background: rgba(255, 255, 255, 0.74);
+}
+
+.avatar-reference-guide strong {
+  display: block;
+  margin-bottom: 8px;
+  color: var(--app-text-main);
+  font-size: 13px;
+}
+
+.avatar-reference-guide ul {
+  margin: 0;
+  padding-left: 18px;
+  color: var(--app-text-secondary);
+  font-size: 12px;
+  line-height: 1.65;
 }
 
 .avatar-section-heading {

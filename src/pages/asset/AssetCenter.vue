@@ -221,9 +221,9 @@
         :class="{ 'asset-row-highlight': highlightedId === asset.assetId }"
       >
         <div class="asset-row-main">
-          <strong class="asset-row-title">{{ asset.fileName }}</strong>
+          <strong class="asset-row-title">{{ displayAssetTitle(asset) }}</strong>
           <p class="asset-row-meta">
-            {{ asset.assetType }} · {{ formatFileSize(asset.fileSize) }} · {{ asset.sourceType }}
+            {{ displayAssetMeta(asset) }}
             <template v-if="asset.createdAt"> · {{ formatTime(asset.createdAt) }}</template>
           </p>
           <div class="asset-row-preview">
@@ -236,6 +236,12 @@
             <template v-else-if="isVideo(asset)">
               <video :src="resolveFileUrl(asset.fileUrl)" controls preload="none" />
             </template>
+            <template v-else-if="isJson(asset)">
+              <div class="asset-result-card">
+                <strong>{{ resultAssetLabel(asset) }}</strong>
+                <span>点击预览查看结构化结果。</span>
+              </div>
+            </template>
             <template v-else>
               <span class="app-muted">此类型建议点击“预览”查看。</span>
             </template>
@@ -243,7 +249,16 @@
         </div>
 
         <div class="asset-row-actions">
-          <a class="app-secondary-button asset-open" :href="resolveFileUrl(asset.fileUrl)" target="_blank" rel="noreferrer">预览</a>
+          <button
+            v-if="isJson(asset)"
+            class="app-secondary-button asset-open"
+            type="button"
+            :disabled="previewLoading"
+            @click="openAssetPreview(asset)"
+          >
+            {{ previewLoading && previewAsset?.assetId === asset.assetId ? '加载中...' : '预览' }}
+          </button>
+          <a v-else class="app-secondary-button asset-open" :href="resolveFileUrl(asset.fileUrl)" target="_blank" rel="noreferrer">预览</a>
           <button class="app-secondary-button" type="button" @click="copyLink(asset)">复制链接</button>
           <button
             v-if="listScope === 'global' && hasToken"
@@ -308,13 +323,106 @@
         </div>
       </div>
     </div>
+
+    <div v-if="previewModalOpen" class="asset-modal-backdrop" @click.self="closeAssetPreview">
+      <section class="asset-preview-modal" role="dialog" aria-modal="true" aria-label="资产预览">
+        <header class="asset-modal-header asset-preview-head">
+          <div>
+            <strong>{{ previewAsset ? resultAssetLabel(previewAsset) : '结果预览' }}</strong>
+            <p v-if="previewAsset" class="app-muted asset-modal-subtitle">
+              {{ displayAssetPreviewSubtitle(previewAsset) }}
+            </p>
+          </div>
+          <button class="app-secondary-button" type="button" @click="closeAssetPreview">关闭</button>
+        </header>
+
+        <p v-if="previewError" class="app-error">{{ previewError }}</p>
+        <div v-else-if="previewLoading" class="asset-preview-empty">正在加载预览...</div>
+
+        <template v-else>
+          <div v-if="previewScriptShots.length" class="asset-preview-storyboard">
+            <div class="asset-preview-toolbar">
+              <label for="asset-preview-shot-select">查看场景</label>
+              <select id="asset-preview-shot-select" v-model.number="previewShotIndex">
+                <option :value="-1">全部场景（共 {{ previewScriptShots.length }} 个）</option>
+                <option v-for="(shot, index) in previewScriptShots" :key="`${shot.order}-${shot.time}`" :value="index">
+                  场景{{ orderLabel(shot.order) }}{{ shot.time ? ` · ${shot.time}` : '' }}
+                </option>
+              </select>
+            </div>
+            <div class="asset-preview-table-wrap">
+              <table class="asset-preview-table">
+                <thead>
+                  <tr>
+                    <th>场景</th>
+                    <th>时间</th>
+                    <th>画面</th>
+                    <th>台词</th>
+                    <th>拍摄技巧</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  <tr v-for="shot in displayedPreviewScriptShots" :key="`${shot.order}-${shot.time}`">
+                    <td>场景{{ orderLabel(shot.order) }}</td>
+                    <td>{{ shot.time || '-' }}</td>
+                    <td>
+                      <div class="asset-preview-cell-text">{{ shot.page || '-' }}</div>
+                      <p v-if="shot.backgroundMusic && shot.backgroundMusic !== '无'" class="asset-preview-bgm">
+                        {{ shot.backgroundMusic }}
+                      </p>
+                    </td>
+                    <td>{{ shot.content || '-' }}</td>
+                    <td>{{ shot.highlight || '-' }}</td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+          </div>
+
+          <div v-else-if="previewStoryboardShots.length" class="asset-preview-shot-grid">
+            <article v-for="shot in previewStoryboardShots" :key="shot.index" class="asset-preview-shot-card">
+              <span>镜头 {{ shot.index }}</span>
+              <strong>{{ shot.visual || '画面描述' }}</strong>
+              <p>{{ shot.narration || '暂无旁白' }}</p>
+              <small>预计 {{ shot.estDurationSec || 0 }} 秒</small>
+            </article>
+          </div>
+
+          <div v-else-if="isBenchmarkPreview" class="asset-preview-benchmark">
+            <article class="asset-preview-video-info">
+              <img v-if="benchmarkParse.coverUrl" :src="benchmarkParse.coverUrl" alt="对标视频封面" />
+              <div v-else class="asset-preview-cover-placeholder">AI</div>
+              <div>
+                <strong>{{ benchmarkParse.title || '对标视频信息' }}</strong>
+                <p>{{ benchmarkParse.authorName || '对标账号' }}</p>
+                <small>
+                  <template v-if="benchmarkParse.durationText">时长 {{ benchmarkParse.durationText }}</template>
+                  <template v-if="benchmarkParse.videoId"> · 视频 ID {{ benchmarkParse.videoId }}</template>
+                </small>
+              </div>
+            </article>
+            <section class="asset-preview-text-panel">
+              <h4>ASR 原文案</h4>
+              <p>{{ benchmarkTranscriptText || '暂无转写原文。' }}</p>
+            </section>
+          </div>
+
+          <div v-else-if="rewritePreviewText" class="asset-preview-text-panel">
+            <h4>{{ rewritePreviewTitle }}</h4>
+            <p>{{ rewritePreviewText }}</p>
+          </div>
+
+          <div v-else class="asset-preview-empty">该结果暂无可视化预览。</div>
+        </template>
+      </section>
+    </div>
   </section>
 </template>
 
 <script setup lang="ts">
 import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { useRouter } from 'vue-router'
-import { deleteAsset, getAssets, publishAsset, saveAsset, unpublishAsset } from '../../services/assetApi'
+import { deleteAsset, getAssets, getAssetTextContent, publishAsset, saveAsset, unpublishAsset } from '../../services/assetApi'
 import type { AssetListScope, AssetListSort } from '../../services/assetApi'
 import { API_ORIGIN, getAuthToken } from '../../services/request'
 import type { AssetItem, AssetType } from '../../types/assetTypes'
@@ -328,6 +436,7 @@ import {
 import { getTaskDetail, getTaskResult, newIdempotencyKey } from '../../services/taskApi'
 import { rememberSessionTaskId } from '../../services/sessionTaskStore'
 import { VOICE_PRESET_SELECTION_KEY, type VoicePresetItem } from '../../types/voiceTypes'
+import { taskTypeLabel } from '../../utils/taskDisplay'
 
 const props = defineProps<{
   /** 从任务中心等入口跳转时，高亮并滚动到该资产 */
@@ -343,6 +452,22 @@ const emit = defineEmits<{
   highlightConsumed: []
   voiceSelected: []
 }>()
+
+interface PreviewScriptShot {
+  order: number
+  time: string
+  content: string
+  backgroundMusic: string
+  page: string
+  highlight: string
+}
+
+interface PreviewStoryboardShot {
+  index: number
+  visual: string
+  narration: string
+  estDurationSec: number
+}
 
 const router = useRouter()
 
@@ -367,7 +492,35 @@ const headSubtitle = computed(() => {
     : voicesHeadSubtitle.value
 })
 
-const KNOWN_SOURCE_TYPES = ['AI_GENERATED', 'DEMO', 'MANUAL_CREATED', 'SYSTEM_MOCK', 'USER_UPLOAD'] as const
+const KNOWN_SOURCE_TYPES = [
+  'AI_GENERATED',
+  'DEMO',
+  'MANUAL_CREATED',
+  'SYSTEM_MOCK',
+  'USER_UPLOAD',
+  'SCRIPT_REWRITE',
+  'STORYBOARD_GENERATE',
+  'VIDEO_PARSE',
+  'VIDEO_SCRIPT_ANALYZE',
+  'VIDEO_SCRIPT_URL_ANALYZE',
+  'DOUYIN_BENCHMARK',
+  'DOUYIN_PARSE_TRANSCRIPT',
+  'DOUYIN_REWRITE',
+  'DOUYIN_TRANSCRIPT',
+  'TTS_GENERATE',
+  'VOICE_SAMPLE',
+  'AVATAR_GENERATE',
+  'DIGITAL_HUMAN_GENERATE',
+  'SEEDANCE_TEXT_VIDEO',
+  'SEEDANCE_FIRST_FRAME_VIDEO',
+  'SEEDANCE_FIRST_LAST_FRAME_VIDEO',
+  'SEEDANCE_REFERENCE_VIDEO',
+  'TEXT_TO_VIDEO_SEEDANCE_1_5',
+  'TEXT_TO_VIDEO_SEEDANCE_2_0',
+  'IMAGE_TO_VIDEO_SEEDANCE_1_5',
+  'IMAGE_TO_VIDEO_SEEDANCE_2_0',
+  'IMAGE_TO_VIDEO_SEEDANCE_2_0_FAST',
+] as const
 
 const assets = ref<AssetItem[]>([])
 const voices = ref<VoicePresetItem[]>([])
@@ -402,6 +555,12 @@ const metadataModalOpen = ref(false)
 const metadataPretty = ref('')
 const metadataTitle = ref('')
 const metadataLink = ref('#')
+const previewModalOpen = ref(false)
+const previewLoading = ref(false)
+const previewError = ref('')
+const previewAsset = ref<AssetItem | null>(null)
+const previewPayload = ref<unknown>(null)
+const previewShotIndex = ref(-1)
 
 const voicesHeadTitle = computed(() =>
   activeCategory.value === 'voices'
@@ -450,6 +609,82 @@ const filteredVoices = computed(() => {
       (voice.scene || '').toLowerCase().includes(q)
     )
   })
+})
+
+const previewRecord = computed(() => (isRecord(previewPayload.value) ? previewPayload.value : null))
+
+const previewTaskType = computed(() => {
+  const asset = previewAsset.value
+  const metadata = asset ? parseJsonObject(asset.metadataJson) : null
+  const fromMeta = stringField(metadata, 'taskType')
+  const fromPayload = stringField(previewRecord.value, 'taskType')
+  const sourceType = asset?.sourceType || ''
+  if (fromMeta) return fromMeta
+  if (fromPayload) return fromPayload
+  if (sourceType === 'DOUYIN_BENCHMARK') return 'DOUYIN_PARSE_TRANSCRIPT'
+  return sourceType
+})
+
+const previewScriptShots = computed<PreviewScriptShot[]>(() => {
+  const scripts = previewRecord.value?.scripts
+  return Array.isArray(scripts)
+    ? scripts.filter(isPreviewScriptShot).sort((a, b) => a.order - b.order)
+    : []
+})
+
+const displayedPreviewScriptShots = computed(() => {
+  const list = previewScriptShots.value
+  const index = previewShotIndex.value
+  if (index < 0 || index >= list.length) {
+    return list
+  }
+  return [list[index]]
+})
+
+const previewStoryboardShots = computed<PreviewStoryboardShot[]>(() => {
+  const storyboard = previewRecord.value?.storyboard
+  return Array.isArray(storyboard)
+    ? storyboard.filter(isPreviewStoryboardShot).sort((a, b) => a.index - b.index)
+    : []
+})
+
+const benchmarkParse = computed(() => {
+  const parseResult = isRecord(previewRecord.value?.parseResult) ? previewRecord.value.parseResult : null
+  const author = isRecord(parseResult?.author) ? parseResult.author : null
+  const durationSeconds = numberField(parseResult, 'durationSeconds')
+  return {
+    coverUrl: stringField(parseResult, 'coverUrl'),
+    title: stringField(parseResult, 'title'),
+    videoId: stringField(parseResult, 'videoId'),
+    authorName: stringField(author, 'nickname'),
+    durationText: durationSeconds > 0 ? formatDuration(durationSeconds) : '',
+  }
+})
+
+const benchmarkTranscriptText = computed(() => {
+  const transcript = isRecord(previewRecord.value?.transcriptResult) ? previewRecord.value.transcriptResult : null
+  return stringField(transcript, 'originalText')
+})
+
+const isBenchmarkPreview = computed(() => {
+  const type = previewTaskType.value
+  return type === 'DOUYIN_PARSE_TRANSCRIPT' || previewAsset.value?.sourceType === 'DOUYIN_BENCHMARK'
+})
+
+const rewritePreviewText = computed(() => {
+  const record = previewRecord.value
+  return (
+    stringField(record, 'rewrittenText') ||
+    stringField(record, 'translatedText') ||
+    stringField(record, 'originalText')
+  )
+})
+
+const rewritePreviewTitle = computed(() => {
+  const type = previewTaskType.value
+  if (type === 'DOUYIN_TRANSCRIPT') return '转写原文'
+  if (type === 'DOUYIN_REWRITE') return '改写后文案'
+  return '生成文案'
 })
 
 onMounted(() => {
@@ -601,6 +836,62 @@ function isVideo(asset: AssetItem) {
   return asset.assetType === 'VIDEO' || (asset.mimeType || '').startsWith('video/')
 }
 
+function isJson(asset: AssetItem) {
+  return (
+    asset.assetType === 'JSON' ||
+    (asset.mimeType || '').toLowerCase().includes('json') ||
+    asset.fileName.toLowerCase().endsWith('.json')
+  )
+}
+
+function resultAssetLabel(asset: AssetItem) {
+  const type = assetTaskType(asset)
+  const label = taskTypeLabel(type)
+  if (label && label !== '其他任务' && label !== '暂无') {
+    return `${label}结果`
+  }
+  return asset.sourceType ? `${asset.sourceType} 结果` : '生成结果'
+}
+
+function displayAssetTitle(asset: AssetItem) {
+  if (isJson(asset) && asset.kind === 'GENERATED') {
+    return resultAssetLabel(asset)
+  }
+  return asset.fileName
+}
+
+function displayAssetMeta(asset: AssetItem) {
+  if (isJson(asset) && asset.kind === 'GENERATED') {
+    const type = assetTaskType(asset)
+    const label = taskTypeLabel(type)
+    const readable = label && label !== '其他任务' && label !== '暂无' ? label : asset.sourceType
+    return readable ? `生成结果 · ${readable}` : '生成结果'
+  }
+  return `${asset.assetType} · ${formatFileSize(asset.fileSize)} · ${asset.sourceType}`
+}
+
+function displayAssetPreviewSubtitle(asset: AssetItem) {
+  if (isJson(asset) && asset.kind === 'GENERATED') {
+    return displayAssetMeta(asset)
+  }
+  return `${asset.fileName} · ${asset.sourceType}`
+}
+
+function assetTaskType(asset: AssetItem | null) {
+  if (!asset) {
+    return ''
+  }
+  const metadata = parseJsonObject(asset.metadataJson)
+  const fromMeta = stringField(metadata, 'taskType')
+  if (fromMeta) {
+    return fromMeta
+  }
+  if (asset.sourceType === 'DOUYIN_BENCHMARK') {
+    return 'DOUYIN_PARSE_TRANSCRIPT'
+  }
+  return asset.sourceType || ''
+}
+
 function formatFileSize(size: number) {
   if (size < 1024) {
     return `${size} B`
@@ -628,6 +919,33 @@ async function copyLink(asset: AssetItem) {
   } catch (e) {
     errorMessage.value = e instanceof Error ? e.message : '复制失败'
   }
+}
+
+async function openAssetPreview(asset: AssetItem) {
+  previewAsset.value = asset
+  previewModalOpen.value = true
+  previewLoading.value = true
+  previewError.value = ''
+  previewPayload.value = null
+  previewShotIndex.value = -1
+  try {
+    const text = await getAssetTextContent(asset)
+    const parsed = parseJsonObject(text)
+    previewPayload.value = parsed ?? { rewrittenText: text }
+  } catch (e) {
+    previewError.value = e instanceof Error ? e.message : '加载预览失败'
+  } finally {
+    previewLoading.value = false
+  }
+}
+
+function closeAssetPreview() {
+  previewModalOpen.value = false
+  previewLoading.value = false
+  previewError.value = ''
+  previewAsset.value = null
+  previewPayload.value = null
+  previewShotIndex.value = -1
 }
 
 async function handleDelete(asset: AssetItem) {
@@ -739,6 +1057,55 @@ function prettyJson(input: string) {
   } catch {
     return input
   }
+}
+
+function parseJsonObject(value: string | null | undefined): Record<string, unknown> | null {
+  if (!value || !value.trim()) {
+    return null
+  }
+  try {
+    const parsed = JSON.parse(value) as unknown
+    return isRecord(parsed) ? parsed : null
+  } catch {
+    return null
+  }
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === 'object' && value !== null && !Array.isArray(value)
+}
+
+function stringField(value: Record<string, unknown> | null | undefined, field: string) {
+  const raw = value?.[field]
+  return typeof raw === 'string' ? raw : ''
+}
+
+function numberField(value: Record<string, unknown> | null | undefined, field: string) {
+  const raw = value?.[field]
+  return typeof raw === 'number' && Number.isFinite(raw) ? raw : 0
+}
+
+function isPreviewScriptShot(value: unknown): value is PreviewScriptShot {
+  return isRecord(value) && typeof value.order === 'number'
+}
+
+function isPreviewStoryboardShot(value: unknown): value is PreviewStoryboardShot {
+  return isRecord(value) && typeof value.index === 'number'
+}
+
+function orderLabel(order: number) {
+  const labels = ['一', '二', '三', '四', '五', '六', '七', '八', '九', '十']
+  if (order >= 1 && order <= labels.length) {
+    return labels[order - 1]
+  }
+  return String(order)
+}
+
+function formatDuration(seconds: number) {
+  const safe = Math.max(0, Math.round(seconds))
+  const minute = Math.floor(safe / 60)
+  const remain = String(safe % 60).padStart(2, '0')
+  return `${minute}:${remain}`
 }
 
 async function copyMetadata() {
@@ -1122,6 +1489,27 @@ async function playVoiceSample(voice: VoicePresetItem) {
   max-width: 100%;
 }
 
+.asset-result-card {
+  display: inline-flex;
+  flex-direction: column;
+  gap: 6px;
+  max-width: 360px;
+  border: 1px solid #e6e8f2;
+  border-radius: 10px;
+  background: #fbfcff;
+  padding: 12px 14px;
+}
+
+.asset-result-card strong {
+  color: #151a2d;
+  font-size: 14px;
+}
+
+.asset-result-card span {
+  color: #667085;
+  font-size: 12px;
+}
+
 .asset-open {
   display: inline-flex;
   align-items: center;
@@ -1194,6 +1582,197 @@ async function playVoiceSample(voice: VoicePresetItem) {
   margin-top: 12px;
 }
 
+.asset-preview-modal {
+  width: min(1100px, 100%);
+  max-height: min(86vh, 820px);
+  overflow: auto;
+  border: 1px solid #e6e8f2;
+  border-radius: 14px;
+  background: #ffffff;
+  padding: 18px;
+  box-shadow: 0 24px 80px rgba(15, 23, 42, 0.28);
+}
+
+.asset-preview-head {
+  align-items: flex-start;
+  color: #111827;
+}
+
+.asset-preview-toolbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 12px;
+}
+
+.asset-preview-toolbar label {
+  color: #475467;
+  font-size: 13px;
+  font-weight: 800;
+}
+
+.asset-preview-toolbar select {
+  min-width: 260px;
+  border: 1px solid #dfe3ee;
+  border-radius: 10px;
+  background: #fff;
+  padding: 10px 12px;
+  color: #111827;
+  font-weight: 700;
+}
+
+.asset-preview-table-wrap {
+  overflow: auto;
+  border: 1px solid #edf0f6;
+  border-radius: 12px;
+}
+
+.asset-preview-table {
+  width: 100%;
+  min-width: 840px;
+  border-collapse: collapse;
+  background: #fff;
+}
+
+.asset-preview-table th {
+  background: #f8f9fd;
+  color: #475467;
+  padding: 12px;
+  text-align: left;
+  font-size: 12px;
+}
+
+.asset-preview-table td {
+  border-top: 1px solid #edf0f6;
+  padding: 12px;
+  color: #1f2937;
+  vertical-align: top;
+  font-size: 13px;
+  line-height: 1.55;
+}
+
+.asset-preview-cell-text {
+  min-width: 180px;
+}
+
+.asset-preview-bgm {
+  margin: 8px 0 0;
+  color: #7c6cff;
+  font-size: 12px;
+}
+
+.asset-preview-shot-grid {
+  display: grid;
+  gap: 12px;
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+}
+
+.asset-preview-shot-card {
+  border: 1px solid #edf0f6;
+  border-radius: 12px;
+  background: #fbfcff;
+  padding: 14px;
+}
+
+.asset-preview-shot-card span,
+.asset-preview-shot-card small {
+  color: #667085;
+  font-size: 12px;
+}
+
+.asset-preview-shot-card strong {
+  display: block;
+  margin: 8px 0;
+  color: #111827;
+  font-size: 15px;
+}
+
+.asset-preview-shot-card p {
+  margin: 0 0 10px;
+  color: #344054;
+  font-size: 13px;
+  line-height: 1.6;
+}
+
+.asset-preview-benchmark {
+  display: grid;
+  gap: 14px;
+}
+
+.asset-preview-video-info {
+  display: grid;
+  grid-template-columns: 168px minmax(0, 1fr);
+  gap: 14px;
+  align-items: center;
+  border: 1px solid #edf0f6;
+  border-radius: 12px;
+  background: #fbfcff;
+  padding: 12px;
+}
+
+.asset-preview-video-info img,
+.asset-preview-cover-placeholder {
+  width: 168px;
+  height: 94px;
+  border-radius: 10px;
+  object-fit: cover;
+  background: #eef0ff;
+}
+
+.asset-preview-cover-placeholder {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: #6d5dfc;
+  font-weight: 900;
+}
+
+.asset-preview-video-info strong {
+  display: block;
+  color: #111827;
+  font-size: 16px;
+}
+
+.asset-preview-video-info p,
+.asset-preview-video-info small {
+  color: #667085;
+  line-height: 1.6;
+}
+
+.asset-preview-text-panel {
+  border: 1px solid #edf0f6;
+  border-radius: 12px;
+  background: #fbfcff;
+  padding: 14px;
+}
+
+.asset-preview-text-panel h4 {
+  margin: 0 0 10px;
+  color: #111827;
+  font-size: 15px;
+}
+
+.asset-preview-text-panel p {
+  margin: 0;
+  white-space: pre-wrap;
+  color: #1f2937;
+  font-size: 14px;
+  line-height: 1.75;
+}
+
+.asset-preview-empty {
+  display: flex;
+  min-height: 220px;
+  align-items: center;
+  justify-content: center;
+  border: 1px dashed #dfe3ee;
+  border-radius: 12px;
+  background: #fbfcff;
+  color: #667085;
+  font-weight: 700;
+}
+
 @media (max-width: 980px) {
   .asset-center-head {
     grid-template-columns: 1fr;
@@ -1231,6 +1810,19 @@ async function playVoiceSample(voice: VoicePresetItem) {
   .voice-library-item {
     align-items: stretch;
     flex-direction: column;
+  }
+
+  .asset-preview-toolbar,
+  .asset-preview-video-info {
+    align-items: stretch;
+    grid-template-columns: 1fr;
+    flex-direction: column;
+  }
+
+  .asset-preview-toolbar select,
+  .asset-preview-video-info img,
+  .asset-preview-cover-placeholder {
+    width: 100%;
   }
 }
 

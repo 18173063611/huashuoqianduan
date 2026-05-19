@@ -325,6 +325,7 @@ const selectedResultTask = ref<TaskItem | null>(null)
 const selectedTaskResult = ref<unknown>(null)
 const selectedOutputJson = ref<unknown>(null)
 const selectedShotIndex = ref(-1)
+let loadInFlight = false
 
 const canQuery = computed(() => hasToken.value)
 const hasSessionTasks = computed(() => getSessionTaskIds().length > 0)
@@ -402,11 +403,16 @@ watchEffect((onCleanup) => {
 })
 
 async function loadData(silent: boolean) {
+  if (loadInFlight) {
+    return
+  }
+  loadInFlight = true
   refreshAuthState()
   const useSessionFallback = !hasToken.value
   if (useSessionFallback && !hasSessionTasks.value) {
     tasks.value = []
     summary.value = null
+    loadInFlight = false
     if (!silent) {
       loading.value = false
     }
@@ -454,6 +460,7 @@ async function loadData(silent: boolean) {
       errorMessage.value = error instanceof Error ? error.message : '加载任务失败'
     }
   } finally {
+    loadInFlight = false
     if (!silent) {
       loading.value = false
     }
