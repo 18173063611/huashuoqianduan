@@ -95,7 +95,13 @@ const routes: RouteRecordRaw[] = [
         meta: { requiresAuth: true, requiresAdmin: true, title: '积分流水' },
       },
       {
-        path: 'operation-logs',
+          path: 'activation-codes',
+          name: 'admin-activation-codes',
+          component: () => import('../pages/admin/AdminActivationCodesPage.vue'),
+          meta: { title: '内测码' },
+        },
+        {
+          path: 'operation-logs',
         name: 'admin-operation-logs',
         component: () => import('../pages/admin/AdminOperationLogsPage.vue'),
         meta: { requiresAuth: true, requiresAdmin: true, title: '操作日志' },

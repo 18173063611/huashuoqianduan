@@ -35,6 +35,10 @@
           <el-icon><Coin /></el-icon>
           <span>积分流水</span>
         </el-menu-item>
+        <el-menu-item index="/admin/activation-codes">
+          <el-icon><Key /></el-icon>
+          <span>内测码</span>
+        </el-menu-item>
         <el-menu-item index="/admin/operation-logs">
           <el-icon><Memo /></el-icon>
           <span>操作日志</span>
@@ -65,7 +69,7 @@
 <script setup lang="ts">
 import { computed } from 'vue'
 import { RouterView, useRoute, useRouter } from 'vue-router'
-import { Coin, DataLine, FolderOpened, Memo, PriceTag, Setting, SwitchButton, Tickets, User } from '@element-plus/icons-vue'
+import { Coin, DataLine, FolderOpened, Key, Memo, PriceTag, Setting, SwitchButton, Tickets, User } from '@element-plus/icons-vue'
 import { clearLogin, getAuthUser } from '../../services/authApi'
 
 const route = useRoute()
@@ -80,6 +84,7 @@ const titleMap: Record<string, string> = {
   '/admin/tasks': '任务管理',
   '/admin/assets': '资产管理',
   '/admin/credit-logs': '积分流水',
+  '/admin/activation-codes': '内测码',
   '/admin/operation-logs': '操作日志',
 }
 
