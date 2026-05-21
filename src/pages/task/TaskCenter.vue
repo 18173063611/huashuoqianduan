@@ -40,7 +40,7 @@
         <select v-model="taskTypeFilter" class="asset-type-select" :disabled="loading" @change="loadData(false)">
           <option value="">全部类型</option>
           <option value="VIDEO_PARSE">视频理解</option>
-          <option value="DOUYIN_PARSE_TRANSCRIPT">抖音对标解析与转写</option>
+          <option value="DOUYIN_PARSE_TRANSCRIPT">对标解析与转写</option>
           <option value="DOUYIN_REWRITE">抖音文案改写</option>
           <option value="DOUYIN_TRANSCRIPT">抖音视频转写</option>
           <option value="VIDEO_SCRIPT_ANALYZE">视频分镜解析</option>
@@ -108,7 +108,7 @@
                 · <span class="task-unread">结果未读</span>
               </template>
             </p>
-            <p v-if="task.errorMessage" class="task-row-err">{{ task.errorMessage }}</p>
+            <p v-if="task.errorMessage" class="task-row-err">{{ friendlyTaskErrorMessage(task.errorMessage) }}</p>
           </div>
           <div class="task-row-actions">
             <span class="app-task-status" :class="statusPillClass(task.status)">{{ task.status }}</span>
@@ -550,6 +550,37 @@ function statusPillClass(status: string) {
     ? raw
     : 'OTHER'
   return `task-status-pill--${key}`
+}
+
+function friendlyTaskErrorMessage(message?: string | null) {
+  const text = message || ''
+  if (!text) {
+    return ''
+  }
+  if (
+    text.includes('TikHub parse failed') ||
+    text.includes('hybrid error') ||
+    text.includes('TikHub request failed with HTTP 400') ||
+    text.includes('平台解析接口拒绝了当前链接')
+  ) {
+    return '平台暂未返回可解析的视频数据，请确认视频是公开可访问的视频，并尽量复制分享内容中的完整 http(s) 链接或完整分享文案后重试。'
+  }
+  if (
+    text.includes('Source video download failed') ||
+    text.includes('ASR audio preprocess failed') ||
+    text.includes('Upload public base url') ||
+    text.includes('TOS')
+  ) {
+    return '本地视频已上传，但转写服务暂时无法读取该视频文件。请检查 TOS 公网访问地址与桶读权限，或稍后重试。'
+  }
+  if (
+    text.includes('Volcengine ASR query succeeded but returned empty text') ||
+    text.includes('没有识别到可转写的口播文案') ||
+    (text.toLowerCase().includes('asr') && text.toLowerCase().includes('empty text'))
+  ) {
+    return '视频里没有识别到可转写的口播文案，可以手动输入/上传文案后继续改写。'
+  }
+  return text
 }
 
 async function openResult(task: TaskItem) {

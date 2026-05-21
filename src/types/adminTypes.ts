@@ -70,6 +70,7 @@ export interface AdminCreditLogItem {
 
 export interface AdminDashboardSummary {
   userCount: number
+  todayNewUserCount: number
   todayTaskCount: number
   todayCreditConsumed: number
   failedTaskCount: number
@@ -149,6 +150,40 @@ export interface AdminTaskQuery {
   taskType?: string
   status?: string
   modelCode?: string
+  pageNo?: number
+  pageSize?: number
+}
+
+export interface AdminAssetItem {
+  assetId: number
+  ownerUserId?: number | null
+  createdByUserId?: number | null
+  projectId?: number | null
+  taskId?: number | null
+  assetType: string
+  kind?: string | null
+  visibility?: string | null
+  status?: string | null
+  publishedAt?: string | null
+  fileName: string
+  filePath?: string | null
+  fileUrl: string
+  thumbnailUrl?: string | null
+  mimeType?: string | null
+  fileSize?: number | null
+  sourceType?: string | null
+  metadataJson?: string | null
+  createdAt?: string
+  updatedAt?: string
+}
+
+export interface AdminAssetQuery {
+  ownerUserId?: number
+  visibility?: string
+  status?: string
+  assetType?: string
+  sourceType?: string
+  keyword?: string
   pageNo?: number
   pageSize?: number
 }
@@ -301,6 +336,7 @@ export type AdminUserPage = PageResult<AdminUserItem>
 export type AdminCreditLogPage = PageResult<AdminCreditLogItem>
 export type AdminModelPage = PageResult<AdminModelItem>
 export type AdminTaskPage = PageResult<AdminTaskItem>
+export type AdminAssetPage = PageResult<AdminAssetItem>
 export type AdminOperationLogPage = PageResult<AdminOperationLogItem>
 export type AdminBillingStepPage = PageResult<AdminBillingStepItem>
 export type AdminModelPricePage = PageResult<AdminModelPriceItem>

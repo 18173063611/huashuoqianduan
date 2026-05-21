@@ -100,7 +100,7 @@ const recentCreditLogs = ref<AdminCreditLogItem[]>([])
 
 const statCards = computed(() => [
   { label: '用户总数', value: summary.value?.userCount ?? '暂无统计数据' },
-  { label: '今日新增用户', value: '暂无统计数据' },
+  { label: '今日新增用户', value: summary.value?.todayNewUserCount ?? '暂无统计数据' },
   { label: '今日任务数', value: summary.value?.todayTaskCount ?? '暂无统计数据' },
   { label: '今日积分消耗', value: summary.value ? formatCreditAmount(summary.value.todayCreditConsumed) : '暂无统计数据' },
   { label: '失败任务数', value: summary.value?.failedTaskCount ?? '暂无统计数据' },

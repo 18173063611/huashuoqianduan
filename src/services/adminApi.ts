@@ -1,5 +1,8 @@
 import { API_BASE_URL, getAuthToken, request } from './request'
 import type {
+  AdminAssetItem,
+  AdminAssetPage,
+  AdminAssetQuery,
   AdminBillingStepItem,
   AdminBillingStepPage,
   AdminBillingStepQuery,
@@ -162,6 +165,41 @@ export function listAdminTasks(params: AdminTaskQuery) {
       pageSize: params.pageSize,
     })}`,
   )
+}
+
+export function listAdminAssets(params: AdminAssetQuery) {
+  return request<AdminAssetPage>(
+    `/admin/assets${toQuery({
+      ownerUserId: params.ownerUserId,
+      visibility: params.visibility?.trim(),
+      status: params.status?.trim(),
+      assetType: params.assetType?.trim(),
+      sourceType: params.sourceType?.trim(),
+      keyword: params.keyword?.trim(),
+      pageNo: params.pageNo,
+      pageSize: params.pageSize,
+    })}`,
+  )
+}
+
+export function publishAdminAsset(assetId: number) {
+  return request<AdminAssetItem>(`/admin/assets/${assetId}/public`, { method: 'POST' })
+}
+
+export function privatizeAdminAsset(assetId: number) {
+  return request<AdminAssetItem>(`/admin/assets/${assetId}/private`, { method: 'POST' })
+}
+
+export function removeAdminAsset(assetId: number) {
+  return request<AdminAssetItem>(`/admin/assets/${assetId}/remove`, { method: 'POST' })
+}
+
+export function restoreAdminAsset(assetId: number) {
+  return request<AdminAssetItem>(`/admin/assets/${assetId}/restore`, { method: 'POST' })
+}
+
+export function deleteAdminAsset(assetId: number) {
+  return request<void>(`/admin/assets/${assetId}`, { method: 'DELETE' })
 }
 
 export function listAdminCreditLogs(params: {

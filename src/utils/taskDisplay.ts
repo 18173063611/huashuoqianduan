@@ -9,7 +9,7 @@ const TASK_TYPE_LABELS: Record<string, string> = {
   DIGITAL_HUMAN_GENERATE: '数字人口播',
   SCRIPT_REWRITE: '文案改写',
   STORYBOARD_GENERATE: '分镜生成',
-  DOUYIN_PARSE_TRANSCRIPT: '抖音对标解析与转写',
+  DOUYIN_PARSE_TRANSCRIPT: '对标解析与转写',
   VIDEO_PARSE: '视频理解',
   TEXT_TO_VIDEO_SEEDANCE_1_5: '文生视频',
   TEXT_TO_VIDEO_SEEDANCE_2_0: '文生视频',

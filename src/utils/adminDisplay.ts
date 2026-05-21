@@ -54,6 +54,9 @@ const operationTypeMap: Record<string, string> = {
   BILLING_PRICE_UPDATE: '编辑模型单价',
   BILLING_PRICE_ENABLE: '启用模型单价',
   BILLING_PRICE_DISABLE: '禁用模型单价',
+  ASSET_VISIBILITY: '调整资产可见性',
+  ASSET_STATUS: '调整资产状态',
+  ASSET_DELETE: '删除资产',
 }
 
 const operationTargetTypeMap: Record<string, string> = {
@@ -61,6 +64,7 @@ const operationTargetTypeMap: Record<string, string> = {
   CREDIT: '积分账户',
   MODEL: '模型',
   TASK: '任务',
+  ASSET: '资产',
   BILLING_STEP: '计费步骤',
   BILLING_PRICE: '模型单价',
 }

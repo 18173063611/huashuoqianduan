@@ -3,25 +3,79 @@
     <div class="benchmark-layout">
       <aside class="analysis-card">
         <section class="panel-block">
-          <h2>1. 输入对标视频链接</h2>
+          <h2>{{ sourcePanelTitle }}</h2>
           <BillingEstimateBanner
             :estimated-credit-cost="parseEstimate.estimatedCreditCost.value"
             :balance="parseEstimate.balance.value"
             :loading="parseEstimate.loading.value"
             :steps="parseEstimate.steps.value"
           />
-          <div class="parse-row">
-            <input v-model.trim="videoUrl" placeholder="https://v.douyin.com/xxxxxx/" />
+          <div class="source-tabs" role="tablist" aria-label="解析来源">
+            <button type="button" :class="{ active: inputMode === 'link' }" @click="switchInputMode('link')">链接解析</button>
+            <button type="button" :class="{ active: inputMode === 'upload' }" @click="switchInputMode('upload')">本地上传</button>
+          </div>
+
+          <template v-if="inputMode === 'link'">
+            <div class="platform-tabs" role="tablist" aria-label="视频平台">
+              <button
+                v-for="option in platformOptions"
+                :key="option.value"
+                type="button"
+                :class="{ active: selectedPlatform === option.value }"
+                @click="selectedPlatform = option.value"
+              >
+                {{ option.label }}
+              </button>
+            </div>
+            <p class="platform-note">{{ selectedPlatformNote }}</p>
+            <div class="parse-row">
+              <input v-model.trim="videoUrl" :placeholder="videoPlaceholder" />
+              <button
+                class="primary-button"
+                type="button"
+                :disabled="parsing || !videoUrl || !!parseEstimate.insufficientHint.value"
+                :title="parseEstimate.insufficientHint.value ?? ''"
+                @click="handleParseVideo"
+              >
+                {{ parsing ? '解析中' : '解析' }}
+              </button>
+              <button
+                class="secondary-button download-button"
+                type="button"
+                :disabled="downloading || !videoUrl"
+                @click="handleDownloadVideo"
+              >
+                {{ downloading ? '下载中' : '下载视频' }}
+              </button>
+            </div>
+          </template>
+
+          <div v-else class="upload-parse-panel">
+            <label class="video-upload-picker" :class="{ disabled: uploadingLocalVideo || parsing }">
+              <input
+                type="file"
+                accept="video/*"
+                :disabled="uploadingLocalVideo || parsing"
+                @change="handleLocalVideoChange"
+              />
+              <span>{{ uploadingLocalVideo ? '上传中…' : '选择视频' }}</span>
+              <small :title="localVideoFileName">{{ localVideoFileName || '支持 MP4、MOV、WEBM 等视频文件，最大 100MB' }}</small>
+            </label>
             <button
-              class="primary-button"
+              class="primary-button upload-parse-button"
               type="button"
-              :disabled="parsing || !videoUrl || !!parseEstimate.insufficientHint.value"
+              :disabled="uploadingLocalVideo || parsing || !localVideoPreviewUrl || !!parseEstimate.insufficientHint.value"
               :title="parseEstimate.insufficientHint.value ?? ''"
-              @click="handleParseVideo"
+              @click="handleParseUploadedVideo"
             >
-              {{ parsing ? '解析中' : '解析' }}
+              {{ parsing ? '解析中' : '解析上传视频' }}
             </button>
           </div>
+          <p v-if="inputMode === 'link' && downloadMessage" class="success-text">{{ downloadMessage }}</p>
+          <p v-if="inputMode === 'link' && downloadError" class="error-text">{{ downloadError }}</p>
+          <p v-if="inputMode === 'upload' && localUploadMessage" class="success-text">{{ localUploadMessage }}</p>
+          <p v-if="inputMode === 'upload' && localUploadError" class="error-text">{{ localUploadError }}</p>
+          <p v-if="parseNotice" class="info-text">{{ parseNotice }}</p>
           <p v-if="parseError && parseStage !== 'error'" class="error-text">{{ parseError }}</p>
         </section>
 
@@ -33,11 +87,20 @@
           <article v-else class="video-detail">
             <div class="video-media">
               <img
-                v-if="douyinParse.coverUrl"
-                :src="douyinParse.coverUrl"
+                v-if="videoCoverUrl"
+                :src="videoCoverUrl"
                 :alt="douyinParse.title || '封面'"
                 class="cover-img"
+                @error="coverImageFailed = true"
               />
+              <video
+                v-else-if="videoPreviewMediaUrl"
+                :src="videoPreviewMediaUrl"
+                class="cover-video"
+                controls
+                preload="metadata"
+              />
+              <div v-else class="cover-placeholder">{{ coverImageFailed ? '封面加载失败' : '封面' }}</div>
             </div>
             <div class="video-meta-block">
               <div class="author-line">
@@ -68,7 +131,7 @@
           </div>
         </section>
 
-        <button class="secondary-button refresh-button" type="button" :disabled="parsing" @click="handleParseVideo">
+        <button class="secondary-button refresh-button" type="button" :disabled="parsing" @click="handleReparseCurrent">
           <span aria-hidden="true">↻</span>
           重新解析
         </button>
@@ -79,6 +142,7 @@
         <section class="rewrite-box">
           <p v-if="transcriptLoading" class="transcript-status">正在转写视频文案，请稍候…</p>
           <p v-else-if="parseStage === 'error' && parseError" class="error-text transcript-banner">{{ parseError }}</p>
+          <p v-else-if="parseNotice" class="info-text transcript-banner">{{ parseNotice }}</p>
 
           <p class="rewrite-flow-hint">
             转写完成后可<strong>二次编辑原文</strong>，按需选择改写风格并填写补充说明；点击 <strong>开始改写</strong>
@@ -175,6 +239,19 @@
 
                 <p v-if="rewriteError" class="rewrite-error" role="alert">{{ rewriteError }}</p>
 
+                <div v-if="showRewriteProgressBar" class="rewrite-progress-row">
+                  <div
+                    class="rewrite-progress-track"
+                    role="progressbar"
+                    :aria-valuemin="0"
+                    :aria-valuemax="100"
+                    :aria-valuenow="rewriteProgressPercent"
+                  >
+                    <div class="rewrite-progress-fill" :style="{ width: `${rewriteProgressPercent}%` }" />
+                  </div>
+                  <span class="rewrite-progress-pct">{{ rewriteProgressPercent }}%</span>
+                </div>
+
                 <div class="confirm-actions">
                   <button
                     class="primary-button confirm-rewrite-btn"
@@ -226,12 +303,20 @@
 
 <script setup lang="ts">
 import { computed, onBeforeUnmount, ref } from 'vue'
-import { rewriteDouyinCopywriting, startDouyinParseWithTranscript } from '../../services/writerDouyinApi'
-import type { DouyinParseStage, DouyinVideoParseResponse, DouyinRewriteWriterVO } from '../../types/writerDouyinTypes'
+import { downloadShareVideo, rewriteDouyinCopywriting, startDouyinParseWithTranscript } from '../../services/writerDouyinApi'
+import { API_BASE_URL, API_ORIGIN } from '../../services/request'
+import { uploadFile } from '../../services/uploadApi'
+import type {
+  DouyinParseStage,
+  DouyinParseTaskResult,
+  DouyinVideoParseResponse,
+  DouyinRewriteWriterVO,
+} from '../../types/writerDouyinTypes'
 import { rememberSessionTaskId } from '../../services/sessionTaskStore'
 import { trackTaskResult } from '../../services/taskRealtime'
 import BillingEstimateBanner from '../../components/business/BillingEstimateBanner.vue'
 import { useBillingEstimate } from '../../composables/useBillingEstimate'
+import { useSmoothTaskProgress } from '../../composables/useSmoothTaskProgress'
 
 // 抖音解析 / 爆款对标：核心计费动作是 VIDEO_PARSE（视频理解）。
 const parseEstimate = useBillingEstimate({ taskType: 'VIDEO_PARSE' })
@@ -240,50 +325,155 @@ const emit = defineEmits<{
   continue: []
 }>()
 
+type VideoPlatformOption = {
+  value: string
+  label: string
+  placeholder: string
+  officialNote: string
+}
+
+const platformOptions: VideoPlatformOption[] = [
+  {
+    value: 'auto',
+    label: '自动',
+    placeholder: '粘贴抖音 / 小红书 / TikTok / 快手 / B站 / YouTube 等视频链接',
+    officialNote: '自动识别平台；官方文档不提供公开视频下载接口的平台，会按平台限制给出提示。',
+  },
+  {
+    value: 'douyin',
+    label: '抖音',
+    placeholder: '粘贴抖音分享链接或完整分享文案',
+    officialNote: '抖音开放平台视频数据能力需要开通授权；任意公开视频直链解析不属于通用官方开放能力。',
+  },
+  {
+    value: 'xiaohongshu',
+    label: '小红书',
+    placeholder: '粘贴小红书完整分享文案或 http(s) 链接',
+    officialNote: '小红书公开开放文档未提供任意笔记视频下载解析接口，解析稳定性受平台限制影响。',
+  },
+  {
+    value: 'tiktok',
+    label: 'TikTok',
+    placeholder: '粘贴 TikTok 视频链接',
+    officialNote: 'TikTok Display API 需用户授权，官方返回元数据与 embed_link，不提供任意公开视频下载直链。',
+  },
+  {
+    value: 'kuaishou',
+    label: '快手',
+    placeholder: '粘贴快手分享链接或完整分享文案',
+    officialNote: '快手开放平台官方能力以登录、发布、挂载为主，未提供任意公开视频下载解析接口。',
+  },
+  {
+    value: 'bilibili',
+    label: 'B站',
+    placeholder: '粘贴 B 站视频链接',
+    officialNote: 'B 站官方外链播放器支持 bvid/aid/cid；当前按 bvid/cid 链路处理公开视频信息。',
+  },
+  {
+    value: 'youtube',
+    label: 'YouTube',
+    placeholder: '粘贴 YouTube 视频链接',
+    officialNote: 'YouTube 官方 Data/IFrame API 支持元数据与嵌入播放，不提供任意视频下载直链。',
+  },
+  {
+    value: 'facebook',
+    label: 'Facebook',
+    placeholder: '粘贴 Facebook 公开视频链接',
+    officialNote: 'Facebook 官方支持公开视频嵌入；官方帮助说明不提供视频下载选项。',
+  },
+]
+
 const videoUrl = ref('')
+const selectedPlatform = ref('auto')
+const inputMode = ref<'link' | 'upload'>('link')
 const douyinParse = ref<DouyinVideoParseResponse | null>(null)
+const coverImageFailed = ref(false)
 const parseStage = ref<DouyinParseStage | ''>('')
 const parsing = ref(false)
 const parseError = ref('')
+const parseNotice = ref('')
+const downloading = ref(false)
+const downloadError = ref('')
+const downloadMessage = ref('')
+const uploadingLocalVideo = ref(false)
+const localVideoFileName = ref('')
+const localVideoPreviewUrl = ref('')
+const localVideoFilePath = ref('')
+const localUploadError = ref('')
+const localUploadMessage = ref('')
 const rewriteStyle = ref('')
 const rewriteTab = ref<'ai' | 'custom'>('ai')
 const rewriteIntroduce = ref('')
 const extraNotesExpanded = ref(false)
 const rewriteLoading = ref(false)
 const rewriteError = ref('')
+const rewriteTaskStatus = ref('')
+const rewriteTaskProgress = ref<number | null>(null)
 const sourceText = ref('')
 const rewrittenText = ref('')
 const applyMessage = ref('')
 const parseAbort = ref<AbortController | null>(null)
+let stopParseTracking: (() => void) | null = null
+let parseRunSeq = 0
+let activeParseTaskId: number | null = null
+let trackedParseTaskId: number | null = null
 let stopRewriteTracking: (() => void) | null = null
+let localUploadRequestSeq = 0
+
+const LOCAL_VIDEO_MAX_BYTES = 100 * 1024 * 1024
+
+const {
+  showTaskProgressBar: showRewriteProgressBar,
+  barProgressPercent: rewriteProgressPercent,
+  reset: resetRewriteProgress,
+} = useSmoothTaskProgress(rewriteTaskStatus, rewriteTaskProgress)
+
+const videoPlaceholder = computed(
+  () => platformOptions.find((option) => option.value === selectedPlatform.value)?.placeholder || platformOptions[0].placeholder,
+)
+
+const selectedPlatformNote = computed(
+  () => platformOptions.find((option) => option.value === selectedPlatform.value)?.officialNote || platformOptions[0].officialNote,
+)
+
+const sourcePanelTitle = computed(() => (inputMode.value === 'upload' ? '1. 上传对标视频' : '1. 输入对标视频链接'))
 
 onBeforeUnmount(() => {
   parseAbort.value?.abort()
+  stopParseTask()
   stopRewriteTask()
 })
 
 const transcriptLoading = computed(
-  () => parsing.value && (parseStage.value === 'parsed' || parseStage.value === 'transcribing'),
+  () =>
+    parsing.value &&
+    (parseStage.value === 'accepted' || parseStage.value === 'parsed' || parseStage.value === 'transcribing'),
 )
 
 const transcriptAreaReadonly = computed(() => transcriptLoading.value)
 
 const sourcePlaceholder = computed(() => {
   if (parseStage.value === 'error') {
-    return '转写失败，请重试或更换链接'
+    return inputMode.value === 'upload' ? '转写失败，请重新上传或重试' : '转写失败，请重试或更换链接'
   }
   if (transcriptLoading.value) {
     return '转写中…'
+  }
+  if (parseNotice.value) {
+    return '未识别到口播文案，可在这里手动输入原文'
   }
   return '解析完成后展示 ASR 原文'
 })
 
 const rewritePlaceholder = computed(() => {
   if (parseStage.value === 'error') {
-    return '转写失败'
+    return inputMode.value === 'upload' ? '上传视频转写失败' : '转写失败'
   }
   if (transcriptLoading.value) {
     return '转写中…'
+  }
+  if (parseNotice.value) {
+    return '手动输入原文后点击「开始改写」，展示返回的改写结果'
   }
   return '编辑原文后点击「开始改写」，展示返回的改写结果'
 })
@@ -295,13 +485,28 @@ const durationText = computed(() => {
   return `${minute}:${remain}`
 })
 
+const videoCoverUrl = computed(() => {
+  if (coverImageFailed.value) return ''
+  const parse = douyinParse.value
+  if (!parse) return ''
+  return normalizeDisplayImageUrl(parse.coverUrl || inferCoverUrl(parse.rawData) || '')
+})
+
+const videoPreviewMediaUrl = computed(() => {
+  if (videoCoverUrl.value) return ''
+  const playUrl = douyinParse.value?.playUrl || ''
+  return playUrl ? normalizePublicMediaUrl(playUrl) : ''
+})
+
 const rewrittenLength = computed(() => rewrittenText.value.replace(/\s/g, '').length)
 
 const insightItems = computed(() => {
   const p = douyinParse.value
-  let status = '提交抖音分享链接后开始解析'
+  let status = inputMode.value === 'upload' ? '选择本地视频后开始解析' : '提交社媒视频链接后开始解析'
   if (parseStage.value === 'completed') {
-    status = '已完成转写，右侧已填入原文；改写稿请点击「开始改写」拉取'
+    status = parseNotice.value || '已完成转写，右侧已填入原文；改写稿请点击「开始改写」拉取'
+  } else if (parseStage.value === 'accepted') {
+    status = '已提交解析任务，正在等待平台返回视频信息…'
   } else if (parseStage.value === 'parsed' || parseStage.value === 'transcribing') {
     status = '正在转写口播文案…'
   } else if (parseStage.value === 'error') {
@@ -324,14 +529,260 @@ const insightItems = computed(() => {
   return rows
 })
 
+function inferCoverUrl(rawData: unknown) {
+  const urls: string[] = []
+  collectCoverUrls(rawData, '', urls)
+  return urls.find(isCoverLikeUrl) || urls[0] || ''
+}
+
+function collectCoverUrls(value: unknown, path: string, urls: string[]) {
+  if (!value) return
+  if (typeof value === 'string') {
+    if (isHttpUrl(value) && isCoverLikePath(path)) {
+      urls.push(value.trim())
+    }
+    return
+  }
+  if (Array.isArray(value)) {
+    value.forEach((item, index) => collectCoverUrls(item, `${path}/${index}`, urls))
+    return
+  }
+  if (typeof value === 'object') {
+    Object.entries(value as Record<string, unknown>).forEach(([key, child]) => {
+      const nextPath = `${path}/${key}`
+      if (typeof child === 'string' && isHttpUrl(child) && isCoverLikePath(nextPath)) {
+        urls.push(child.trim())
+      } else {
+        collectCoverUrls(child, nextPath, urls)
+      }
+    })
+  }
+}
+
+function isHttpUrl(value: string) {
+  return /^https?:\/\//i.test(value.trim())
+}
+
+function normalizeDisplayImageUrl(value: string) {
+  const url = value.trim()
+  if (!url) return ''
+  if (url.startsWith('data:') || url.startsWith('blob:')) {
+    return url
+  }
+  if (url.startsWith('/')) {
+    return `${API_ORIGIN}${url}`
+  }
+  if (isHttpUrl(url)) {
+    return `${API_BASE_URL}/writer/media/cover?url=${encodeURIComponent(url)}`
+  }
+  return url
+}
+
+function isCoverLikePath(path: string) {
+  return /cover|thumbnail|thumb|image|display|poster|pic/i.test(path)
+}
+
+function isCoverLikeUrl(url: string) {
+  const normalized = url.toLowerCase()
+  if (normalized.includes('.mp4') || normalized.includes('.m3u8') || normalized.includes('mime=video')) {
+    return false
+  }
+  return (
+    normalized.includes('.jpg') ||
+    normalized.includes('.jpeg') ||
+    normalized.includes('.png') ||
+    normalized.includes('.webp') ||
+    normalized.includes('i.ytimg.com') ||
+    normalized.includes('ytimg.com') ||
+    normalized.includes('hdslb.com') ||
+    normalized.includes('biliimg.com') ||
+    normalized.includes('kwaicdn.com') ||
+    normalized.includes('ksapisrv.com') ||
+    normalized.includes('gifshow.com') ||
+    normalized.includes('p16-sign') ||
+    normalized.includes('p19-sign') ||
+    normalized.includes('tos-maliva-p') ||
+    (normalized.includes('tiktokcdn') && /image|jpeg|webp/.test(normalized))
+  )
+}
+
+function normalizePublicMediaUrl(url: string) {
+  const trimmed = url.trim()
+  if (!trimmed) return ''
+  if (isHttpUrl(trimmed)) return trimmed
+  return trimmed.startsWith('/') ? `${API_ORIGIN}${trimmed}` : `${API_ORIGIN}/${trimmed}`
+}
+
+function formatFileSize(size: number) {
+  if (size < 1024) {
+    return `${size} B`
+  }
+  if (size < 1024 * 1024) {
+    return `${(size / 1024).toFixed(1)} KB`
+  }
+  return `${(size / 1024 / 1024).toFixed(1)} MB`
+}
+
+function isSupportedLocalVideoFile(file: File) {
+  if (file.type.startsWith('video/')) {
+    return true
+  }
+  return /\.(mp4|mov|m4v|webm)$/i.test(file.name)
+}
+
+function switchInputMode(mode: 'link' | 'upload') {
+  if (inputMode.value === mode) {
+    return
+  }
+  inputMode.value = mode
+  parseAbort.value?.abort()
+  stopParseTask()
+  resetParseWorkflowState()
+  downloadError.value = ''
+  downloadMessage.value = ''
+  localUploadError.value = ''
+}
+
+function resetParseWorkflowState() {
+  douyinParse.value = null
+  sourceText.value = ''
+  rewrittenText.value = ''
+  rewriteIntroduce.value = ''
+  extraNotesExpanded.value = false
+  rewriteError.value = ''
+  rewriteLoading.value = false
+  rewriteTaskStatus.value = ''
+  rewriteTaskProgress.value = null
+  resetRewriteProgress()
+  parseError.value = ''
+  parseNotice.value = ''
+  coverImageFailed.value = false
+  parseStage.value = ''
+  parsing.value = false
+  applyMessage.value = ''
+  activeParseTaskId = null
+}
+
+async function handleLocalVideoChange(event: Event) {
+  const input = event.target as HTMLInputElement
+  const file = input.files?.[0] ?? null
+  const requestId = ++localUploadRequestSeq
+
+  parseAbort.value?.abort()
+  stopParseTask()
+  resetParseWorkflowState()
+  localVideoFileName.value = ''
+  localVideoPreviewUrl.value = ''
+  localVideoFilePath.value = ''
+  localUploadError.value = ''
+  localUploadMessage.value = ''
+  downloadError.value = ''
+  downloadMessage.value = ''
+
+  if (!file) {
+    return
+  }
+  if (!isSupportedLocalVideoFile(file)) {
+    localUploadError.value = '请上传 MP4、MOV、M4V 或 WEBM 格式的视频文件'
+    input.value = ''
+    return
+  }
+  if (file.size > LOCAL_VIDEO_MAX_BYTES) {
+    localUploadError.value = `视频文件不能超过 ${formatFileSize(LOCAL_VIDEO_MAX_BYTES)}`
+    input.value = ''
+    return
+  }
+
+  localVideoFileName.value = `${file.name}（${formatFileSize(file.size)}）`
+  uploadingLocalVideo.value = true
+
+  try {
+    const uploaded = await uploadFile(file)
+    if (requestId !== localUploadRequestSeq) {
+      return
+    }
+    localVideoPreviewUrl.value = normalizePublicMediaUrl(uploaded.previewUrl)
+    localVideoFilePath.value = uploaded.filePath || ''
+    localUploadMessage.value = `${uploaded.originalFileName || file.name} 已上传，可开始解析`
+  } catch (error) {
+    if (requestId !== localUploadRequestSeq) {
+      return
+    }
+    localUploadError.value = error instanceof Error ? error.message : '上传失败'
+    localVideoFileName.value = ''
+    localVideoPreviewUrl.value = ''
+    localVideoFilePath.value = ''
+    input.value = ''
+  } finally {
+    if (requestId === localUploadRequestSeq) {
+      uploadingLocalVideo.value = false
+    }
+  }
+}
+
+async function handleParseUploadedVideo() {
+  const url = localVideoPreviewUrl.value.trim()
+  if (!url || uploadingLocalVideo.value || parsing.value) {
+    return
+  }
+  const title = localVideoFileName.value.replace(/（.*$/, '').trim() || '本地上传视频'
+  await runParseVideo(url, 'upload', title, {
+    sourceType: 'upload',
+    filePath: localVideoFilePath.value,
+  })
+}
+
+async function handleDownloadVideo() {
+  const url = videoUrl.value.trim()
+  if (!url || downloading.value) {
+    return
+  }
+
+  downloading.value = true
+  downloadError.value = ''
+  downloadMessage.value = ''
+  try {
+    // 直链通常存在跨域与防盗链限制，因此下载走后端代理，页面只负责触发浏览器保存。
+    await downloadShareVideo({ url, platform: selectedPlatform.value })
+    downloadMessage.value = '视频下载已开始'
+  } catch (error) {
+    downloadError.value = error instanceof Error ? error.message : '下载失败'
+  } finally {
+    downloading.value = false
+  }
+}
+
 async function handleParseVideo() {
   const url = videoUrl.value.trim()
   if (!url || parsing.value) {
     return
   }
+  await runParseVideo(url, selectedPlatform.value)
+}
 
+async function handleReparseCurrent() {
+  if (inputMode.value === 'upload') {
+    await handleParseUploadedVideo()
+    return
+  }
+  await handleParseVideo()
+}
+
+async function runParseVideo(
+  url: string,
+  platform: string,
+  title?: string,
+  extra?: { sourceType?: string; filePath?: string },
+) {
+  if (!url || parsing.value) {
+    return
+  }
+
+  const runId = ++parseRunSeq
   parseAbort.value?.abort()
+  stopParseTask()
   parseAbort.value = new AbortController()
+  activeParseTaskId = null
 
   douyinParse.value = null
   sourceText.value = ''
@@ -340,7 +791,14 @@ async function handleParseVideo() {
   extraNotesExpanded.value = false
   rewriteError.value = ''
   rewriteLoading.value = false
+  rewriteTaskStatus.value = ''
+  rewriteTaskProgress.value = null
+  resetRewriteProgress()
   parseError.value = ''
+  parseNotice.value = ''
+  coverImageFailed.value = false
+  downloadError.value = ''
+  downloadMessage.value = ''
   parseStage.value = ''
   applyMessage.value = ''
   parsing.value = true
@@ -348,55 +806,236 @@ async function handleParseVideo() {
   try {
     await startDouyinParseWithTranscript({
       url,
+      platform,
+      title,
+      sourceType: extra?.sourceType,
+      filePath: extra?.filePath,
       signal: parseAbort.value.signal,
-      onParsed(payload) {
-        parseStage.value = 'parsed'
-        if (payload.data?.taskId) {
-          rememberSessionTaskId(payload.data.taskId)
+      onAccepted(payload) {
+        if (!isActiveParseRun(runId, payload.data?.taskId)) {
+          return
         }
-        if (payload.data?.parseResult) {
-          douyinParse.value = payload.data.parseResult
-        }
+        parseStage.value = 'accepted'
+        rememberParseTask(payload.data?.taskId, runId)
       },
-      onTranscribing() {
+      onParsed(payload) {
+        if (!isActiveParseRun(runId, payload.data?.taskId)) {
+          return
+        }
+        parseStage.value = 'parsed'
+        rememberParseTask(payload.data?.taskId, runId)
+        applyParseTaskOutput(
+          {
+            parseResult: payload.data?.parseResult,
+            transcriptResult: null,
+          },
+          { completed: false },
+        )
+      },
+      onTranscribing(payload) {
+        if (!isActiveParseRun(runId, payload.data?.taskId)) {
+          return
+        }
         parseStage.value = 'transcribing'
       },
       onCompleted(payload) {
+        if (!isActiveParseRun(runId, payload.data?.taskId)) {
+          return
+        }
         parseStage.value = 'completed'
-        if (payload.data?.taskId) {
-          rememberSessionTaskId(payload.data.taskId)
-        }
-        const transcript = payload.data?.transcriptResult
-        if (transcript) {
-          sourceText.value = transcript.originalText || ''
-          rewrittenText.value = ''
-        }
-        if (payload.data?.parseResult) {
-          douyinParse.value = payload.data.parseResult
-        }
+        rememberParseTask(payload.data?.taskId, runId)
+        applyParseTaskOutput(
+          {
+            parseResult: payload.data?.parseResult,
+            transcriptResult: payload.data?.transcriptResult,
+          },
+          { completed: true, message: payload.message },
+        )
+        stopParseTask()
       },
       onErrorEvent(payload) {
-        parseStage.value = 'error'
-        if (payload.data?.taskId) {
-          rememberSessionTaskId(payload.data.taskId)
+        if (!isActiveParseRun(runId, payload.data?.taskId)) {
+          return
         }
-        parseError.value = `${payload.message || '解析或转写失败'}${payload.traceId ? `（traceId：${payload.traceId}）` : ''}`
+        const friendlyMessage = friendlyParseErrorMessage(payload.message)
+        if (payload.code === 50215) {
+          parseStage.value = 'completed'
+          parseError.value = ''
+          parseNotice.value = friendlyMessage
+          rememberParseTask(payload.data?.taskId, runId)
+          applyParseTaskOutput(
+            {
+              parseResult: payload.data?.parseResult,
+              transcriptResult: payload.data?.transcriptResult,
+            },
+            { completed: true, message: payload.message },
+          )
+          return
+        }
+        parseStage.value = 'error'
+        parseNotice.value = ''
+        rememberParseTask(payload.data?.taskId, runId)
+        parseError.value = `${friendlyMessage}${payload.traceId ? `（traceId：${payload.traceId}）` : ''}`
         if (payload.data?.parseResult) {
           douyinParse.value = payload.data.parseResult
         }
       },
     })
   } catch (error) {
+    if (!isActiveParseRun(runId)) {
+      return
+    }
     if (error instanceof DOMException && error.name === 'AbortError') {
       return
     }
     if (!parseStage.value) {
       parseStage.value = 'error'
     }
-    parseError.value = error instanceof Error ? error.message : '请求失败'
+    parseNotice.value = ''
+    parseError.value = friendlyParseErrorMessage(error instanceof Error ? error.message : '请求失败')
   } finally {
-    parsing.value = false
+    if (isActiveParseRun(runId)) {
+      parsing.value = false
+    }
   }
+}
+
+function isActiveParseRun(runId: number, taskId?: number | null) {
+  if (runId !== parseRunSeq) {
+    return false
+  }
+  return taskId == null || activeParseTaskId == null || activeParseTaskId === taskId
+}
+
+function rememberParseTask(taskId?: number | null, runId = parseRunSeq) {
+  if (!taskId) {
+    return
+  }
+  if (!isActiveParseRun(runId, taskId)) {
+    return
+  }
+  activeParseTaskId = taskId
+  rememberSessionTaskId(taskId)
+  startParseTaskFallback(taskId, runId)
+}
+
+function startParseTaskFallback(taskId: number, runId = parseRunSeq) {
+  if (!isActiveParseRun(runId, taskId)) {
+    return
+  }
+  if (stopParseTracking && trackedParseTaskId === taskId) {
+    return
+  }
+  stopParseTask()
+  trackedParseTaskId = taskId
+  stopParseTracking = trackTaskResult<DouyinParseTaskResult>(taskId, {
+    pollIntervalMs: 1500,
+    onStatus(message) {
+      if (!isActiveParseRun(runId, message.taskId)) {
+        return
+      }
+      const status = String(message.status || '')
+      if (status === 'RUNNING' && (!parseStage.value || parseStage.value === 'accepted')) {
+        parseStage.value = douyinParse.value ? 'transcribing' : 'accepted'
+      }
+    },
+    onResult(taskResult) {
+      if (!isActiveParseRun(runId, taskResult.taskId)) {
+        return
+      }
+      applyParseTaskOutput(taskResult.result, { completed: true })
+      parseStage.value = 'completed'
+      parsing.value = false
+      parseAbort.value?.abort()
+      stopParseTracking = null
+      trackedParseTaskId = null
+    },
+    onFailure(message) {
+      if (!isActiveParseRun(runId, message.taskId)) {
+        return
+      }
+      if (parseStage.value === 'completed') {
+        return
+      }
+      parseStage.value = 'error'
+      parseNotice.value = ''
+      parseError.value = friendlyParseErrorMessage(message.errorMessage || '解析或转写失败')
+      parsing.value = false
+      parseAbort.value?.abort()
+      stopParseTracking = null
+      trackedParseTaskId = null
+    },
+    onError(error) {
+      if (!isActiveParseRun(runId, taskId)) {
+        return
+      }
+      if (!douyinParse.value && parseStage.value !== 'completed') {
+        parseError.value = friendlyParseErrorMessage(error.message)
+      }
+    },
+  })
+}
+
+function applyParseTaskOutput(
+  output: DouyinParseTaskResult | null | undefined,
+  options: { completed: boolean; message?: string },
+) {
+  if (!output) {
+    return
+  }
+  if (output.parseResult) {
+    douyinParse.value = output.parseResult
+    coverImageFailed.value = false
+  }
+  if (output.transcriptResult) {
+    sourceText.value = output.transcriptResult.originalText || ''
+    rewrittenText.value = ''
+  }
+  if (options.completed) {
+    parseError.value = ''
+    parseNotice.value = sourceText.value.trim() ? '' : friendlyEmptyTranscriptMessage(options.message)
+  }
+}
+
+function friendlyEmptyTranscriptMessage(message?: string) {
+  return friendlyParseErrorMessage(message || '视频里没有识别到可转写的口播文案，可以手动输入原文后继续改写')
+}
+
+function friendlyParseErrorMessage(message?: string) {
+  const text = message || '解析或转写失败'
+  if (
+    text.includes('Volcengine ASR query succeeded but returned empty text') ||
+    text.includes('没有识别到可转写的口播文案') ||
+    (text.toLowerCase().includes('asr') && text.toLowerCase().includes('empty text'))
+  ) {
+    return '视频里没有识别到可转写的口播文案，可以手动输入原文后继续改写。'
+  }
+  if (text.includes('bvc2') || text.includes('HEVC') || text.includes('AV1')) {
+    return '平台返回的视频编码当前播放器不兼容，已尽量选择通用 MP4；如果仍失败，请换公开视频链接后重试。'
+  }
+  if (
+    text.includes('Source video download failed') ||
+    text.includes('ASR audio preprocess failed') ||
+    text.includes('Upload public base url') ||
+    text.includes('TOS')
+  ) {
+    return '本地视频已上传，但转写服务暂时无法读取该视频文件。请检查 TOS 公网访问地址与桶读权限，或稍后重试。'
+  }
+  if (
+    text.includes('TikHub parse failed') ||
+    text.includes('hybrid error') ||
+    text.includes('TikHub request failed with HTTP 400') ||
+    text.includes('平台解析接口拒绝了当前链接')
+  ) {
+    if (inputMode.value === 'upload') {
+      return '本地视频解析未正确进入上传流程，请重新选择视频后再解析。'
+    }
+    return '平台暂未返回可解析的视频数据，请确认视频是公开可访问的视频，并尽量复制分享内容中的完整 http(s) 链接或完整分享文案后重试。'
+  }
+  if (text.includes('未识别到可解析的视频链接')) {
+    return '没有识别到可解析的视频链接，请粘贴包含 http(s) 链接的社媒分享内容后重试。'
+  }
+  return text
 }
 
 async function handleDouyinRewrite() {
@@ -412,6 +1051,9 @@ async function handleDouyinRewrite() {
   rewriteLoading.value = true
   rewriteError.value = ''
   rewrittenText.value = ''
+  rewriteTaskStatus.value = 'QUEUED'
+  rewriteTaskProgress.value = 0
+  resetRewriteProgress()
 
   try {
     const task = await rewriteDouyinCopywriting({
@@ -420,15 +1062,25 @@ async function handleDouyinRewrite() {
       introduce: rewriteIntroduce.value.trim() || undefined,
     })
     rememberSessionTaskId(task.taskId)
+    rewriteTaskStatus.value = String(task.status || 'QUEUED')
+    rewriteTaskProgress.value = task.progress ?? 0
     await new Promise<void>((resolve) => {
       stopRewriteTask()
       stopRewriteTracking = trackTaskResult<DouyinRewriteWriterVO>(task.taskId, {
+        onStatus(message) {
+          rewriteTaskStatus.value = String(message.status)
+          rewriteTaskProgress.value = message.progress
+        },
         onResult(taskResult) {
+          rewriteTaskStatus.value = String(taskResult.status || 'SUCCESS')
+          rewriteTaskProgress.value = taskResult.progress ?? 100
           rewrittenText.value = taskResult.result?.translatedText ?? ''
           rewriteLoading.value = false
           resolve()
         },
         onFailure(message) {
+          rewriteTaskStatus.value = String(message.status)
+          rewriteTaskProgress.value = message.progress
           rewriteError.value = message.errorMessage || '改写任务失败'
           rewriteLoading.value = false
           resolve()
@@ -443,6 +1095,7 @@ async function handleDouyinRewrite() {
   } catch (e) {
     rewriteError.value = e instanceof Error ? e.message : '请求失败'
     rewriteLoading.value = false
+    rewriteTaskStatus.value = 'FAILED'
   } finally {
     stopRewriteTask()
   }
@@ -453,6 +1106,14 @@ function stopRewriteTask() {
     stopRewriteTracking()
     stopRewriteTracking = null
   }
+}
+
+function stopParseTask() {
+  if (stopParseTracking) {
+    stopParseTracking()
+    stopParseTracking = null
+  }
+  trackedParseTaskId = null
 }
 
 async function copyRewrittenText() {
@@ -615,8 +1276,99 @@ function applyScript() {
 
 .parse-row {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) 62px;
+  grid-template-columns: minmax(0, 1fr) 62px 92px;
   gap: 10px;
+}
+
+.source-tabs,
+.platform-tabs {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin: 14px 0 10px;
+}
+
+.source-tabs button,
+.platform-tabs button {
+  min-height: 34px;
+  padding: 0 12px;
+  border: 1px solid #dfe5f2;
+  border-radius: 8px;
+  background: #fff;
+  color: #516078;
+  font-size: 13px;
+  font-weight: 800;
+  cursor: pointer;
+}
+
+.source-tabs button.active,
+.platform-tabs button.active {
+  border-color: #7d67ff;
+  background: #f2efff;
+  color: #513ee8;
+}
+
+.source-tabs {
+  margin-bottom: 12px;
+}
+
+.platform-note {
+  margin: 0 0 12px;
+  color: #667085;
+  font-size: 12px;
+  font-weight: 700;
+  line-height: 1.6;
+}
+
+.upload-parse-panel {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 128px;
+  gap: 10px;
+  align-items: stretch;
+}
+
+.video-upload-picker {
+  display: flex;
+  min-width: 0;
+  min-height: 52px;
+  align-items: center;
+  gap: 10px;
+  border: 1px dashed #cfd6e6;
+  border-radius: 8px;
+  background: #fff;
+  padding: 0 14px;
+  cursor: pointer;
+}
+
+.video-upload-picker input {
+  display: none;
+}
+
+.video-upload-picker span {
+  flex-shrink: 0;
+  color: #4630d1;
+  font-size: 13px;
+  font-weight: 850;
+}
+
+.video-upload-picker small {
+  min-width: 0;
+  overflow: hidden;
+  color: #667085;
+  font-size: 12px;
+  font-weight: 700;
+  line-height: 1.45;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.video-upload-picker.disabled {
+  cursor: not-allowed;
+  opacity: 0.58;
+}
+
+.upload-parse-button {
+  min-height: 52px;
 }
 
 .parse-row input,
@@ -654,6 +1406,20 @@ function applyScript() {
   margin: 10px 0 0;
   color: #d64c4c;
   font-size: 13px;
+}
+
+.success-text {
+  margin: 10px 0 0;
+  color: #178a4c;
+  font-size: 13px;
+  font-weight: 750;
+}
+
+.info-text {
+  margin: 10px 0 0;
+  color: #4d5f7c;
+  font-size: 13px;
+  line-height: 1.65;
 }
 
 .transcript-status {
@@ -707,6 +1473,26 @@ function applyScript() {
   border-radius: 8px;
   object-fit: cover;
   border: 1px solid #edf0f6;
+}
+
+.cover-video {
+  width: 100%;
+  max-height: 220px;
+  border: 1px solid #edf0f6;
+  border-radius: 8px;
+  background: #111827;
+}
+
+.cover-placeholder {
+  display: grid;
+  min-height: 132px;
+  place-items: center;
+  border: 1px dashed #d9deea;
+  border-radius: 8px;
+  background: #f8fafc;
+  color: #8a94a6;
+  font-size: 13px;
+  font-weight: 800;
 }
 
 .video-meta-block {
@@ -994,6 +1780,36 @@ function applyScript() {
   line-height: 1.5;
 }
 
+.rewrite-progress-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.rewrite-progress-track {
+  flex: 1;
+  height: 8px;
+  overflow: hidden;
+  border-radius: 999px;
+  background: #e8ecf4;
+}
+
+.rewrite-progress-fill {
+  height: 100%;
+  border-radius: 999px;
+  background: linear-gradient(90deg, #563bf0 0%, #7c6dff 100%);
+  transition: width 0.35s ease;
+}
+
+.rewrite-progress-pct {
+  flex-shrink: 0;
+  min-width: 2.75rem;
+  color: #667085;
+  font-size: 12px;
+  font-weight: 800;
+  text-align: right;
+}
+
 .extra-notes-block {
   display: flex;
   flex-direction: column;
@@ -1188,6 +2004,18 @@ function applyScript() {
 
   .benchmark-layout {
     grid-template-columns: 1fr;
+  }
+
+  .parse-row {
+    grid-template-columns: 1fr;
+  }
+
+  .upload-parse-panel {
+    grid-template-columns: 1fr;
+  }
+
+  .parse-row button {
+    width: 100%;
   }
 
   .tabs,

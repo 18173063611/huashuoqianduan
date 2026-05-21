@@ -83,6 +83,12 @@ const routes: RouteRecordRaw[] = [
         meta: { requiresAuth: true, requiresAdmin: true, title: '任务管理' },
       },
       {
+        path: 'assets',
+        name: 'admin-assets',
+        component: () => import('../pages/admin/AdminAssetsPage.vue'),
+        meta: { requiresAuth: true, requiresAdmin: true, title: '资产管理' },
+      },
+      {
         path: 'credit-logs',
         name: 'admin-credit-logs',
         component: () => import('../pages/admin/AdminCreditLogsPage.vue'),

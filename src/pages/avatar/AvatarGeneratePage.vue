@@ -170,11 +170,18 @@
             <img :src="assetUrl(avatar.previewUrl)" :alt="avatar.avatarName" />
             <div>
               <strong>{{ avatar.avatarName }}</strong>
-              <p class="app-muted">{{ avatar.sourceType === 'AI_GENERATED' ? 'AI 生成' : '用户上传' }}</p>
+              <p class="app-muted">{{ sourceLabel(avatar) }} · {{ visibilityLabel(avatar) }}</p>
             </div>
-            <button class="app-secondary-button" type="button" :disabled="avatar.defaultAvatar" @click="setAsDefault(avatar)">
+            <button
+              v-if="canManageAvatar(avatar)"
+              class="app-secondary-button"
+              type="button"
+              :disabled="avatar.defaultAvatar"
+              @click="setAsDefault(avatar)"
+            >
               {{ avatar.defaultAvatar ? '默认形象' : '设为默认形象' }}
             </button>
+            <span v-else class="avatar-public-badge">公共形象</span>
           </article>
         </div>
       </section>
@@ -393,6 +400,10 @@ function startTaskTracking(taskId: number) {
 }
 
 async function setAsDefault(avatar: AvatarItem) {
+  if (!canManageAvatar(avatar)) {
+    errorMessage.value = '公共形象仅可预览，不能设为个人默认形象'
+    return
+  }
   errorMessage.value = ''
   try {
     await updateAvatar(avatar.avatarId, { defaultAvatar: true })
@@ -432,6 +443,11 @@ async function applyAvatarResult(result: AvatarGenerateTaskResult) {
     projectId: null,
     taskId: null,
     assetId: result.assetIds?.[index] ?? null,
+    ownerUserId: null,
+    createdByUserId: null,
+    visibility: 'PRIVATE',
+    status: 'ACTIVE',
+    manageable: true,
     avatarName: `${form.avatarName || 'AI 形象'} ${index + 1}`,
     sourceType: 'AI_GENERATED',
     prompt: form.prompt,
@@ -452,6 +468,22 @@ function assetUrl(url?: string | null) {
     return ''
   }
   return url.startsWith('http') ? url : `${API_ORIGIN}${url}`
+}
+
+function canManageAvatar(avatar: AvatarItem) {
+  return avatar.manageable !== false
+}
+
+function sourceLabel(avatar: AvatarItem) {
+  if (avatar.sourceType === 'AI_GENERATED') return 'AI 生成'
+  if (avatar.sourceType === 'USER_UPLOAD') return '用户上传'
+  return avatar.sourceType || '形象资产'
+}
+
+function visibilityLabel(avatar: AvatarItem) {
+  if (avatar.visibility === 'PUBLIC') return '公共'
+  if (avatar.visibility === 'PRIVATE') return '私有'
+  return avatar.ownerUserId == null ? '公共' : '私有'
 }
 </script>
 
@@ -802,6 +834,21 @@ function assetUrl(url?: string | null) {
   padding: 0 12px;
   font-size: 13px;
   font-weight: 800;
+}
+
+.avatar-public-badge {
+  display: inline-flex;
+  min-height: 34px;
+  align-items: center;
+  justify-content: center;
+  border: 1px solid #dbeafe;
+  border-radius: var(--app-radius-sm);
+  background: #eff6ff;
+  color: #1d4ed8;
+  padding: 0 12px;
+  font-size: 13px;
+  font-weight: 800;
+  white-space: nowrap;
 }
 
 .avatar-library {

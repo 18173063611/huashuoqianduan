@@ -5,6 +5,11 @@ export interface AvatarItem {
   projectId: number | null
   taskId: number | null
   assetId: number | null
+  ownerUserId?: number | null
+  createdByUserId?: number | null
+  visibility?: string | null
+  status?: string | null
+  manageable?: boolean
   avatarName: string
   sourceType: 'USER_UPLOAD' | 'AI_GENERATED' | string
   prompt: string | null

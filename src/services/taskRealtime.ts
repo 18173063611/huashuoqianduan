@@ -93,6 +93,7 @@ export function trackTaskResult<T = unknown>(taskId: number, options: TrackTaskR
     },
     onUnavailable: startPolling,
   })
+  void pollOnce()
   fallbackTimer = window.setTimeout(startPolling, 5000)
 
   return stop

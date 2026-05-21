@@ -19,18 +19,31 @@ export interface DouyinVideoParseResponse {
   rawData: unknown
 }
 
+export interface ShareVideoDownloadRequest {
+  url: string
+  platform?: string
+  title?: string
+}
+
 export interface WriterTranscriptVO {
   originalText: string
   translatedText: string
 }
 
-export type DouyinParseStage = 'parsed' | 'transcribing' | 'completed' | 'error'
+export type DouyinParseStage = 'accepted' | 'parsed' | 'transcribing' | 'completed' | 'error'
 
 export interface DouyinParseWithTranscriptEventPayload {
   stage: DouyinParseStage
   taskId?: number | null
   parseResult: DouyinVideoParseResponse | null
   transcriptResult: WriterTranscriptVO | null
+}
+
+export interface DouyinParseTaskResult {
+  parseResult?: DouyinVideoParseResponse | null
+  transcriptResult?: WriterTranscriptVO | null
+  resultAssetId?: number | null
+  previewUrl?: string | null
 }
 
 /** POST `/writer/douyin/rewrite`，与 huaye-ai `writer-douyin-rewrite.md` 一致 */
