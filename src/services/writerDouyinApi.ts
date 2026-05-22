@@ -23,6 +23,18 @@ export interface StartDouyinParseWithTranscriptOptions {
   onErrorEvent?: (payload: ApiResponse<DouyinParseWithTranscriptEventPayload>) => void
 }
 
+export interface ShareVideoDownloadProgress {
+  fileName: string
+  receivedBytes: number
+  totalBytes: number | null
+  percent: number | null
+}
+
+export interface ShareVideoDownloadOptions {
+  onStarted?: (progress: ShareVideoDownloadProgress) => void
+  onProgress?: (progress: ShareVideoDownloadProgress) => void
+}
+
 /**
  * POST SSE：`/api/v1/writer/douyin/parse-with-transcript`
  * `API_BASE_URL` 已包含 `/api/v1` 前缀。
@@ -127,7 +139,7 @@ export function rewriteDouyinCopywriting(body: DouyinRewriteRequest) {
  * POST 二进制：`/writer/videos/download`
  * 平台视频直链常有 CORS/Referer 限制，下载统一走后端代理并使用 Content-Disposition 文件名。
  */
-export async function downloadShareVideo(body: ShareVideoDownloadRequest) {
+export async function downloadShareVideo(body: ShareVideoDownloadRequest, options: ShareVideoDownloadOptions = {}) {
   const url = `${API_BASE_URL}/writer/videos/download`
   const token = getAuthToken()
   const response = await fetch(url, {
@@ -146,18 +158,72 @@ export async function downloadShareVideo(body: ShareVideoDownloadRequest) {
     throw new Error(await readDownloadError(response))
   }
 
-  const blob = await response.blob()
+  const fileName = resolveDownloadFileName(response.headers.get('Content-Disposition') || '')
+  const totalBytes = parsePositiveInt(response.headers.get('Content-Length'))
+  options.onStarted?.({
+    fileName,
+    receivedBytes: 0,
+    totalBytes,
+    percent: null,
+  })
+
+  const blob = await readDownloadBlob(response, fileName, totalBytes, options)
   if (blob.size <= 0) {
     throw new Error('下载失败：视频内容为空')
   }
   const objectUrl = URL.createObjectURL(blob)
   const link = document.createElement('a')
   link.href = objectUrl
-  link.download = resolveDownloadFileName(response.headers.get('Content-Disposition') || '')
+  link.download = fileName
   document.body.appendChild(link)
   link.click()
   document.body.removeChild(link)
   URL.revokeObjectURL(objectUrl)
+}
+
+async function readDownloadBlob(
+  response: Response,
+  fileName: string,
+  totalBytes: number | null,
+  options: ShareVideoDownloadOptions,
+) {
+  if (!response.body) {
+    const blob = await response.blob()
+    options.onProgress?.({
+      fileName,
+      receivedBytes: blob.size,
+      totalBytes: totalBytes ?? blob.size,
+      percent: 100,
+    })
+    return blob
+  }
+
+  const reader = response.body.getReader()
+  const chunks: ArrayBuffer[] = []
+  let receivedBytes = 0
+  while (true) {
+    const { done, value } = await reader.read()
+    if (done) break
+    if (!value) continue
+    const chunk = new Uint8Array(value)
+    chunks.push(chunk.buffer)
+    receivedBytes += chunk.byteLength
+    options.onProgress?.({
+      fileName,
+      receivedBytes,
+      totalBytes,
+      percent: totalBytes ? Math.min(100, Math.round((receivedBytes / totalBytes) * 100)) : null,
+    })
+  }
+  return new Blob(chunks, { type: response.headers.get('Content-Type') || 'video/mp4' })
+}
+
+function parsePositiveInt(value: string | null) {
+  if (!value) {
+    return null
+  }
+  const parsed = Number.parseInt(value, 10)
+  return Number.isFinite(parsed) && parsed > 0 ? parsed : null
 }
 
 function normalizePlatformPath(value?: string | null) {

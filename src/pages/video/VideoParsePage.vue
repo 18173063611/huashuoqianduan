@@ -22,12 +22,13 @@
                 :key="option.value"
                 type="button"
                 :class="{ active: selectedPlatform === option.value }"
-                @click="selectedPlatform = option.value"
+                @click="selectPlatform(option.value)"
               >
                 {{ option.label }}
               </button>
             </div>
             <p class="platform-note">{{ selectedPlatformNote }}</p>
+            <p v-if="platformAutoHint" class="platform-auto-hint">{{ platformAutoHint }}</p>
             <div class="parse-row">
               <input v-model.trim="videoUrl" :placeholder="videoPlaceholder" />
               <button
@@ -47,6 +48,23 @@
               >
                 {{ downloading ? '下载中' : '下载视频' }}
               </button>
+            </div>
+            <div v-if="downloading || downloadProgressText" class="download-progress-panel" role="status">
+              <div class="download-progress-head">
+                <span>{{ downloadStatusText }}</span>
+                <strong v-if="downloadProgressPercent !== null">{{ downloadProgressPercent }}%</strong>
+              </div>
+              <div
+                v-if="downloadProgressPercent !== null"
+                class="download-progress-track"
+                role="progressbar"
+                :aria-valuemin="0"
+                :aria-valuemax="100"
+                :aria-valuenow="downloadProgressPercent"
+              >
+                <div class="download-progress-fill" :style="{ width: `${downloadProgressPercent}%` }" />
+              </div>
+              <p v-if="downloadProgressText">{{ downloadProgressText }}</p>
             </div>
           </template>
 
@@ -302,7 +320,7 @@
 </template>
 
 <script setup lang="ts">
-import { computed, onBeforeUnmount, ref } from 'vue'
+import { computed, onBeforeUnmount, ref, watch } from 'vue'
 import { downloadShareVideo, rewriteDouyinCopywriting, startDouyinParseWithTranscript } from '../../services/writerDouyinApi'
 import { API_BASE_URL, API_ORIGIN } from '../../services/request'
 import { uploadFile } from '../../services/uploadApi'
@@ -395,6 +413,11 @@ const parseNotice = ref('')
 const downloading = ref(false)
 const downloadError = ref('')
 const downloadMessage = ref('')
+const downloadStatusText = ref('')
+const downloadReceivedBytes = ref(0)
+const downloadTotalBytes = ref<number | null>(null)
+const downloadProgressPercent = ref<number | null>(null)
+const platformAutoHint = ref('')
 const uploadingLocalVideo = ref(false)
 const localVideoFileName = ref('')
 const localVideoPreviewUrl = ref('')
@@ -436,7 +459,34 @@ const selectedPlatformNote = computed(
   () => platformOptions.find((option) => option.value === selectedPlatform.value)?.officialNote || platformOptions[0].officialNote,
 )
 
+const downloadProgressText = computed(() => {
+  if (downloadReceivedBytes.value <= 0) {
+    return ''
+  }
+  const received = formatFileSize(downloadReceivedBytes.value)
+  const total = downloadTotalBytes.value && downloadTotalBytes.value > 0
+    ? ` / ${formatFileSize(downloadTotalBytes.value)}`
+    : ''
+  return `已接收 ${received}${total}`
+})
+
 const sourcePanelTitle = computed(() => (inputMode.value === 'upload' ? '1. 上传对标视频' : '1. 输入对标视频链接'))
+
+watch(videoUrl, (value) => {
+  if (inputMode.value !== 'link') {
+    return
+  }
+  const detected = detectPlatformFromText(value)
+  if (!detected) {
+    platformAutoHint.value = ''
+    return
+  }
+  if (selectedPlatform.value !== detected) {
+    selectedPlatform.value = detected
+    const label = platformOptions.find((option) => option.value === detected)?.label || '对应平台'
+    platformAutoHint.value = `已根据链接识别为${label}，将按该平台解析。`
+  }
+})
 
 onBeforeUnmount(() => {
   parseAbort.value?.abort()
@@ -563,6 +613,19 @@ function isHttpUrl(value: string) {
   return /^https?:\/\//i.test(value.trim())
 }
 
+function detectPlatformFromText(value: string) {
+  const text = value.toLowerCase()
+  if (!text.trim()) return ''
+  if (/douyin\.com|iesdouyin\.com|amemv\.com|douyinvod\.com/.test(text)) return 'douyin'
+  if (/xiaohongshu\.com|xhslink\.com|xhscdn\.com|xhs\.cn/.test(text)) return 'xiaohongshu'
+  if (/tiktok\.com|tiktokv\.com|vm\.tiktok\.com|vt\.tiktok\.com|musical\.ly/.test(text)) return 'tiktok'
+  if (/kuaishou\.com|kwai\.com|gifshow\.com|kwaicdn\.com|ksapisrv\.com|oskwai\.com|yximgs\.com/.test(text)) return 'kuaishou'
+  if (/bilibili\.com|b23\.tv|bilivideo\.com|hdslb\.com|biliimg\.com/.test(text)) return 'bilibili'
+  if (/youtube\.com|youtu\.be|googlevideo\.com/.test(text)) return 'youtube'
+  if (/facebook\.com|fb\.watch|fbcdn\.net|fb\.com/.test(text)) return 'facebook'
+  return ''
+}
+
 function normalizeDisplayImageUrl(value: string) {
   const url = value.trim()
   if (!url) return ''
@@ -623,11 +686,32 @@ function formatFileSize(size: number) {
   return `${(size / 1024 / 1024).toFixed(1)} MB`
 }
 
+function resetDownloadProgress() {
+  downloadStatusText.value = ''
+  downloadReceivedBytes.value = 0
+  downloadTotalBytes.value = null
+  downloadProgressPercent.value = null
+}
+
 function isSupportedLocalVideoFile(file: File) {
   if (file.type.startsWith('video/')) {
     return true
   }
   return /\.(mp4|mov|m4v|webm)$/i.test(file.name)
+}
+
+function selectPlatform(value: string) {
+  selectedPlatform.value = value
+  platformAutoHint.value = ''
+}
+
+function effectivePlatformForUrl(url: string) {
+  const detected = detectPlatformFromText(url)
+  if (detected) {
+    selectedPlatform.value = detected
+    return detected
+  }
+  return selectedPlatform.value
 }
 
 function switchInputMode(mode: 'link' | 'upload') {
@@ -640,6 +724,8 @@ function switchInputMode(mode: 'link' | 'upload') {
   resetParseWorkflowState()
   downloadError.value = ''
   downloadMessage.value = ''
+  platformAutoHint.value = ''
+  resetDownloadProgress()
   localUploadError.value = ''
 }
 
@@ -678,6 +764,7 @@ async function handleLocalVideoChange(event: Event) {
   localUploadMessage.value = ''
   downloadError.value = ''
   downloadMessage.value = ''
+  resetDownloadProgress()
 
   if (!file) {
     return
@@ -741,12 +828,32 @@ async function handleDownloadVideo() {
   downloading.value = true
   downloadError.value = ''
   downloadMessage.value = ''
+  downloadStatusText.value = '正在连接下载服务…'
+  downloadReceivedBytes.value = 0
+  downloadTotalBytes.value = null
+  downloadProgressPercent.value = null
   try {
+    const platform = effectivePlatformForUrl(url)
     // 直链通常存在跨域与防盗链限制，因此下载走后端代理，页面只负责触发浏览器保存。
-    await downloadShareVideo({ url, platform: selectedPlatform.value })
-    downloadMessage.value = '视频下载已开始'
+    await downloadShareVideo(
+      { url, platform },
+      {
+        onStarted(progress) {
+          downloadStatusText.value = '已连接，正在接收视频…'
+          downloadTotalBytes.value = progress.totalBytes
+        },
+        onProgress(progress) {
+          downloadReceivedBytes.value = progress.receivedBytes
+          downloadTotalBytes.value = progress.totalBytes
+          downloadProgressPercent.value = progress.percent
+        },
+      },
+    )
+    downloadStatusText.value = '接收完成'
+    downloadMessage.value = '视频已接收完成，浏览器正在保存文件'
   } catch (error) {
-    downloadError.value = error instanceof Error ? error.message : '下载失败'
+    downloadStatusText.value = downloadReceivedBytes.value > 0 ? '下载中断' : ''
+    downloadError.value = friendlyDownloadErrorMessage(error instanceof Error ? error.message : '下载失败')
   } finally {
     downloading.value = false
   }
@@ -757,7 +864,7 @@ async function handleParseVideo() {
   if (!url || parsing.value) {
     return
   }
-  await runParseVideo(url, selectedPlatform.value)
+  await runParseVideo(url, effectivePlatformForUrl(url))
 }
 
 async function handleReparseCurrent() {
@@ -799,6 +906,7 @@ async function runParseVideo(
   coverImageFailed.value = false
   downloadError.value = ''
   downloadMessage.value = ''
+  resetDownloadProgress()
   parseStage.value = ''
   applyMessage.value = ''
   parsing.value = true
@@ -999,6 +1107,25 @@ function applyParseTaskOutput(
 
 function friendlyEmptyTranscriptMessage(message?: string) {
   return friendlyParseErrorMessage(message || '视频里没有识别到可转写的口播文案，可以手动输入原文后继续改写')
+}
+
+function friendlyDownloadErrorMessage(message?: string) {
+  const text = message || '下载失败'
+  if (
+    text.includes('没有拿到可下载') ||
+    text.includes('未返回可下载') ||
+    text.includes('without downloadable url') ||
+    text.includes('no downloadable')
+  ) {
+    return '已识别到视频信息，但平台未返回可下载的视频地址。请确认视频为公开且允许下载，或更换分享链接后重试。'
+  }
+  if (text.includes('bvc2') || text.includes('HEVC') || text.includes('AV1')) {
+    return '平台返回的视频编码暂不适合通用 MP4 下载，请更换公开分享链接后重试。'
+  }
+  if (text.includes('HTTP 400') || text.includes('TikHub parse failed') || text.includes('平台暂未返回可解析')) {
+    return '平台暂未返回可解析的视频数据，请确认链接公开可访问，并尽量粘贴完整分享文案后重试。'
+  }
+  return text
 }
 
 function friendlyParseErrorMessage(message?: string) {
@@ -1320,6 +1447,14 @@ function applyScript() {
   line-height: 1.6;
 }
 
+.platform-auto-hint {
+  margin: -4px 0 12px;
+  color: #256a52;
+  font-size: 12px;
+  font-weight: 800;
+  line-height: 1.5;
+}
+
 .upload-parse-panel {
   display: grid;
   grid-template-columns: minmax(0, 1fr) 128px;
@@ -1420,6 +1555,52 @@ function applyScript() {
   color: #4d5f7c;
   font-size: 13px;
   line-height: 1.65;
+}
+
+.download-progress-panel {
+  display: grid;
+  gap: 8px;
+  margin-top: 10px;
+  border: 1px solid #d8e8df;
+  border-radius: 8px;
+  background: #f8fcfa;
+  padding: 10px 12px;
+}
+
+.download-progress-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  color: #365647;
+  font-size: 13px;
+  font-weight: 800;
+}
+
+.download-progress-head strong {
+  color: #197351;
+  font-size: 12px;
+}
+
+.download-progress-track {
+  height: 8px;
+  overflow: hidden;
+  border-radius: 999px;
+  background: #dfece6;
+}
+
+.download-progress-fill {
+  height: 100%;
+  border-radius: inherit;
+  background: linear-gradient(90deg, #1f8a61 0%, #3fb77f 100%);
+  transition: width 0.25s ease;
+}
+
+.download-progress-panel p {
+  margin: 0;
+  color: #5d6f65;
+  font-size: 12px;
+  font-weight: 750;
 }
 
 .transcript-status {
