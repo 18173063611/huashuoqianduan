@@ -847,6 +847,13 @@ async function handleDownloadVideo() {
           downloadTotalBytes.value = progress.totalBytes
           downloadProgressPercent.value = progress.percent
         },
+        onRetry(retry) {
+          downloadStatusText.value = `下载中断，正在自动重试（${retry.nextAttempt}/${retry.maxAttempts}）…`
+          downloadProgressPercent.value = null
+          downloadTotalBytes.value = null
+          downloadReceivedBytes.value = 0
+          downloadError.value = ''
+        },
       },
     )
     downloadStatusText.value = '接收完成'
@@ -1110,6 +1117,9 @@ function friendlyEmptyTranscriptMessage(message?: string) {
 }
 
 function friendlyDownloadErrorMessage(message?: string) {
+  if (isTransientDownloadErrorMessage(message || '')) {
+    return '视频下载连接中断，已自动重试但仍未完成。请稍后再试，或重新解析后再次下载。'
+  }
   const text = message || '下载失败'
   if (
     text.includes('没有拿到可下载') ||
@@ -1126,6 +1136,23 @@ function friendlyDownloadErrorMessage(message?: string) {
     return '平台暂未返回可解析的视频数据，请确认链接公开可访问，并尽量粘贴完整分享文案后重试。'
   }
   return text
+}
+
+function isTransientDownloadErrorMessage(message: string) {
+  const text = message.toLowerCase()
+  return (
+    text.includes('network error') ||
+    text.includes('failed to fetch') ||
+    text.includes('load failed') ||
+    text.includes('body stream') ||
+    text.includes('connection') ||
+    text.includes('timeout') ||
+    text.includes('terminated') ||
+    text.includes('interrupted') ||
+    text.includes('unexpected end') ||
+    text.includes('premature eof') ||
+    text.includes('closed before expected')
+  )
 }
 
 function friendlyParseErrorMessage(message?: string) {

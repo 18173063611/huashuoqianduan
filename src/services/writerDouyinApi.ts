@@ -33,7 +33,17 @@ export interface ShareVideoDownloadProgress {
 export interface ShareVideoDownloadOptions {
   onStarted?: (progress: ShareVideoDownloadProgress) => void
   onProgress?: (progress: ShareVideoDownloadProgress) => void
+  onRetry?: (retry: ShareVideoDownloadRetry) => void
 }
+
+export interface ShareVideoDownloadRetry {
+  attempt: number
+  nextAttempt: number
+  maxAttempts: number
+  message: string
+}
+
+const SHARE_VIDEO_DOWNLOAD_MAX_ATTEMPTS = 2
 
 /**
  * POST SSE：`/api/v1/writer/douyin/parse-with-transcript`
@@ -140,6 +150,30 @@ export function rewriteDouyinCopywriting(body: DouyinRewriteRequest) {
  * 平台视频直链常有 CORS/Referer 限制，下载统一走后端代理并使用 Content-Disposition 文件名。
  */
 export async function downloadShareVideo(body: ShareVideoDownloadRequest, options: ShareVideoDownloadOptions = {}) {
+  let lastError: unknown = null
+  for (let attempt = 1; attempt <= SHARE_VIDEO_DOWNLOAD_MAX_ATTEMPTS; attempt++) {
+    try {
+      await downloadShareVideoOnce(body, options)
+      return
+    } catch (error) {
+      lastError = error
+      const message = error instanceof Error ? error.message : String(error || 'download failed')
+      if (attempt >= SHARE_VIDEO_DOWNLOAD_MAX_ATTEMPTS || !isRetryableDownloadError(message)) {
+        throw error
+      }
+      options.onRetry?.({
+        attempt,
+        nextAttempt: attempt + 1,
+        maxAttempts: SHARE_VIDEO_DOWNLOAD_MAX_ATTEMPTS,
+        message,
+      })
+      await sleep(900 * attempt)
+    }
+  }
+  throw lastError instanceof Error ? lastError : new Error('download failed')
+}
+
+async function downloadShareVideoOnce(body: ShareVideoDownloadRequest, options: ShareVideoDownloadOptions = {}) {
   const url = `${API_BASE_URL}/writer/videos/download`
   const token = getAuthToken()
   const response = await fetch(url, {
@@ -179,6 +213,28 @@ export async function downloadShareVideo(body: ShareVideoDownloadRequest, option
   link.click()
   document.body.removeChild(link)
   URL.revokeObjectURL(objectUrl)
+}
+
+function isRetryableDownloadError(message: string) {
+  const text = message.toLowerCase()
+  return (
+    text.includes('network error') ||
+    text.includes('failed to fetch') ||
+    text.includes('load failed') ||
+    text.includes('body stream') ||
+    text.includes('connection') ||
+    text.includes('timeout') ||
+    text.includes('timed out') ||
+    text.includes('terminated') ||
+    text.includes('interrupted') ||
+    text.includes('unexpected end') ||
+    text.includes('premature eof') ||
+    text.includes('closed before expected')
+  )
+}
+
+function sleep(ms: number) {
+  return new Promise((resolve) => window.setTimeout(resolve, ms))
 }
 
 async function readDownloadBlob(
