@@ -65,6 +65,19 @@
               </div>
               <p v-if="referenceAssets.length === 0" class="app-muted avatar-small">资产中心暂无图片资产，可先上传形象照或直接文生图。</p>
               <div v-else class="avatar-reference-list">
+                <div class="avatar-reference-actions">
+                  <span>已选 {{ selectedReferenceAssets.length }} 张</span>
+                  <button type="button" class="app-secondary-button" @click="selectAllReferenceAssets">全选</button>
+                  <button type="button" class="app-secondary-button" @click="clearReferenceAssets">清空</button>
+                  <button
+                    type="button"
+                    class="avatar-ref-delete avatar-ref-batch-delete"
+                    :disabled="batchDeleting || selectedDeletableReferenceAssets.length === 0"
+                    @click="deleteSelectedReferenceAssets"
+                  >
+                    {{ batchDeleting ? '删除中…' : `批量删除${selectedDeletableReferenceAssets.length ? ` ${selectedDeletableReferenceAssets.length}` : ''}` }}
+                  </button>
+                </div>
                 <div v-for="asset in referenceAssets" :key="asset.assetId" class="avatar-reference-item">
                   <label class="avatar-reference-pick">
                     <input v-model="form.referenceAssetIds" type="checkbox" :value="asset.assetId" />
@@ -76,10 +89,10 @@
                     type="button"
                     class="avatar-ref-delete"
                     title="从资产中删除（仅私有）"
-                    :disabled="deletingAssetId === asset.assetId"
+                    :disabled="deletingAssetIds.has(asset.assetId)"
                     @click="deleteReferenceAsset(asset)"
                   >
-                    {{ deletingAssetId === asset.assetId ? '…' : '删除' }}
+                    {{ deletingAssetIds.has(asset.assetId) ? '…' : '删除' }}
                   </button>
                 </div>
               </div>
@@ -244,7 +257,8 @@ const saveMessage = ref('')
 const taskStatus = ref('')
 const taskProgress = ref<number | null>(null)
 let stopTaskTracking: (() => void) | null = null
-const deletingAssetId = ref<number | null>(null)
+const deletingAssetIds = ref<Set<number>>(new Set())
+const batchDeleting = ref(false)
 
 const { showTaskProgressBar, barProgressPercent, reset: resetSmoothProgress } = useSmoothTaskProgress(
   taskStatus,
@@ -252,6 +266,11 @@ const { showTaskProgressBar, barProgressPercent, reset: resetSmoothProgress } = 
 )
 
 const canGenerate = computed(() => Boolean(form.avatarName && form.prompt && form.imageCount >= 1))
+const selectedReferenceAssets = computed(() => {
+  const selectedIds = new Set(form.referenceAssetIds)
+  return referenceAssets.value.filter((asset) => selectedIds.has(asset.assetId))
+})
+const selectedDeletableReferenceAssets = computed(() => selectedReferenceAssets.value.filter(canDeleteReferenceAsset))
 
 onMounted(async () => {
   loggedIn.value = !!getAuthToken()
@@ -278,6 +297,14 @@ function canDeleteReferenceAsset(asset: AssetItem) {
   return asset.ownerUserId != null
 }
 
+function selectAllReferenceAssets() {
+  form.referenceAssetIds = referenceAssets.value.map((asset) => asset.assetId)
+}
+
+function clearReferenceAssets() {
+  form.referenceAssetIds = []
+}
+
 async function deleteReferenceAsset(asset: AssetItem) {
   if (!canDeleteReferenceAsset(asset)) {
     return
@@ -286,7 +313,7 @@ async function deleteReferenceAsset(asset: AssetItem) {
   if (!ok) {
     return
   }
-  deletingAssetId.value = asset.assetId
+  deletingAssetIds.value = new Set([asset.assetId])
   errorMessage.value = ''
   try {
     await deleteAsset(asset.assetId)
@@ -295,7 +322,46 @@ async function deleteReferenceAsset(asset: AssetItem) {
   } catch (e) {
     errorMessage.value = e instanceof Error ? e.message : '删除失败'
   } finally {
-    deletingAssetId.value = null
+    deletingAssetIds.value = new Set()
+  }
+}
+
+async function deleteSelectedReferenceAssets() {
+  const assets = selectedDeletableReferenceAssets.value
+  if (assets.length === 0) {
+    return
+  }
+  const skippedCount = selectedReferenceAssets.value.length - assets.length
+  const ok = window.confirm(
+    `确定从资产中批量删除 ${assets.length} 张参考图？删除后不可恢复。${skippedCount > 0 ? `\n已跳过 ${skippedCount} 张不可删除的公共资产。` : ''}`,
+  )
+  if (!ok) {
+    return
+  }
+  const deletingIds = new Set(assets.map((asset) => asset.assetId))
+  batchDeleting.value = true
+  deletingAssetIds.value = deletingIds
+  errorMessage.value = ''
+  try {
+    const results = await Promise.allSettled(assets.map((asset) => deleteAsset(asset.assetId)))
+    const deletedIds = new Set<number>()
+    results.forEach((result, index) => {
+      if (result.status === 'fulfilled') {
+        deletedIds.add(assets[index].assetId)
+      }
+    })
+    if (deletedIds.size > 0) {
+      form.referenceAssetIds = form.referenceAssetIds.filter((id) => !deletedIds.has(id))
+      referenceAssets.value = referenceAssets.value.filter((asset) => !deletedIds.has(asset.assetId))
+    }
+    if (deletedIds.size < assets.length) {
+      errorMessage.value = `已删除 ${deletedIds.size} 张，${assets.length - deletedIds.size} 张删除失败，请稍后重试。`
+    } else {
+      ElMessage.success(`已删除 ${deletedIds.size} 张参考图`)
+    }
+  } finally {
+    batchDeleting.value = false
+    deletingAssetIds.value = new Set()
   }
 }
 
@@ -668,6 +734,30 @@ function visibilityLabel(avatar: AvatarItem) {
   overflow: auto;
 }
 
+.avatar-reference-actions {
+  position: sticky;
+  top: 0;
+  z-index: 1;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+  padding: 8px;
+  border: 1px solid var(--app-border);
+  border-radius: var(--app-radius-sm);
+  background: rgba(255, 255, 255, 0.96);
+  color: var(--app-text-secondary);
+  font-size: 12px;
+  font-weight: 800;
+}
+
+.avatar-reference-actions .app-secondary-button,
+.avatar-reference-actions .avatar-ref-delete {
+  min-height: 30px;
+  padding: 5px 10px;
+  font-size: 12px;
+}
+
 .avatar-reference-item {
   display: grid;
   align-items: center;
@@ -718,6 +808,10 @@ function visibilityLabel(avatar: AvatarItem) {
 .avatar-ref-delete:disabled {
   opacity: 0.55;
   cursor: not-allowed;
+}
+
+.avatar-ref-batch-delete {
+  margin-left: auto;
 }
 
 .avatar-reference-item img,
