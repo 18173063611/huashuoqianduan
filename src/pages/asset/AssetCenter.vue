@@ -87,6 +87,20 @@
           </button>
         </div>
 
+        <div v-if="activeCategory === 'materials'" class="asset-stage-segment" role="tablist" aria-label="功能来源">
+          <button
+            v-for="stage in workflowStageOptions"
+            :key="stage.key"
+            type="button"
+            class="asset-stage-btn"
+            :class="{ 'asset-stage-btn-active': selectedWorkflowStage === stage.key }"
+            :disabled="loading"
+            @click="selectWorkflowStage(stage.key)"
+          >
+            {{ stage.label }}
+          </button>
+        </div>
+
         <select v-if="activeCategory === 'materials'" v-model="selectedType" class="asset-type-select" :disabled="loading">
           <option value="">全部类型</option>
           <option value="TEXT">TEXT 文本</option>
@@ -96,9 +110,15 @@
           <option value="COVER">COVER 封面</option>
           <option value="JSON">JSON 数据</option>
         </select>
-        <select v-if="activeCategory === 'materials'" v-model="selectedSourceType" class="asset-type-select" :disabled="loading">
+        <select
+          v-if="activeCategory === 'materials'"
+          v-model="selectedSourceType"
+          class="asset-type-select"
+          :disabled="loading"
+          @change="selectSpecificSourceType"
+        >
           <option value="">全部来源</option>
-          <option v-for="item in sourceTypeOptions" :key="item" :value="item">{{ item }}</option>
+          <option v-for="item in sourceTypeOptions" :key="item" :value="item">{{ sourceTypeLabel(item) }}</option>
         </select>
         <select v-if="activeCategory === 'materials'" v-model="sortKey" class="asset-type-select" :disabled="loading">
           <option value="createdAtDesc">按时间（新到旧）</option>
@@ -112,6 +132,26 @@
           type="search"
           :disabled="loading"
           :placeholder="activeCategory === 'materials' ? '搜索文件名...' : '搜索音色名称或 voice_type...'"
+        />
+        <label v-if="activeCategory === 'materials' && hasToken" class="asset-upload-toggle">
+          <input v-model="uploadPublishToPublic" type="checkbox" :disabled="loading" />
+          <span>上传后发布公共</span>
+        </label>
+        <button
+          v-if="activeCategory === 'materials'"
+          class="app-secondary-button asset-upload-button"
+          type="button"
+          :disabled="loading"
+          @click="openMaterialUpload"
+        >
+          {{ loading ? '处理中...' : '上传素材' }}
+        </button>
+        <input
+          ref="materialUploadInputRef"
+          class="asset-hidden-file-input"
+          type="file"
+          multiple
+          @change="handleMaterialUploadChange"
         />
         <button class="app-secondary-button" type="button" :disabled="loading" @click="refreshCurrent">
           {{ loading ? '加载中...' : '刷新' }}
@@ -422,7 +462,15 @@
 <script setup lang="ts">
 import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { useRouter } from 'vue-router'
-import { deleteAsset, getAssets, getAssetTextContent, publishAsset, saveAsset, unpublishAsset } from '../../services/assetApi'
+import {
+  deleteAsset,
+  getAssets,
+  getAssetTextContent,
+  publishAsset,
+  saveAsset,
+  unpublishAsset,
+  uploadMaterialAsset,
+} from '../../services/assetApi'
 import type { AssetListScope, AssetListSort } from '../../services/assetApi'
 import { API_ORIGIN, getAuthToken } from '../../services/request'
 import type { AssetItem, AssetType } from '../../types/assetTypes'
@@ -515,12 +563,60 @@ const KNOWN_SOURCE_TYPES = [
   'SEEDANCE_FIRST_FRAME_VIDEO',
   'SEEDANCE_FIRST_LAST_FRAME_VIDEO',
   'SEEDANCE_REFERENCE_VIDEO',
+  'SEEDANCE_CAR_SALES_VIDEO',
   'TEXT_TO_VIDEO_SEEDANCE_1_5',
   'TEXT_TO_VIDEO_SEEDANCE_2_0',
   'IMAGE_TO_VIDEO_SEEDANCE_1_5',
   'IMAGE_TO_VIDEO_SEEDANCE_2_0',
   'IMAGE_TO_VIDEO_SEEDANCE_2_0_FAST',
 ] as const
+
+const WORKFLOW_STAGE_OPTIONS = [
+  { key: '', label: '全部功能', sourceTypes: [] },
+  {
+    key: 'benchmark',
+    label: '爆款对标',
+    sourceTypes: ['DOUYIN_BENCHMARK', 'DOUYIN_PARSE_TRANSCRIPT', 'DOUYIN_REWRITE', 'DOUYIN_TRANSCRIPT'],
+  },
+  {
+    key: 'storyboard',
+    label: '分镜生成',
+    sourceTypes: ['STORYBOARD_GENERATE', 'VIDEO_SCRIPT_ANALYZE', 'VIDEO_SCRIPT_URL_ANALYZE'],
+  },
+  {
+    key: 'voice',
+    label: '声音生成',
+    sourceTypes: ['TTS_GENERATE', 'VOICE_SAMPLE'],
+  },
+  {
+    key: 'digitalHuman',
+    label: '数字人',
+    sourceTypes: ['AVATAR_GENERATE', 'DIGITAL_HUMAN_GENERATE'],
+  },
+  {
+    key: 'video',
+    label: '视频制作',
+    sourceTypes: [
+      'SEEDANCE_TEXT_VIDEO',
+      'SEEDANCE_FIRST_FRAME_VIDEO',
+      'SEEDANCE_FIRST_LAST_FRAME_VIDEO',
+      'SEEDANCE_REFERENCE_VIDEO',
+      'SEEDANCE_CAR_SALES_VIDEO',
+      'TEXT_TO_VIDEO_SEEDANCE_1_5',
+      'TEXT_TO_VIDEO_SEEDANCE_2_0',
+      'IMAGE_TO_VIDEO_SEEDANCE_1_5',
+      'IMAGE_TO_VIDEO_SEEDANCE_2_0',
+      'IMAGE_TO_VIDEO_SEEDANCE_2_0_FAST',
+    ],
+  },
+  {
+    key: 'material',
+    label: '上传素材',
+    sourceTypes: ['USER_UPLOAD', 'MANUAL_CREATED', 'DEMO', 'AI_GENERATED'],
+  },
+] as const
+
+type WorkflowStageKey = (typeof WORKFLOW_STAGE_OPTIONS)[number]['key']
 
 const assets = ref<AssetItem[]>([])
 const voices = ref<VoicePresetItem[]>([])
@@ -530,12 +626,15 @@ const highlightedId = ref<number | null>(null)
 const jumpHint = ref('')
 const selectedType = ref<'' | AssetType>('')
 const selectedSourceType = ref<string>('')
+const selectedWorkflowStage = ref<WorkflowStageKey>('')
 const sortKey = ref<AssetListSort>('createdAtDesc')
 const keyword = ref('')
 const listScope = ref<AssetListScope>('global')
 const activeCategory = ref<'materials' | 'voices'>('materials')
 const voiceListScope = ref<'private' | 'public'>('private')
 const hasToken = ref(false)
+const materialUploadInputRef = ref<HTMLInputElement | null>(null)
+const uploadPublishToPublic = ref(false)
 let keywordReloadTimer: number | null = null
 let highlightClearTimer: number | null = null
 
@@ -595,6 +694,8 @@ const sourceTypeOptions = computed(() => {
   }
   return Array.from(set).sort((a, b) => a.localeCompare(b))
 })
+
+const workflowStageOptions = computed(() => WORKFLOW_STAGE_OPTIONS)
 
 const filteredVoices = computed(() => {
   const q = keyword.value.trim().toLowerCase()
@@ -691,7 +792,7 @@ onMounted(() => {
   void refreshCurrent()
 })
 
-watch([activeCategory, listScope, voiceListScope, selectedType, selectedSourceType, sortKey], () => {
+watch([activeCategory, listScope, voiceListScope, selectedType, selectedSourceType, selectedWorkflowStage, sortKey], () => {
   scheduleReload()
 })
 
@@ -749,13 +850,14 @@ async function loadAssets() {
       voices.value = res.records || []
       return
     }
-    assets.value = await getAssets({
+    const rows = await getAssets({
       scope: listScope.value,
       assetType: selectedType.value || undefined,
-      sourceType: selectedSourceType.value || undefined,
+      sourceType: selectedWorkflowStage.value ? undefined : selectedSourceType.value || undefined,
       keyword: keyword.value || undefined,
       sort: sortKey.value,
     })
+    assets.value = rows.filter(matchesWorkflowStage)
     await nextTick()
     if (props.highlightAssetId != null && props.highlightAssetId > 0) {
       applyHighlightWhenReady(props.highlightAssetId)
@@ -773,6 +875,136 @@ async function loadAssets() {
 
 function refreshCurrent() {
   void loadAssets()
+}
+
+function openMaterialUpload() {
+  if (!hasToken.value) {
+    errorMessage.value = '请先登录后再上传素材到私有资产。'
+    return
+  }
+  materialUploadInputRef.value?.click()
+}
+
+async function handleMaterialUploadChange(event: Event) {
+  const input = event.target as HTMLInputElement
+  const files = Array.from(input.files || [])
+  input.value = ''
+  if (files.length === 0) {
+    return
+  }
+  if (!hasToken.value) {
+    errorMessage.value = '请先登录后再上传素材到私有资产。'
+    return
+  }
+
+  loading.value = true
+  errorMessage.value = ''
+  jumpHint.value = ''
+  const publishAfterUpload = uploadPublishToPublic.value
+  let latestAssetId: number | null = null
+  try {
+    for (const file of files) {
+      const uploaded = await uploadMaterialAsset(file, { publish: publishAfterUpload })
+      latestAssetId = uploaded.assetId
+    }
+    selectedType.value = ''
+    selectedSourceType.value = ''
+    selectedWorkflowStage.value = 'material'
+    keyword.value = ''
+    sortKey.value = 'createdAtDesc'
+    listScope.value = publishAfterUpload ? 'global' : 'private'
+    jumpHint.value =
+      files.length > 1
+        ? publishAfterUpload
+          ? `已上传并发布 ${files.length} 个素材到公共素材。`
+          : `已上传 ${files.length} 个素材到私有资产。`
+        : publishAfterUpload
+          ? '已上传并发布到公共素材。'
+          : '已上传到私有资产。'
+    await loadAssets()
+    if (latestAssetId != null) {
+      highlightedId.value = latestAssetId
+      clearHighlightTimer()
+      await nextTick()
+      document.getElementById(assetRowDomId(latestAssetId))?.scrollIntoView({ behavior: 'smooth', block: 'center' })
+      highlightClearTimer = window.setTimeout(() => {
+        highlightedId.value = null
+        jumpHint.value = ''
+        highlightClearTimer = null
+      }, 6000)
+    }
+  } catch (e) {
+    errorMessage.value = e instanceof Error ? e.message : '上传素材失败'
+  } finally {
+    loading.value = false
+  }
+}
+
+function selectWorkflowStage(stage: WorkflowStageKey) {
+  selectedWorkflowStage.value = stage
+  if (stage) {
+    selectedSourceType.value = ''
+  }
+}
+
+function selectSpecificSourceType() {
+  if (selectedSourceType.value) {
+    selectedWorkflowStage.value = ''
+  }
+}
+
+function matchesWorkflowStage(asset: AssetItem) {
+  if (!selectedWorkflowStage.value) {
+    return true
+  }
+  if (
+    selectedWorkflowStage.value === 'voice' &&
+    asset.assetType === 'AUDIO' &&
+    String(asset.sourceType || '').trim().toUpperCase() === 'AI_GENERATED'
+  ) {
+    return true
+  }
+  const stage = WORKFLOW_STAGE_OPTIONS.find((item) => item.key === selectedWorkflowStage.value)
+  if (!stage || stage.sourceTypes.length === 0) {
+    return true
+  }
+  const allowed = Array.from(stage.sourceTypes as readonly string[])
+  return allowed.includes(String(asset.sourceType || '').trim().toUpperCase())
+}
+
+function sourceTypeLabel(sourceType: string | null | undefined) {
+  const key = String(sourceType || '').trim().toUpperCase()
+  const labels: Record<string, string> = {
+    AI_GENERATED: 'AI 生成',
+    DEMO: '演示素材',
+    MANUAL_CREATED: '手动创建',
+    SYSTEM_MOCK: '系统示例',
+    USER_UPLOAD: '上传素材',
+    SCRIPT_REWRITE: '文案改写',
+    STORYBOARD_GENERATE: '分镜生成',
+    VIDEO_PARSE: '视频理解',
+    VIDEO_SCRIPT_ANALYZE: '分镜生成',
+    VIDEO_SCRIPT_URL_ANALYZE: '链接分镜',
+    DOUYIN_BENCHMARK: '爆款对标',
+    DOUYIN_PARSE_TRANSCRIPT: '爆款对标转写',
+    DOUYIN_REWRITE: '爆款文案改写',
+    DOUYIN_TRANSCRIPT: '爆款口播转写',
+    TTS_GENERATE: '声音生成',
+    VOICE_SAMPLE: '声音试音',
+    AVATAR_GENERATE: '数字人形象',
+    DIGITAL_HUMAN_GENERATE: '数字人视频',
+    SEEDANCE_TEXT_VIDEO: '文生视频',
+    SEEDANCE_FIRST_FRAME_VIDEO: '图生视频',
+    SEEDANCE_FIRST_LAST_FRAME_VIDEO: '图生视频',
+    SEEDANCE_REFERENCE_VIDEO: '图生视频',
+    SEEDANCE_CAR_SALES_VIDEO: '汽车销售成片',
+    TEXT_TO_VIDEO_SEEDANCE_1_5: '文生视频',
+    TEXT_TO_VIDEO_SEEDANCE_2_0: '文生视频',
+    IMAGE_TO_VIDEO_SEEDANCE_1_5: '图生视频',
+    IMAGE_TO_VIDEO_SEEDANCE_2_0: '图生视频',
+    IMAGE_TO_VIDEO_SEEDANCE_2_0_FAST: '图生视频',
+  }
+  return labels[key] || key || '未知来源'
 }
 
 function clearKeywordReloadTimer() {
@@ -850,7 +1082,7 @@ function resultAssetLabel(asset: AssetItem) {
   if (label && label !== '其他任务' && label !== '暂无') {
     return `${label}结果`
   }
-  return asset.sourceType ? `${asset.sourceType} 结果` : '生成结果'
+  return asset.sourceType ? `${sourceTypeLabel(asset.sourceType)}结果` : '生成结果'
 }
 
 function displayAssetTitle(asset: AssetItem) {
@@ -864,17 +1096,17 @@ function displayAssetMeta(asset: AssetItem) {
   if (isJson(asset) && asset.kind === 'GENERATED') {
     const type = assetTaskType(asset)
     const label = taskTypeLabel(type)
-    const readable = label && label !== '其他任务' && label !== '暂无' ? label : asset.sourceType
+    const readable = label && label !== '其他任务' && label !== '暂无' ? label : sourceTypeLabel(asset.sourceType)
     return readable ? `生成结果 · ${readable}` : '生成结果'
   }
-  return `${asset.assetType} · ${formatFileSize(asset.fileSize)} · ${asset.sourceType}`
+  return `${asset.assetType} · ${formatFileSize(asset.fileSize)} · ${sourceTypeLabel(asset.sourceType)}`
 }
 
 function displayAssetPreviewSubtitle(asset: AssetItem) {
   if (isJson(asset) && asset.kind === 'GENERATED') {
     return displayAssetMeta(asset)
   }
-  return `${asset.fileName} · ${asset.sourceType}`
+  return `${asset.fileName} · ${sourceTypeLabel(asset.sourceType)}`
 }
 
 function assetTaskType(asset: AssetItem | null) {
@@ -1271,6 +1503,32 @@ async function playVoiceSample(voice: VoicePresetItem) {
   gap: 2px;
 }
 
+.asset-stage-segment {
+  display: flex;
+  grid-column: 1 / -1;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.asset-stage-btn {
+  height: 32px;
+  border: 1px solid #e5e7eb;
+  border-radius: 8px;
+  background: #fff;
+  color: #4b5563;
+  padding: 0 12px;
+  font-size: 12.5px;
+  font-weight: 750;
+  cursor: pointer;
+}
+
+.asset-stage-btn:hover:not(:disabled),
+.asset-stage-btn-active {
+  border-color: #a79bff;
+  background: #f5f3ff;
+  color: #5e50df;
+}
+
 .asset-category-segment {
   background: #f5f3ff;
   border-color: #e2ddff;
@@ -1324,6 +1582,31 @@ async function playVoiceSample(voice: VoicePresetItem) {
   background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='18' height='18' viewBox='0 0 24 24' fill='none'%3E%3Cpath d='M21 21l-4.35-4.35' stroke='%239CA3AF' stroke-width='2' stroke-linecap='round'/%3E%3Cpath d='M11 19a8 8 0 110-16 8 8 0 010 16z' stroke='%239CA3AF' stroke-width='2'/%3E%3C/svg%3E");
   background-repeat: no-repeat;
   background-position: 12px 50%;
+}
+
+.asset-hidden-file-input {
+  display: none;
+}
+
+.asset-upload-toggle {
+  display: inline-flex;
+  min-height: 36px;
+  align-items: center;
+  gap: 7px;
+  border: 1px solid #e5e7eb;
+  border-radius: 8px;
+  background: #ffffff;
+  color: #344054;
+  padding: 0 12px;
+  font-size: 12.5px;
+  font-weight: 750;
+  white-space: nowrap;
+}
+
+.asset-upload-toggle input {
+  width: 15px;
+  height: 15px;
+  accent-color: #635bff;
 }
 
 .asset-type-select:focus,

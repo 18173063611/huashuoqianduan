@@ -6,7 +6,7 @@
           <div>
             <h2>选择视频来源</h2>
             <p class="app-muted">
-              支持两种方式：直接粘贴公网视频链接 / 选择本地文件先上传再解析。建议视频不超过 50MB，否则模型可能解析失败。
+              支持两种方式：粘贴爆款对标同款平台链接或公网视频直链 / 选择本地文件先上传再解析。建议视频不超过 50MB，否则模型可能解析失败。
             </p>
           </div>
         </div>
@@ -40,19 +40,34 @@
         </div>
 
         <div v-if="sourceMode === 'url'" class="storyboard-source storyboard-source-url">
+          <div class="storyboard-platforms" role="group" aria-label="视频平台">
+            <button
+              v-for="option in platformOptions"
+              :key="option.value"
+              type="button"
+              :class="{ active: selectedPlatform === option.value }"
+              :disabled="busy"
+              @click="selectedPlatform = option.value"
+            >
+              {{ option.label }}
+            </button>
+          </div>
           <input
             v-model.trim="videoUrl"
             type="url"
-            placeholder="https://example.com/your-video.mp4"
+            :placeholder="videoPlaceholder"
             :disabled="busy"
           />
+          <p v-if="selectedPlatformLimitReason" class="storyboard-platform-limit">
+            {{ selectedPlatformLimitReason }}
+          </p>
 
           <div class="storyboard-actions">
             <button
               class="app-primary-button"
               type="button"
-              :disabled="!canAnalyzeUrl || busy || !!storyboardEstimate.insufficientHint.value"
-              :title="storyboardEstimate.insufficientHint.value ?? ''"
+              :disabled="!canAnalyzeUrl || busy || !!selectedPlatformLimitReason || !!storyboardEstimate.insufficientHint.value"
+              :title="selectedPlatformLimitReason || storyboardEstimate.insufficientHint.value || ''"
               @click="handleAnalyzeUrl"
             >
               {{ busyLabel }}
@@ -200,7 +215,7 @@
 </template>
 
 <script setup lang="ts">
-import { computed, onBeforeUnmount, ref } from 'vue'
+import { computed, onBeforeUnmount, ref, watch } from 'vue'
 import { uploadFile } from '../../services/uploadApi'
 import { analyzeVideoScript, analyzeVideoScriptByUrl } from '../../services/videoApi'
 import { API_ORIGIN } from '../../services/request'
@@ -214,7 +229,67 @@ import { notifyAuthRefresh } from '../../services/authRefreshHub'
 
 type SourceMode = 'url' | 'file'
 
+type StoryboardPlatformOption = {
+  value: string
+  label: string
+  placeholder: string
+  limitReason?: string
+}
+
+const platformOptions: StoryboardPlatformOption[] = [
+  {
+    value: 'auto',
+    label: '自动',
+    placeholder: '粘贴抖音 / 小红书 / 视频号 / TikTok / 快手 / B站 / YouTube 等视频链接',
+  },
+  {
+    value: 'douyin',
+    label: '抖音',
+    placeholder: '粘贴抖音分享链接或完整分享文案',
+  },
+  {
+    value: 'xiaohongshu',
+    label: '小红书',
+    placeholder: '粘贴小红书完整分享文案或 http(s) 链接',
+  },
+  {
+    value: 'wechat_channels',
+    label: '视频号',
+    placeholder: '粘贴微信视频号分享链接，例如 https://weixin.qq.com/sph/...',
+    limitReason:
+      '微信视频号暂不支持链接解析：视频号内容通常依赖微信登录、客户端上下文或平台授权，官方没有开放任意公开视频下载解析接口。请改用本地上传视频文件。',
+  },
+  {
+    value: 'tiktok',
+    label: 'TikTok',
+    placeholder: '粘贴 TikTok 视频链接',
+  },
+  {
+    value: 'kuaishou',
+    label: '快手',
+    placeholder: '粘贴快手分享链接或完整分享文案',
+  },
+  {
+    value: 'bilibili',
+    label: 'B站',
+    placeholder: '粘贴 B 站视频链接',
+  },
+  {
+    value: 'youtube',
+    label: 'YouTube',
+    placeholder: '粘贴 YouTube 视频链接',
+  },
+  {
+    value: 'facebook',
+    label: 'Facebook',
+    placeholder: '粘贴 Facebook 公开视频链接',
+    limitReason:
+      'Facebook 暂不支持链接解析：公开视频常受登录、地区、隐私权限和防下载策略限制，官方也不提供任意视频下载接口。请改用本地上传视频文件或可直接访问的视频直链。',
+  },
+]
+
 const sourceMode = ref<SourceMode>('url')
+const selectedPlatform = ref('auto')
 
 // 与 WriterAsyncTaskService 一致：链接 -> VIDEO_SCRIPT_URL_ANALYZE，上传解析 -> VIDEO_SCRIPT_ANALYZE。
 const storyboardEstimate = useBillingEstimate({
@@ -251,6 +326,12 @@ const busyLabel = computed(() => {
 
 const canAnalyzeUrl = computed(() => Boolean(videoUrl.value))
 const canAnalyzeFile = computed(() => Boolean(selectedFile.value && uploadedPreviewUrl.value))
+const videoPlaceholder = computed(
+  () => platformOptions.find((option) => option.value === selectedPlatform.value)?.placeholder || platformOptions[0].placeholder,
+)
+const selectedPlatformLimitReason = computed(
+  () => platformOptions.find((option) => option.value === selectedPlatform.value)?.limitReason || '',
+)
 
 const ORDER_CN = ['一', '二', '三', '四', '五', '六', '七', '八', '九', '十']
 
@@ -311,6 +392,30 @@ function formatFileSize(size: number) {
     return `${(size / 1024).toFixed(1)} KB`
   }
   return `${(size / 1024 / 1024).toFixed(1)} MB`
+}
+
+watch(videoUrl, (value) => {
+  if (sourceMode.value !== 'url') {
+    return
+  }
+  const detected = detectPlatformFromText(value)
+  if (detected && selectedPlatform.value !== detected) {
+    selectedPlatform.value = detected
+  }
+})
+
+function detectPlatformFromText(value: string) {
+  const text = value.toLowerCase()
+  if (!text.trim()) return ''
+  if (/douyin\.com|iesdouyin\.com|amemv\.com|douyinvod\.com/.test(text)) return 'douyin'
+  if (/xiaohongshu\.com|xhslink\.com|xhscdn\.com|xhs\.cn/.test(text)) return 'xiaohongshu'
+  if (/weixin\.qq\.com\/sph|channels\.weixin\.qq\.com|finder\.video\.qq\.com|finder\.video\.wechat\.com/.test(text)) return 'wechat_channels'
+  if (/tiktok\.com|tiktokv\.com|vm\.tiktok\.com|vt\.tiktok\.com|musical\.ly/.test(text)) return 'tiktok'
+  if (/kuaishou\.com|kwai\.com|gifshow\.com|kwaicdn\.com|ksapisrv\.com|oskwai\.com|yximgs\.com/.test(text)) return 'kuaishou'
+  if (/bilibili\.com|b23\.tv|bilivideo\.com|hdslb\.com|biliimg\.com/.test(text)) return 'bilibili'
+  if (/youtube\.com|youtu\.be|googlevideo\.com/.test(text)) return 'youtube'
+  if (/facebook\.com|fb\.watch|fbcdn\.net|fb\.com/.test(text)) return 'facebook'
+  return ''
 }
 
 async function handleFileChange(event: Event) {
@@ -448,9 +553,13 @@ async function handleAnalyzeUrl() {
   if (!canAnalyzeUrl.value || busy.value) {
     return
   }
+  if (selectedPlatformLimitReason.value) {
+    errorMessage.value = selectedPlatformLimitReason.value
+    return
+  }
 
   const targetUrl = videoUrl.value
-  await runAnalyze(() => analyzeVideoScriptByUrl(targetUrl), targetUrl)
+  await runAnalyze(() => analyzeVideoScriptByUrl(targetUrl, selectedPlatform.value), targetUrl)
 }
 
 async function handleAnalyzeFile() {
@@ -549,6 +658,39 @@ async function handleAnalyzeFile() {
   gap: 8px;
 }
 
+.storyboard-platforms {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.storyboard-platforms button {
+  display: inline-flex;
+  height: 40px;
+  align-items: center;
+  justify-content: center;
+  border: 1px solid #dfe4f0;
+  border-radius: 8px;
+  background: #fff;
+  color: #42526e;
+  padding: 0 14px;
+  font-size: 13px;
+  font-weight: 800;
+  cursor: pointer;
+}
+
+.storyboard-platforms button.active {
+  border-color: #715cff;
+  background: #fbfaff;
+  box-shadow: inset 0 0 0 1px rgba(113, 92, 255, 0.35);
+  color: #563bf0;
+}
+
+.storyboard-platforms button:disabled {
+  cursor: not-allowed;
+  opacity: 0.6;
+}
+
 .storyboard-source-url input {
   width: 100%;
   height: 46px;
@@ -563,6 +705,18 @@ async function handleAnalyzeFile() {
 .storyboard-source-url input:focus {
   border-color: #8f81ff;
   box-shadow: 0 0 0 3px rgba(99, 91, 255, 0.12);
+}
+
+.storyboard-platform-limit {
+  margin: 0;
+  border: 1px solid #ffd9a8;
+  border-radius: 8px;
+  background: #fff8ec;
+  color: #9a5a12;
+  padding: 9px 10px;
+  font-size: 12px;
+  font-weight: 800;
+  line-height: 1.6;
 }
 
 .storyboard-file-picker {

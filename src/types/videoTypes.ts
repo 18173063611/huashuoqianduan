@@ -49,12 +49,19 @@ export interface VideoScriptShotItem {
 /** 视频生成任务的统一响应，对应后端 VideoTaskVO（火山方舟 Seedance） */
 export interface VideoTaskVO {
   taskId: string
+  localTaskId?: number
   model: string
   status: string
   createdAt?: number
   updatedAt?: number
   videoUrl: string
   resultAssetId?: number | null
+  segmentVideos?: VideoTaskVO[]
+  segmentAssetIds?: number[]
+  finalAssetId?: number | null
+  segmentCount?: number
+  totalDurationSeconds?: number
+  durationSeconds?: number
   lastFrameUrl: string | null
   completionTokens: number
   errorCode: string | null
@@ -126,5 +133,38 @@ export interface ReferenceVideoRequest {
   imageUrls: string[]
   prompt?: string
   duration?: number
+  model?: string
+}
+
+export interface CarSalesVideoSceneRequest {
+  segmentIndex?: number
+  title?: string
+  visualPrompt?: string
+  prompt?: string
+  imageUrls?: string[]
+  referenceImage?: string
+  voiceText?: string
+  duration?: number
+}
+
+export interface CarSalesVideoRequest {
+  projectId?: number | null
+  carImageUrls: string[]
+  brandModel?: string
+  sellingPoints?: string
+  audience?: string
+  callToAction?: string
+  scriptContext?: string
+  prompt?: string
+  audioUrl?: string
+  audioMode?: 'none' | 'post_mix' | 'reference'
+  bgmUrl?: string
+  ignoredStoryboardFields?: string[]
+  hostImageUrl?: string
+  hostVideoUrl?: string
+  sourceAssetIds?: number[]
+  segmentCount?: number
+  segmentDuration?: number
+  scenes?: CarSalesVideoSceneRequest[]
   model?: string
 }

@@ -14,6 +14,11 @@ export interface ListAssetsParams {
   sort?: AssetListSort
 }
 
+export interface UploadMaterialAssetOptions {
+  projectId?: number | null
+  publish?: boolean
+}
+
 export async function getAssets(params?: ListAssetsParams) {
   const search = new URLSearchParams()
   if (params?.assetType) {
@@ -46,6 +51,21 @@ export async function getAssets(params?: ListAssetsParams) {
 
 export function getAssetDetail(assetId: number) {
   return request<AssetItem>(`/assets/${assetId}`)
+}
+
+export function uploadMaterialAsset(file: File, options?: UploadMaterialAssetOptions) {
+  const formData = new FormData()
+  formData.append('file', file)
+  if (options?.projectId != null) {
+    formData.append('projectId', String(options.projectId))
+  }
+  if (options?.publish) {
+    formData.append('publish', 'true')
+  }
+  return request<AssetItem>('/assets/upload', {
+    method: 'POST',
+    body: formData,
+  })
 }
 
 export async function getAssetTextContent(asset: AssetItem) {

@@ -163,6 +163,278 @@
           </div>
         </template>
 
+        <template v-if="mainTab === 'carSales'">
+          <div class="render-digital-workspace">
+            <section class="render-digital-section">
+              <h3>车辆图片</h3>
+              <AssetPicker
+                title="从资产中心选择车辆图片"
+                asset-type="IMAGE"
+                :selected-url="carPickedImageUrl"
+                placeholder="搜索车辆图片素材..."
+                @select="handleCarImageAssetSelect"
+              />
+              <div class="render-ref-list">
+                <div
+                  v-for="(item, idx) in carImages"
+                  :key="`car-img-${idx}`"
+                  class="render-ref-item"
+                >
+                  <div class="render-ref-index">图{{ idx + 1 }}</div>
+                  <ImageInput
+                    :busy="busy"
+                    :value="item"
+                    compact
+                    @update="updateCarImage(idx, $event)"
+                  />
+                  <button
+                    type="button"
+                    class="render-ref-remove"
+                    :disabled="busy || carImages.length <= 1"
+                    title="移除该图片"
+                    @click="removeCarImageSlot(idx)"
+                  >
+                    ×
+                  </button>
+                </div>
+              </div>
+              <button
+                type="button"
+                class="app-secondary-button render-mini-btn"
+                :disabled="busy || carImages.length >= MAX_REFERENCE"
+                @click="addCarImageSlot"
+              >
+                添加车辆图片
+              </button>
+            </section>
+
+            <section class="render-digital-section">
+              <h3>复用前序资产</h3>
+              <AssetPicker
+                title="分镜生成结果（控制视频画面）"
+                asset-type="JSON"
+                :selected-url="carStoryboardAssetUrl"
+                :source-types="['STORYBOARD_GENERATE', 'VIDEO_SCRIPT_ANALYZE', 'VIDEO_SCRIPT_URL_ANALYZE']"
+                source-hint="分镜用于决定镜头画面、节奏和场景，不和口播文案混用"
+                placeholder="搜索分镜生成结果..."
+                @select="handleCarStoryboardAssetSelect"
+              />
+              <AssetPicker
+                title="爆款对标文案（口播参考）"
+                asset-type="JSON"
+                :selected-url="carBenchmarkAssetUrl"
+                :source-types="['DOUYIN_BENCHMARK', 'DOUYIN_PARSE_TRANSCRIPT', 'DOUYIN_REWRITE', 'DOUYIN_TRANSCRIPT']"
+                source-hint="爆款解析文案主要用于声音生成或口播参考"
+                placeholder="搜索爆款对标文案..."
+                @select="handleCarBenchmarkAssetSelect"
+              />
+              <AssetPicker
+                title="口播/配音音频"
+                asset-type="AUDIO"
+                :selected-url="carAudioUrl"
+                :source-types="['TTS_GENERATE', 'VOICE_SAMPLE']"
+                source-hint="口播音频会作为字幕、口型和节奏的主导来源"
+                placeholder="搜索口播音频资产..."
+                @select="handleCarAudioAssetSelect"
+              />
+              <label class="render-upload-audio" :class="{ disabled: busy || carAudioUploading }">
+                <input
+                  type="file"
+                  accept="audio/*"
+                  :disabled="busy || carAudioUploading"
+                  @change="handleCarAudioUpload"
+                />
+                <span>{{ carAudioUploading ? '上传中...' : '上传本地口播' }}</span>
+                <small>{{ carAudioUploadName || '用于口播、字幕和口型；BGM 请在下方单独选择' }}</small>
+              </label>
+              <div class="render-audio-mode">
+                <button
+                  type="button"
+                  :class="{ active: carAudioMode === 'none' }"
+                  :disabled="busy"
+                  @click="carAudioMode = 'none'"
+                >
+                  不使用音频
+                </button>
+                <button
+                  type="button"
+                  :class="{ active: carAudioMode === 'post_mix' }"
+                  :disabled="busy || !carAudioUrl"
+                  title="生成画面后，用该口播音频替换最终成片音轨"
+                  @click="carAudioMode = 'post_mix'"
+                >
+                  后期口播配音
+                </button>
+                <button
+                  type="button"
+                  :class="{ active: carAudioMode === 'reference' }"
+                  :disabled="busy || !canUseAudioReference"
+                  :title="audioReferenceHint"
+                  @click="carAudioMode = 'reference'"
+                >
+                  参考音频生成
+                </button>
+              </div>
+              <p class="app-muted render-audio-hint">{{ audioReferenceHint }}</p>
+              <AssetPicker
+                title="背景音乐 BGM"
+                asset-type="AUDIO"
+                :selected-url="carBgmUrl"
+                :source-types="['USER_UPLOAD']"
+                source-hint="BGM 只作为背景音乐，不参与口播、字幕或口型生成"
+                placeholder="搜索 BGM 音频资产..."
+                @select="handleCarBgmAssetSelect"
+              />
+              <label class="render-upload-audio" :class="{ disabled: busy || carBgmUploading }">
+                <input
+                  type="file"
+                  accept="audio/*"
+                  :disabled="busy || carBgmUploading"
+                  @change="handleCarBgmUpload"
+                />
+                <span>{{ carBgmUploading ? '上传中...' : '上传本地 BGM' }}</span>
+                <small>{{ carBgmUploadName || '仅混入背景音乐，不覆盖口播音频' }}</small>
+              </label>
+              <AssetPicker
+                title="数字人形象"
+                asset-type="IMAGE"
+                :selected-url="carHostImageUrl"
+                :source-types="['AVATAR_GENERATE', 'USER_UPLOAD', 'MANUAL_CREATED', 'AI_GENERATED']"
+                source-hint="选择数字人形象图片，生成时会作为销售顾问/主播参考图"
+                placeholder="搜索数字人形象或上传图片..."
+                @select="handleCarHostImageAssetSelect"
+              />
+              <ImageInput
+                :busy="busy"
+                :value="carHostImageUrl"
+                label="上传本地数字人形象"
+                compact
+                @update="carHostImageUrl = $event"
+              />
+              <AssetPicker
+                title="已有视频素材"
+                asset-type="VIDEO"
+                :selected-url="carMaterialVideoUrl"
+                :source-types="['USER_UPLOAD', 'SEEDANCE_TEXT_VIDEO', 'SEEDANCE_FIRST_FRAME_VIDEO', 'SEEDANCE_FIRST_LAST_FRAME_VIDEO', 'SEEDANCE_REFERENCE_VIDEO', 'SEEDANCE_CAR_SALES_VIDEO']"
+                source-hint="选择上传或视频制作阶段产出的素材"
+                placeholder="搜索视频素材..."
+                @select="handleCarMaterialVideoAssetSelect"
+              />
+            </section>
+          </div>
+
+          <section class="render-recommend-panel">
+            <div class="render-recommend-main">
+              <span>推荐出片设置</span>
+              <strong>{{ carRecommendationSummary }}</strong>
+              <p>{{ carRecommendationReasonText }}</p>
+            </div>
+            <button
+              type="button"
+              class="app-secondary-button render-mini-btn"
+              :disabled="busy || recommendationMatchesCurrent"
+              @click="applyCarRecommendation"
+            >
+              {{ recommendationMatchesCurrent ? '已采用' : '应用推荐' }}
+            </button>
+          </section>
+
+          <div class="render-grid-two">
+            <div class="render-form-field render-form-field-inline">
+              <label>分段数量</label>
+              <select v-model.number="carSegmentCount" :disabled="busy">
+                <option v-for="n in [1, 2, 3, 4, 5, 6]" :key="n" :value="n">{{ n }} 段</option>
+              </select>
+              <span class="app-muted render-duration-hint">会分别生成并入库</span>
+            </div>
+            <div class="render-form-field render-form-field-inline">
+              <label>单段时长</label>
+              <select v-model.number="carSegmentDuration" :disabled="busy">
+                <option v-for="n in carSegmentDurationOptions" :key="n" :value="n">
+                  {{ n }} 秒
+                </option>
+              </select>
+              <span class="app-muted render-duration-hint">{{ carDurationHint }}，总片约 {{ carTotalDuration }} 秒</span>
+            </div>
+          </div>
+
+          <details class="render-details">
+            <summary>
+              <span>可选销售信息</span>
+              <small>车型、客户、卖点等应优先在脚本/分镜阶段整理，这里只做最终补充</small>
+            </summary>
+            <div class="render-details-body">
+              <div class="render-grid-two">
+                <div class="render-form-field">
+                  <label>车型</label>
+                  <input v-model.trim="carBrandModel" :disabled="busy" placeholder="例如：比亚迪秦 PLUS DM-i" />
+                </div>
+                <div class="render-form-field">
+                  <label>目标客户</label>
+                  <input v-model.trim="carAudience" :disabled="busy" placeholder="例如：家庭通勤 / 首购 / 置换客户" />
+                </div>
+              </div>
+
+              <div class="render-form-field">
+                <label>转化引导</label>
+                <input v-model.trim="carCallToAction" :disabled="busy" placeholder="例如：预约试驾，私信领取到店权益" />
+              </div>
+
+              <div class="render-form-field">
+                <label>卖点与优惠</label>
+                <textarea
+                  v-model="carSellingPoints"
+                  :disabled="busy"
+                  rows="3"
+                  maxlength="1000"
+                  placeholder="输入配置、价格、金融政策、到店礼、试驾权益等"
+                />
+              </div>
+            </div>
+          </details>
+
+          <details class="render-details">
+            <summary>
+              <span>高级微调</span>
+              <small>一般不用改；前序改写、分镜和口播应在各自模块完成</small>
+            </summary>
+            <div class="render-details-body">
+              <div class="render-form-field">
+                <label>分镜画面参考</label>
+                <textarea
+                  v-model="carStoryboardContext"
+                  :disabled="busy"
+                  rows="4"
+                  maxlength="4000"
+                  placeholder="选择分镜资产后会自动填入；这里只保留画面、节奏、场景"
+                />
+              </div>
+
+              <div class="render-form-field">
+                <label>口播文案参考</label>
+                <textarea
+                  v-model="carVoiceContext"
+                  :disabled="busy"
+                  rows="3"
+                  maxlength="4000"
+                  placeholder="仅在未选择口播音频时作为文案参考"
+                />
+              </div>
+
+              <div class="render-form-field">
+                <label>补充镜头要求</label>
+                <textarea
+                  v-model="prompt"
+                  :disabled="busy"
+                  rows="3"
+                  maxlength="500"
+                  placeholder="例如：门店实拍风格、竖屏短视频、镜头运动更稳、突出车灯和内饰"
+                />
+              </div>
+            </div>
+          </details>
+        </template>
+
         <template v-if="mainTab === 'image' && imageSubTab === 'first'">
           <ImageInput
             label="首帧图片"
@@ -232,7 +504,7 @@
           </div>
         </template>
 
-        <div v-if="mainTab !== 'digitalHuman'" class="render-form-field">
+        <div v-if="mainTab !== 'digitalHuman' && mainTab !== 'carSales'" class="render-form-field">
           <label>
             提示词
             <span v-if="mainTab === 'text'" class="render-required">*</span>
@@ -248,7 +520,7 @@
           <div class="render-counter">{{ prompt.length }} / 500</div>
         </div>
 
-        <div v-if="mainTab !== 'digitalHuman'" class="render-form-field render-form-field-inline">
+        <div v-if="mainTab !== 'digitalHuman' && mainTab !== 'carSales'" class="render-form-field render-form-field-inline">
           <label>视频时长（秒）</label>
           <select v-model.number="duration" :disabled="busy">
             <option v-for="d in durationOptions" :key="d.value" :value="d.value">
@@ -296,6 +568,30 @@
             </ul>
           </div>
         </div>
+
+        <section v-if="mainTab === 'carSales'" class="render-basis-panel" aria-label="生成依据检查">
+          <div class="render-basis-head">
+            <h3>生成依据检查</h3>
+            <span :class="carGenerationBlockingMessages.length ? 'danger' : 'ok'">
+              {{ carGenerationBlockingMessages.length ? '需修正' : '可生成' }}
+            </span>
+          </div>
+          <p>{{ carGenerationBasisSummary }}</p>
+          <dl class="render-basis-grid">
+            <div v-for="row in carGenerationBasisRows" :key="row.label">
+              <dt>{{ row.label }}</dt>
+              <dd>{{ row.value }}</dd>
+            </div>
+          </dl>
+          <div v-if="carGenerationBlockingMessages.length" class="render-basis-alert danger">
+            <strong>提交前需要处理：</strong>
+            <span v-for="item in carGenerationBlockingMessages" :key="item">{{ item }}</span>
+          </div>
+          <div v-if="carGenerationWarnings.length" class="render-basis-alert warn">
+            <strong>生成提示：</strong>
+            <span v-for="item in carGenerationWarnings" :key="item">{{ item }}</span>
+          </div>
+        </section>
       </div>
 
       <BillingEstimateBanner
@@ -310,7 +606,7 @@
           class="app-primary-button"
           type="button"
           :disabled="!canSubmit || busy || !!renderEstimate.insufficientHint.value"
-          :title="renderEstimate.insufficientHint.value ?? ''"
+          :title="renderEstimate.insufficientHint.value || carGenerationBlockingMessages[0] || ''"
           @click="handleGenerate"
         >
           {{ busy ? '生成中…' : '开始生成视频' }}
@@ -391,6 +687,23 @@
             在新窗口打开
           </a>
         </div>
+        <div v-if="result.segmentVideos?.length" class="render-segment-list">
+          <h3>分段视频</h3>
+          <div class="render-segment-grid">
+            <article
+              v-for="(segment, idx) in result.segmentVideos"
+              :key="segment.resultAssetId || segment.taskId || idx"
+              class="render-segment-item"
+            >
+              <video :src="segment.videoUrl" controls preload="metadata" />
+              <div>
+                <strong>片段 {{ idx + 1 }}</strong>
+                <small>资产 ID：{{ segment.resultAssetId || '-' }}</small>
+              </div>
+              <a :href="segment.videoUrl" target="_blank" rel="noreferrer">打开</a>
+            </article>
+          </div>
+        </div>
       </div>
     </section>
   </div>
@@ -408,7 +721,9 @@ import { useBillingEstimate } from '../../composables/useBillingEstimate'
 import { rememberSessionTaskId } from '../../services/sessionTaskStore'
 import { trackTaskResult } from '../../services/taskRealtime'
 import { uploadFile } from '../../services/uploadApi'
+import { getAssetTextContent, uploadMaterialAsset } from '../../services/assetApi'
 import {
+  generateCarSalesVideo,
   generateDigitalHumanVideo,
   generateFirstFrameVideo,
   generateFirstLastFrameVideo,
@@ -417,15 +732,18 @@ import {
   getDigitalHumanVideoTask,
   newVideoIdempotencyKey,
 } from '../../services/videoApi'
-import type { DigitalHumanTaskDetailResponse, VideoTaskVO } from '../../types/videoTypes'
+import type { DigitalHumanTaskDetailResponse, VideoScriptShotItem, VideoTaskVO } from '../../types/videoTypes'
+import type { AssetItem } from '../../types/assetTypes'
 
 
-type MainTab = 'text' | 'image' | 'digitalHuman'
+type MainTab = 'text' | 'image' | 'carSales' | 'digitalHuman'
 type ImageSubTab = 'first' | 'firstLast' | 'reference'
 type DigitalHumanAudioMode = 'asset' | 'upload' | 'url' | 'text'
+type CarAudioMode = 'none' | 'post_mix' | 'reference'
 type SeedanceModelValue = 'doubao-seedance-1-5-pro-251215' | 'ep-20260512233524-85r4g'
 
 const MAX_REFERENCE = 9
+const SEEDANCE_2_MODEL: SeedanceModelValue = 'ep-20260512233524-85r4g'
 
 const seedanceModelOptions: Array<{
   value: SeedanceModelValue
@@ -434,10 +752,11 @@ const seedanceModelOptions: Array<{
   maxDuration: number
 }> = [
   { value: 'doubao-seedance-1-5-pro-251215', label: 'seedance1.5', maxDuration: 12 },
-  { value: 'ep-20260512233524-85r4g', label: 'seedance2.0', tip: '不支持上传人脸', maxDuration: 15 },
+  { value: SEEDANCE_2_MODEL, label: 'seedance2.0', tip: '不支持上传人脸', maxDuration: 15 },
 ]
 
 const mainTabs: Array<{ key: MainTab; label: string }> = [
+  { key: 'carSales', label: '汽车销售成片' },
   { key: 'text', label: '文生视频' },
   { key: 'image', label: '图生视频' },
   { key: 'digitalHuman', label: '数字人口播' },
@@ -463,7 +782,7 @@ const digitalHumanAudioTabs: Array<{ key: DigitalHumanAudioMode; label: string }
   { key: 'text', label: '文本口播' },
 ]
 
-const mainTab = ref<MainTab>('text')
+const mainTab = ref<MainTab>('carSales')
 const imageSubTab = ref<ImageSubTab>('first')
 
 watch(
@@ -493,6 +812,36 @@ const digitalHumanResolution = ref<'540p' | '720p' | '1080p'>('720p')
 const digitalHumanAudioMode = ref<DigitalHumanAudioMode>('asset')
 const digitalHumanAudioUploading = ref(false)
 const digitalHumanAudioUploadName = ref('')
+const carImages = ref<string[]>([''])
+const carPickedImageUrl = ref('')
+const carBrandModel = ref('')
+const carAudience = ref('')
+const carCallToAction = ref('预约试驾，私信领取到店权益')
+const carSellingPoints = ref('')
+const carStoryboardContext = ref('')
+const carStoryboardAssetUrl = ref('')
+const carStoryboardAssetId = ref<number | null>(null)
+const carVoiceContext = ref('')
+const carBenchmarkAssetUrl = ref('')
+const carBenchmarkAssetId = ref<number | null>(null)
+const carAudioUrl = ref('')
+const carAudioAssetId = ref<number | null>(null)
+const carAudioSourceType = ref('')
+const carAudioMode = ref<CarAudioMode>('none')
+const carAudioUploading = ref(false)
+const carAudioUploadName = ref('')
+const carBgmUrl = ref('')
+const carBgmAssetId = ref<number | null>(null)
+const carBgmSourceType = ref('')
+const carBgmUploading = ref(false)
+const carBgmUploadName = ref('')
+const carAudioDurationSeconds = ref<number | null>(null)
+const carHostImageUrl = ref('')
+const carHostImageAssetId = ref<number | null>(null)
+const carMaterialVideoUrl = ref('')
+const carMaterialVideoAssetId = ref<number | null>(null)
+const carSegmentCount = ref(4)
+const carSegmentDuration = ref(8)
 
 const loggedIn = ref(false)
 
@@ -506,6 +855,7 @@ const loggedIn = ref(false)
  */
 const currentRenderTaskType = computed(() => {
   if (mainTab.value === 'digitalHuman') return 'DIGITAL_HUMAN_GENERATE'
+  if (mainTab.value === 'carSales') return 'SEEDANCE_CAR_SALES_VIDEO'
   if (mainTab.value === 'text') return 'TEXT_TO_VIDEO_SEEDANCE_1_5'
   if (imageSubTab.value === 'reference') return 'IMAGE_TO_VIDEO_SEEDANCE_2_0_FAST'
   return 'IMAGE_TO_VIDEO_SEEDANCE_1_5'
@@ -560,7 +910,36 @@ const durationHint = computed(() => {
   return `${selectedSeedanceModel.value.label} 支持 4 ~ ${selectedSeedanceModel.value.maxDuration} 秒`
 })
 
+const carSegmentDurationOptions = computed(() =>
+  Array.from({ length: selectedSeedanceModel.value.maxDuration - 3 }, (_, idx) => idx + 4),
+)
+
+const carDurationHint = computed(
+  () => `${selectedSeedanceModel.value.label} 单段支持 4 ~ ${selectedSeedanceModel.value.maxDuration} 秒`,
+)
+
+const isSeedance2Selected = computed(() => selectedModel.value === SEEDANCE_2_MODEL)
+const canUseAudioReference = computed(
+  () => !!carAudioUrl.value.trim() && isSeedance2Selected.value && carSegmentCount.value === 1,
+)
+
+const audioReferenceHint = computed(() => {
+  if (!carAudioUrl.value.trim()) {
+    return '选择音频后可决定是否参与视频生成。'
+  }
+  if (!isSeedance2Selected.value) {
+    return '参考音频生成仅支持 seedance2.0；seedance1.5 只能后期口播配音。'
+  }
+  if (carSegmentCount.value !== 1) {
+    return '参考音频生成当前仅支持 1 段视频；多段成片建议使用后期口播配音。'
+  }
+  return 'seedance2.0 会把音频作为生成参考，并在成片中使用该音频。'
+})
+
 const showModelSelector = computed(() => {
+  if (mainTab.value === 'carSales') {
+    return true
+  }
   if (mainTab.value === 'text') {
     return true
   }
@@ -618,6 +997,67 @@ const digitalHumanAudioReady = computed(() => {
   return digitalHumanAudio.value.trim().length > 0
 })
 
+const carImageUrls = computed(() => carImages.value.map((url) => url.trim()).filter((url) => url.length > 0))
+const carTotalDuration = computed(() => carSegmentCount.value * carSegmentDuration.value)
+
+const storyboardShotsForRecommendation = computed(() => extractStoryboardShots(carStoryboardContext.value))
+const storyboardDurationSeconds = computed(() => storyboardTotalDuration(storyboardShotsForRecommendation.value))
+const carRecommendedSegmentCount = computed(() => {
+  if (carAudioMode.value === 'reference' && carAudioUrl.value.trim()) {
+    return 1
+  }
+  const shotCount = storyboardShotsForRecommendation.value.length
+  if (shotCount > 0) {
+    return Math.max(1, Math.min(6, shotCount))
+  }
+  if (carAudioDurationSeconds.value && carAudioDurationSeconds.value > 0) {
+    return Math.max(1, Math.min(6, Math.ceil(carAudioDurationSeconds.value / selectedSeedanceModel.value.maxDuration)))
+  }
+  return Math.max(1, Math.min(6, carSegmentCount.value || 4))
+})
+const carRecommendedSegmentDuration = computed(() => {
+  const count = carRecommendedSegmentCount.value
+  if (carAudioMode.value === 'reference' && carAudioDurationSeconds.value) {
+    return clampCarSegmentDuration(Math.ceil(carAudioDurationSeconds.value))
+  }
+  if (storyboardDurationSeconds.value) {
+    return clampCarSegmentDuration(Math.ceil(storyboardDurationSeconds.value / count))
+  }
+  if (carAudioDurationSeconds.value) {
+    return clampCarSegmentDuration(Math.ceil(carAudioDurationSeconds.value / count))
+  }
+  return clampCarSegmentDuration(carSegmentDuration.value || 8)
+})
+const carRecommendedTotalDuration = computed(
+  () => carRecommendedSegmentCount.value * carRecommendedSegmentDuration.value,
+)
+const carRecommendationSummary = computed(
+  () => `${carRecommendedSegmentCount.value} 段 × ${carRecommendedSegmentDuration.value} 秒，总约 ${carRecommendedTotalDuration.value} 秒`,
+)
+const carRecommendationReasonText = computed(() => {
+  const reasons: string[] = []
+  const shotCount = storyboardShotsForRecommendation.value.length
+  if (shotCount > 0) {
+    reasons.push(`已选分镜包含 ${shotCount} 个镜头`)
+  }
+  if (storyboardDurationSeconds.value) {
+    reasons.push(`分镜标注时长约 ${formatSeconds(storyboardDurationSeconds.value)}`)
+  }
+  if (carAudioDurationSeconds.value) {
+    reasons.push(`口播音频约 ${formatSeconds(carAudioDurationSeconds.value)}`)
+  }
+  if (carAudioMode.value === 'reference') {
+    reasons.push('参考音频生成当前按单段处理')
+  }
+  reasons.push(`${selectedSeedanceModel.value.label} 单段最长 ${selectedSeedanceModel.value.maxDuration} 秒`)
+  return reasons.join('；')
+})
+const recommendationMatchesCurrent = computed(
+  () =>
+    carSegmentCount.value === carRecommendedSegmentCount.value &&
+    carSegmentDuration.value === carRecommendedSegmentDuration.value,
+)
+
 // 切换模式时重置错误与结果，避免误展示其它模式产物
 watch([mainTab, imageSubTab, selectedModel], () => {
   errorMessage.value = ''
@@ -631,7 +1071,33 @@ watch([mainTab, imageSubTab, selectedModel], () => {
   } else if (!allowed.includes(duration.value)) {
     duration.value = min
   }
+  const carAllowed = carSegmentDurationOptions.value
+  const carMin = carAllowed[0] ?? 4
+  const carMax = carAllowed[carAllowed.length - 1] ?? carMin
+  if (carSegmentDuration.value < carMin) {
+    carSegmentDuration.value = carMin
+  } else if (carSegmentDuration.value > carMax) {
+    carSegmentDuration.value = carMax
+  } else if (!carAllowed.includes(carSegmentDuration.value)) {
+    carSegmentDuration.value = carMin
+  }
 })
+
+let audioDurationRequestId = 0
+watch(
+  () => carAudioUrl.value,
+  (url) => {
+    const requestId = ++audioDurationRequestId
+    carAudioDurationSeconds.value = null
+    const cleanUrl = url.trim()
+    if (!cleanUrl) return
+    resolveAudioDuration(cleanUrl).then((seconds) => {
+      if (requestId === audioDurationRequestId) {
+        carAudioDurationSeconds.value = seconds
+      }
+    })
+  },
+)
 
 const canSubmit = computed(() => {
   if (mainTab.value === 'digitalHuman') {
@@ -642,6 +1108,9 @@ const canSubmit = computed(() => {
   }
   if (mainTab.value === 'text') {
     return prompt.value.trim().length > 0
+  }
+  if (mainTab.value === 'carSales') {
+    return carImageUrls.value.length > 0 && carGenerationBlockingMessages.value.length === 0
   }
   if (imageSubTab.value === 'first') {
     return firstFrame.value.trim().length > 0
@@ -669,6 +1138,480 @@ function removeReferenceSlot(idx: number) {
 
 function updateReferenceImage(idx: number, value: string) {
   referenceImages.value[idx] = value
+}
+
+function addCarImageSlot() {
+  if (carImages.value.length >= MAX_REFERENCE) {
+    return
+  }
+  carImages.value.push('')
+}
+
+function removeCarImageSlot(idx: number) {
+  if (carImages.value.length <= 1) {
+    return
+  }
+  carImages.value.splice(idx, 1)
+}
+
+function updateCarImage(idx: number, value: string) {
+  carImages.value[idx] = value
+}
+
+function handleCarImageAssetSelect(payload: { asset: AssetItem; url: string }) {
+  carPickedImageUrl.value = payload.url
+  const emptyIndex = carImages.value.findIndex((url) => !url.trim())
+  if (emptyIndex >= 0) {
+    carImages.value[emptyIndex] = payload.url
+  } else if (!carImages.value.includes(payload.url) && carImages.value.length < MAX_REFERENCE) {
+    carImages.value.push(payload.url)
+  }
+}
+
+async function handleCarStoryboardAssetSelect(payload: { asset: AssetItem; url: string }) {
+  carStoryboardAssetUrl.value = payload.url
+  carStoryboardAssetId.value = payload.asset.assetId
+  try {
+    const text = await getAssetTextContent(payload.asset)
+    carStoryboardContext.value = text.length > 4000 ? text.slice(0, 4000) : text
+    const shots = extractStoryboardShots(carStoryboardContext.value)
+    if (shots.length > 0) {
+      const count = Math.max(1, Math.min(6, shots.length))
+      carSegmentCount.value = count
+      const total = storyboardTotalDuration(shots)
+      if (total) {
+        carSegmentDuration.value = clampCarSegmentDuration(Math.ceil(total / count))
+      }
+    }
+  } catch (error) {
+    errorMessage.value = error instanceof Error ? error.message : '分镜资产读取失败'
+  }
+}
+
+async function handleCarBenchmarkAssetSelect(payload: { asset: AssetItem; url: string }) {
+  carBenchmarkAssetUrl.value = payload.url
+  carBenchmarkAssetId.value = payload.asset.assetId
+  try {
+    const text = await getAssetTextContent(payload.asset)
+    carVoiceContext.value = text.length > 4000 ? text.slice(0, 4000) : text
+  } catch (error) {
+    errorMessage.value = error instanceof Error ? error.message : '爆款文案读取失败'
+  }
+}
+
+function handleCarAudioAssetSelect(payload: { asset: AssetItem; url: string }) {
+  carAudioUrl.value = payload.url
+  carAudioAssetId.value = payload.asset.assetId
+  carAudioSourceType.value = payload.asset.sourceType || ''
+  carAudioUploadName.value = payload.asset.fileName
+  if (carAudioMode.value === 'none') {
+    carAudioMode.value = 'post_mix'
+  }
+}
+
+async function handleCarAudioUpload(event: Event) {
+  const input = event.target as HTMLInputElement
+  const file = input.files?.[0]
+  if (!file) {
+    return
+  }
+  carAudioUploading.value = true
+  carAudioUploadName.value = file.name
+  errorMessage.value = ''
+  try {
+    const asset = await uploadMaterialAsset(file)
+    carAudioUrl.value = normalizePublicUrl(asset.fileUrl)
+    carAudioAssetId.value = asset.assetId
+    carAudioSourceType.value = asset.sourceType || 'USER_UPLOAD'
+    if (carAudioMode.value === 'none') {
+      carAudioMode.value = 'post_mix'
+    }
+    ElMessage.success('音频已上传到资产中心')
+  } catch (error) {
+    errorMessage.value = error instanceof Error ? error.message : '音频上传失败'
+  } finally {
+    carAudioUploading.value = false
+    input.value = ''
+  }
+}
+
+function handleCarBgmAssetSelect(payload: { asset: AssetItem; url: string }) {
+  carBgmUrl.value = payload.url
+  carBgmAssetId.value = payload.asset.assetId
+  carBgmSourceType.value = payload.asset.sourceType || ''
+  carBgmUploadName.value = payload.asset.fileName
+}
+
+async function handleCarBgmUpload(event: Event) {
+  const input = event.target as HTMLInputElement
+  const file = input.files?.[0]
+  if (!file) {
+    return
+  }
+  carBgmUploading.value = true
+  carBgmUploadName.value = file.name
+  errorMessage.value = ''
+  try {
+    const asset = await uploadMaterialAsset(file)
+    carBgmUrl.value = normalizePublicUrl(asset.fileUrl)
+    carBgmAssetId.value = asset.assetId
+    carBgmSourceType.value = asset.sourceType || 'USER_UPLOAD'
+    ElMessage.success('BGM 已上传到资产中心')
+  } catch (error) {
+    errorMessage.value = error instanceof Error ? error.message : 'BGM 上传失败'
+  } finally {
+    carBgmUploading.value = false
+    input.value = ''
+  }
+}
+
+function handleCarHostImageAssetSelect(payload: { asset: AssetItem; url: string }) {
+  carHostImageUrl.value = payload.url
+  carHostImageAssetId.value = payload.asset.assetId
+}
+
+function handleCarMaterialVideoAssetSelect(payload: { asset: AssetItem; url: string }) {
+  carMaterialVideoUrl.value = payload.url
+  carMaterialVideoAssetId.value = payload.asset.assetId
+}
+
+type StoryboardRecord = Record<string, unknown>
+
+function asRecord(value: unknown): StoryboardRecord | null {
+  return value && typeof value === 'object' && !Array.isArray(value) ? (value as StoryboardRecord) : null
+}
+
+function stringField(record: StoryboardRecord, keys: string[]) {
+  for (const key of keys) {
+    const value = record[key]
+    if (typeof value === 'string' && value.trim()) {
+      return value.trim()
+    }
+    if (typeof value === 'number') {
+      return String(value)
+    }
+  }
+  return ''
+}
+
+const STORYBOARD_IGNORED_FIELD_KEYS = ['content', 'voiceText', 'backgroundMusic']
+
+function parseJsonSafely(raw: string): unknown | null {
+  try {
+    return JSON.parse(raw)
+  } catch {
+    return null
+  }
+}
+
+function extractStoryboardShots(raw: string): VideoScriptShotItem[] {
+  const parsed = parseJsonSafely(raw.trim())
+  const source = Array.isArray(parsed)
+    ? parsed
+    : Array.isArray(asRecord(parsed)?.scripts)
+      ? (asRecord(parsed)?.scripts as unknown[])
+      : Array.isArray(asRecord(parsed)?.shots)
+        ? (asRecord(parsed)?.shots as unknown[])
+        : []
+  return source
+    .map((item, idx) => {
+      const record = asRecord(item)
+      if (!record) return null
+      const orderValue = record.order
+      const order = typeof orderValue === 'number' ? orderValue : Number(orderValue) || idx + 1
+      return {
+        order,
+        time: stringField(record, ['time', 'duration', 'range']),
+        page: stringField(record, ['page', 'visual', 'scene', 'shot', 'picture']),
+        backgroundMusic: stringField(record, ['backgroundMusic', 'bgm']),
+        content: stringField(record, ['content', 'voiceText', 'script', 'voiceover', 'subtitle']),
+        highlight: stringField(record, ['highlight', 'intent', 'goal']),
+      }
+    })
+    .filter((item): item is VideoScriptShotItem => !!item && (!!item.page || !!item.highlight))
+}
+
+function collectStoryboardIgnoredFields(raw: string) {
+  const ignored = new Set<string>()
+  const parsed = parseJsonSafely(raw.trim())
+  const walk = (value: unknown) => {
+    if (Array.isArray(value)) {
+      value.forEach(walk)
+      return
+    }
+    const record = asRecord(value)
+    if (!record) return
+    for (const key of Object.keys(record)) {
+      if (STORYBOARD_IGNORED_FIELD_KEYS.includes(key)) {
+        const v = record[key]
+        if (typeof v === 'string' ? v.trim() : v != null) {
+          ignored.add(key)
+        }
+      }
+      walk(record[key])
+    }
+  }
+  if (parsed != null) {
+    walk(parsed)
+  } else {
+    for (const key of STORYBOARD_IGNORED_FIELD_KEYS) {
+      const pattern = new RegExp(`["']?${key}["']?\\s*[:：]`, 'i')
+      if (pattern.test(raw)) ignored.add(key)
+    }
+  }
+  return Array.from(ignored)
+}
+
+function parseStoryboardDuration(time: string) {
+  const seconds = parseStoryboardDurationRaw(time)
+  if (seconds == null) return undefined
+  return clampCarSegmentDuration(seconds)
+}
+
+function parseStoryboardDurationRaw(time: string) {
+  const match = time.match(/(\d{1,2}):(\d{2}):(\d{2})(?:\.\d+)?\s*[-~—]\s*(\d{1,2}):(\d{2}):(\d{2})(?:\.\d+)?/)
+  if (!match) return undefined
+  const start = Number(match[1]) * 3600 + Number(match[2]) * 60 + Number(match[3])
+  const end = Number(match[4]) * 3600 + Number(match[5]) * 60 + Number(match[6])
+  const seconds = Math.round(end - start)
+  if (!Number.isFinite(seconds) || seconds <= 0) return undefined
+  return seconds
+}
+
+function storyboardTotalDuration(shots: VideoScriptShotItem[]) {
+  const durations = shots.map((shot) => parseStoryboardDurationRaw(shot.time)).filter((n): n is number => !!n)
+  if (!durations.length) return null
+  return durations.reduce((sum, value) => sum + value, 0)
+}
+
+function clampCarSegmentDuration(value: number) {
+  const min = 4
+  const max = selectedSeedanceModel.value.maxDuration
+  return Math.max(min, Math.min(max, value))
+}
+
+function formatSeconds(seconds: number) {
+  const rounded = Math.max(1, Math.round(seconds))
+  if (rounded < 60) return `${rounded} 秒`
+  const minutes = Math.floor(rounded / 60)
+  const rest = rounded % 60
+  return rest ? `${minutes} 分 ${rest} 秒` : `${minutes} 分钟`
+}
+
+function resolveAudioDuration(url: string) {
+  return new Promise<number | null>((resolve) => {
+    if (typeof Audio === 'undefined') {
+      resolve(null)
+      return
+    }
+    const audio = new Audio()
+    const cleanup = () => {
+      audio.removeAttribute('src')
+      audio.load()
+    }
+    const timer = window.setTimeout(() => {
+      cleanup()
+      resolve(null)
+    }, 8000)
+    audio.preload = 'metadata'
+    audio.onloadedmetadata = () => {
+      window.clearTimeout(timer)
+      const duration = Number.isFinite(audio.duration) ? audio.duration : null
+      cleanup()
+      resolve(duration)
+    }
+    audio.onerror = () => {
+      window.clearTimeout(timer)
+      cleanup()
+      resolve(null)
+    }
+    audio.src = url
+  })
+}
+
+function applyCarRecommendation() {
+  carSegmentCount.value = carRecommendedSegmentCount.value
+  carSegmentDuration.value = carRecommendedSegmentDuration.value
+}
+
+function storyboardVisualText(shot: VideoScriptShotItem, idx: number) {
+  const pieces = [`镜头${shot.order || idx + 1}`]
+  if (shot.time) pieces.push(`时间 ${shot.time}`)
+  if (shot.page) pieces.push(`画面 ${shot.page}`)
+  if (shot.highlight) pieces.push(`重点 ${shot.highlight}`)
+  return pieces.join('；')
+}
+
+function summarizeStoryboardForPrompt(raw: string) {
+  const shots = extractStoryboardShots(raw)
+  if (!shots.length) {
+    return raw.trim()
+  }
+  return shots.map(storyboardVisualText).join('\n')
+}
+
+function hasSelectedVoiceAudio() {
+  return carAudioMode.value !== 'none' && !!carAudioUrl.value.trim()
+}
+
+const storyboardIgnoredFields = computed(() => collectStoryboardIgnoredFields(carStoryboardContext.value))
+const storyboardHasOldLines = computed(() => storyboardIgnoredFields.value.length > 0)
+const storyboardOldLineStatus = computed(() => {
+  if (!carStoryboardContext.value.trim()) return '未使用分镜'
+  if (storyboardHasOldLines.value) return '已忽略'
+  return '无旧台词'
+})
+
+function sourceTypeLabelForAudio(sourceType: string) {
+  const normalized = sourceType.trim().toUpperCase()
+  if (normalized === 'USER_UPLOAD' || !normalized) return '用户上传音频'
+  if (['TTS_GENERATE', 'VOICE_SAMPLE', 'AI_GENERATED'].includes(normalized)) return '声音生成音频'
+  return '已选择音频'
+}
+
+const carAudioSourceLabel = computed(() => {
+  if (!hasSelectedVoiceAudio()) return '无'
+  const audioKind = sourceTypeLabelForAudio(carAudioSourceType.value)
+  if (carAudioMode.value === 'reference') return `参考音频生成（${audioKind}）`
+  return `后期口播配音（${audioKind}）`
+})
+
+const carBgmSourceLabel = computed(() => (carBgmUrl.value.trim() ? '已选择 BGM' : '无'))
+const carSubtitleSourceLabel = computed(() => {
+  const suffix = storyboardHasOldLines.value ? '（不使用分镜旧台词）' : ''
+  if (hasSelectedVoiceAudio()) return `口播音频转写 / 最终口播文案${suffix}`
+  if (carVoiceContext.value.trim()) return `最终口播文案${suffix}`
+  return '无'
+})
+
+const carVisualSourceLabel = computed(() => {
+  const sources: string[] = []
+  if (prompt.value.trim()) sources.push('用户输入提示词')
+  if (carStoryboardContext.value.trim()) sources.push('分镜画面参考')
+  if (carImageUrls.value.length > 0) {
+    sources.push(isSeedance2Selected.value ? '参考图 / 车型图' : '车型图')
+  }
+  if (carHostImageUrl.value.trim()) sources.push('数字人形象参考')
+  return sources.length ? sources.join('、') : '未选择'
+})
+
+const carSegmentModeLabel = computed(() => (carSegmentCount.value === 1 ? '单段' : `多段（${carSegmentCount.value} 段）`))
+
+const carGenerationBlockingMessages = computed(() => {
+  if (mainTab.value !== 'carSales') return []
+  const messages: string[] = []
+  if (carAudioMode.value === 'reference' && !isSeedance2Selected.value) {
+    messages.push('参考音频生成仅支持 Seedance 2.0')
+  }
+  if (carAudioMode.value === 'reference' && carSegmentCount.value > 1) {
+    messages.push('当前参考音频生成仅支持单段视频，多段请使用后期口播配音或拆段生成')
+  }
+  return messages
+})
+
+const carGenerationWarnings = computed(() => {
+  if (mainTab.value !== 'carSales') return []
+  const warnings: string[] = []
+  if (hasSelectedVoiceAudio() && storyboardHasOldLines.value) {
+    warnings.push('口播音频优先，分镜台词已忽略')
+  }
+  if (!hasSelectedVoiceAudio() && carBgmUrl.value.trim()) {
+    warnings.push('BGM 不会生成口播、字幕或口型')
+  }
+  if (carAudioMode.value === 'post_mix' && carAudioUrl.value.trim()) {
+    warnings.push('后期口播配音不保证口型同步，如需口型同步请使用参考音频生成或数字人口播链路')
+  }
+  return warnings
+})
+
+const carGenerationBasisRows = computed(() => [
+  { label: '视频模型', value: selectedSeedanceModel.value.label },
+  { label: '视频段数', value: carSegmentModeLabel.value },
+  { label: '画面来源', value: carVisualSourceLabel.value },
+  { label: '口播来源', value: carAudioSourceLabel.value },
+  { label: 'BGM 来源', value: carBgmSourceLabel.value },
+  { label: '字幕来源', value: carSubtitleSourceLabel.value },
+  { label: '分镜旧台词处理', value: storyboardOldLineStatus.value },
+])
+
+const carGenerationBasisSummary = computed(() => {
+  if (hasSelectedVoiceAudio()) {
+    const bgmSentence = carBgmUrl.value.trim() ? 'BGM 只会作为背景音乐混入，不参与口型和字幕。' : ''
+    const storyboardSentence = storyboardHasOldLines.value
+      ? '分镜中的旧台词已被忽略，仅保留画面描述。'
+      : carStoryboardContext.value.trim()
+        ? '分镜只作为画面描述参考。'
+        : '未使用分镜旧台词。'
+    return `本次视频将以【口播音频】作为内容主导，${storyboardSentence}${bgmSentence}`
+  }
+  if (carBgmUrl.value.trim()) {
+    return '本次视频只选择了 BGM，它只会作为背景音乐混入，不会生成口播、字幕或口型。'
+  }
+  if (carStoryboardContext.value.trim()) {
+    return '本次视频将使用分镜中的画面描述控制镜头，分镜旧台词和背景音乐字段不会作为口播或字幕来源。'
+  }
+  return '本次视频将以车型图、补充提示词和销售信息作为主要生成依据。'
+})
+
+function buildCarScriptContext() {
+  const parts: string[] = []
+  if (carStoryboardContext.value.trim()) {
+    parts.push(`分镜画面参考（仅用于镜头画面，不作为口播、字幕或 BGM 来源）：${summarizeStoryboardForPrompt(carStoryboardContext.value)}`)
+  }
+  if (hasSelectedVoiceAudio()) {
+    parts.push('内容主导：已选择口播/配音音频，口型、字幕和节奏以该音频为准；分镜和爆款对标文案只作为画面参考。')
+  } else if (carVoiceContext.value.trim()) {
+    parts.push(`口播文案参考：${carVoiceContext.value.trim()}`)
+  }
+  return parts.join('\n\n')
+}
+
+function buildCarSalesScenes() {
+  const storyboardShots = extractStoryboardShots(carStoryboardContext.value)
+  if (storyboardShots.length > 0) {
+    return storyboardShots.slice(0, carSegmentCount.value).map((shot, idx) => ({
+      segmentIndex: idx + 1,
+      title: `镜头 ${shot.order || idx + 1}`,
+      visualPrompt: storyboardVisualText(shot, idx),
+      prompt: storyboardVisualText(shot, idx),
+      imageUrls: carImageUrls.value,
+      referenceImage: carImageUrls.value[0],
+      voiceText: hasSelectedVoiceAudio() ? undefined : carVoiceContext.value.trim() || undefined,
+      duration: parseStoryboardDuration(shot.time) || carSegmentDuration.value,
+    }))
+  }
+  const titles = ['外观开场', '内饰空间', '核心卖点', '到店转化', '用车场景', '优惠收口']
+  const prompts = [
+    '展示车辆外观、车头、车身线条和灯光质感，镜头稳定推进。',
+    '展示内饰、座椅、空间、屏幕和舒适体验。',
+    '突出动力、智能、安全、油耗/续航或核心配置卖点。',
+    '展示试驾邀约、到店权益、咨询引导和成交氛围。',
+    '展示城市通勤、家庭出行或周末短途场景。',
+    '用车身高光细节和优惠信息氛围收口。',
+  ]
+  return Array.from({ length: carSegmentCount.value }, (_, idx) => ({
+    segmentIndex: idx + 1,
+    title: titles[idx] || `片段 ${idx + 1}`,
+    visualPrompt: prompts[idx] || prompts[prompts.length - 1],
+    prompt: prompts[idx] || prompts[prompts.length - 1],
+    imageUrls: carImageUrls.value,
+    referenceImage: carImageUrls.value[0],
+    voiceText: hasSelectedVoiceAudio() ? undefined : carVoiceContext.value.trim() || undefined,
+    duration: carSegmentDuration.value,
+  }))
+}
+
+function carSourceAssetIds() {
+  return [
+    carStoryboardAssetId.value,
+    carBenchmarkAssetId.value,
+    carAudioAssetId.value,
+    carBgmAssetId.value,
+    carHostImageAssetId.value,
+    carMaterialVideoAssetId.value,
+  ].filter(
+    (id): id is number => typeof id === 'number' && id > 0,
+  )
 }
 
 function resetResult() {
@@ -724,7 +1667,16 @@ async function handleDigitalHumanAudioUpload(event: Event) {
 }
 
 async function handleGenerate() {
-  if (!canSubmit.value || busy.value) {
+  if (busy.value) {
+    return
+  }
+  if (mainTab.value === 'carSales' && carGenerationBlockingMessages.value.length > 0) {
+    const message = carGenerationBlockingMessages.value[0]
+    errorMessage.value = message
+    ElMessage.error(message)
+    return
+  }
+  if (!canSubmit.value) {
     return
   }
 
@@ -766,6 +1718,29 @@ async function handleGenerate() {
         ElMessage.success('任务已提交')
       }
       return
+    } else if (mainTab.value === 'carSales') {
+      const submitted = await generateCarSalesVideo({
+        carImageUrls: carImageUrls.value,
+        brandModel: carBrandModel.value.trim() || undefined,
+        sellingPoints: carSellingPoints.value.trim() || undefined,
+        audience: carAudience.value.trim() || undefined,
+        callToAction: carCallToAction.value.trim() || undefined,
+        scriptContext: buildCarScriptContext() || undefined,
+        prompt: prompt.value.trim() || undefined,
+        audioUrl: carAudioMode.value === 'none' ? undefined : carAudioUrl.value.trim() || undefined,
+        audioMode: carAudioUrl.value.trim() ? carAudioMode.value : 'none',
+        bgmUrl: carBgmUrl.value.trim() || undefined,
+        ignoredStoryboardFields: storyboardIgnoredFields.value,
+        hostImageUrl: carHostImageUrl.value.trim() || undefined,
+        hostVideoUrl: carMaterialVideoUrl.value.trim() || undefined,
+        sourceAssetIds: carSourceAssetIds(),
+        segmentCount: carSegmentCount.value,
+        segmentDuration: carSegmentDuration.value,
+        scenes: buildCarSalesScenes(),
+        model: selectedModel.value,
+      })
+      submittedTaskId = submitted.taskId
+      submittedStatus = String(submitted.status)
     } else if (mainTab.value === 'text') {
       const submitted = await generateTextToVideo({
         prompt: prompt.value.trim(),
@@ -1085,6 +2060,95 @@ onBeforeUnmount(() => {
   align-items: end;
 }
 
+.render-recommend-panel {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 14px;
+  border: 1px solid #d8e2ff;
+  border-radius: 8px;
+  background: #f8fbff;
+  padding: 14px;
+}
+
+.render-recommend-main {
+  display: grid;
+  min-width: 0;
+  gap: 4px;
+}
+
+.render-recommend-main span {
+  color: #667085;
+  font-size: 12px;
+  font-weight: 900;
+}
+
+.render-recommend-main strong {
+  color: #1d4ed8;
+  font-size: 18px;
+  font-weight: 900;
+}
+
+.render-recommend-main p {
+  margin: 0;
+  color: #667085;
+  font-size: 12.5px;
+  line-height: 1.6;
+}
+
+.render-details {
+  border: 1px solid #e7eaf2;
+  border-radius: 8px;
+  background: #fff;
+  overflow: hidden;
+}
+
+.render-details summary {
+  display: flex;
+  min-height: 48px;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 0 14px;
+  color: #2d3446;
+  cursor: pointer;
+  font-size: 13px;
+  font-weight: 900;
+  list-style: none;
+}
+
+.render-details summary::-webkit-details-marker {
+  display: none;
+}
+
+.render-details summary::after {
+  content: '展开';
+  flex: 0 0 auto;
+  color: #5e50df;
+  font-size: 12px;
+  font-weight: 900;
+}
+
+.render-details[open] summary::after {
+  content: '收起';
+}
+
+.render-details summary small {
+  min-width: 0;
+  color: #98a2b3;
+  font-size: 12px;
+  font-weight: 700;
+  text-align: right;
+}
+
+.render-details-body {
+  display: grid;
+  gap: 14px;
+  border-top: 1px solid #edf0f6;
+  background: #fbfcff;
+  padding: 14px;
+}
+
 .render-grid-two {
   display: grid;
   grid-template-columns: 1fr 1fr;
@@ -1097,8 +2161,24 @@ onBeforeUnmount(() => {
     grid-template-columns: 1fr;
   }
 
-  .render-grid-two {
+  .render-grid-two,
+  .render-basis-grid {
     grid-template-columns: 1fr;
+  }
+
+  .render-recommend-panel,
+  .render-details summary {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+
+  .render-details summary {
+    justify-content: center;
+    padding: 10px 14px;
+  }
+
+  .render-details summary small {
+    text-align: left;
   }
 }
 
@@ -1226,6 +2306,149 @@ onBeforeUnmount(() => {
 
 .render-duration-hint {
   font-size: 12.5px;
+}
+
+.render-audio-mode {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.render-audio-mode button {
+  min-height: 36px;
+  border: 1px solid #e1e6f0;
+  border-radius: 8px;
+  background: #fff;
+  color: #4f586c;
+  font-size: 13px;
+  font-weight: 800;
+  cursor: pointer;
+}
+
+.render-audio-mode button.active {
+  border-color: #7d69ff;
+  background: #f5f3ff;
+  color: #5b4be7;
+}
+
+.render-audio-mode button:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
+}
+
+.render-audio-hint {
+  margin: -4px 0 4px;
+  font-size: 12px;
+}
+
+.render-basis-panel {
+  display: grid;
+  gap: 12px;
+  border: 1px solid #dce3f2;
+  border-radius: 8px;
+  background: #fbfcff;
+  padding: 14px;
+}
+
+.render-basis-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.render-basis-head h3 {
+  margin: 0;
+  color: #151a2d;
+  font-size: 15px;
+  font-weight: 900;
+}
+
+.render-basis-head span {
+  flex: 0 0 auto;
+  border-radius: 999px;
+  padding: 4px 10px;
+  font-size: 12px;
+  font-weight: 900;
+}
+
+.render-basis-head span.ok {
+  background: #eafaf1;
+  color: #099250;
+}
+
+.render-basis-head span.danger {
+  background: #fff1f0;
+  color: #d92d20;
+}
+
+.render-basis-panel p {
+  margin: 0;
+  color: #4f586c;
+  font-size: 13px;
+  line-height: 1.7;
+}
+
+.render-basis-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
+  margin: 0;
+}
+
+.render-basis-grid div {
+  min-width: 0;
+  border: 1px solid #e7eaf2;
+  border-radius: 8px;
+  background: #fff;
+  padding: 10px 12px;
+}
+
+.render-basis-grid dt {
+  color: #98a2b3;
+  font-size: 12px;
+  font-weight: 800;
+}
+
+.render-basis-grid dd {
+  margin: 4px 0 0;
+  overflow-wrap: anywhere;
+  color: #232838;
+  font-size: 13px;
+  font-weight: 800;
+}
+
+.render-basis-alert {
+  display: grid;
+  gap: 6px;
+  border-radius: 8px;
+  padding: 10px 12px;
+  font-size: 12.5px;
+  line-height: 1.6;
+}
+
+.render-basis-alert strong {
+  font-weight: 900;
+}
+
+.render-basis-alert span {
+  display: block;
+}
+
+.render-basis-alert.warn {
+  background: #fffaeb;
+  color: #93370d;
+}
+
+.render-basis-alert.danger {
+  background: #fff1f0;
+  color: #b42318;
+}
+
+@media (max-width: 720px) {
+  .render-basis-grid {
+    grid-template-columns: 1fr;
+  }
 }
 
 .render-model-dropdown {
@@ -1565,6 +2788,57 @@ onBeforeUnmount(() => {
 }
 
 .render-video-actions a {
+  text-decoration: none;
+}
+
+.render-segment-list {
+  display: grid;
+  gap: 12px;
+}
+
+.render-segment-list h3 {
+  margin: 0;
+  color: #2d3446;
+  font-size: 14px;
+  font-weight: 850;
+}
+
+.render-segment-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  gap: 12px;
+}
+
+.render-segment-item {
+  display: grid;
+  gap: 8px;
+  border: 1px solid #edf0f6;
+  border-radius: 8px;
+  background: #fafbff;
+  padding: 10px;
+}
+
+.render-segment-item video {
+  width: 100%;
+  max-height: 180px;
+  border-radius: 8px;
+  background: #1f2230;
+}
+
+.render-segment-item strong,
+.render-segment-item small {
+  display: block;
+}
+
+.render-segment-item small {
+  color: #667085;
+  font-size: 12px;
+}
+
+.render-segment-item a {
+  color: #5e50df;
+  font-size: 13px;
+  font-weight: 800;
   text-decoration: none;
 }
 </style>

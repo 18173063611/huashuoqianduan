@@ -57,6 +57,7 @@
           <option value="SEEDANCE_FIRST_FRAME_VIDEO">图生视频 · 首帧（旧）</option>
           <option value="SEEDANCE_FIRST_LAST_FRAME_VIDEO">图生视频 · 首尾帧（旧）</option>
           <option value="SEEDANCE_REFERENCE_VIDEO">图生视频 · 参照（旧）</option>
+          <option value="SEEDANCE_CAR_SALES_VIDEO">汽车销售成片</option>
           <option value="DIGITAL_HUMAN_GENERATE">数字人口播</option>
         </select>
         <select v-model="statusFilter" class="asset-type-select" :disabled="loading" @change="loadData(false)">

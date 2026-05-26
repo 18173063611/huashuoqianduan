@@ -1,6 +1,7 @@
 import { request } from './request'
 import { newIdempotencyKey } from './taskApi'
 import type {
+  CarSalesVideoRequest,
   DigitalHumanGenerateResponse,
   DigitalHumanTaskDetailResponse,
   DigitalHumanVideoRequest,
@@ -53,9 +54,13 @@ export function analyzeVideoScript(videoUrl: string) {
   })
 }
 
-/** 视频链接分镜解析：后端先解析分享链接，再对真实播放地址做分镜分析。 */
-export function analyzeVideoScriptByUrl(videoUrl: string) {
-  const qs = `url=${encodeURIComponent(videoUrl)}`
+/** 视频链接分镜解析：后端复用爆款对标的分享链接解析，再对真实播放地址做分镜分析。 */
+export function analyzeVideoScriptByUrl(videoUrl: string, platform?: string) {
+  const params = new URLSearchParams({ url: videoUrl })
+  if (platform && platform !== 'auto') {
+    params.set('platform', platform)
+  }
+  const qs = params.toString()
   return request<TaskItem>(`/video/script/url?${qs}`, {
     method: 'POST',
   })
@@ -94,6 +99,14 @@ export function generateFirstLastFrameVideo(payload: FirstLastFrameVideoRequest)
 /** 图生视频 - 参照图生成。imageUrls 长度 1~9，lite i2v 实际支持 1~4。 */
 export function generateReferenceVideo(payload: ReferenceVideoRequest) {
   return request<TaskItem>('/video/generate/image/reference', {
+    method: 'POST',
+    body: JSON.stringify(payload),
+    headers: videoGenerateHeaders(),
+  })
+}
+
+export function generateCarSalesVideo(payload: CarSalesVideoRequest) {
+  return request<TaskItem>('/video/generate/car-sales', {
     method: 'POST',
     body: JSON.stringify(payload),
     headers: videoGenerateHeaders(),

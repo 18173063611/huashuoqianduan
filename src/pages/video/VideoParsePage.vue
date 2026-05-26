@@ -28,14 +28,15 @@
               </button>
             </div>
             <p class="platform-note">{{ selectedPlatformNote }}</p>
+            <p v-if="selectedPlatformLimitReason" class="platform-limit-note">{{ selectedPlatformLimitReason }}</p>
             <p v-if="platformAutoHint" class="platform-auto-hint">{{ platformAutoHint }}</p>
             <div class="parse-row">
               <input v-model.trim="videoUrl" :placeholder="videoPlaceholder" />
               <button
                 class="primary-button"
                 type="button"
-                :disabled="parsing || !videoUrl || !!parseEstimate.insufficientHint.value"
-                :title="parseEstimate.insufficientHint.value ?? ''"
+                :disabled="parsing || !videoUrl || !!selectedPlatformLimitReason || !!parseEstimate.insufficientHint.value"
+                :title="selectedPlatformLimitReason || parseEstimate.insufficientHint.value || ''"
                 @click="handleParseVideo"
               >
                 {{ parsing ? '解析中' : '解析' }}
@@ -43,7 +44,8 @@
               <button
                 class="secondary-button download-button"
                 type="button"
-                :disabled="downloading || !videoUrl"
+                :disabled="downloading || !videoUrl || !!selectedPlatformLimitReason"
+                :title="selectedPlatformLimitReason || ''"
                 @click="handleDownloadVideo"
               >
                 {{ downloading ? '下载中' : '下载视频' }}
@@ -354,7 +356,7 @@ const platformOptions: VideoPlatformOption[] = [
   {
     value: 'auto',
     label: '自动',
-    placeholder: '粘贴抖音 / 小红书 / TikTok / 快手 / B站 / YouTube 等视频链接',
+    placeholder: '粘贴抖音 / 小红书 / 视频号 / TikTok / 快手 / B站 / YouTube 等视频链接',
     officialNote: '自动识别平台；官方文档不提供公开视频下载接口的平台，会按平台限制给出提示。',
   },
   {
@@ -368,6 +370,12 @@ const platformOptions: VideoPlatformOption[] = [
     label: '小红书',
     placeholder: '粘贴小红书完整分享文案或 http(s) 链接',
     officialNote: '小红书公开开放文档未提供任意笔记视频下载解析接口，解析稳定性受平台限制影响。',
+  },
+  {
+    value: 'wechat_channels',
+    label: '视频号',
+    placeholder: '粘贴微信视频号分享链接，例如 https://weixin.qq.com/sph/...',
+    officialNote: '微信视频号官方开放能力不提供任意公开视频下载解析接口；该平台内容通常需要微信登录、客户端上下文或平台授权，当前无法稳定解析。',
   },
   {
     value: 'tiktok',
@@ -397,9 +405,16 @@ const platformOptions: VideoPlatformOption[] = [
     value: 'facebook',
     label: 'Facebook',
     placeholder: '粘贴 Facebook 公开视频链接',
-    officialNote: 'Facebook 官方支持公开视频嵌入；官方帮助说明不提供视频下载选项。',
+    officialNote: 'Facebook 官方支持公开视频嵌入和 Graph API 授权访问，但不提供任意公开视频下载接口；很多视频需要登录、地区或权限校验，当前无法稳定解析。',
   },
 ]
+
+const PLATFORM_LIMIT_REASONS: Record<string, string> = {
+  wechat_channels:
+    '微信视频号暂不支持链接解析：视频号内容通常依赖微信登录、客户端上下文或平台授权，官方没有开放任意公开视频下载解析接口。请改用本地上传视频文件。',
+  facebook:
+    'Facebook 暂不支持链接解析：公开视频常受登录、地区、隐私权限和防下载策略限制，官方也不提供任意视频下载接口。请改用本地上传视频文件或可直接访问的视频直链。',
+}
 
 const videoUrl = ref('')
 const selectedPlatform = ref('auto')
@@ -458,6 +473,11 @@ const videoPlaceholder = computed(
 const selectedPlatformNote = computed(
   () => platformOptions.find((option) => option.value === selectedPlatform.value)?.officialNote || platformOptions[0].officialNote,
 )
+
+const selectedPlatformLimitReason = computed(() => {
+  if (inputMode.value !== 'link') return ''
+  return PLATFORM_LIMIT_REASONS[selectedPlatform.value] || ''
+})
 
 const downloadProgressText = computed(() => {
   if (downloadReceivedBytes.value <= 0) {
@@ -618,6 +638,7 @@ function detectPlatformFromText(value: string) {
   if (!text.trim()) return ''
   if (/douyin\.com|iesdouyin\.com|amemv\.com|douyinvod\.com/.test(text)) return 'douyin'
   if (/xiaohongshu\.com|xhslink\.com|xhscdn\.com|xhs\.cn/.test(text)) return 'xiaohongshu'
+  if (/weixin\.qq\.com\/sph|channels\.weixin\.qq\.com|finder\.video\.qq\.com|finder\.video\.wechat\.com/.test(text)) return 'wechat_channels'
   if (/tiktok\.com|tiktokv\.com|vm\.tiktok\.com|vt\.tiktok\.com|musical\.ly/.test(text)) return 'tiktok'
   if (/kuaishou\.com|kwai\.com|gifshow\.com|kwaicdn\.com|ksapisrv\.com|oskwai\.com|yximgs\.com/.test(text)) return 'kuaishou'
   if (/bilibili\.com|b23\.tv|bilivideo\.com|hdslb\.com|biliimg\.com/.test(text)) return 'bilibili'
@@ -824,6 +845,12 @@ async function handleDownloadVideo() {
   if (!url || downloading.value) {
     return
   }
+  const platform = effectivePlatformForUrl(url)
+  const platformLimitReason = PLATFORM_LIMIT_REASONS[platform]
+  if (platformLimitReason) {
+    downloadError.value = platformLimitReason
+    return
+  }
 
   downloading.value = true
   downloadError.value = ''
@@ -833,7 +860,6 @@ async function handleDownloadVideo() {
   downloadTotalBytes.value = null
   downloadProgressPercent.value = null
   try {
-    const platform = effectivePlatformForUrl(url)
     // 直链通常存在跨域与防盗链限制，因此下载走后端代理，页面只负责触发浏览器保存。
     await downloadShareVideo(
       { url, platform },
@@ -871,7 +897,15 @@ async function handleParseVideo() {
   if (!url || parsing.value) {
     return
   }
-  await runParseVideo(url, effectivePlatformForUrl(url))
+  const platform = effectivePlatformForUrl(url)
+  const platformLimitReason = PLATFORM_LIMIT_REASONS[platform]
+  if (platformLimitReason) {
+    parseStage.value = 'error'
+    parseNotice.value = ''
+    parseError.value = platformLimitReason
+    return
+  }
+  await runParseVideo(url, platform)
 }
 
 async function handleReparseCurrent() {
@@ -1480,6 +1514,18 @@ function applyScript() {
   font-size: 12px;
   font-weight: 800;
   line-height: 1.5;
+}
+
+.platform-limit-note {
+  margin: -4px 0 12px;
+  border: 1px solid #ffd9a8;
+  border-radius: 8px;
+  background: #fff8ec;
+  color: #9a5a12;
+  padding: 9px 10px;
+  font-size: 12px;
+  font-weight: 800;
+  line-height: 1.6;
 }
 
 .upload-parse-panel {
