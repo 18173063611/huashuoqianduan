@@ -134,6 +134,8 @@ export interface QuickRenderRequest {
   customSubtitle?: string
   audioPolicy: 'auto' | 'none' | 'voiceover' | 'bgm'
   model: string
+  segmentCount?: number
+  segmentDuration?: number
   goalText?: string
   projectId?: number | null
 }

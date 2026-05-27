@@ -94,6 +94,15 @@
             <option value="voiceover">优先口播</option>
           </select>
         </div>
+
+        <div class="quick-field">
+          <label>成片时长</label>
+          <select v-model.number="segmentCount" :disabled="busy">
+            <option v-for="option in segmentOptions" :key="option.count" :value="option.count">
+              {{ option.label }}
+            </option>
+          </select>
+        </div>
       </div>
 
       <div v-if="subtitleMode === 'upload'" class="quick-field">
@@ -139,6 +148,10 @@
           <div>
             <dt>BGM</dt>
             <dd>{{ bgmLabel }}</dd>
+          </div>
+          <div>
+            <dt>目标时长</dt>
+            <dd>{{ totalDuration }} 秒</dd>
           </div>
         </dl>
         <p>{{ summaryText }}</p>
@@ -238,6 +251,8 @@ const subtitleMode = ref<'off' | 'auto' | 'upload'>('auto')
 const customSubtitle = ref('')
 const audioPolicy = ref<'auto' | 'none' | 'voiceover' | 'bgm'>('auto')
 const goalText = ref('')
+const segmentDuration = 8
+const segmentCount = ref(4)
 const uploading = ref(false)
 const busy = ref(false)
 const errorMessage = ref('')
@@ -248,6 +263,16 @@ let stopTracking: (() => void) | null = null
 let digitalHumanPollTimer: number | null = null
 
 const canSubmit = computed(() => materials.value.length > 0 && !uploading.value)
+const segmentOptions = computed(() =>
+  Array.from({ length: 6 }, (_, idx) => {
+    const count = idx + 1
+    return {
+      count,
+      label: `${count * segmentDuration} 秒（${count} 段）`,
+    }
+  }),
+)
+const totalDuration = computed(() => segmentCount.value * segmentDuration)
 
 const inferredRoute = computed(() => {
   if (intent.value !== 'auto') return intent.value
@@ -353,6 +378,8 @@ async function submitQuickRender() {
     customSubtitle: subtitleMode.value === 'upload' ? customSubtitle.value || undefined : undefined,
     audioPolicy: audioPolicy.value,
     model: 'auto',
+    segmentCount: segmentCount.value,
+    segmentDuration,
     goalText: goalText.value || undefined,
   }
 
