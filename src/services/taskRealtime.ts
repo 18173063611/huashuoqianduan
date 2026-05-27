@@ -2,7 +2,7 @@ import { API_ORIGIN, getAuthToken } from './request'
 import { getTaskDetail, getTaskResult } from './taskApi'
 import type { TaskResultItem, TaskStatusMessage } from '../types/taskTypes'
 
-const TERMINAL_FAILURE_STATUSES = new Set(['FAILED', 'RETRYABLE', 'CANCELED'])
+const TERMINAL_FAILURE_STATUSES = new Set(['FAILED', 'CANCELED'])
 const SUCCESS_STATUS = 'SUCCESS'
 
 export interface TrackTaskResultOptions<T> {

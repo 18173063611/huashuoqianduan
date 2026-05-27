@@ -6,6 +6,10 @@
         基于火山方舟 Seedance 系列模型，通过文字或图片生成短视频。后端同步轮询任务，
         生成耗时通常 1~3 分钟，期间请保持页面打开。
       </p>
+      <div class="render-mode-switch" aria-label="视频制作模式">
+        <RouterLink to="/quick-render">一键成片</RouterLink>
+        <span>手动装配</span>
+      </div>
     </header>
 
     <section class="app-card render-input">
@@ -276,6 +280,30 @@
                 </button>
               </div>
               <p class="app-muted render-audio-hint">{{ audioReferenceHint }}</p>
+              <div class="render-form-field">
+                <label>字幕</label>
+                <div class="render-audio-mode render-subtitle-mode">
+                  <button
+                    v-for="option in carSubtitleOptions"
+                    :key="option.key"
+                    type="button"
+                    :class="{ active: carSubtitleMode === option.key }"
+                    :disabled="busy"
+                    @click="carSubtitleMode = option.key"
+                  >
+                    {{ option.label }}
+                  </button>
+                </div>
+              </div>
+              <div v-if="carSubtitleMode === 'custom'" class="render-form-field">
+                <textarea
+                  v-model="carSubtitleText"
+                  :disabled="busy"
+                  rows="4"
+                  maxlength="8000"
+                  placeholder="输入或粘贴自定义字幕内容"
+                />
+              </div>
               <AssetPicker
                 title="背景音乐 BGM"
                 asset-type="AUDIO"
@@ -740,6 +768,7 @@ type MainTab = 'text' | 'image' | 'carSales' | 'digitalHuman'
 type ImageSubTab = 'first' | 'firstLast' | 'reference'
 type DigitalHumanAudioMode = 'asset' | 'upload' | 'url' | 'text'
 type CarAudioMode = 'none' | 'post_mix' | 'reference'
+type CarSubtitleMode = 'off' | 'auto' | 'custom'
 type SeedanceModelValue = 'doubao-seedance-1-5-pro-251215' | 'ep-20260512233524-85r4g'
 
 const MAX_REFERENCE = 9
@@ -780,6 +809,11 @@ const digitalHumanAudioTabs: Array<{ key: DigitalHumanAudioMode; label: string }
   { key: 'upload', label: '上传音频' },
   { key: 'url', label: '音频链接' },
   { key: 'text', label: '文本口播' },
+]
+const carSubtitleOptions: Array<{ key: CarSubtitleMode; label: string }> = [
+  { key: 'off', label: '关闭' },
+  { key: 'auto', label: '自动生成' },
+  { key: 'custom', label: '自定义字幕' },
 ]
 
 const mainTab = ref<MainTab>('carSales')
@@ -830,6 +864,8 @@ const carAudioSourceType = ref('')
 const carAudioMode = ref<CarAudioMode>('none')
 const carAudioUploading = ref(false)
 const carAudioUploadName = ref('')
+const carSubtitleMode = ref<CarSubtitleMode>('off')
+const carSubtitleText = ref('')
 const carBgmUrl = ref('')
 const carBgmAssetId = ref<number | null>(null)
 const carBgmSourceType = ref('')
@@ -1479,9 +1515,9 @@ const carAudioSourceLabel = computed(() => {
 const carBgmSourceLabel = computed(() => (carBgmUrl.value.trim() ? '已选择 BGM' : '无'))
 const carSubtitleSourceLabel = computed(() => {
   const suffix = storyboardHasOldLines.value ? '（不使用分镜旧台词）' : ''
-  if (hasSelectedVoiceAudio()) return `口播音频转写 / 最终口播文案${suffix}`
-  if (carVoiceContext.value.trim()) return `最终口播文案${suffix}`
-  return '无'
+  if (carSubtitleMode.value === 'off') return '关闭'
+  if (carSubtitleMode.value === 'auto') return `自动生成${suffix}`
+  return carSubtitleText.value.trim() ? `自定义字幕${suffix}` : '自定义字幕（未填写）'
 })
 
 const carVisualSourceLabel = computed(() => {
@@ -1559,11 +1595,17 @@ function buildCarScriptContext() {
     parts.push(`分镜画面参考（仅用于镜头画面，不作为口播、字幕或 BGM 来源）：${summarizeStoryboardForPrompt(carStoryboardContext.value)}`)
   }
   if (hasSelectedVoiceAudio()) {
-    parts.push('内容主导：已选择口播/配音音频，口型、字幕和节奏以该音频为准；分镜和爆款对标文案只作为画面参考。')
+    parts.push('内容主导：已选择口播/配音音频，口型和节奏以该音频为准；字幕按当前字幕设置处理；分镜和爆款对标文案只作为画面参考。')
   } else if (carVoiceContext.value.trim()) {
     parts.push(`口播文案参考：${carVoiceContext.value.trim()}`)
   }
   return parts.join('\n\n')
+}
+
+function buildCarSubtitleValue() {
+  if (carSubtitleMode.value === 'off') return '无'
+  if (carSubtitleMode.value === 'auto') return '自动生成'
+  return carSubtitleText.value.trim()
 }
 
 function buildCarSalesScenes() {
@@ -1727,6 +1769,7 @@ async function handleGenerate() {
         callToAction: carCallToAction.value.trim() || undefined,
         scriptContext: buildCarScriptContext() || undefined,
         prompt: prompt.value.trim() || undefined,
+        subtitle: buildCarSubtitleValue(),
         audioUrl: carAudioMode.value === 'none' ? undefined : carAudioUrl.value.trim() || undefined,
         audioMode: carAudioUrl.value.trim() ? carAudioMode.value : 'none',
         bgmUrl: carBgmUrl.value.trim() || undefined,
@@ -1926,6 +1969,34 @@ onBeforeUnmount(() => {
   color: #667085;
   font-size: 14px;
   line-height: 1.7;
+}
+
+.render-mode-switch {
+  display: inline-flex;
+  gap: 6px;
+  margin-top: 12px;
+  border: 1px solid #e7eaf2;
+  border-radius: 8px;
+  background: #fff;
+  padding: 4px;
+}
+
+.render-mode-switch a,
+.render-mode-switch span {
+  display: inline-flex;
+  min-height: 30px;
+  align-items: center;
+  border-radius: 6px;
+  padding: 0 12px;
+  color: #4f586c;
+  font-size: 13px;
+  font-weight: 800;
+  text-decoration: none;
+}
+
+.render-mode-switch span {
+  background: #f5f3ff;
+  color: #5e50df;
 }
 
 .render-project-hint {
