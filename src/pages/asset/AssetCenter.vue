@@ -146,6 +146,15 @@
         >
           {{ loading ? '处理中...' : '上传素材' }}
         </button>
+        <button
+          v-if="activeCategory === 'materials' && hasToken"
+          class="app-secondary-button asset-upload-button"
+          type="button"
+          :disabled="loading"
+          @click="carBundleBuilderOpen = true"
+        >
+          创建车型素材包
+        </button>
         <input
           ref="materialUploadInputRef"
           class="asset-hidden-file-input"
@@ -364,6 +373,13 @@
       </div>
     </div>
 
+    <CarModelBundleBuilder
+      v-if="carBundleBuilderOpen"
+      :publish="uploadPublishToPublic"
+      @close="carBundleBuilderOpen = false"
+      @created="handleCarBundleCreated"
+    />
+
     <div v-if="previewModalOpen" class="asset-modal-backdrop" @click.self="closeAssetPreview">
       <section class="asset-preview-modal" role="dialog" aria-modal="true" aria-label="资产预览">
         <header class="asset-modal-header asset-preview-head">
@@ -380,7 +396,21 @@
         <div v-else-if="previewLoading" class="asset-preview-empty">正在加载预览...</div>
 
         <template v-else>
-          <div v-if="previewScriptShots.length" class="asset-preview-storyboard">
+          <div v-if="isCarBundlePreview" class="asset-preview-car-bundle">
+            <div class="asset-preview-car-head">
+              <strong>{{ carBundleTitle }}</strong>
+              <span>{{ carBundleImages.length }} 张车型素材</span>
+            </div>
+            <div class="asset-preview-car-grid">
+              <article v-for="item in carBundleImages" :key="`${item.role}-${item.url}`">
+                <img :src="resolveFileUrl(item.url)" alt="" />
+                <strong>{{ item.label }}</strong>
+                <small>{{ item.fileName || item.role }}</small>
+              </article>
+            </div>
+          </div>
+
+          <div v-else-if="previewScriptShots.length" class="asset-preview-storyboard">
             <div class="asset-preview-toolbar">
               <label for="asset-preview-shot-select">查看场景</label>
               <select id="asset-preview-shot-select" v-model.number="previewShotIndex">
@@ -485,6 +515,7 @@ import { getTaskDetail, getTaskResult, newIdempotencyKey } from '../../services/
 import { rememberSessionTaskId } from '../../services/sessionTaskStore'
 import { VOICE_PRESET_SELECTION_KEY, type VoicePresetItem } from '../../types/voiceTypes'
 import { taskTypeLabel } from '../../utils/taskDisplay'
+import CarModelBundleBuilder from './CarModelBundleBuilder.vue'
 
 const props = defineProps<{
   /** 从任务中心等入口跳转时，高亮并滚动到该资产 */
@@ -635,6 +666,7 @@ const voiceListScope = ref<'private' | 'public'>('private')
 const hasToken = ref(false)
 const materialUploadInputRef = ref<HTMLInputElement | null>(null)
 const uploadPublishToPublic = ref(false)
+const carBundleBuilderOpen = ref(false)
 let keywordReloadTimer: number | null = null
 let highlightClearTimer: number | null = null
 
@@ -770,6 +802,33 @@ const benchmarkTranscriptText = computed(() => {
 const isBenchmarkPreview = computed(() => {
   const type = previewTaskType.value
   return type === 'DOUYIN_PARSE_TRANSCRIPT' || previewAsset.value?.sourceType === 'DOUYIN_BENCHMARK'
+})
+
+const isCarBundlePreview = computed(() =>
+  stringField(previewRecord.value, 'bundleType') === 'car_model' ||
+  stringField(previewRecord.value, 'assetRole') === 'car_model_bundle',
+)
+
+const carBundleTitle = computed(() => {
+  const brandModel = stringField(previewRecord.value, 'brandModel')
+  const color = stringField(previewRecord.value, 'color')
+  return [brandModel || '车型素材包', color].filter(Boolean).join(' · ')
+})
+
+const carBundleImages = computed(() => {
+  const images = previewRecord.value?.images
+  if (!Array.isArray(images)) {
+    return []
+  }
+  return images
+    .filter(isRecord)
+    .map((item) => ({
+      role: stringField(item, 'role'),
+      label: stringField(item, 'label') || stringField(item, 'role') || '车型图片',
+      url: stringField(item, 'url'),
+      fileName: stringField(item, 'fileName'),
+    }))
+    .filter((item) => item.url)
 })
 
 const rewritePreviewText = computed(() => {
@@ -938,6 +997,27 @@ async function handleMaterialUploadChange(event: Event) {
   } finally {
     loading.value = false
   }
+}
+
+async function handleCarBundleCreated(asset: AssetItem) {
+  carBundleBuilderOpen.value = false
+  selectedType.value = 'JSON'
+  selectedSourceType.value = ''
+  selectedWorkflowStage.value = 'material'
+  keyword.value = ''
+  sortKey.value = 'createdAtDesc'
+  listScope.value = uploadPublishToPublic.value ? 'global' : 'private'
+  jumpHint.value = '车型素材包已保存，可在视频生成页直接选择。'
+  await loadAssets()
+  highlightedId.value = asset.assetId
+  clearHighlightTimer()
+  await nextTick()
+  document.getElementById(assetRowDomId(asset.assetId))?.scrollIntoView({ behavior: 'smooth', block: 'center' })
+  highlightClearTimer = window.setTimeout(() => {
+    highlightedId.value = null
+    jumpHint.value = ''
+    highlightClearTimer = null
+  }, 6000)
 }
 
 function selectWorkflowStage(stage: WorkflowStageKey) {
@@ -2054,6 +2134,67 @@ async function playVoiceSample(voice: VoicePresetItem) {
   background: #fbfcff;
   color: #667085;
   font-weight: 700;
+}
+
+.asset-preview-car-bundle {
+  display: grid;
+  gap: 14px;
+}
+
+.asset-preview-car-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.asset-preview-car-head strong {
+  color: #111827;
+  font-size: 16px;
+  font-weight: 900;
+}
+
+.asset-preview-car-head span {
+  color: #667085;
+  font-size: 13px;
+  font-weight: 800;
+}
+
+.asset-preview-car-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.asset-preview-car-grid article {
+  display: grid;
+  gap: 6px;
+  border: 1px solid #edf0f6;
+  border-radius: 10px;
+  background: #fbfcff;
+  padding: 10px;
+}
+
+.asset-preview-car-grid img {
+  width: 100%;
+  aspect-ratio: 4 / 3;
+  border-radius: 8px;
+  object-fit: cover;
+  background: #f1f3f8;
+}
+
+.asset-preview-car-grid strong {
+  color: #344054;
+  font-size: 13px;
+  font-weight: 900;
+}
+
+.asset-preview-car-grid small {
+  overflow: hidden;
+  color: #667085;
+  font-size: 12px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 @media (max-width: 980px) {

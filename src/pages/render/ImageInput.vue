@@ -105,8 +105,15 @@ void props
   font-weight: 800;
 }
 
+.image-input-row {
+  min-width: 0;
+}
+
 .image-input-file {
-  display: inline-flex;
+  display: grid;
+  width: 100%;
+  min-width: 0;
+  grid-template-columns: auto minmax(0, 1fr);
   align-items: center;
   gap: 12px;
   padding: 8px 12px;
@@ -135,13 +142,17 @@ void props
   color: #fff;
   font-size: 12.5px;
   font-weight: 800;
+  white-space: nowrap;
 }
 
 .image-input-meta {
+  min-width: 0;
+  overflow: hidden;
   color: #5c6477;
   font-size: 12.5px;
   font-weight: 700;
-  word-break: break-all;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .image-input-preview {

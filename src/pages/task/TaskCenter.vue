@@ -84,7 +84,24 @@
               :task-updated-at="task.updatedAt"
               :status="task.status"
               :progress="task.progress"
+              :virtual-ceil="taskSmoothProgressCeil(task)"
+              :smooth-min-step="taskSmoothProgressMinStep(task)"
+              :smooth-room-rate="taskSmoothProgressRoomRate(task)"
             />
+            <p v-if="taskProgressCaption(task)" class="task-row-stage">
+              {{ taskProgressCaption(task) }}
+            </p>
+            <div v-if="carSalesSegmentBadges(task).length" class="task-segment-badges" aria-label="汽车成片分段进度">
+              <span
+                v-for="segment in carSalesSegmentBadges(task)"
+                :key="segment.index"
+                class="task-segment-badge"
+                :class="`task-segment-badge--${segment.state}`"
+                :title="segment.title"
+              >
+                {{ segment.label }}
+              </span>
+            </div>
             <p class="task-row-meta task-row-meta-primary">
               <el-tooltip v-if="task.taskType" :content="task.taskType" placement="top">
                 <span>{{ taskTypeLabel(task.taskType) }}</span>
@@ -112,9 +129,9 @@
             <p v-if="task.errorMessage" class="task-row-err">{{ friendlyTaskErrorMessage(task.errorMessage) }}</p>
           </div>
           <div class="task-row-actions">
-            <span class="app-task-status" :class="statusPillClass(task.status)">{{ task.status }}</span>
+            <span class="app-task-status" :class="statusPillClass(task.status)">{{ taskStatusLabel(task.status) }}</span>
             <button
-              v-if="task.status === 'QUEUED' || task.status === 'RUNNING'"
+              v-if="canCancelTask(task)"
               type="button"
               class="app-secondary-button task-cancel"
               :disabled="loading"
@@ -136,13 +153,13 @@
               重试
             </button>
             <button
-              v-if="task.status === 'SUCCESS'"
+              v-if="task.status === 'SUCCESS' || canOpenRunningProgress(task)"
               type="button"
               class="app-secondary-button task-open-asset"
               :disabled="resultLoading"
               @click="openResult(task)"
             >
-              {{ resultLoading && selectedTaskId === task.taskId ? '加载中...' : '查看结果' }}
+              {{ resultLoading && selectedTaskId === task.taskId ? '加载中...' : task.status === 'SUCCESS' ? '查看结果' : '查看进度' }}
             </button>
           </div>
         </div>
@@ -173,7 +190,133 @@
 
         <div v-else-if="isVideoResultTaskType(selectedResultTask?.taskType)" class="task-result-video">
           <video v-if="seedanceVideoUrl" :src="seedanceVideoUrl" controls preload="metadata" />
-          <div v-else class="task-result-empty">未找到视频地址。</div>
+          <div v-else-if="carSalesPartialVisible" class="task-result-partial">
+            <strong>{{ selectedCarSalesStageText }}</strong>
+            <span>{{ carSalesCompletedSegmentCount }} / {{ carSalesSegmentCount }} 段已完成</span>
+          </div>
+          <div v-else class="task-result-empty">
+            {{ isActiveTask(selectedResultTask) ? '任务正在准备中，完成首个片段后可在这里预览。' : '未找到视频地址。' }}
+          </div>
+          <div v-if="carSalesSegmentVideos.length" class="task-result-segments">
+            <h4>{{ seedanceVideoUrl ? '分段视频' : '已完成片段预览' }}</h4>
+            <div class="task-result-segment-grid">
+              <article
+                v-for="(segment, idx) in carSalesSegmentVideos"
+                :key="segmentKey(segment, idx)"
+                class="task-result-segment-item"
+              >
+                <video :src="segmentVideoUrl(segment)" controls preload="metadata" />
+                <div>
+                  <strong>片段 {{ idx + 1 }}</strong>
+                  <small>资产 ID：{{ segmentAssetId(segment) || '-' }}</small>
+                </div>
+                <div class="task-segment-actions">
+                  <a :href="segmentVideoUrl(segment)" target="_blank" rel="noreferrer">打开片段</a>
+                  <button
+                    v-if="canRegenerateCarSalesSegment"
+                    type="button"
+                    class="task-segment-action-button"
+                    :disabled="segmentRegenerationState(idx)?.loading || segmentRegenerationState(idx)?.adopting"
+                    @click="handleRegenerateSegment(idx)"
+                  >
+                    {{ segmentRegenerationState(idx)?.loading ? '提交中...' : '重新生成此段' }}
+                  </button>
+                  <button
+                    v-if="canRegenerateCarSalesSegment"
+                    type="button"
+                    class="task-segment-action-button task-segment-action-button--danger"
+                    :disabled="composeBusy || carSalesSegmentVideos.length <= 1"
+                    @click="handleRemoveCurrentSegment(idx)"
+                  >
+                    移除并重拼
+                  </button>
+                </div>
+                <div v-if="segmentRegenerationState(idx)" class="task-segment-regeneration">
+                  <div class="task-segment-regeneration-head">
+                    <span>
+                      重生任务 #{{ segmentRegenerationState(idx)?.taskId || '-' }}
+                      · {{ taskStatusLabel(segmentRegenerationState(idx)?.status || 'QUEUED') }}
+                      <template v-if="typeof segmentRegenerationState(idx)?.progress === 'number'">
+                        {{ segmentRegenerationState(idx)?.progress }}%
+                      </template>
+                    </span>
+                    <button
+                      type="button"
+                      class="task-segment-mini-button"
+                      :disabled="segmentRegenerationState(idx)?.loading"
+                      @click="refreshSegmentRegeneration(idx, false)"
+                    >
+                      刷新
+                    </button>
+                  </div>
+                  <p v-if="segmentRegenerationState(idx)?.error" class="app-error">
+                    {{ segmentRegenerationState(idx)?.error }}
+                  </p>
+                  <video
+                    v-if="segmentReplacementVideoUrl(idx)"
+                    :src="segmentReplacementVideoUrl(idx)"
+                    controls
+                    preload="metadata"
+                  />
+                  <button
+                    v-if="canAdoptSegmentRegeneration(idx)"
+                    type="button"
+                    class="task-segment-adopt-button"
+                    :disabled="segmentRegenerationState(idx)?.adopting"
+                    @click="handleAdoptSegment(idx)"
+                  >
+                    {{ segmentRegenerationState(idx)?.adopting ? '重新拼接中...' : '采用此段并重新拼接' }}
+                  </button>
+                </div>
+              </article>
+            </div>
+            <section v-if="canRegenerateCarSalesSegment" class="task-compose-panel">
+              <div class="task-compose-head">
+                <div>
+                  <h4>手动拼接</h4>
+                  <p>按下方顺序重新合成当前成片，可加入资产中心里的任意视频。</p>
+                </div>
+                <button type="button" class="task-segment-mini-button" :disabled="composeBusy" @click="resetManualComposeSegmentsFromCurrent">
+                  恢复当前分段
+                </button>
+              </div>
+              <div class="task-compose-list">
+                <article
+                  v-for="(item, idx) in manualComposeSegments"
+                  :key="`${item.assetId || item.videoUrl}-${idx}`"
+                  class="task-compose-item"
+                >
+                  <video :src="item.videoUrl" controls preload="metadata" />
+                  <div class="task-compose-item-main">
+                    <strong>{{ idx + 1 }}. {{ item.title || '视频片段' }}</strong>
+                    <small>{{ item.assetId ? `资产 ID：${item.assetId}` : '外部视频链接' }}</small>
+                  </div>
+                  <div class="task-compose-item-actions">
+                    <button type="button" :disabled="composeBusy || idx === 0" @click="moveComposeSegment(idx, -1)">上移</button>
+                    <button type="button" :disabled="composeBusy || idx === manualComposeSegments.length - 1" @click="moveComposeSegment(idx, 1)">下移</button>
+                    <button type="button" :disabled="composeBusy || manualComposeSegments.length <= 1" @click="removeManualComposeSegment(idx)">移除</button>
+                  </div>
+                </article>
+              </div>
+              <AssetPicker
+                title="选择视频加入拼接"
+                asset-type="VIDEO"
+                :selected-url="manualVideoPickerUrl"
+                placeholder="搜索视频资产..."
+                source-hint="从资产中心选择任意视频，加入到当前拼接队列"
+                @select="handleManualComposeAssetSelect"
+              />
+              <p v-if="composeError" class="app-error">{{ composeError }}</p>
+              <button
+                type="button"
+                class="task-compose-submit"
+                :disabled="!canComposeCarSalesSegments || composeBusy"
+                @click="submitManualCompose"
+              >
+                {{ composeBusy ? '重新拼接中...' : '按当前顺序重新拼接' }}
+              </button>
+            </section>
+          </div>
         </div>
 
         <div v-else-if="selectedResultTask?.taskType === 'TTS_GENERATE'" class="task-result-audio">
@@ -276,7 +419,9 @@
 
 import { computed, ref, watch, watchEffect } from 'vue'
 import { RouterLink } from 'vue-router'
+import { ElMessage } from 'element-plus'
 import TaskRowSmoothProgress from '../../components/TaskRowSmoothProgress.vue'
+import AssetPicker from '../render/AssetPicker.vue'
 import { API_ORIGIN, getAuthToken } from '../../services/request'
 import {
   cancelTask,
@@ -287,8 +432,10 @@ import {
   markTaskViewed,
   retryTask,
 } from '../../services/taskApi'
+import { adoptCarSalesSegment, composeCarSalesSegments, regenerateCarSalesSegment } from '../../services/videoApi'
 import { getSessionTaskIds } from '../../services/sessionTaskStore'
-import type { TaskItem, TaskSummaryResponse } from '../../types/taskTypes'
+import type { AssetItem } from '../../types/assetTypes'
+import type { TaskItem, TaskResultItem, TaskSummaryResponse } from '../../types/taskTypes'
 import { isStoryboardScriptTask, isVideoResultTaskType, taskTypeLabel } from '../../utils/taskDisplay'
 import { formatFriendlyDateTime } from '../../utils/timeFormat'
 
@@ -299,6 +446,30 @@ interface ScriptShot {
   backgroundMusic: string
   page: string
   highlight: string
+}
+
+interface SegmentBadge {
+  index: number
+  label: string
+  state: 'done' | 'active' | 'pending'
+  title: string
+}
+
+interface SegmentRegenerationState {
+  taskId: number | null
+  status: string
+  progress: number | null
+  result: Record<string, unknown> | null
+  loading: boolean
+  adopting: boolean
+  error: string
+}
+
+interface ManualComposeSegment {
+  assetId: number | null
+  videoUrl: string
+  title: string
+  source: 'current' | 'asset'
 }
 
 const props = withDefaults(
@@ -326,13 +497,58 @@ const selectedResultTask = ref<TaskItem | null>(null)
 const selectedTaskResult = ref<unknown>(null)
 const selectedOutputJson = ref<unknown>(null)
 const selectedShotIndex = ref(-1)
+const segmentRegenerations = ref<Record<number, SegmentRegenerationState>>({})
+const manualComposeSegments = ref<ManualComposeSegment[]>([])
+const manualVideoPickerUrl = ref('')
+const composeBusy = ref(false)
+const composeError = ref('')
 let loadInFlight = false
 
 const canQuery = computed(() => hasToken.value)
 const hasSessionTasks = computed(() => getSessionTaskIds().length > 0)
-const resultObject = computed(() => (isRecord(selectedTaskResult.value) ? selectedTaskResult.value : null))
+const resultObject = computed(() => {
+  const primary = isRecord(selectedTaskResult.value) ? selectedTaskResult.value : null
+  const fallback = isRecord(selectedOutputJson.value) ? selectedOutputJson.value : null
+  if (primary && (primary.videoUrl || primary.segmentVideos || primary.partial)) {
+    return primary
+  }
+  return fallback || primary
+})
 const outputObject = computed(() => (isRecord(selectedOutputJson.value) ? selectedOutputJson.value : null))
 const seedanceVideoUrl = computed(() => stringField(resultObject.value, 'videoUrl'))
+const carSalesSegmentVideos = computed<Record<string, unknown>[]>(() => {
+  const raw = resultObject.value?.segmentVideos
+  return Array.isArray(raw) ? raw.filter(isRecord) : []
+})
+const canRegenerateCarSalesSegment = computed(() => {
+  const task = selectedResultTask.value
+  return isCarSalesTask(task) && task?.status === 'SUCCESS' && carSalesSegmentVideos.value.length > 0
+})
+const canComposeCarSalesSegments = computed(() => canRegenerateCarSalesSegment.value && manualComposeSegments.value.length > 0)
+const carSalesSegmentCount = computed(() => {
+  const raw = resultObject.value?.segmentCount
+  const parsed = typeof raw === 'number' ? raw : Number(raw)
+  return Number.isFinite(parsed) && parsed > 0 ? parsed : Math.max(1, carSalesSegmentVideos.value.length)
+})
+const carSalesCompletedSegmentCount = computed(() => {
+  const raw = resultObject.value?.completedSegmentCount
+  const parsed = typeof raw === 'number' ? raw : Number(raw)
+  return Math.min(
+    carSalesSegmentCount.value,
+    Math.max(Number.isFinite(parsed) ? parsed : 0, carSalesSegmentVideos.value.length),
+  )
+})
+const carSalesPartialVisible = computed(() =>
+  isCarSalesTask(selectedResultTask.value) &&
+  (carSalesSegmentVideos.value.length > 0 || Boolean(resultObject.value?.partial) || isActiveTask(selectedResultTask.value)),
+)
+const selectedCarSalesStageText = computed(() => {
+  const stage = stringField(resultObject.value, 'stage')
+  if (stage) return stage
+  const task = selectedResultTask.value
+  if (!task) return '正在生成视频片段'
+  return taskProgressCaption(task) || '正在生成视频片段'
+})
 const ttsAudioUrl = computed(() => stringField(resultObject.value, 'previewUrl'))
 const scriptShots = computed<ScriptShot[]>(() => {
   const scripts = resultObject.value?.scripts
@@ -403,6 +619,35 @@ watchEffect((onCleanup) => {
   onCleanup(() => window.clearInterval(timer))
 })
 
+watchEffect((onCleanup) => {
+  const task = selectedResultTask.value
+  if (!resultModalOpen.value || !task || !isActiveTask(task)) {
+    return
+  }
+  const timer = window.setInterval(() => {
+    void refreshSelectedResult(true)
+  }, 3500)
+  onCleanup(() => window.clearInterval(timer))
+})
+
+watchEffect((onCleanup) => {
+  if (!resultModalOpen.value) {
+    return
+  }
+  const activeIndexes = Object.entries(segmentRegenerations.value)
+    .filter(([, state]) => state.taskId && isActiveStatus(state.status))
+    .map(([index]) => Number(index) - 1)
+  if (!activeIndexes.length) {
+    return
+  }
+  const timer = window.setInterval(() => {
+    activeIndexes.forEach((index) => {
+      void refreshSegmentRegeneration(index, true)
+    })
+  }, 3500)
+  onCleanup(() => window.clearInterval(timer))
+})
+
 async function loadData(silent: boolean) {
   if (loadInFlight) {
     return
@@ -444,17 +689,19 @@ async function loadData(silent: boolean) {
         records: list,
       }
     } else {
-      const [list, sum] = await Promise.all([
-        listTasks({
-          ...(typeArg ? { taskType: typeArg } : {}),
-          ...(statusArg ? { status: statusArg } : {}),
-          pageNo: 1,
-          pageSize: 50,
-        }),
-        getTaskSummary(),
-      ])
-      tasks.value = list
-      summary.value = sum
+      const list = await listTasks({
+        ...(typeArg ? { taskType: typeArg } : {}),
+        ...(statusArg ? { status: statusArg } : {}),
+        pageNo: 1,
+        pageSize: 50,
+      })
+      tasks.value = await hydrateLiveCarSalesRows(list)
+      if (silent && summary.value) {
+        summary.value = { ...summary.value, records: tasks.value.slice(0, 10) }
+      } else {
+        const sum = await getTaskSummary()
+        summary.value = sum
+      }
     }
   } catch (error) {
     if (!silent) {
@@ -468,6 +715,44 @@ async function loadData(silent: boolean) {
   }
 }
 
+function shouldHydrateLiveCarSalesTask(task: TaskItem) {
+  return isCarSalesTask(task) && isActiveTask(task)
+}
+
+async function hydrateLiveCarSalesRows(list: TaskItem[]) {
+  const targets = list.filter(shouldHydrateLiveCarSalesTask)
+  if (!targets.length) {
+    return list
+  }
+  const results = await Promise.all(
+    targets.map((task) =>
+      getTaskResult<unknown>(task.taskId)
+        .then((result) => ({ taskId: task.taskId, result }))
+        .catch(() => null),
+    ),
+  )
+  const resultByTaskId = new Map<number, TaskResultItem<unknown>>(
+    results
+      .filter((item): item is { taskId: number; result: TaskResultItem<unknown> } => !!item)
+      .map((item) => [item.taskId, item.result]),
+  )
+  return list.map((task) => {
+    const result = resultByTaskId.get(task.taskId)
+    if (!result) {
+      return task
+    }
+    return {
+      ...task,
+      taskTitle: result.taskTitle || task.taskTitle,
+      status: result.status || task.status,
+      progress: result.progress ?? task.progress,
+      errorCode: result.errorCode ?? task.errorCode,
+      errorMessage: result.errorMessage ?? task.errorMessage,
+      outputJson: result.result == null ? task.outputJson : JSON.stringify(result.result),
+    }
+  })
+}
+
 async function handleRetry(taskId: number) {
   if (loading.value || retryingTaskId.value !== null) {
     return
@@ -479,6 +764,7 @@ async function handleRetry(taskId: number) {
     await retryTask(taskId)
     await loadData(false)
   } catch (error) {
+    await loadData(false)
     errorMessage.value = error instanceof Error ? error.message : '重试失败'
   } finally {
     loading.value = false
@@ -496,6 +782,7 @@ async function handleCancel(taskId: number) {
     await cancelTask(taskId)
     await loadData(false)
   } catch (error) {
+    await loadData(false)
     errorMessage.value = error instanceof Error ? error.message : '取消失败'
   } finally {
     loading.value = false
@@ -535,6 +822,158 @@ function creditRefundHint(task: TaskItem): string | null {
 
 function taskRowProgressEligible(task: TaskItem) {
   return task.status === 'QUEUED' || task.status === 'RUNNING' || task.status === 'SUCCESS'
+}
+
+function isActiveTask(task: TaskItem | null | undefined) {
+  return task?.status === 'QUEUED' || task?.status === 'RUNNING'
+}
+
+function isActiveStatus(status: string | null | undefined) {
+  return status === 'QUEUED' || status === 'RUNNING'
+}
+
+function canCancelTask(task: TaskItem | null | undefined) {
+  return task?.status === 'QUEUED' || task?.status === 'RUNNING' || task?.status === 'RETRYABLE'
+}
+
+function isCarSalesTask(task: TaskItem | null | undefined) {
+  return String(task?.taskType || '').trim().toUpperCase() === 'SEEDANCE_CAR_SALES_VIDEO'
+}
+
+function canOpenRunningProgress(task: TaskItem) {
+  return isCarSalesTask(task) && isActiveTask(task)
+}
+
+function taskStatusLabel(status: string) {
+  const raw = String(status || '').toUpperCase()
+  const map: Record<string, string> = {
+    QUEUED: '排队中',
+    RUNNING: '生成中',
+    SUCCESS: '已完成',
+    FAILED: '失败',
+    RETRYABLE: '可重试',
+    CANCELED: '已取消',
+  }
+  return map[raw] || raw || '未知'
+}
+
+function taskSegmentCount(task: TaskItem) {
+  if (!isCarSalesTask(task)) {
+    return 1
+  }
+  const output = taskOutputObject(task)
+  const outputCount = Number(output?.segmentCount ?? 0)
+  if (Number.isFinite(outputCount) && outputCount > 0) {
+    return Math.max(1, outputCount)
+  }
+  const cost = Number(task.creditCost ?? task.estimatedCreditCost ?? 0)
+  if (Number.isFinite(cost) && cost >= 220) {
+    return Math.max(1, Math.round(cost / 220))
+  }
+  return 4
+}
+
+function taskOutputObject(task: TaskItem) {
+  const parsed = parseJsonObject(task.outputJson)
+  return isRecord(parsed) ? parsed : null
+}
+
+function taskCompletedSegmentsByProgress(task: TaskItem) {
+  const total = taskSegmentCount(task)
+  const output = taskOutputObject(task)
+  const outputCompleted = Number(output?.completedSegmentCount ?? Number.NaN)
+  if (Number.isFinite(outputCompleted)) {
+    return Math.max(0, Math.min(total, outputCompleted))
+  }
+  const progress = Number(task.progress ?? 0)
+  if (progress >= 86) return total
+  if (progress <= 22) return 0
+  return Math.max(0, Math.min(total, Math.floor(((progress - 22) / 58) * total)))
+}
+
+function taskActiveSegmentIndex(task: TaskItem) {
+  const output = taskOutputObject(task)
+  const rawActive = Number(output?.activeSegmentIndex ?? Number.NaN)
+  if (Number.isFinite(rawActive) && rawActive > 0) {
+    return Math.max(1, Math.min(taskSegmentCount(task), rawActive))
+  }
+  if (task.status !== 'RUNNING') {
+    return 0
+  }
+  const completed = taskCompletedSegmentsByProgress(task)
+  return Math.min(taskSegmentCount(task), completed + 1)
+}
+
+function carSalesSegmentBadges(task: TaskItem): SegmentBadge[] {
+  if (!isCarSalesTask(task)) {
+    return []
+  }
+  const status = String(task.status || '').toUpperCase()
+  if (!['QUEUED', 'RUNNING', 'SUCCESS', 'FAILED', 'RETRYABLE', 'CANCELED'].includes(status)) {
+    return []
+  }
+  const total = taskSegmentCount(task)
+  const completed = status === 'SUCCESS' ? total : taskCompletedSegmentsByProgress(task)
+  const active = taskActiveSegmentIndex(task)
+  return Array.from({ length: total }, (_, index) => {
+    const segmentIndex = index + 1
+    const done = segmentIndex <= completed
+    const activeNow = !done && status === 'RUNNING' && segmentIndex === active
+    const state: SegmentBadge['state'] = done ? 'done' : activeNow ? 'active' : 'pending'
+    const title =
+      state === 'done'
+        ? `第 ${segmentIndex} 段已完成，可在查看进度中预览`
+        : state === 'active'
+          ? `第 ${segmentIndex} 段正在生成`
+          : `第 ${segmentIndex} 段等待生成`
+    return {
+      index: segmentIndex,
+      label: `第${segmentIndex}段`,
+      state,
+      title,
+    }
+  })
+}
+
+function taskProgressCaption(task: TaskItem) {
+  if (!isCarSalesTask(task) || task.status === 'SUCCESS') {
+    return ''
+  }
+  if (task.status === 'QUEUED') {
+    return '已进入队列，等待开始分段生成。'
+  }
+  if (task.status !== 'RUNNING') {
+    return ''
+  }
+  const liveStage = stringField(taskOutputObject(task), 'stage')
+  if (liveStage) {
+    return liveStage
+  }
+  const total = taskSegmentCount(task)
+  const completed = taskCompletedSegmentsByProgress(task)
+  const progress = Number(task.progress ?? 0)
+  if (progress >= 95) {
+    return '最终成片已生成，正在保存到资产中心。'
+  }
+  if (progress >= 86) {
+    return '分段视频已完成，正在合成整条视频并处理音频。'
+  }
+  if (completed > 0) {
+    return `已完成 ${completed} / ${total} 段，可点击“查看进度”预览已完成片段。`
+  }
+  return `正在生成第 1 / ${total} 段，首段完成后可预览。`
+}
+
+function taskSmoothProgressCeil(task: TaskItem) {
+  return isCarSalesTask(task) ? 88 : 95
+}
+
+function taskSmoothProgressMinStep(task: TaskItem) {
+  return isCarSalesTask(task) ? 0.07 : 0.22
+}
+
+function taskSmoothProgressRoomRate(task: TaskItem) {
+  return isCarSalesTask(task) ? 0.012 : 0.038
 }
 
 function resultAssetId(task: TaskItem): number | null {
@@ -592,29 +1031,56 @@ async function openResult(task: TaskItem) {
   selectedOutputJson.value = parseJsonObject(task.outputJson)
   selectedResultTask.value = task
   selectedShotIndex.value = -1
+  segmentRegenerations.value = {}
+  manualComposeSegments.value = []
+  manualVideoPickerUrl.value = ''
+  composeError.value = ''
   resultModalOpen.value = true
 
+  await refreshSelectedResult(false)
+  resetManualComposeSegmentsFromCurrent()
+}
+
+async function refreshSelectedResult(silent: boolean) {
+  const task = selectedResultTask.value
+  if (!task) {
+    return
+  }
+  if (!silent) {
+    resultLoading.value = true
+  }
   try {
     const [detail, taskResult] = await Promise.all([
       getTaskDetail(task.taskId).catch(() => task),
       getTaskResult<unknown>(task.taskId),
     ])
     selectedResultTask.value = detail
-    selectedTaskResult.value = taskResult.result
-    selectedOutputJson.value = parseJsonObject(detail.outputJson) ?? selectedOutputJson.value
-    await markTaskViewed(task.taskId)
+    const parsedOutput = parseJsonObject(detail.outputJson)
+    selectedOutputJson.value = parsedOutput ?? selectedOutputJson.value
+    selectedTaskResult.value = isRecord(taskResult.result) ? taskResult.result : parsedOutput
+    if (detail.status === 'SUCCESS') {
+      await markTaskViewed(task.taskId)
+    }
     void loadData(true)
   } catch (error) {
-    resultError.value = error instanceof Error ? error.message : '查询任务结果失败'
+    if (!silent) {
+      resultError.value = error instanceof Error ? error.message : '查询任务结果失败'
+    }
   } finally {
-    resultLoading.value = false
-    selectedTaskId.value = null
+    if (!silent) {
+      resultLoading.value = false
+      selectedTaskId.value = null
+    }
   }
 }
 
 function closeResultModal() {
   resultModalOpen.value = false
   resultError.value = ''
+  segmentRegenerations.value = {}
+  manualComposeSegments.value = []
+  manualVideoPickerUrl.value = ''
+  composeError.value = ''
 }
 
 function parseJsonObject(value: string | null | undefined) {
@@ -640,6 +1106,261 @@ function stringField(value: Record<string, unknown> | null | undefined, field: s
 function arrayStringField(value: Record<string, unknown> | null | undefined, field: string) {
   const raw = value?.[field]
   return Array.isArray(raw) ? raw.filter((item): item is string => typeof item === 'string' && item.length > 0) : []
+}
+
+function segmentVideoUrl(segment: Record<string, unknown>) {
+  return stringField(segment, 'videoUrl')
+}
+
+function segmentAssetId(segment: Record<string, unknown>) {
+  const raw = segment.resultAssetId
+  const parsed = typeof raw === 'number' ? raw : Number(raw)
+  return Number.isFinite(parsed) && parsed > 0 ? parsed : null
+}
+
+function segmentKey(segment: Record<string, unknown>, idx: number) {
+  return String(segmentAssetId(segment) || stringField(segment, 'taskId') || idx)
+}
+
+function currentSegmentsForCompose(): ManualComposeSegment[] {
+  return carSalesSegmentVideos.value
+    .map((segment, idx) => {
+      const videoUrl = segmentVideoUrl(segment)
+      return {
+        assetId: segmentAssetId(segment),
+        videoUrl: normalizePreviewUrl(videoUrl),
+        title: `片段 ${idx + 1}`,
+        source: 'current' as const,
+      }
+    })
+    .filter((item) => !!item.videoUrl)
+}
+
+function resetManualComposeSegmentsFromCurrent() {
+  manualComposeSegments.value = currentSegmentsForCompose()
+  composeError.value = ''
+}
+
+function ensureManualComposeSegments() {
+  if (!manualComposeSegments.value.length) {
+    resetManualComposeSegmentsFromCurrent()
+  }
+}
+
+function handleManualComposeAssetSelect(payload: { asset: AssetItem; url: string }) {
+  ensureManualComposeSegments()
+  manualVideoPickerUrl.value = payload.url
+  manualComposeSegments.value = [
+    ...manualComposeSegments.value,
+    {
+      assetId: payload.asset.assetId,
+      videoUrl: payload.url,
+      title: payload.asset.fileName || `视频 ${manualComposeSegments.value.length + 1}`,
+      source: 'asset',
+    },
+  ]
+  composeError.value = ''
+}
+
+function moveComposeSegment(index: number, direction: -1 | 1) {
+  const nextIndex = index + direction
+  if (nextIndex < 0 || nextIndex >= manualComposeSegments.value.length) {
+    return
+  }
+  const next = manualComposeSegments.value.slice()
+  const [item] = next.splice(index, 1)
+  next.splice(nextIndex, 0, item)
+  manualComposeSegments.value = next
+}
+
+function removeManualComposeSegment(index: number) {
+  if (manualComposeSegments.value.length <= 1) {
+    ElMessage.warning('至少保留一个视频片段')
+    return
+  }
+  manualComposeSegments.value = manualComposeSegments.value.filter((_, idx) => idx !== index)
+}
+
+async function handleRemoveCurrentSegment(index: number) {
+  if (carSalesSegmentVideos.value.length <= 1) {
+    ElMessage.warning('至少保留一个视频片段')
+    return
+  }
+  const next = currentSegmentsForCompose().filter((_, idx) => idx !== index)
+  await composeSegmentsWith(next, '已移除片段并重新拼接')
+}
+
+async function submitManualCompose() {
+  ensureManualComposeSegments()
+  await composeSegmentsWith(manualComposeSegments.value, '已按当前顺序重新拼接')
+}
+
+async function composeSegmentsWith(segments: ManualComposeSegment[], successMessage: string) {
+  const task = selectedResultTask.value
+  const rows = segments.filter((item) => item.videoUrl)
+  if (!task || !canRegenerateCarSalesSegment.value || rows.length === 0) {
+    return
+  }
+  composeBusy.value = true
+  composeError.value = ''
+  try {
+    const updated = await composeCarSalesSegments(task.taskId, {
+      segments: rows.map((item) => ({
+        assetId: item.assetId,
+        videoUrl: item.videoUrl,
+        title: item.title,
+      })),
+    })
+    selectedTaskResult.value = updated
+    selectedOutputJson.value = updated
+    resetManualComposeSegmentsFromCurrent()
+    await refreshSelectedResult(true)
+    resetManualComposeSegmentsFromCurrent()
+    await loadData(true)
+    ElMessage.success(successMessage)
+  } catch (error) {
+    composeError.value = error instanceof Error ? error.message : '重新拼接失败'
+  } finally {
+    composeBusy.value = false
+  }
+}
+
+function segmentRegenerationState(idx: number) {
+  return segmentRegenerations.value[idx + 1] || null
+}
+
+function updateSegmentRegeneration(segmentIndex: number, patch: Partial<SegmentRegenerationState>) {
+  const previous = segmentRegenerations.value[segmentIndex] || {
+    taskId: null,
+    status: 'QUEUED',
+    progress: null,
+    result: null,
+    loading: false,
+    adopting: false,
+    error: '',
+  }
+  segmentRegenerations.value = {
+    ...segmentRegenerations.value,
+    [segmentIndex]: {
+      ...previous,
+      ...patch,
+    },
+  }
+}
+
+function segmentReplacementResult(idx: number) {
+  const state = segmentRegenerationState(idx)
+  const result = state?.result
+  if (!result) {
+    return null
+  }
+  const segments = result.segmentVideos
+  if (Array.isArray(segments)) {
+    const first = segments.find(isRecord)
+    if (first) {
+      return first
+    }
+  }
+  return result
+}
+
+function segmentReplacementVideoUrl(idx: number) {
+  const replacement = segmentReplacementResult(idx)
+  return replacement ? segmentVideoUrl(replacement) : ''
+}
+
+function canAdoptSegmentRegeneration(idx: number) {
+  const state = segmentRegenerationState(idx)
+  return !!state?.taskId && state.status === 'SUCCESS' && !!segmentReplacementVideoUrl(idx)
+}
+
+async function handleRegenerateSegment(idx: number) {
+  const task = selectedResultTask.value
+  if (!task || !canRegenerateCarSalesSegment.value) {
+    return
+  }
+  const segmentIndex = idx + 1
+  updateSegmentRegeneration(segmentIndex, {
+    loading: true,
+    error: '',
+  })
+  try {
+    const created = await regenerateCarSalesSegment(task.taskId, segmentIndex)
+    const createdOutput = parseJsonObject(created.outputJson)
+    updateSegmentRegeneration(segmentIndex, {
+      taskId: created.taskId,
+      status: String(created.status || 'QUEUED'),
+      progress: created.progress,
+      result: isRecord(createdOutput) ? createdOutput : null,
+      loading: false,
+    })
+    await refreshSegmentRegeneration(idx, true)
+    void loadData(true)
+  } catch (error) {
+    updateSegmentRegeneration(segmentIndex, {
+      loading: false,
+      error: error instanceof Error ? error.message : '重新生成片段失败',
+    })
+  }
+}
+
+async function refreshSegmentRegeneration(idx: number, silent: boolean) {
+  const segmentIndex = idx + 1
+  const state = segmentRegenerationState(idx)
+  if (!state?.taskId) {
+    return
+  }
+  if (!silent) {
+    updateSegmentRegeneration(segmentIndex, { loading: true, error: '' })
+  }
+  try {
+    const [detail, taskResult] = await Promise.all([
+      getTaskDetail(state.taskId),
+      getTaskResult<unknown>(state.taskId).catch(() => null),
+    ])
+    const detailOutput = parseJsonObject(detail.outputJson)
+    updateSegmentRegeneration(segmentIndex, {
+      status: String(detail.status || state.status),
+      progress: detail.progress,
+      result: isRecord(taskResult?.result) ? taskResult.result : isRecord(detailOutput) ? detailOutput : null,
+      loading: false,
+    })
+  } catch (error) {
+    updateSegmentRegeneration(segmentIndex, {
+      loading: false,
+      error: error instanceof Error ? error.message : '刷新片段结果失败',
+    })
+  }
+}
+
+async function handleAdoptSegment(idx: number) {
+  const task = selectedResultTask.value
+  const state = segmentRegenerationState(idx)
+  if (!task || !state?.taskId || !canAdoptSegmentRegeneration(idx)) {
+    return
+  }
+  const segmentIndex = idx + 1
+  updateSegmentRegeneration(segmentIndex, {
+    adopting: true,
+    error: '',
+  })
+  try {
+    const updated = await adoptCarSalesSegment(task.taskId, segmentIndex, state.taskId)
+    selectedTaskResult.value = updated
+    selectedOutputJson.value = updated
+    updateSegmentRegeneration(segmentIndex, {
+      adopting: false,
+      status: 'SUCCESS',
+    })
+    await refreshSelectedResult(true)
+    resetManualComposeSegmentsFromCurrent()
+    await loadData(true)
+  } catch (error) {
+    updateSegmentRegeneration(segmentIndex, {
+      adopting: false,
+      error: error instanceof Error ? error.message : '采用片段并重新拼接失败',
+    })
+  }
 }
 
 function isScriptShot(value: unknown): value is ScriptShot {
@@ -877,6 +1598,58 @@ section.app-card.app-page-stack {
   font-weight: 500;
 }
 
+.task-row-stage {
+  margin: 8px 0 0;
+  border: 1px solid #d8e2ff;
+  border-radius: 8px;
+  background: #f8fbff;
+  color: #365899;
+  padding: 8px 10px;
+  font-size: 12px;
+  font-weight: 700;
+  line-height: 1.5;
+}
+
+.task-segment-badges {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin: 8px 0 0;
+}
+
+.task-segment-badge {
+  display: inline-flex;
+  align-items: center;
+  min-height: 24px;
+  padding: 0 9px;
+  border: 1px solid #e5e7eb;
+  border-radius: 999px;
+  background: #f8fafc;
+  color: #64748b;
+  font-size: 12px;
+  font-weight: 750;
+  line-height: 1;
+  white-space: nowrap;
+}
+
+.task-segment-badge--done {
+  border-color: rgba(16, 185, 129, 0.28);
+  background: rgba(16, 185, 129, 0.1);
+  color: #047857;
+}
+
+.task-segment-badge--active {
+  border-color: rgba(79, 70, 229, 0.28);
+  background: rgba(79, 70, 229, 0.1);
+  color: #4338ca;
+}
+
+.task-segment-badge--pending {
+  border-color: #e5e7eb;
+  background: #f8fafc;
+  color: #64748b;
+}
+
 .task-retry-chip {
   display: inline-block;
   margin-left: 6px;
@@ -1100,12 +1873,296 @@ section.app-card.app-page-stack {
   overflow: auto;
 }
 
+.task-result-video {
+  display: grid;
+  gap: 14px;
+}
+
 .task-result-video video {
   display: block;
   width: 100%;
   max-height: 600px;
   border-radius: 10px;
   background: #111827;
+}
+
+.task-result-partial {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  border: 1px solid #d8e2ff;
+  border-radius: 10px;
+  background: #f8fbff;
+  padding: 14px 16px;
+}
+
+.task-result-partial strong {
+  color: #1f2937;
+  font-size: 14px;
+  font-weight: 800;
+}
+
+.task-result-partial span {
+  flex: 0 0 auto;
+  color: #4f46e5;
+  font-size: 13px;
+  font-weight: 800;
+}
+
+.task-result-segments {
+  display: grid;
+  gap: 12px;
+}
+
+.task-result-segments h4 {
+  margin: 0;
+  color: #1f2937;
+  font-size: 14px;
+  font-weight: 850;
+}
+
+.task-result-segment-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  gap: 12px;
+}
+
+.task-result-segment-item {
+  display: grid;
+  gap: 8px;
+  border: 1px solid #edf0f6;
+  border-radius: 10px;
+  background: #fafbff;
+  padding: 10px;
+}
+
+.task-result-segment-item video {
+  width: 100%;
+  max-height: 180px;
+  border-radius: 8px;
+  background: #111827;
+}
+
+.task-result-segment-item strong,
+.task-result-segment-item small {
+  display: block;
+}
+
+.task-result-segment-item strong {
+  color: #1f2937;
+  font-size: 13px;
+  font-weight: 850;
+}
+
+.task-result-segment-item small {
+  color: #667085;
+  font-size: 12px;
+}
+
+.task-result-segment-item a {
+  color: #4f46e5;
+  font-size: 13px;
+  font-weight: 800;
+  text-decoration: none;
+}
+
+.task-segment-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.task-segment-action-button,
+.task-segment-mini-button,
+.task-segment-adopt-button {
+  border: 1px solid #dbe3f0;
+  border-radius: 8px;
+  background: #ffffff;
+  color: #344054;
+  font-size: 12px;
+  font-weight: 800;
+  cursor: pointer;
+}
+
+.task-segment-action-button {
+  padding: 7px 10px;
+}
+
+.task-segment-mini-button {
+  padding: 4px 8px;
+}
+
+.task-segment-adopt-button {
+  width: 100%;
+  padding: 8px 10px;
+  border-color: rgba(79, 70, 229, 0.35);
+  background: rgba(79, 70, 229, 0.08);
+  color: #4338ca;
+}
+
+.task-segment-action-button:disabled,
+.task-segment-mini-button:disabled,
+.task-segment-adopt-button:disabled {
+  cursor: not-allowed;
+  opacity: 0.65;
+}
+
+.task-segment-action-button--danger {
+  border-color: #fecaca;
+  background: #fff7f7;
+  color: #b42318;
+}
+
+.task-segment-regeneration {
+  display: grid;
+  gap: 8px;
+  border: 1px solid rgba(79, 70, 229, 0.18);
+  border-radius: 8px;
+  background: #ffffff;
+  padding: 8px;
+}
+
+.task-segment-regeneration-head {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  justify-content: space-between;
+  color: #475467;
+  font-size: 12px;
+  font-weight: 750;
+}
+
+.task-compose-panel {
+  display: grid;
+  gap: 12px;
+  border: 1px solid #dbe3f0;
+  border-radius: 10px;
+  background: #ffffff;
+  padding: 12px;
+}
+
+.task-compose-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.task-compose-head h4 {
+  margin: 0;
+}
+
+.task-compose-head p {
+  margin: 4px 0 0;
+  color: #667085;
+  font-size: 12px;
+  line-height: 1.5;
+}
+
+.task-compose-list {
+  display: grid;
+  gap: 8px;
+}
+
+.task-compose-item {
+  display: grid;
+  grid-template-columns: 92px minmax(0, 1fr) auto;
+  gap: 10px;
+  align-items: center;
+  border: 1px solid #edf0f6;
+  border-radius: 8px;
+  background: #fbfcff;
+  padding: 8px;
+}
+
+.task-compose-item video {
+  width: 92px;
+  height: 56px;
+  border-radius: 6px;
+  background: #111827;
+  object-fit: cover;
+}
+
+.task-compose-item-main {
+  min-width: 0;
+}
+
+.task-compose-item-main strong,
+.task-compose-item-main small {
+  display: block;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.task-compose-item-main strong {
+  color: #1f2937;
+  font-size: 12.5px;
+  font-weight: 850;
+}
+
+.task-compose-item-main small {
+  margin-top: 3px;
+  color: #667085;
+  font-size: 11.5px;
+}
+
+.task-compose-item-actions {
+  display: flex;
+  gap: 6px;
+}
+
+.task-compose-item-actions button,
+.task-compose-submit {
+  border: 1px solid #dbe3f0;
+  border-radius: 8px;
+  background: #fff;
+  color: #344054;
+  font-size: 12px;
+  font-weight: 800;
+  cursor: pointer;
+}
+
+.task-compose-item-actions button {
+  padding: 5px 8px;
+}
+
+.task-compose-submit {
+  width: 100%;
+  padding: 9px 12px;
+  border-color: rgba(79, 70, 229, 0.35);
+  background: rgba(79, 70, 229, 0.08);
+  color: #4338ca;
+}
+
+.task-compose-item-actions button:disabled,
+.task-compose-submit:disabled {
+  cursor: not-allowed;
+  opacity: 0.62;
+}
+
+@media (max-width: 640px) {
+  .task-compose-head,
+  .task-compose-item {
+    grid-template-columns: 1fr;
+  }
+
+  .task-compose-head {
+    display: grid;
+  }
+
+  .task-compose-item video {
+    width: 100%;
+    height: auto;
+    aspect-ratio: 16 / 9;
+  }
+
+  .task-compose-item-actions {
+    flex-wrap: wrap;
+  }
 }
 
 .task-result-audio {

@@ -17,6 +17,7 @@ export interface ListAssetsParams {
 export interface UploadMaterialAssetOptions {
   projectId?: number | null
   publish?: boolean
+  metadataJson?: string
 }
 
 export async function getAssets(params?: ListAssetsParams) {
@@ -61,6 +62,9 @@ export function uploadMaterialAsset(file: File, options?: UploadMaterialAssetOpt
   }
   if (options?.publish) {
     formData.append('publish', 'true')
+  }
+  if (options?.metadataJson && options.metadataJson.trim()) {
+    formData.append('metadataJson', options.metadataJson.trim())
   }
   return request<AssetItem>('/assets/upload', {
     method: 'POST',

@@ -220,14 +220,14 @@ async function handleSubmit() {
   try {
     const res =
       authMode.value === 'login'
-        ? await login({ username, password })
+        ? await login({ username, password }, 'USER_WEB')
         : await register({
             username,
             password,
             displayName: displayName || undefined,
             key: key || undefined,
-          })
-    applyLogin(res, rememberMe.value)
+          }, 'USER_WEB')
+    applyLogin(res, 'USER_WEB')
     emit('success', { userId: res.userId, username: res.username, displayName: res.displayName })
   } catch (e) {
     console.log(e)

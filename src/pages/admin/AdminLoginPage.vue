@@ -71,14 +71,14 @@ async function handleSubmit() {
     const res = await login({
       username: form.username.trim(),
       password: form.password.trim(),
-    })
+    }, 'ADMIN_WEB')
     // 管理后台只接受 ADMIN 角色；后端仍需要二次鉴权，前端校验只负责体验闭环。
     if (res.role !== 'ADMIN') {
-      clearLogin()
+      clearLogin('ADMIN_WEB')
       message.value = '当前账号没有管理员权限'
       return
     }
-    applyLogin(res)
+    applyLogin(res, 'ADMIN_WEB')
     const redirect = Array.isArray(route.query.redirect) ? route.query.redirect[0] : route.query.redirect
     const target = redirect && redirect.startsWith('/admin') ? redirect : '/admin/dashboard'
     void router.replace(target)

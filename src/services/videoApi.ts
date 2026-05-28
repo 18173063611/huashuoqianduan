@@ -1,6 +1,7 @@
 import { request } from './request'
 import { newIdempotencyKey } from './taskApi'
 import type {
+  CarSalesSegmentComposeRequest,
   CarSalesVideoRequest,
   DigitalHumanGenerateResponse,
   DigitalHumanTaskDetailResponse,
@@ -12,6 +13,7 @@ import type {
   TextToVideoRequest,
   VideoParseQueryResponse,
   VideoParseSubmitResponse,
+  VideoTaskVO,
 } from '../types/videoTypes'
 import type { TaskItem } from '../types/taskTypes'
 
@@ -110,6 +112,27 @@ export function generateCarSalesVideo(payload: CarSalesVideoRequest) {
     method: 'POST',
     body: JSON.stringify(payload),
     headers: videoGenerateHeaders(),
+  })
+}
+
+export function regenerateCarSalesSegment(taskId: number, segmentIndex: number) {
+  return request<TaskItem>(`/video/car-sales/${taskId}/segments/${segmentIndex}/regenerate`, {
+    method: 'POST',
+    headers: videoGenerateHeaders(),
+  })
+}
+
+export function adoptCarSalesSegment(taskId: number, segmentIndex: number, regeneratedTaskId: number) {
+  return request<VideoTaskVO>(`/video/car-sales/${taskId}/segments/${segmentIndex}/adopt`, {
+    method: 'POST',
+    body: JSON.stringify({ regeneratedTaskId }),
+  })
+}
+
+export function composeCarSalesSegments(taskId: number, payload: CarSalesSegmentComposeRequest) {
+  return request<VideoTaskVO>(`/video/car-sales/${taskId}/segments/compose`, {
+    method: 'POST',
+    body: JSON.stringify(payload),
   })
 }
 

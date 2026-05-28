@@ -1,8 +1,17 @@
 import { computed, onBeforeUnmount, ref, watch, type Ref } from 'vue'
 
-const SMOOTH_PROGRESS_CEIL = 92
-const SMOOTH_TICK_MS = 280
+const DEFAULT_SMOOTH_PROGRESS_CEIL = 92
+const DEFAULT_SMOOTH_TICK_MS = 280
+const DEFAULT_MIN_STEP = 0.22
+const DEFAULT_ROOM_RATE = 0.038
 const COMPLETION_FLASH_MS = 650
+
+export interface SmoothTaskProgressOptions {
+  ceiling?: number
+  tickMs?: number
+  minStep?: number
+  roomRate?: number
+}
 
 /**
  * 任务进度展示：服务端进度为下限，前台在 RUNNING/QUEUED 时平滑爬升；SUCCESS 时拉满并短暂闪动。
@@ -10,9 +19,14 @@ const COMPLETION_FLASH_MS = 650
 export function useSmoothTaskProgress(
   taskStatus: Ref<string>,
   serverProgress: Ref<number | null>,
+  options?: SmoothTaskProgressOptions,
 ) {
   const smoothProgress = ref(0)
   const showCompletionFlash = ref(false)
+  const ceiling = options?.ceiling ?? DEFAULT_SMOOTH_PROGRESS_CEIL
+  const tickMs = options?.tickMs ?? DEFAULT_SMOOTH_TICK_MS
+  const minStep = options?.minStep ?? DEFAULT_MIN_STEP
+  const roomRate = options?.roomRate ?? DEFAULT_ROOM_RATE
 
   let smoothTickTimer: number | null = null
   let completionHoldTimer: number | null = null
@@ -49,18 +63,18 @@ export function useSmoothTaskProgress(
     }
     const server = serverProgress.value ?? 0
     let v = Math.max(smoothProgress.value, server)
-    if (v < SMOOTH_PROGRESS_CEIL) {
-      const room = SMOOTH_PROGRESS_CEIL - v
-      v += Math.max(0.22, room * 0.038)
+    if (v < ceiling) {
+      const room = ceiling - v
+      v += Math.max(minStep, room * roomRate)
     }
-    smoothProgress.value = Math.min(SMOOTH_PROGRESS_CEIL, Math.round(v * 100) / 100)
+    smoothProgress.value = Math.min(ceiling, Math.round(v * 100) / 100)
   }
 
   function startSmoothTick() {
     if (smoothTickTimer != null) {
       return
     }
-    smoothTickTimer = window.setInterval(tick, SMOOTH_TICK_MS)
+    smoothTickTimer = window.setInterval(tick, tickMs)
   }
 
   function flashCompletionBar() {

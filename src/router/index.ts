@@ -1,6 +1,6 @@
 import { createRouter, createWebHistory, type RouteRecordRaw } from 'vue-router'
 import WorkbenchShell from '../components/layout/WorkbenchShell.vue'
-import { clearAuthSession, setAuthUser } from '../services/authSession'
+import { clearAuthSession, setAuthUser, type AuthClientType } from '../services/authSession'
 import { me } from '../services/authApi'
 import { getAuthToken } from '../services/request'
 
@@ -170,8 +170,9 @@ router.beforeEach(async (to) => {
     return true
   }
 
-  const token = getAuthToken()
   const needsAdmin = to.matched.some((record) => record.meta.requiresAdmin)
+  const clientType: AuthClientType = needsAdmin ? 'ADMIN_WEB' : 'USER_WEB'
+  const token = getAuthToken(clientType)
   const loginPath = to.path.startsWith('/admin') ? '/admin/login' : '/login'
   const redirectToLogin = () => ({
     path: loginPath,
@@ -183,10 +184,10 @@ router.beforeEach(async (to) => {
   }
 
   try {
-    const user = await me()
-    setAuthUser(user)
+    const user = await me(clientType)
+    setAuthUser(user, clientType)
     if (user.status && user.status !== 'ENABLED') {
-      clearAuthSession()
+      clearAuthSession(clientType)
       return redirectToLogin()
     }
     if (needsAdmin && user.role !== 'ADMIN') {
@@ -197,7 +198,7 @@ router.beforeEach(async (to) => {
     }
     return true
   } catch {
-    clearAuthSession()
+    clearAuthSession(clientType)
     return redirectToLogin()
   }
 })

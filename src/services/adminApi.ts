@@ -310,7 +310,7 @@ export function getAdminUsageSummary(params: AdminUsageSummaryQuery) {
  */
 export async function downloadAdminUsageSummaryCsv(params: AdminUsageSummaryQuery) {
   const url = `${API_BASE_URL}/admin/billing/usage-summary.csv${usageSummaryQuery(params)}`
-  const token = getAuthToken()
+  const token = getAuthToken('ADMIN_WEB')
   const response = await fetch(url, {
     method: 'GET',
     headers: token ? { Authorization: `Bearer ${token}` } : undefined,

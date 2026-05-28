@@ -5,35 +5,64 @@ import {
   clearAuthSession,
   getAuthToken as readAuthToken,
   setAuthToken as writeAuthToken,
+  type AuthClientType,
 } from './authSession'
 
-/** 开发默认连本机；生产未配置时走同域 /api/v1，也可用环境变量覆盖。 */
 export const API_BASE_URL =
   import.meta.env.VITE_API_BASE_URL ||
   (import.meta.env.DEV ? 'http://127.0.0.1:8080/api/v1' : '/api/v1')
 
-/** 用于拼接 /uploads 等静态资源的绝对地址 */
 export const API_ORIGIN = API_BASE_URL.replace(/\/api\/v1\/?$/, '')
 
-export function setAuthToken(token: string | null, persist = true) {
-  void persist
-  writeAuthToken(token)
+interface AuthRequestInit extends RequestInit {
+  authClientType?: AuthClientType
+  skipAuth?: boolean
 }
 
-export function getAuthToken(): string | null {
-  return readAuthToken()
+export function inferAuthClientType(path?: string): AuthClientType {
+  const candidate =
+    path ||
+    (typeof window !== 'undefined' ? `${window.location.pathname}${window.location.search}` : '')
+  return candidate.startsWith('/admin') ? 'ADMIN_WEB' : 'USER_WEB'
 }
 
-function redirectToLogin() {
-  clearAuthSession()
+export function setAuthToken(token: string | null, clientType: AuthClientType = 'USER_WEB') {
+  writeAuthToken(token, clientType)
+}
+
+export function getAuthToken(clientType: AuthClientType = inferAuthClientType()): string | null {
+  return readAuthToken(clientType)
+}
+
+function normalizeApiPath(path: string) {
+  return path.startsWith('/') ? path : `/${path}`
+}
+
+function clientTypeForRequest(apiPath: string, init?: AuthRequestInit): AuthClientType {
+  if (init?.authClientType) return init.authClientType
+  if (apiPath === '/admin' || apiPath.startsWith('/admin/')) return 'ADMIN_WEB'
+  return inferAuthClientType()
+}
+
+function shouldSkipAuth(apiPath: string, init?: AuthRequestInit): boolean {
+  if (init?.skipAuth) return true
+  return apiPath === '/auth/login' || apiPath === '/auth/register'
+}
+
+function redirectToLogin(clientType: AuthClientType, errorCode?: string) {
+  clearAuthSession(clientType)
   if (typeof window === 'undefined') return
+
+  if (errorCode === 'TOKEN_REVOKED') {
+    window.alert('当前账号已在其他设备登录，请重新登录。')
+  }
 
   const { pathname, search, hash } = window.location
   if (pathname === '/login' || pathname === '/register' || pathname === '/admin/login') return
 
   const currentPath = `${pathname}${search}${hash}`
   const params = new URLSearchParams({ redirect: currentPath })
-  const loginPath = pathname.startsWith('/admin') ? '/admin/login' : '/login'
+  const loginPath = clientType === 'ADMIN_WEB' ? '/admin/login' : '/login'
   window.location.assign(`${loginPath}?${params.toString()}`)
 }
 
@@ -42,7 +71,7 @@ function shouldNotifyAuthRefreshAfterSuccess(method: string | undefined, apiPath
   if (m === 'GET' || m === 'HEAD' || m === 'OPTIONS') {
     return false
   }
-  const p = apiPath.startsWith('/') ? apiPath : `/${apiPath}`
+  const p = normalizeApiPath(apiPath)
   if (p.startsWith('/admin/') || p.startsWith('/auth/')) {
     return false
   }
@@ -52,6 +81,7 @@ function shouldNotifyAuthRefreshAfterSuccess(method: string | undefined, apiPath
     p.startsWith('/voices/presets/') ||
     p.startsWith('/avatars/') ||
     p.startsWith('/video/generate') ||
+    p.startsWith('/video/car-sales') ||
     p.startsWith('/video/script') ||
     p.startsWith('/video-sources/parse') ||
     p.startsWith('/scripts/rewrite') ||
@@ -59,68 +89,79 @@ function shouldNotifyAuthRefreshAfterSuccess(method: string | undefined, apiPath
   )
 }
 
-export async function request<T>(path: string, init?: RequestInit): Promise<T> {
-  const url = `${API_BASE_URL}${path.startsWith('/') ? path : `/${path}`}`
-  const requestInit: RequestInit = { ...init }
-  const token = getAuthToken()
-  // FormData 由浏览器自动生成 multipart boundary，不能手动设置 Content-Type。
-  if (!(init?.body instanceof FormData)) {
-    requestInit.headers = {
-      'Content-Type': 'application/json',
-      ...(token ? { Authorization: `Bearer ${token}` } : null),
-      ...(init?.headers as Record<string, string> | undefined),
-    }
-  } else {
-    requestInit.headers = {
-      ...(token ? { Authorization: `Bearer ${token}` } : null),
-      ...(init?.headers as Record<string, string> | undefined),
-    }
+function parseApiResponse<T>(text: string): ApiResponse<T> | null {
+  if (!text) return null
+  try {
+    return JSON.parse(text) as ApiResponse<T>
+  } catch {
+    return null
   }
+}
+
+function buildBusinessError(payload: ApiResponse<unknown>, fallback = '请求失败') {
+  const detail = formatApiBusinessError(payload.code, payload.message || fallback)
+  return `${detail}${payload.traceId ? `，traceId：${payload.traceId}` : ''}`
+}
+
+export async function request<T>(path: string, init?: AuthRequestInit): Promise<T> {
+  const apiPath = normalizeApiPath(path)
+  const url = `${API_BASE_URL}${apiPath}`
+  const clientType = clientTypeForRequest(apiPath, init)
+  const token = shouldSkipAuth(apiPath, init) ? null : getAuthToken(clientType)
+  const requestInit: AuthRequestInit = init || {}
+  const { authClientType, skipAuth, ...fetchInit } = requestInit
+  void authClientType
+  void skipAuth
+
+  const headers = new Headers(fetchInit.headers)
+  if (!(fetchInit.body instanceof FormData) && !headers.has('Content-Type')) {
+    headers.set('Content-Type', 'application/json')
+  }
+  if (token && !headers.has('Authorization')) {
+    headers.set('Authorization', `Bearer ${token}`)
+  }
+
   let response: Response
   try {
     response = await fetch(url, {
-      ...requestInit,
+      ...fetchInit,
+      headers,
     })
   } catch (error) {
-    // fetch 网络层失败（服务不可达 / CORS / Mixed Content）会直接抛 TypeError，前端只看到 “Failed to fetch”
     const pageProtocol = typeof window !== 'undefined' ? window.location.protocol : ''
     const mixedContentHint =
       pageProtocol === 'https:' && url.startsWith('http://')
-        ? '当前页面是 https，但请求了 http 接口（浏览器会拦截 Mixed Content）。请把后端/网关也改为 https，或用隧道工具暴露 https 地址后再配置 VITE_API_BASE_URL。'
+        ? '\n当前页面是 https，但接口是 http，请改用 https 网关或重新配置 VITE_API_BASE_URL。'
         : ''
-    const corsHint = '若后端已启动但仍失败，请检查浏览器控制台 Network/CORS 报错与后端 CORS 配置。'
-    const reachabilityHint = '请确认后端服务可访问，或设置 VITE_API_BASE_URL 指向正确的 /api/v1。'
-    throw new Error(
-      `Failed to fetch: ${url}\n${reachabilityHint}${mixedContentHint ? `\n${mixedContentHint}` : ''}\n${corsHint}`,
-    )
+    throw new Error(`Failed to fetch: ${url}\n请确认后端服务可访问，或检查浏览器 Network/CORS 报错。${mixedContentHint}`)
   }
 
   const text = await response.text()
+  const payload = parseApiResponse<T>(text)
+
   if (!response.ok) {
-    if (response.status === 401) {
-      redirectToLogin()
+    if (response.status === 401 || payload?.code === 40100) {
+      redirectToLogin(clientType, payload?.message)
+    }
+    if (payload) {
+      throw new Error(buildBusinessError(payload, `HTTP ${response.status}`))
     }
     throw new Error(`HTTP ${response.status}: ${text}`)
   }
+
   if (!text) {
     return null as T
   }
-
-  let payload: ApiResponse<T>
-  try {
-    payload = JSON.parse(text) as ApiResponse<T>
-  } catch (error) {
-    console.error('接口返回的不是 JSON:', text)
-    throw error
+  if (!payload) {
+    throw new Error(`接口返回的不是 JSON: ${text}`)
   }
   if (payload.code === 40100) {
-    redirectToLogin()
+    redirectToLogin(clientType, payload.message)
   }
   if (payload.code !== 0) {
-    const detail = formatApiBusinessError(payload.code, payload.message || '')
-    throw new Error(`${detail}${payload.traceId ? `，traceId：${payload.traceId}` : ''}`)
+    throw new Error(buildBusinessError(payload))
   }
-  if (shouldNotifyAuthRefreshAfterSuccess(requestInit.method, path)) {
+  if (shouldNotifyAuthRefreshAfterSuccess(fetchInit.method, apiPath)) {
     notifyAuthRefresh()
   }
   return payload.data

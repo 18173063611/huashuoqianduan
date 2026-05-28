@@ -1,5 +1,6 @@
 export type UserRole = 'USER' | 'ADMIN'
 export type UserStatus = 'ENABLED' | 'DISABLED' | 'LOCKED'
+export type AuthClientType = 'USER_WEB' | 'ADMIN_WEB'
 
 export interface UserMe {
   userId: number
@@ -13,7 +14,10 @@ export interface UserMe {
 }
 
 export interface LoginResponse extends UserMe {
+  accessToken?: string
   token: string
+  clientType?: AuthClientType
+  sessionId?: string
   expiresAt: string
 }
 
@@ -22,9 +26,13 @@ export interface RegisterRequest {
   password: string
   displayName?: string
   key?: string
+  clientType?: AuthClientType
+  deviceId?: string
 }
 
 export interface LoginRequest {
   username: string
   password: string
+  clientType?: AuthClientType
+  deviceId?: string
 }

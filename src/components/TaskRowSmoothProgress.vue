@@ -30,11 +30,16 @@ const props = defineProps<{
   taskUpdatedAt?: string
   status: string
   progress?: number | null
+  virtualCeil?: number
+  smoothMinStep?: number
+  smoothRoomRate?: number
 }>()
 
-const CEIL = SMOOTH_PROGRESS_CEIL
 const TICK_MS = SMOOTH_TICK_MS
 const FLASH_MS = 650
+const ceil = computed(() => props.virtualCeil ?? SMOOTH_PROGRESS_CEIL)
+const minStep = computed(() => props.smoothMinStep ?? 0.22)
+const roomRate = computed(() => props.smoothRoomRate ?? 0.038)
 
 const smooth = ref(0)
 const flash = ref(false)
@@ -66,11 +71,12 @@ function tick() {
   }
   const server = typeof props.progress === 'number' ? props.progress : 0
   let v = Math.max(smooth.value, server)
-  if (v < CEIL) {
-    const room = CEIL - v
-    v += Math.max(0.22, room * 0.038)
+  const targetCeil = ceil.value
+  if (v < targetCeil) {
+    const room = targetCeil - v
+    v += Math.max(minStep.value, room * roomRate.value)
   }
-  smooth.value = Math.min(CEIL, Math.round(v * 100) / 100)
+  smooth.value = Math.min(targetCeil, Math.round(v * 100) / 100)
 }
 
 function startTick() {
@@ -108,7 +114,7 @@ watch(
         hydratedForTaskId.value = tid
         const row = loadTaskSmoothProgressRecord(tid)
         if (row && (row.status === 'RUNNING' || row.status === 'QUEUED')) {
-          smooth.value = Math.max(server, catchUpSmoothProgress(row.progress, row.lastTickAt, server))
+          smooth.value = Math.max(server, catchUpSmoothProgress(row.progress, row.lastTickAt, server, Date.now(), TICK_MS, ceil.value))
         } else {
           smooth.value = Math.max(smooth.value, server)
         }

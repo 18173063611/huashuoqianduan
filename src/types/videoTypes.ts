@@ -60,6 +60,9 @@ export interface VideoTaskVO {
   segmentAssetIds?: number[]
   finalAssetId?: number | null
   segmentCount?: number
+  completedSegmentCount?: number
+  partial?: boolean
+  stage?: string
   totalDurationSeconds?: number
   durationSeconds?: number
   lastFrameUrl: string | null
@@ -147,6 +150,14 @@ export interface CarSalesVideoSceneRequest {
   duration?: number
 }
 
+export interface CarSalesAssetRoleBinding {
+  assetId?: number
+  url?: string
+  assetType?: string
+  assetRole?: string
+  label?: string
+}
+
 export interface CarSalesVideoRequest {
   projectId?: number | null
   carImageUrls: string[]
@@ -157,14 +168,39 @@ export interface CarSalesVideoRequest {
   scriptContext?: string
   prompt?: string
   audioUrl?: string
-  audioMode?: 'none' | 'post_mix' | 'reference'
+  audioMode?: 'none' | 'post_mix' | 'reference' | 'model_native'
   bgmUrl?: string
+  voicePolicy?: 'user_audio' | 'model_native' | 'none'
+  finalVoiceText?: string
+  generatedVoiceAssetId?: number
+  generatedVoiceUrl?: string
+  autoTtsVoiceId?: number
+  autoTtsSpeed?: number
+  autoTtsVolume?: number
+  autoTtsPitch?: number
+  nativeVoiceStyle?: string
+  nativeSpeechStyle?: string
   ignoredStoryboardFields?: string[]
   hostImageUrl?: string
+  hostAppearanceEnabled?: boolean
   hostVideoUrl?: string
   sourceAssetIds?: number[]
+  renderMode?: 'manual' | 'quick'
+  aspectRatio?: string
+  quickAssetIds?: number[]
+  assetRoleBindings?: CarSalesAssetRoleBinding[]
   segmentCount?: number
   segmentDuration?: number
   scenes?: CarSalesVideoSceneRequest[]
   model?: string
+}
+
+export interface CarSalesSegmentComposeItem {
+  assetId?: number | null
+  videoUrl?: string
+  title?: string
+}
+
+export interface CarSalesSegmentComposeRequest {
+  segments: CarSalesSegmentComposeItem[]
 }

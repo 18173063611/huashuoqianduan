@@ -70,11 +70,11 @@
 import { computed } from 'vue'
 import { RouterView, useRoute, useRouter } from 'vue-router'
 import { Coin, DataLine, FolderOpened, Key, Memo, PriceTag, Setting, SwitchButton, Tickets, User } from '@element-plus/icons-vue'
-import { clearLogin, getAuthUser } from '../../services/authApi'
+import { clearLogin, getAuthUser, logout } from '../../services/authApi'
 
 const route = useRoute()
 const router = useRouter()
-const currentUser = computed(() => getAuthUser())
+const currentUser = computed(() => getAuthUser('ADMIN_WEB'))
 
 const titleMap: Record<string, string> = {
   '/admin/dashboard': '运营概览',
@@ -91,9 +91,15 @@ const titleMap: Record<string, string> = {
 const activePath = computed(() => (route.path.startsWith('/admin/users/') ? '/admin/users' : route.path))
 const pageTitle = computed(() => String(route.meta.title || titleMap[activePath.value] || '后台管理'))
 
-function handleLogout() {
-  clearLogin()
-  void router.replace('/admin/login')
+async function handleLogout() {
+  try {
+    await logout('ADMIN_WEB')
+  } catch {
+    // ignore
+  } finally {
+    clearLogin('ADMIN_WEB')
+    void router.replace('/admin/login')
+  }
 }
 </script>
 
