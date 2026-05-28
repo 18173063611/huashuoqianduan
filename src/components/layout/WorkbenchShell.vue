@@ -44,6 +44,7 @@ function isWorkbenchRouteMenuKey(value: unknown): value is MenuKey {
     value === 'storyboard' ||
     value === 'voice' ||
     value === 'avatar' ||
+    value === 'quick-render' ||
     value === 'render' ||
     value === 'AssetCenter'
   )

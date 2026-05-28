@@ -82,6 +82,7 @@ function shouldNotifyAuthRefreshAfterSuccess(method: string | undefined, apiPath
     p.startsWith('/avatars/') ||
     p.startsWith('/video/generate') ||
     p.startsWith('/video/car-sales') ||
+    p.startsWith('/video/quick-render') ||
     p.startsWith('/video/script') ||
     p.startsWith('/video-sources/parse') ||
     p.startsWith('/scripts/rewrite') ||

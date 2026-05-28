@@ -9,6 +9,8 @@ import type {
   FirstFrameVideoRequest,
   FirstLastFrameVideoRequest,
   ParseVideoSourceRequest,
+  QuickRenderRequest,
+  QuickRenderResponse,
   ReferenceVideoRequest,
   TextToVideoRequest,
   VideoParseQueryResponse,
@@ -138,6 +140,14 @@ export function composeCarSalesSegments(taskId: number, payload: CarSalesSegment
 
 export function generateDigitalHumanVideo(payload: DigitalHumanVideoRequest, idempotencyKey?: string | null) {
   return request<DigitalHumanGenerateResponse>('/video/generate/digital-human', {
+    method: 'POST',
+    body: JSON.stringify(payload),
+    headers: idempotencyHeaders(idempotencyKey),
+  })
+}
+
+export function quickRenderVideo(payload: QuickRenderRequest, idempotencyKey?: string | null) {
+  return request<QuickRenderResponse>('/video/quick-render', {
     method: 'POST',
     body: JSON.stringify(payload),
     headers: idempotencyHeaders(idempotencyKey),

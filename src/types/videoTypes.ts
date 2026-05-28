@@ -1,5 +1,7 @@
 /** 视频源解析相关类型，字段需与后端 `com.huashuo.video.dto` 保持一致 */
 
+import type { TaskItem } from './taskTypes'
+
 export interface ParseVideoSourceRequest {
   projectId?: number | null
   videoUrl: string
@@ -96,6 +98,69 @@ export interface DigitalHumanTaskDetailResponse {
   credits: number | null
 }
 
+export type QuickRenderIntent = 'auto' | 'car_sales' | 'digital_human' | 'general_video' | 'material_mix'
+
+export type QuickRenderAssetRole =
+  | 'car_exterior_front'
+  | 'car_exterior_side'
+  | 'car_exterior_rear'
+  | 'car_interior_dashboard'
+  | 'car_interior_front_seat'
+  | 'car_interior_back_seat'
+  | 'car_detail_light'
+  | 'car_detail_wheel'
+  | 'car_detail_logo'
+  | 'scene_showroom'
+  | 'scene_outdoor'
+  | 'scene_road'
+  | 'host_image'
+  | 'voiceover'
+  | 'bgm'
+  | 'reference_audio'
+  | 'subtitle'
+  | 'voice_script'
+  | 'storyboard_json'
+  | 'benchmark_json'
+  | 'material_video'
+  | 'host_video'
+  | 'reference_video'
+  | 'material'
+
+export interface QuickRenderRequest {
+  intent: QuickRenderIntent
+  assetIds: number[]
+  assetRoles: Record<string, QuickRenderAssetRole>
+  assetTextContents?: Record<string, string>
+  aspectRatio: '9:16' | '16:9' | 'auto'
+  subtitleMode: 'off' | 'auto' | 'upload'
+  burnInSubtitle: boolean
+  customSubtitle?: string
+  audioPolicy: 'auto' | 'none' | 'voiceover' | 'bgm'
+  model: string
+  segmentCount?: number
+  segmentDuration?: number
+  goalText?: string
+  projectId?: number | null
+}
+
+export interface QuickRenderRecognizedAsset {
+  assetId: number
+  fileName: string
+  assetType: string
+  mimeType: string | null
+  role: QuickRenderAssetRole | string
+  url: string
+}
+
+export interface QuickRenderResponse {
+  route: 'car_sales' | 'digital_human' | 'general_video' | 'material_mix'
+  task?: TaskItem | null
+  digitalHumanTask?: DigitalHumanGenerateResponse | null
+  assets: QuickRenderRecognizedAsset[]
+  summary: string
+  normalizedRequest?: unknown
+}
+
 export interface DigitalHumanVideoRequest {
   projectId?: number | null
   imageUrl: string
@@ -167,6 +232,7 @@ export interface CarSalesVideoRequest {
   callToAction?: string
   scriptContext?: string
   prompt?: string
+  subtitle?: string
   audioUrl?: string
   audioMode?: 'none' | 'post_mix' | 'reference' | 'model_native'
   bgmUrl?: string
