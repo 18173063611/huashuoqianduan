@@ -248,7 +248,6 @@ const menuItems = [
   { key: 'storyboard', label: '分镜生成', icon: menuIcons.storyboard },
   { key: 'voice', label: '声音生成', icon: menuIcons.voice },
   { key: 'avatar', label: '数字人形象', icon: menuIcons.avatar },
-  { key: 'quick-render', label: '一键成片', icon: menuIcons.render },
   { key: 'render', label: '视频制作', icon: menuIcons.render },
 ] as const
 
@@ -271,8 +270,7 @@ const flowSteps = [
   { key: 'storyboard', label: '脚本生成' },
   { key: 'voice', label: '声音合成' },
   { key: 'avatar', label: '数字人形象生成' },
-  { key: 'quick-render', label: '一键成片' },
-  { key: 'render', label: '手动装配' },
+  { key: 'render', label: '视频制作' },
 ] as const
 
 const router = useRouter()
@@ -315,8 +313,7 @@ const stepIndexMap: Record<string, number> = {
   storyboard: 1,
   voice: 2,
   avatar: 3,
-  'quick-render': 4,
-  render: 5,
+  render: 4,
   AssetCenter: -1,
 }
 

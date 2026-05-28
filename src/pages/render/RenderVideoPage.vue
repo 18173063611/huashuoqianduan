@@ -1,17 +1,35 @@
 <template>
   <div class="render-video-page app-page-stack">
     <header class="render-head">
-      <h1>视频合成</h1>
-      <p>
-        基于火山方舟 Seedance 系列模型，通过文字或图片生成短视频。后端同步轮询任务，
-        生成耗时通常 1~3 分钟，期间请保持页面打开。
-      </p>
+      <div>
+        <h1>视频制作</h1>
+        <p>
+          一键成片适合直接上传素材包自动判断；手动制作保留完整参数控制，适合精修分镜、口播和成片一致性。
+        </p>
+      </div>
       <div class="render-mode-switch" aria-label="视频制作模式">
-        <RouterLink to="/quick-render">一键成片</RouterLink>
-        <span>手动装配</span>
+        <button
+          type="button"
+          :class="{ active: productionMode === 'quick' }"
+          :disabled="busy || seedanceSubmitInFlight"
+          @click="setProductionMode('quick')"
+        >
+          一键成片
+        </button>
+        <button
+          type="button"
+          :class="{ active: productionMode === 'manual' }"
+          :disabled="busy || seedanceSubmitInFlight"
+          @click="setProductionMode('manual')"
+        >
+          手动制作
+        </button>
       </div>
     </header>
 
+    <QuickRenderPage v-if="productionMode === 'quick'" embedded />
+
+    <template v-else>
     <section class="app-card render-input">
       <div class="app-section-title">
         <span>1</span>
@@ -168,6 +186,12 @@
         </template>
 
         <template v-if="mainTab === 'carSales'">
+          <div class="render-car-workflow-strip" aria-label="视频制作主流程">
+            <span><strong>1</strong>素材</span>
+            <span><strong>2</strong>分镜</span>
+            <span><strong>3</strong>口播</span>
+            <small>配音、BGM、数字人和已有视频素材按需展开</small>
+          </div>
           <div class="render-digital-workspace">
               <section class="render-digital-section">
               <h3>车辆图片</h3>
@@ -257,11 +281,11 @@
               >
                 添加车辆图片
               </button>
-              <div class="render-scene-material-block">
-                <div class="render-scene-material-head">
+              <details class="render-scene-material-block render-optional-group">
+                <summary class="render-scene-material-head">
                   <strong>场景图片</strong>
                   <span>用于替换分镜里的展厅、道路、门店等地点，车辆与人物仍由上方素材控制。</span>
-                </div>
+                </summary>
                 <AssetPicker
                   title="从资产中心选择场景图片"
                   asset-type="IMAGE"
@@ -326,7 +350,7 @@
                 >
                   添加场景图片
                 </button>
-              </div>
+              </details>
               <div class="render-car-bundle-save">
                 <label>
                   <span>加入车型素材包</span>
@@ -367,7 +391,7 @@
             </section>
 
             <section class="render-digital-section">
-              <h3>复用前序资产</h3>
+              <h3>分镜与口播</h3>
               <AssetPicker
                 title="分镜生成结果（控制段落节奏）"
                 asset-type="JSON"
@@ -398,64 +422,72 @@
                 <span>{{ carBenchmarkUploading ? '上传中...' : '上传爆款对标文案' }}</span>
                 <small>{{ carBenchmarkUploadName || '支持 JSON / TXT / MD；不上传音频时可用它生成口播和音频' }}</small>
               </label>
-              <AssetPicker
-                title="口播/配音音频"
-                asset-type="AUDIO"
-                :selected-url="carAudioUrl"
-                :source-types="['TTS_GENERATE', 'VOICE_SAMPLE']"
-                :role-options="CAR_VOICE_AUDIO_ROLE_OPTIONS"
-                source-hint="口播音频会作为字幕、口型和节奏的主导来源"
-                placeholder="搜索口播音频资产..."
-                @select="handleCarAudioAssetSelect"
-              />
-              <label class="render-upload-audio" :class="{ disabled: busy || carAudioUploading }">
-                <input
-                  type="file"
-                  accept="audio/*"
-                  :disabled="busy || carAudioUploading"
-                  @change="handleCarAudioUpload"
-                />
-                <span>{{ carAudioUploading ? '上传中...' : '上传本地口播' }}</span>
-                <small>{{ carAudioUploadName || '用于口播、字幕和口型；BGM 请在下方单独选择' }}</small>
-              </label>
-              <div class="render-audio-mode">
-                <button
-                  type="button"
-                  :class="{ active: carAudioMode === 'none' }"
-                  :disabled="busy"
-                  @click="setCarAudioMode('none')"
-                >
-                  不使用音频
-                </button>
-                <button
-                  type="button"
-                  :class="{ active: carAudioMode === 'model_native' }"
-                  :disabled="busy"
-                  title="不调用音色库，直接把口播文案交给视频模型生成匹配的画面和原生音频"
-                  @click="setCarAudioMode('model_native')"
-                >
-                  文案生成音视频
-                </button>
-                <button
-                  type="button"
-                  :class="{ active: carAudioMode === 'post_mix' }"
-                  :disabled="busy || !carAudioUrl"
-                  title="生成画面后，用该口播音频替换最终成片音轨"
-                  @click="setCarAudioMode('post_mix')"
-                >
-                  后期口播配音
-                </button>
-                <button
-                  type="button"
-                  :class="{ active: carAudioMode === 'reference' }"
-                  :disabled="busy || !carAudioUrl.trim()"
-                  :title="audioReferenceHint"
-                  @click="setCarAudioMode('reference')"
-                >
-                  参考音频生成
-                </button>
-              </div>
-              <p class="app-muted render-audio-hint">{{ audioReferenceHint }}</p>
+              <details class="render-optional-group">
+                <summary>
+                  <span>可选配音</span>
+                  <small>默认按口播文案驱动模型；已有音频时再展开配置。</small>
+                </summary>
+                <div class="render-optional-body">
+                  <AssetPicker
+                    title="口播/配音音频"
+                    asset-type="AUDIO"
+                    :selected-url="carAudioUrl"
+                    :source-types="['TTS_GENERATE', 'VOICE_SAMPLE']"
+                    :role-options="CAR_VOICE_AUDIO_ROLE_OPTIONS"
+                    source-hint="口播音频会作为字幕、口型和节奏的主导来源"
+                    placeholder="搜索口播音频资产..."
+                    @select="handleCarAudioAssetSelect"
+                  />
+                  <label class="render-upload-audio" :class="{ disabled: busy || carAudioUploading }">
+                    <input
+                      type="file"
+                      accept="audio/*"
+                      :disabled="busy || carAudioUploading"
+                      @change="handleCarAudioUpload"
+                    />
+                    <span>{{ carAudioUploading ? '上传中...' : '上传本地口播' }}</span>
+                    <small>{{ carAudioUploadName || '用于口播、字幕和口型；BGM 请在下方单独选择' }}</small>
+                  </label>
+                  <div class="render-audio-mode">
+                    <button
+                      type="button"
+                      :class="{ active: carAudioMode === 'none' }"
+                      :disabled="busy"
+                      @click="setCarAudioMode('none')"
+                    >
+                      不使用音频
+                    </button>
+                    <button
+                      type="button"
+                      :class="{ active: carAudioMode === 'model_native' }"
+                      :disabled="busy"
+                      title="不调用音色库，直接把口播文案交给视频模型生成匹配的画面和原生音频"
+                      @click="setCarAudioMode('model_native')"
+                    >
+                      文案生成音视频
+                    </button>
+                    <button
+                      type="button"
+                      :class="{ active: carAudioMode === 'post_mix' }"
+                      :disabled="busy || !carAudioUrl"
+                      title="生成画面后，用该口播音频替换最终成片音轨"
+                      @click="setCarAudioMode('post_mix')"
+                    >
+                      后期口播配音
+                    </button>
+                    <button
+                      type="button"
+                      :class="{ active: carAudioMode === 'reference' }"
+                      :disabled="busy || !carAudioUrl.trim()"
+                      :title="audioReferenceHint"
+                      @click="setCarAudioMode('reference')"
+                    >
+                      参考音频生成
+                    </button>
+                  </div>
+                  <p class="app-muted render-audio-hint">{{ audioReferenceHint }}</p>
+                </div>
+              </details>
               <section v-if="usesModelNativeVoiceover()" class="render-tts-style-panel" aria-label="文案驱动音视频设置">
                 <div class="render-tts-source">
                   <span>口播文案来源</span>
@@ -487,8 +519,17 @@
                   </div>
                   <small>{{ carVoiceTextSourceHint }}</small>
                 </div>
-                <div class="render-tts-controls">
+                <div v-if="shouldShowNativeVoiceLanguagePanel" class="render-tts-controls">
                   <div class="render-form-field">
+                    <label>讲述语言</label>
+                    <select v-model="carNativeVoiceLanguage" :disabled="busy">
+                      <option v-for="item in CAR_NATIVE_VOICE_LANGUAGE_OPTIONS" :key="item.value" :value="item.value">
+                        {{ item.label }}
+                      </option>
+                    </select>
+                    <small>{{ carNativeVoiceLanguageHint }}</small>
+                  </div>
+                  <div v-if="shouldShowNativeVoiceStylePanel" class="render-form-field">
                     <label>口播风格</label>
                     <select v-model="carNativeVoiceStyle" :disabled="busy">
                       <option v-for="item in CAR_NATIVE_VOICE_STYLE_OPTIONS" :key="item.value" :value="item.value">
@@ -497,7 +538,7 @@
                     </select>
                     <small>{{ carNativeVoiceStyleHint }}</small>
                   </div>
-                  <div class="render-form-field">
+                  <div v-if="shouldShowNativeVoiceStylePanel" class="render-form-field">
                     <label>节奏控制</label>
                     <select v-model="carNativeSpeechStyle" :disabled="busy">
                       <option v-for="item in CAR_NATIVE_SPEECH_STYLE_OPTIONS" :key="item.value" :value="item.value">
@@ -507,7 +548,7 @@
                     <small>{{ carNativeSpeechStyleHint }}</small>
                   </div>
                 </div>
-                <section class="render-tts-script-panel" aria-label="完整口播台词">
+                <section v-if="shouldShowNativeVoiceStylePanel" class="render-tts-script-panel" aria-label="完整口播台词">
                   <div class="render-tts-script-head">
                     <strong>完整口播台词</strong>
                     <span>{{ modelNativeVoiceTextPreview.length }} 字</span>
@@ -516,7 +557,7 @@
                     {{ modelNativeVoiceTextPreview || '暂无可用口播台词' }}
                   </p>
                 </section>
-                <section class="render-tts-script-panel" aria-label="分镜台词结构">
+                <section v-if="shouldShowSceneVoiceStructure" class="render-tts-script-panel" aria-label="分镜台词结构">
                   <div class="render-tts-script-head">
                     <strong>分镜台词结构</strong>
                     <span>{{ carSceneVoiceStructurePreview.length }} 段</span>
@@ -536,6 +577,9 @@
                     </article>
                   </div>
                 </section>
+                <p v-if="!shouldShowNativeVoiceStylePanel" class="render-tts-empty">
+                  上传或选择口播文案后展示音色、语速和分段台词，避免无内容时干扰判断。
+                </p>
               </section>
               <div class="render-voice-policy" :class="carVoicePolicyLevel">
                 <strong>{{ carVoicePolicyTitle }}</strong>
@@ -565,51 +609,66 @@
                   placeholder="输入或粘贴自定义字幕内容"
                 />
               </div>
-              <AssetPicker
-                title="背景音乐 BGM"
-                asset-type="AUDIO"
-                :selected-url="carBgmUrl"
-                :source-types="['USER_UPLOAD']"
-                :role-options="CAR_BGM_AUDIO_ROLE_OPTIONS"
-                source-hint="BGM 只作为背景音乐，不参与口播、字幕或口型生成"
-                placeholder="搜索 BGM 音频资产..."
-                @select="handleCarBgmAssetSelect"
-              />
-              <label class="render-upload-audio" :class="{ disabled: busy || carBgmUploading }">
-                <input
-                  type="file"
-                  accept="audio/*"
-                  :disabled="busy || carBgmUploading"
-                  @change="handleCarBgmUpload"
-                />
-                <span>{{ carBgmUploading ? '上传中...' : '上传本地 BGM' }}</span>
-                <small>{{ carBgmUploadName || '仅混入背景音乐，不覆盖口播音频' }}</small>
-              </label>
-              <div class="render-host-toggle">
-                <span>数字人出镜</span>
-                <div class="render-host-options">
-                  <button
-                    type="button"
-                    :class="{ active: !carHostAppearanceEnabled }"
-                    :disabled="busy"
-                    @click="carHostAppearanceEnabled = false"
-                  >
-                    不出镜
-                  </button>
-                  <button
-                    type="button"
-                    :class="{ active: carHostAppearanceEnabled }"
-                    :disabled="busy"
-                    @click="carHostAppearanceEnabled = true"
-                  >
-                    虚拟人物出镜
-                  </button>
-                </div>
+              <div v-if="carSubtitleMode !== 'off'" class="render-form-field">
+                <label>字幕语言</label>
+                <select v-model="carSubtitleLanguage" :disabled="busy">
+                  <option v-for="item in carSubtitleLanguageOptions" :key="item.value" :value="item.value">
+                    {{ item.label }}
+                  </option>
+                </select>
+                <small>用于生成后自动识别字幕；自定义字幕会按原文烧录。</small>
               </div>
-              <p v-if="!carHostAppearanceEnabled" class="app-muted render-audio-hint">
-                不出镜时会强制提示模型不要出现人物；若文案或分镜包含人物描述，提交前会提示你切换或调整。
-              </p>
-              <template v-if="carHostAppearanceEnabled">
+              <details class="render-optional-group">
+                <summary>
+                  <span>更多可选素材</span>
+                  <small>BGM、数字人出镜和已有视频素材按需配置。</small>
+                </summary>
+                <div class="render-optional-body">
+                  <AssetPicker
+                    title="背景音乐 BGM"
+                    asset-type="AUDIO"
+                    :selected-url="carBgmUrl"
+                    :source-types="['USER_UPLOAD']"
+                    :role-options="CAR_BGM_AUDIO_ROLE_OPTIONS"
+                    source-hint="BGM 只作为背景音乐，不参与口播、字幕或口型生成"
+                    placeholder="搜索 BGM 音频资产..."
+                    @select="handleCarBgmAssetSelect"
+                  />
+                  <label class="render-upload-audio" :class="{ disabled: busy || carBgmUploading }">
+                    <input
+                      type="file"
+                      accept="audio/*"
+                      :disabled="busy || carBgmUploading"
+                      @change="handleCarBgmUpload"
+                    />
+                    <span>{{ carBgmUploading ? '上传中...' : '上传本地 BGM' }}</span>
+                    <small>{{ carBgmUploadName || '仅混入背景音乐，不覆盖口播音频' }}</small>
+                  </label>
+                  <div class="render-host-toggle">
+                    <span>数字人出镜</span>
+                    <div class="render-host-options">
+                      <button
+                        type="button"
+                        :class="{ active: !carHostAppearanceEnabled }"
+                        :disabled="busy"
+                        @click="carHostAppearanceEnabled = false"
+                      >
+                        不出镜
+                      </button>
+                      <button
+                        type="button"
+                        :class="{ active: carHostAppearanceEnabled }"
+                        :disabled="busy"
+                        @click="carHostAppearanceEnabled = true"
+                      >
+                        虚拟人物出镜
+                      </button>
+                    </div>
+                  </div>
+                  <p v-if="!carHostAppearanceEnabled" class="app-muted render-audio-hint">
+                    不出镜时会强制提示模型不要出现人物；若文案或分镜包含人物描述，提交前会提示你切换或调整。
+                  </p>
+                  <template v-if="carHostAppearanceEnabled">
                 <AssetPicker
                   title="数字人形象"
                   asset-type="IMAGE"
@@ -627,17 +686,19 @@
                   compact
                   @update="carHostImageUrl = $event"
                 />
-              </template>
-              <AssetPicker
-                title="已有视频素材"
-                asset-type="VIDEO"
-                :selected-url="carMaterialVideoUrl"
-                :source-types="['USER_UPLOAD', 'SEEDANCE_TEXT_VIDEO', 'SEEDANCE_FIRST_FRAME_VIDEO', 'SEEDANCE_FIRST_LAST_FRAME_VIDEO', 'SEEDANCE_REFERENCE_VIDEO', 'SEEDANCE_CAR_SALES_VIDEO']"
-                :role-options="CAR_VIDEO_ROLE_OPTIONS"
-                source-hint="选择上传或视频制作阶段产出的素材"
-                placeholder="搜索视频素材..."
-                @select="handleCarMaterialVideoAssetSelect"
-              />
+                  </template>
+                  <AssetPicker
+                    title="已有视频素材"
+                    asset-type="VIDEO"
+                    :selected-url="carMaterialVideoUrl"
+                    :source-types="['USER_UPLOAD', 'SEEDANCE_TEXT_VIDEO', 'SEEDANCE_FIRST_FRAME_VIDEO', 'SEEDANCE_FIRST_LAST_FRAME_VIDEO', 'SEEDANCE_REFERENCE_VIDEO', 'SEEDANCE_CAR_SALES_VIDEO']"
+                    :role-options="CAR_VIDEO_ROLE_OPTIONS"
+                    source-hint="选择上传或视频制作阶段产出的素材"
+                    placeholder="搜索视频素材..."
+                    @select="handleCarMaterialVideoAssetSelect"
+                  />
+                </div>
+              </details>
             </section>
           </div>
 
@@ -657,7 +718,7 @@
             </button>
           </section>
 
-          <div class="render-grid-two">
+          <div class="render-grid-three">
             <div class="render-form-field render-form-field-inline">
               <label>分段数量</label>
               <select :value="carSegmentCount" :disabled="busy" @change="handleCarSegmentCountChange">
@@ -669,6 +730,15 @@
               <label>出片时长</label>
               <strong class="render-duration-summary">{{ carSegmentDurationSummary }}</strong>
               <span class="app-muted render-duration-hint">{{ carDurationHint }}</span>
+            </div>
+            <div class="render-form-field render-form-field-inline">
+              <label>成片比例</label>
+              <select v-model="renderAspectRatio" :disabled="busy">
+                <option v-for="item in renderAspectRatioOptions" :key="item.value" :value="item.value">
+                  {{ item.label }}
+                </option>
+              </select>
+              <span class="app-muted render-duration-hint">{{ renderAspectRatioHint }}</span>
             </div>
           </div>
 
@@ -875,6 +945,16 @@
           <span class="app-muted render-duration-hint">{{ durationHint }}</span>
         </div>
 
+        <div v-if="mainTab !== 'digitalHuman' && mainTab !== 'carSales'" class="render-form-field render-form-field-inline">
+          <label>成片比例</label>
+          <select v-model="renderAspectRatio" :disabled="busy">
+            <option v-for="item in renderAspectRatioOptions" :key="item.value" :value="item.value">
+              {{ item.label }}
+            </option>
+          </select>
+          <span class="app-muted render-duration-hint">{{ renderAspectRatioHint }}</span>
+        </div>
+
         <div
           v-if="showModelSelector"
           class="render-form-field render-form-field-inline"
@@ -1063,14 +1143,17 @@
         </div>
       </div>
     </section>
+    </template>
   </div>
 </template>
 
 <script setup lang="ts">
 import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
+import { useRoute, useRouter } from 'vue-router'
 import { ElMessage } from 'element-plus'
 import AssetPicker from './AssetPicker.vue'
 import ImageInput from './ImageInput.vue'
+import QuickRenderPage from './QuickRenderPage.vue'
 import { useSmoothTaskProgress } from '../../composables/useSmoothTaskProgress'
 import { API_ORIGIN, getAuthToken } from '../../services/request'
 import BillingEstimateBanner from '../../components/business/BillingEstimateBanner.vue'
@@ -1106,8 +1189,11 @@ type CarAudioMode = 'none' | 'post_mix' | 'reference' | 'model_native'
 type CarVoicePolicy = 'user_audio' | 'model_native' | 'none'
 type CarVoiceTextSource = 'auto' | 'benchmark' | 'manual'
 type CarSubtitleMode = 'off' | 'auto' | 'custom'
+type NativeVoiceLanguage = 'zh-CN' | 'en-US'
 type SeedanceModelValue = 'doubao-seedance-1-5-pro-251215' | 'ep-20260512233524-85r4g'
 type CarMaterialGroup = 'exterior' | 'interior' | 'detail' | 'scene' | 'host'
+type RenderProductionMode = 'quick' | 'manual'
+type RenderAspectRatio = '9:16' | '16:9' | 'auto'
 
 interface ModelRequirement {
   model: SeedanceModelValue
@@ -1162,6 +1248,10 @@ const CAR_VIDEO_ROLE_OPTIONS = [
   { value: 'material_video', label: '视频素材' },
   { value: 'host_video', label: '数字人视频' },
   { value: 'reference_video', label: '参考视频' },
+]
+const CAR_NATIVE_VOICE_LANGUAGE_OPTIONS = [
+  { value: 'zh-CN', label: '中文讲述', hint: '按中文普通话讲述，适合国内销售口播' },
+  { value: 'en-US', label: '英语讲述', hint: '按自然英语讲述，中文文案会忠实转成英文表达' },
 ]
 const CAR_NATIVE_VOICE_STYLE_OPTIONS = [
   { value: 'natural_explain', label: '自然讲解', hint: '中性销售顾问，普通话清晰可信' },
@@ -1310,9 +1400,22 @@ const digitalHumanAudioTabs: Array<{ key: DigitalHumanAudioMode; label: string }
 ]
 const carSubtitleOptions: Array<{ key: CarSubtitleMode; label: string }> = [
   { key: 'off', label: '关闭' },
-  { key: 'auto', label: '自动生成' },
+  { key: 'auto', label: '自动字幕' },
   { key: 'custom', label: '自定义字幕' },
 ]
+const carSubtitleLanguageOptions = [
+  { value: 'zh-CN', label: '中文普通话' },
+  { value: 'en-US', label: '英语' },
+]
+const renderAspectRatioOptions: Array<{ value: RenderAspectRatio; label: string; hint: string }> = [
+  { value: '9:16', label: '竖屏 9:16', hint: '适合抖音、视频号、竖版信息流' },
+  { value: '16:9', label: '横屏 16:9', hint: '适合横版展示、门店大屏和通用素材' },
+  { value: 'auto', label: '跟随素材', hint: '交给模型按素材主体自动决定' },
+]
+
+const route = useRoute()
+const router = useRouter()
+const productionMode = ref<RenderProductionMode>(route.query.mode === 'quick' ? 'quick' : 'manual')
 
 const mainTab = ref<MainTab>('carSales')
 const imageSubTab = ref<ImageSubTab>('first')
@@ -1327,12 +1430,31 @@ watch(
   { immediate: true },
 )
 
+watch(
+  () => route.query.mode,
+  (mode) => {
+    productionMode.value = mode === 'quick' ? 'quick' : 'manual'
+  },
+)
+
+function setProductionMode(mode: RenderProductionMode) {
+  productionMode.value = mode
+  const query = { ...route.query }
+  if (mode === 'quick') {
+    query.mode = 'quick'
+  } else {
+    delete query.mode
+  }
+  void router.replace({ name: 'render', query })
+}
+
 const selectedModel = ref<SeedanceModelValue>('doubao-seedance-1-5-pro-251215')
 const modelDropdownOpen = ref(false)
 const modelDropdownRef = ref<HTMLElement | null>(null)
 
 const prompt = ref('')
 const duration = ref<number>(5)
+const renderAspectRatio = ref<RenderAspectRatio>('9:16')
 const firstFrame = ref('')
 const lastFrame = ref('')
 const referenceImages = ref<string[]>([''])
@@ -1379,10 +1501,12 @@ const carAudioMode = ref<CarAudioMode>('model_native')
 const carAudioUploading = ref(false)
 const carAudioUploadName = ref('')
 const carVoiceTextSource = ref<CarVoiceTextSource>('auto')
+const carNativeVoiceLanguage = ref<NativeVoiceLanguage>('zh-CN')
 const carNativeVoiceStyle = ref('natural_explain')
 const carNativeSpeechStyle = ref('natural')
 const carSubtitleMode = ref<CarSubtitleMode>('off')
 const carSubtitleText = ref('')
+const carSubtitleLanguage = ref('zh-CN')
 const carBgmUrl = ref('')
 const carBgmAssetId = ref<number | null>(null)
 const carBgmSourceType = ref('')
@@ -1519,6 +1643,14 @@ const carSegmentDurationOptions = computed(() =>
 const carDurationHint = computed(
   () => `${selectedSeedanceModel.value.label} 单段支持 4 ~ ${selectedSeedanceModel.value.maxDuration} 秒`,
 )
+
+const renderAspectRatioHint = computed(
+  () => renderAspectRatioOptions.find((item) => item.value === renderAspectRatio.value)?.hint || '',
+)
+
+function aspectRatioForRequest() {
+  return renderAspectRatio.value === 'auto' ? undefined : renderAspectRatio.value
+}
 
 const isSeedance2Selected = computed(() => selectedModel.value === SEEDANCE_2_MODEL)
 
@@ -1671,8 +1803,14 @@ function setCarAudioMode(mode: CarAudioMode) {
 const carNativeVoiceStyleLabel = computed(
   () => CAR_NATIVE_VOICE_STYLE_OPTIONS.find((item) => item.value === carNativeVoiceStyle.value)?.label || '自然讲解',
 )
+const carNativeVoiceLanguageLabel = computed(
+  () => CAR_NATIVE_VOICE_LANGUAGE_OPTIONS.find((item) => item.value === carNativeVoiceLanguage.value)?.label || '中文讲述',
+)
 const carNativeSpeechStyleLabel = computed(
   () => CAR_NATIVE_SPEECH_STYLE_OPTIONS.find((item) => item.value === carNativeSpeechStyle.value)?.label || '自然语速',
+)
+const carNativeVoiceLanguageHint = computed(
+  () => CAR_NATIVE_VOICE_LANGUAGE_OPTIONS.find((item) => item.value === carNativeVoiceLanguage.value)?.hint || '',
 )
 const carNativeVoiceStyleHint = computed(
   () => CAR_NATIVE_VOICE_STYLE_OPTIONS.find((item) => item.value === carNativeVoiceStyle.value)?.hint || '',
@@ -1681,7 +1819,7 @@ const carNativeSpeechStyleHint = computed(
   () => CAR_NATIVE_SPEECH_STYLE_OPTIONS.find((item) => item.value === carNativeSpeechStyle.value)?.hint || '',
 )
 const carNativeVoiceStyleSummary = computed(
-  () => `${carNativeVoiceStyleLabel.value} / ${carNativeSpeechStyleLabel.value}`,
+  () => `${carNativeVoiceLanguageLabel.value} / ${carNativeVoiceStyleLabel.value} / ${carNativeSpeechStyleLabel.value}`,
 )
 
 const carVoiceTextSourceLabel = computed(() => {
@@ -3160,6 +3298,18 @@ const carSceneVoiceStructurePreview = computed(() =>
     duration: scene.duration || carSegmentDuration.value,
   })),
 )
+const hasExplicitNativeVoiceText = computed(() => {
+  if (carVoiceTextSource.value === 'benchmark') return Boolean(carBenchmarkVoiceText.value.trim())
+  if (carVoiceTextSource.value === 'manual') return Boolean(carVoiceContext.value.trim())
+  return false
+})
+const shouldShowNativeVoiceStylePanel = computed(() =>
+  usesModelNativeVoiceover() && hasExplicitNativeVoiceText.value,
+)
+const shouldShowNativeVoiceLanguagePanel = computed(() => usesModelNativeVoiceover())
+const shouldShowSceneVoiceStructure = computed(() =>
+  shouldShowNativeVoiceStylePanel.value && Boolean(carStoryboardContext.value.trim()) && carSceneVoiceStructurePreview.value.length > 0,
+)
 
 const storyboardIgnoredFields = computed(() => collectStoryboardIgnoredFields(carStoryboardContext.value))
 const storyboardHasOldLines = computed(() => storyboardIgnoredFields.value.length > 0)
@@ -3251,9 +3401,10 @@ const carAudioSourceLabel = computed(() => {
 const carBgmSourceLabel = computed(() => (carBgmUrl.value.trim() ? '已选择 BGM' : '无'))
 const carSubtitleSourceLabel = computed(() => {
   const suffix = storyboardHasOldLines.value ? '（不使用分镜旧台词）' : ''
+  const language = carSubtitleLanguageOptions.find((item) => item.value === carSubtitleLanguage.value)?.label || '默认语言'
   if (carSubtitleMode.value === 'off') return '关闭'
-  if (carSubtitleMode.value === 'auto') return `自动生成${suffix}`
-  return carSubtitleText.value.trim() ? `自定义字幕${suffix}` : '自定义字幕（未填写）'
+  if (carSubtitleMode.value === 'auto') return `自动字幕 / ${language}${suffix}`
+  return carSubtitleText.value.trim() ? `自定义字幕 / ${language}${suffix}` : '自定义字幕（未填写）'
 })
 
 const carVisualSourceLabel = computed(() => {
@@ -3772,11 +3923,14 @@ async function handleGenerate() {
         scriptContext: buildCarScriptContext() || undefined,
         prompt: prompt.value.trim() || undefined,
         subtitle: buildCarSubtitleValue(),
+        subtitleMode: carSubtitleMode.value,
+        subtitleLanguage: carSubtitleLanguage.value,
         audioUrl: hasSelectedVoiceAudio() ? carAudioUrl.value.trim() : undefined,
         audioMode: carAudioModeForRequest(),
         bgmUrl: carBgmUrl.value.trim() || undefined,
         voicePolicy: carVoicePolicyForRequest(),
         finalVoiceText: carFinalVoiceTextForRequest(),
+        nativeVoiceLanguage: usesModelNativeVoiceover() ? carNativeVoiceLanguage.value : undefined,
         nativeVoiceStyle: usesModelNativeVoiceover() ? carNativeVoiceStyle.value : undefined,
         nativeSpeechStyle: usesModelNativeVoiceover() ? carNativeSpeechStyle.value : undefined,
         ignoredStoryboardFields: storyboardIgnoredFields.value,
@@ -3785,6 +3939,7 @@ async function handleGenerate() {
         hostVideoUrl: carMaterialVideoUrl.value.trim() || undefined,
         sourceAssetIds: carSourceAssetIds(),
         renderMode: 'manual',
+        aspectRatio: aspectRatioForRequest(),
         assetRoleBindings: buildCarAssetRoleBindings(),
         segmentCount: carSegmentCount.value,
         segmentDuration: carSegmentDuration.value,
@@ -3797,6 +3952,7 @@ async function handleGenerate() {
       const submitted = await generateTextToVideo({
         prompt: prompt.value.trim(),
         duration: duration.value,
+        ratio: aspectRatioForRequest(),
         model: selectedModel.value,
       })
       submittedTaskId = submitted.taskId
@@ -3806,6 +3962,7 @@ async function handleGenerate() {
         imageUrl: firstFrame.value.trim(),
         prompt: prompt.value.trim() || undefined,
         duration: duration.value,
+        ratio: aspectRatioForRequest(),
         model: selectedModel.value,
       })
       submittedTaskId = submitted.taskId
@@ -3816,6 +3973,7 @@ async function handleGenerate() {
         lastFrameUrl: lastFrame.value.trim(),
         prompt: prompt.value.trim() || undefined,
         duration: duration.value,
+        ratio: aspectRatioForRequest(),
         model: selectedModel.value,
       })
       submittedTaskId = submitted.taskId
@@ -3826,6 +3984,8 @@ async function handleGenerate() {
         imageUrls: urls,
         prompt: prompt.value.trim() || undefined,
         duration: duration.value,
+        ratio: aspectRatioForRequest(),
+        model: selectedModel.value,
       })
       submittedTaskId = submitted.taskId
       submittedStatus = String(submitted.status)
@@ -4006,6 +4166,13 @@ onBeforeUnmount(() => {
   gap: 16px;
 }
 
+.render-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 18px;
+}
+
 .render-head h1 {
   margin: 0 0 8px;
   color: #151a2d;
@@ -4022,30 +4189,37 @@ onBeforeUnmount(() => {
 
 .render-mode-switch {
   display: inline-flex;
+  flex: 0 0 auto;
   gap: 6px;
-  margin-top: 12px;
   border: 1px solid #e7eaf2;
   border-radius: 8px;
   background: #fff;
   padding: 4px;
+  box-shadow: 0 10px 24px rgba(15, 23, 42, 0.06);
 }
 
-.render-mode-switch a,
-.render-mode-switch span {
+.render-mode-switch button {
   display: inline-flex;
   min-height: 30px;
   align-items: center;
+  border: 0;
   border-radius: 6px;
+  background: transparent;
   padding: 0 12px;
   color: #4f586c;
   font-size: 13px;
   font-weight: 800;
-  text-decoration: none;
+  cursor: pointer;
 }
 
-.render-mode-switch span {
+.render-mode-switch button.active {
   background: #f5f3ff;
   color: #5e50df;
+}
+
+.render-mode-switch button:disabled {
+  cursor: not-allowed;
+  opacity: 0.6;
 }
 
 .render-project-hint {
@@ -4174,6 +4348,106 @@ onBeforeUnmount(() => {
   color: #2d3446;
   font-size: 14px;
   font-weight: 850;
+}
+
+.render-car-workflow-strip {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(120px, 1fr)) minmax(220px, 1.4fr);
+  gap: 10px;
+  align-items: center;
+  border: 1px solid #e3e7ef;
+  border-radius: 8px;
+  background: #fff;
+  padding: 10px;
+}
+
+.render-car-workflow-strip span {
+  display: inline-flex;
+  min-height: 38px;
+  align-items: center;
+  gap: 8px;
+  border-radius: 8px;
+  background: #f6f8fc;
+  color: #344054;
+  padding: 0 12px;
+  font-size: 13px;
+  font-weight: 900;
+}
+
+.render-car-workflow-strip strong {
+  display: inline-grid;
+  width: 22px;
+  height: 22px;
+  place-items: center;
+  border-radius: 999px;
+  background: #635bff;
+  color: #fff;
+  font-size: 12px;
+}
+
+.render-car-workflow-strip small {
+  color: #667085;
+  font-size: 12.5px;
+  line-height: 1.5;
+}
+
+.render-optional-group {
+  display: grid;
+  gap: 12px;
+  border: 1px solid #edf0f6;
+  border-radius: 8px;
+  background: #fbfcff;
+  padding: 12px;
+}
+
+.render-optional-group summary {
+  display: flex;
+  min-width: 0;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  cursor: pointer;
+  list-style: none;
+}
+
+.render-optional-group summary::-webkit-details-marker {
+  display: none;
+}
+
+.render-optional-group summary::after {
+  content: '展开';
+  flex: 0 0 auto;
+  border-radius: 999px;
+  background: #eef0f6;
+  color: #667085;
+  padding: 3px 9px;
+  font-size: 11px;
+  font-weight: 900;
+}
+
+.render-optional-group[open] summary::after {
+  content: '收起';
+}
+
+.render-optional-group summary span {
+  color: #344054;
+  font-size: 13px;
+  font-weight: 900;
+}
+
+.render-optional-group summary small {
+  min-width: 0;
+  color: #98a2b3;
+  font-size: 12px;
+  font-weight: 750;
+  line-height: 1.5;
+}
+
+.render-optional-body {
+  display: grid;
+  gap: 12px;
+  padding-top: 10px;
+  border-top: 1px solid #edf0f6;
 }
 
 .render-digital-options {
@@ -4351,13 +4625,25 @@ onBeforeUnmount(() => {
   gap: 16px;
 }
 
+.render-grid-three {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 16px;
+}
+
 @media (max-width: 720px) {
+  .render-head {
+    flex-direction: column;
+  }
+
   .digital-human-guide,
-  .render-digital-workspace {
+  .render-digital-workspace,
+  .render-car-workflow-strip {
     grid-template-columns: 1fr;
   }
 
   .render-grid-two,
+  .render-grid-three,
   .render-basis-grid {
     grid-template-columns: 1fr;
   }
@@ -4604,9 +4890,20 @@ onBeforeUnmount(() => {
   line-height: 1.6;
 }
 
+.render-tts-empty {
+  margin: 0;
+  border: 1px dashed #d8d2ff;
+  border-radius: 8px;
+  background: #fbfaff;
+  color: #667085;
+  padding: 10px 12px;
+  font-size: 12.5px;
+  line-height: 1.6;
+}
+
 .render-tts-controls {
   display: grid;
-  grid-template-columns: minmax(0, 1.25fr) minmax(180px, 0.75fr);
+  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
   gap: 14px;
   align-items: start;
 }

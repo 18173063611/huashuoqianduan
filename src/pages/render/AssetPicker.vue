@@ -148,6 +148,7 @@ const emptyLabel = computed(() => {
   if (props.assetType === 'AUDIO') return '从资产中心选择音频'
   if (props.assetType === 'VIDEO') return '从资产中心选择视频'
   if (props.assetType === 'JSON') return '从资产中心选择脚本/分镜'
+  if (props.assetType === 'TEXT') return '从资产中心选择文案/字幕'
   return '从资产中心选择资产'
 })
 const selectedLabel = computed(() => {

@@ -9,7 +9,6 @@ export type WorkbenchRouteName =
   | 'storyboard'
   | 'voice'
   | 'avatar'
-  | 'quick-render'
   | 'render'
   | 'AssetCenter'
 
@@ -143,9 +142,7 @@ const routes: RouteRecordRaw[] = [
       },
       {
         path: 'quick-render',
-        name: 'quick-render',
-        component: () => import('../pages/render/QuickRenderPage.vue'),
-        meta: { ...businessRouteMeta, menuKey: 'quick-render' },
+        redirect: { name: 'render', query: { mode: 'quick' } },
       },
       {
         path: 'render',

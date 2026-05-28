@@ -1,6 +1,6 @@
 <template>
-  <div class="quick-render-page app-page-stack">
-    <header class="quick-head">
+  <div class="quick-render-page app-page-stack" :class="{ 'quick-render-page--embedded': props.embedded }">
+    <header v-if="!props.embedded" class="quick-head">
       <div>
         <h1>一键成片</h1>
         <p>上传素材包，确认识别结果后直接生成视频。</p>
@@ -20,17 +20,68 @@
         </div>
       </div>
 
-      <label class="quick-upload" :class="{ disabled: uploading || busy }">
-        <input
-          type="file"
-          multiple
-          accept="image/*,audio/*,video/*,.json,.txt,.srt"
-          :disabled="uploading || busy"
-          @change="handleFilesSelected"
+      <div class="quick-source-grid">
+        <label class="quick-upload" :class="{ disabled: uploading || busy }">
+          <input
+            type="file"
+            multiple
+            accept="image/*,audio/*,video/*,.json,.txt,.srt"
+            :disabled="uploading || busy"
+            @change="handleFilesSelected"
+          />
+          <strong>{{ uploading ? '上传中...' : '本地上传素材' }}</strong>
+          <small>上传后自动保存到资产中心，并参与一键成片识别。</small>
+        </label>
+        <AssetPicker
+          title="资产中心图片"
+          asset-type="IMAGE"
+          :selected-url="quickPickedImageUrl"
+          :role-options="quickImageRoleOptions"
+          placeholder="搜索图片素材..."
+          @select="handleAssetCenterSelect"
         />
-        <strong>{{ uploading ? '上传中...' : '选择素材文件' }}</strong>
-        <small>素材会先保存到资产中心，再用于一键成片识别。</small>
-      </label>
+        <AssetPicker
+          title="资产中心车型素材包"
+          asset-type="JSON"
+          :selected-url="quickPickedCarBundleUrl"
+          :asset-roles="['car_model_bundle']"
+          :role-options="quickCarBundleRoleOptions"
+          placeholder="搜索车型素材包..."
+          @select="handleAssetCenterSelect"
+        />
+        <AssetPicker
+          title="资产中心口播/音频"
+          asset-type="AUDIO"
+          :selected-url="quickPickedAudioUrl"
+          :role-options="quickAudioRoleOptions"
+          placeholder="搜索口播、参考音频或 BGM..."
+          @select="handleAssetCenterSelect"
+        />
+        <AssetPicker
+          title="资产中心分镜/文案"
+          asset-type="JSON"
+          :selected-url="quickPickedJsonUrl"
+          :role-options="quickJsonRoleOptions"
+          placeholder="搜索分镜、对标文案..."
+          @select="handleAssetCenterSelect"
+        />
+        <AssetPicker
+          title="资产中心文案/TXT"
+          asset-type="TEXT"
+          :selected-url="quickPickedTextUrl"
+          :role-options="quickTextRoleOptions"
+          placeholder="搜索口播文案、字幕文本..."
+          @select="handleAssetCenterSelect"
+        />
+        <AssetPicker
+          title="资产中心视频"
+          asset-type="VIDEO"
+          :selected-url="quickPickedVideoUrl"
+          :role-options="quickVideoRoleOptions"
+          placeholder="搜索视频素材..."
+          @select="handleAssetCenterSelect"
+        />
+      </div>
 
       <div v-if="materials.length" class="quick-materials">
         <article v-for="item in materials" :key="item.asset.assetId" class="quick-material">
@@ -38,11 +89,10 @@
             <strong>{{ item.asset.fileName }}</strong>
             <small>{{ item.asset.assetType }} · {{ formatSize(item.asset.fileSize) }}</small>
           </div>
-          <select v-model="item.role" :disabled="busy">
-            <option v-for="role in roleOptions" :key="role.value" :value="role.value">
-              {{ role.label }}
-            </option>
-          </select>
+          <div class="quick-material-role">
+            <strong>{{ roleLabel(item.role) }}</strong>
+            <small>系统自动识别</small>
+          </div>
           <button type="button" :disabled="busy" @click="removeMaterial(item.asset.assetId)">移除</button>
         </article>
       </div>
@@ -52,68 +102,64 @@
       <div class="app-section-title">
         <span>2</span>
         <div>
-          <h2>成片设置</h2>
-          <p class="app-muted">保持自动即可，只有目标非常明确时再手动指定。</p>
+          <h2>智能成片判断</h2>
+          <p class="app-muted">系统会按素材类型、文件名和文本内容自动判断链路、字幕、口播和段落数量。</p>
         </div>
       </div>
 
-      <div class="quick-grid">
-        <div class="quick-field">
-          <label>成片目标</label>
-          <select v-model="intent" :disabled="busy">
-            <option value="auto">自动判断</option>
-            <option value="car_sales">汽车销售</option>
-            <option value="general_video">通用短视频</option>
-          </select>
+      <div class="quick-smart-grid">
+        <div>
+          <span>成片目标</span>
+          <strong>{{ routeLabel }}</strong>
+          <small>{{ routeHint }}</small>
         </div>
+        <div>
+          <span>口播/BGM</span>
+          <strong>{{ audioDecisionLabel }}</strong>
+          <small>{{ audioDecisionHint }}</small>
+        </div>
+        <div>
+          <span>字幕</span>
+          <strong>{{ subtitleLabel }}</strong>
+          <small>{{ subtitleDecisionHint }}</small>
+        </div>
+        <div>
+          <span>讲述语言</span>
+          <strong>{{ voiceLanguageLabel }}</strong>
+          <small>用于文案生成音视频的模型原生口播</small>
+        </div>
+        <div>
+          <span>段落</span>
+          <strong>{{ totalDuration }} 秒</strong>
+          <small>{{ segmentCount }} 段，每段 {{ segmentDuration }} 秒</small>
+        </div>
+      </div>
 
+      <div class="quick-grid quick-grid-compact">
         <div class="quick-field">
           <label>成片比例</label>
           <select v-model="aspectRatio" :disabled="busy">
             <option value="9:16">竖屏 9:16</option>
             <option value="16:9">横屏 16:9</option>
-            <option value="auto">自动</option>
+            <option value="auto">跟随素材</option>
           </select>
         </div>
-
         <div class="quick-field">
-          <label>字幕</label>
-          <select v-model="subtitleMode" :disabled="busy">
-            <option value="off">关闭</option>
-            <option value="auto">自动</option>
-            <option value="upload">上传</option>
-          </select>
-        </div>
-
-        <div class="quick-field">
-          <label>BGM</label>
-          <select v-model="audioPolicy" :disabled="busy">
-            <option value="auto">自动</option>
-            <option value="none">无</option>
-            <option value="bgm">从素材使用 BGM</option>
-            <option value="voiceover">优先口播</option>
-          </select>
-        </div>
-
-        <div class="quick-field">
-          <label>成片时长</label>
-          <select v-model.number="segmentCount" :disabled="busy">
-            <option v-for="option in segmentOptions" :key="option.count" :value="option.count">
-              {{ option.label }}
+          <label>讲述语言</label>
+          <select v-model="voiceLanguage" :disabled="busy">
+            <option v-for="item in voiceLanguageOptions" :key="item.value" :value="item.value">
+              {{ item.label }}
             </option>
           </select>
         </div>
-      </div>
-
-      <div v-if="subtitleMode === 'upload'" class="quick-field">
-        <label>自定义字幕</label>
-        <textarea
-          v-model.trim="customSubtitle"
-          :disabled="busy"
-          maxlength="2000"
-          rows="4"
-          placeholder="请输入需要烧录到视频中的字幕内容"
-        />
+        <div class="quick-field">
+          <label>字幕语言</label>
+          <select v-model="subtitleLanguage" :disabled="busy || subtitleMode === 'off'">
+            <option v-for="item in subtitleLanguageOptions" :key="item.value" :value="item.value">
+              {{ item.label }}
+            </option>
+          </select>
+        </div>
       </div>
 
       <div class="quick-field">
@@ -205,17 +251,26 @@ import type { AssetItem } from '../../types/assetTypes'
 import type {
   DigitalHumanTaskDetailResponse,
   QuickRenderAssetRole,
-  QuickRenderIntent,
   QuickRenderRequest,
   QuickRenderResponse,
   VideoTaskVO,
 } from '../../types/videoTypes'
+import AssetPicker from './AssetPicker.vue'
 
 interface QuickMaterial {
   asset: AssetItem
   role: QuickRenderAssetRole
   textContent?: string
 }
+
+interface QuickFileLike {
+  name: string
+  type?: string | null
+}
+
+const props = withDefaults(defineProps<{ embedded?: boolean }>(), {
+  embedded: false,
+})
 
 const roleOptions: Array<{ value: QuickRenderAssetRole; label: string }> = [
   { value: 'car_exterior_front', label: '车头外观' },
@@ -238,21 +293,44 @@ const roleOptions: Array<{ value: QuickRenderAssetRole; label: string }> = [
   { value: 'voice_script', label: '口播文案' },
   { value: 'storyboard_json', label: '分镜 JSON' },
   { value: 'benchmark_json', label: '对标 JSON' },
+  { value: 'car_model_bundle', label: '车型素材包' },
   { value: 'material_video', label: '视频素材' },
   { value: 'host_video', label: '口播视频' },
   { value: 'reference_video', label: '参考视频' },
   { value: 'material', label: '普通素材' },
 ]
 
+const quickImageRoleOptions = roleOptions.filter((item) =>
+  item.value.startsWith('car_') || item.value.startsWith('scene_') || item.value === 'host_image',
+)
+const quickAudioRoleOptions = roleOptions.filter((item) =>
+  ['voiceover', 'reference_audio', 'bgm'].includes(item.value),
+)
+const quickJsonRoleOptions = roleOptions.filter((item) =>
+  ['storyboard_json', 'benchmark_json', 'voice_script', 'subtitle'].includes(item.value),
+)
+const quickCarBundleRoleOptions = roleOptions.filter((item) =>
+  item.value === 'car_model_bundle',
+)
+const quickTextRoleOptions = roleOptions.filter((item) =>
+  ['voice_script', 'subtitle'].includes(item.value),
+)
+const quickVideoRoleOptions = roleOptions.filter((item) =>
+  ['material_video', 'host_video', 'reference_video'].includes(item.value),
+)
+
 const materials = ref<QuickMaterial[]>([])
-const intent = ref<QuickRenderIntent>('auto')
+const quickPickedImageUrl = ref('')
+const quickPickedCarBundleUrl = ref('')
+const quickPickedAudioUrl = ref('')
+const quickPickedJsonUrl = ref('')
+const quickPickedTextUrl = ref('')
+const quickPickedVideoUrl = ref('')
 const aspectRatio = ref<'9:16' | '16:9' | 'auto'>('9:16')
-const subtitleMode = ref<'off' | 'auto' | 'upload'>('auto')
-const customSubtitle = ref('')
-const audioPolicy = ref<'auto' | 'none' | 'voiceover' | 'bgm'>('auto')
+const subtitleLanguage = ref('zh-CN')
+const voiceLanguage = ref<'zh-CN' | 'en-US'>('zh-CN')
 const goalText = ref('')
 const segmentDuration = 8
-const segmentCount = ref(4)
 const uploading = ref(false)
 const busy = ref(false)
 const errorMessage = ref('')
@@ -263,20 +341,41 @@ let stopTracking: (() => void) | null = null
 let digitalHumanPollTimer: number | null = null
 
 const canSubmit = computed(() => materials.value.length > 0 && !uploading.value)
-const segmentOptions = computed(() =>
-  Array.from({ length: 6 }, (_, idx) => {
-    const count = idx + 1
-    return {
-      count,
-      label: `${count * segmentDuration} 秒（${count} 段）`,
-    }
-  }),
+const imageCount = computed(() => materials.value.filter((item) => item.asset.assetType === 'IMAGE').length)
+const videoCount = computed(() => materials.value.filter((item) => item.asset.assetType === 'VIDEO').length)
+const hasVoiceMaterial = computed(() =>
+  materials.value.some((item) => item.role === 'voiceover' || item.role === 'reference_audio' || item.role === 'voice_script'),
 )
+const hasBgmMaterial = computed(() => materials.value.some((item) => item.role === 'bgm'))
+const uploadedSubtitleText = computed(() =>
+  materials.value.find((item) => item.role === 'subtitle' && item.textContent?.trim())?.textContent?.trim() || '',
+)
+const subtitleMode = computed<'off' | 'auto' | 'upload'>(() => {
+  if (uploadedSubtitleText.value) return 'upload'
+  if (hasVoiceMaterial.value) return 'auto'
+  return 'off'
+})
+const subtitleLanguageOptions = [
+  { value: 'zh-CN', label: '中文普通话' },
+  { value: 'en-US', label: '英语' },
+]
+const voiceLanguageOptions = [
+  { value: 'zh-CN', label: '中文讲述' },
+  { value: 'en-US', label: '英语讲述' },
+]
+const voiceLanguageLabel = computed(
+  () => voiceLanguageOptions.find((item) => item.value === voiceLanguage.value)?.label || '中文讲述',
+)
+const audioPolicy = computed<'auto' | 'none' | 'voiceover' | 'bgm'>(() => (hasVoiceMaterial.value || hasBgmMaterial.value ? 'auto' : 'none'))
+const segmentCount = computed(() => {
+  if (inferredRoute.value === 'digital_human' || inferredRoute.value === 'general_video') return 1
+  if (inferredRoute.value === 'material_mix') return Math.max(1, Math.min(4, videoCount.value || 1))
+  return Math.max(2, Math.min(4, imageCount.value || 4))
+})
 const totalDuration = computed(() => segmentCount.value * segmentDuration)
 
 const inferredRoute = computed(() => {
-  if (intent.value !== 'auto') return intent.value
-  if (materials.value.some((item) => item.role.startsWith('car_exterior'))) return 'car_sales'
+  if (materials.value.some((item) => item.role === 'car_model_bundle' || item.role.startsWith('car_') || item.role.startsWith('scene_'))) return 'car_sales'
   if (
     materials.value.some((item) => item.role === 'host_image') &&
     materials.value.some((item) => item.role === 'voiceover' || item.role === 'voice_script')
@@ -301,10 +400,41 @@ const routeLabel = computed(() => {
   return map[inferredRoute.value] || '自动判断'
 })
 
+const routeHint = computed(() => {
+  if (!materials.value.length) return '上传素材后自动判断'
+  if (inferredRoute.value === 'car_sales') return '检测到车辆/场景素材，使用视频制作汽车成片链路'
+  if (inferredRoute.value === 'digital_human') return '检测到人物图和口播素材，走数字人口播链路'
+  if (inferredRoute.value === 'material_mix') return '视频素材占比更高，优先作为素材混剪'
+  if (inferredRoute.value === 'general_video') return '图片素材为主，生成通用图生视频'
+  return '继续上传图片、音频或视频素材'
+})
+
 const subtitleLabel = computed(() => {
   if (subtitleMode.value === 'off') return '关闭'
-  if (subtitleMode.value === 'upload') return '使用上传字幕'
+  if (subtitleMode.value === 'upload') return '使用字幕素材'
   return '自动'
+})
+
+const subtitleDecisionHint = computed(() => {
+  if (subtitleMode.value === 'upload') return '检测到字幕文件，将作为字幕内容'
+  if (subtitleMode.value === 'auto') return '检测到口播素材，自动跟随口播'
+  return '未检测到口播或字幕素材'
+})
+
+const audioDecisionLabel = computed(() => {
+  if (materials.value.some((item) => item.role === 'voiceover')) return '口播优先'
+  if (materials.value.some((item) => item.role === 'reference_audio')) return '参考音频'
+  if (hasBgmMaterial.value) return '仅 BGM'
+  if (materials.value.some((item) => item.role === 'voice_script')) return '文案驱动'
+  return '无音频'
+})
+
+const audioDecisionHint = computed(() => {
+  if (materials.value.some((item) => item.role === 'voiceover')) return '口播音频会作为成片主音轨'
+  if (materials.value.some((item) => item.role === 'reference_audio')) return '单段可参考音频，多段转后期配音'
+  if (hasBgmMaterial.value) return 'BGM 只作为背景音乐'
+  if (materials.value.some((item) => item.role === 'voice_script')) return '使用文案拆分到各片段'
+  return '模型只按图片/视频素材生成画面'
 })
 
 const bgmLabel = computed(() => {
@@ -334,14 +464,7 @@ async function handleFilesSelected(event: Event) {
   try {
     for (const file of files) {
       const asset = await uploadMaterialAsset(file)
-      const material: QuickMaterial = {
-        asset,
-        role: inferRole(file, asset),
-      }
-      if (shouldReadText(asset, file)) {
-        material.textContent = await readTextContent(asset).catch(() => '')
-      }
-      materials.value.push(material)
+      await appendMaterial(asset, { name: file.name, type: file.type })
     }
   } catch (error) {
     errorMessage.value = error instanceof Error ? error.message : '素材上传失败'
@@ -350,8 +473,57 @@ async function handleFilesSelected(event: Event) {
   }
 }
 
+async function handleAssetCenterSelect(payload: { asset: AssetItem; url: string }) {
+  errorMessage.value = ''
+  rememberPickedAssetUrl(payload.asset, payload.url)
+  try {
+    await appendMaterial(payload.asset, {
+      name: payload.asset.fileName || '',
+      type: payload.asset.mimeType || '',
+    })
+  } catch (error) {
+    errorMessage.value = error instanceof Error ? error.message : '资产加入失败'
+  }
+}
+
+async function appendMaterial(asset: AssetItem, file: QuickFileLike) {
+  if (materials.value.some((item) => item.asset.assetId === asset.assetId)) {
+    return
+  }
+  const material: QuickMaterial = {
+    asset,
+    role: inferRole(file, asset),
+  }
+  if (shouldReadText(asset, file)) {
+    material.textContent = await readTextContent(asset).catch(() => '')
+  }
+  materials.value.push(material)
+}
+
+function rememberPickedAssetUrl(asset: AssetItem, url: string) {
+  if (asset.assetType === 'IMAGE' || asset.assetType === 'COVER') {
+    quickPickedImageUrl.value = url
+  } else if (asset.assetType === 'AUDIO') {
+    quickPickedAudioUrl.value = url
+  } else if (asset.assetType === 'VIDEO') {
+    quickPickedVideoUrl.value = url
+  } else if (asset.assetType === 'JSON') {
+    if (isCarModelBundleAsset(asset)) {
+      quickPickedCarBundleUrl.value = url
+    } else {
+      quickPickedJsonUrl.value = url
+    }
+  } else if (asset.assetType === 'TEXT') {
+    quickPickedTextUrl.value = url
+  }
+}
+
 function removeMaterial(assetId: number) {
   materials.value = materials.value.filter((item) => item.asset.assetId !== assetId)
+}
+
+function roleLabel(role: QuickRenderAssetRole | string) {
+  return roleOptions.find((item) => item.value === role)?.label || '自动素材'
 }
 
 async function submitQuickRender() {
@@ -364,7 +536,7 @@ async function submitQuickRender() {
   stopAllTracking()
 
   const payload: QuickRenderRequest = {
-    intent: intent.value,
+    intent: 'auto',
     assetIds: materials.value.map((item) => item.asset.assetId),
     assetRoles: Object.fromEntries(materials.value.map((item) => [String(item.asset.assetId), item.role])),
     assetTextContents: Object.fromEntries(
@@ -374,8 +546,10 @@ async function submitQuickRender() {
     ),
     aspectRatio: aspectRatio.value,
     subtitleMode: subtitleMode.value,
+    subtitleLanguage: subtitleLanguage.value,
+    nativeVoiceLanguage: voiceLanguage.value,
     burnInSubtitle: subtitleMode.value !== 'off',
-    customSubtitle: subtitleMode.value === 'upload' ? customSubtitle.value || undefined : undefined,
+    customSubtitle: subtitleMode.value === 'upload' ? uploadedSubtitleText.value || undefined : undefined,
     audioPolicy: audioPolicy.value,
     model: 'auto',
     segmentCount: segmentCount.value,
@@ -521,9 +695,12 @@ function digitalHumanDetailToVideoResult(detail: DigitalHumanTaskDetailResponse)
   }
 }
 
-function inferRole(file: File, asset: AssetItem): QuickRenderAssetRole {
+function inferRole(file: QuickFileLike, asset: AssetItem): QuickRenderAssetRole {
   const name = `${file.name} ${asset.fileName || ''}`.toLowerCase()
   const mime = (file.type || asset.mimeType || '').toLowerCase()
+  if (isCarModelBundleAsset(asset) || name.includes('车型素材包') || name.includes('car_model_bundle')) {
+    return 'car_model_bundle'
+  }
   if (mime.startsWith('audio/')) {
     if (name.includes('bgm') || name.includes('music') || name.includes('背景')) return 'bgm'
     if (name.includes('ref') || name.includes('reference')) return 'reference_audio'
@@ -560,7 +737,14 @@ function inferRole(file: File, asset: AssetItem): QuickRenderAssetRole {
   return 'material'
 }
 
-function shouldReadText(asset: AssetItem, file: File) {
+function isCarModelBundleAsset(asset: AssetItem) {
+  const meta = (asset.metadataJson || '').toLowerCase()
+  const name = (asset.fileName || '').toLowerCase()
+  return meta.includes('car_model_bundle') || (meta.includes('car_model') && meta.includes('bundle')) ||
+    name.includes('车型素材包') || name.includes('car-model-bundle') || name.includes('car_model_bundle')
+}
+
+function shouldReadText(asset: AssetItem, file: QuickFileLike) {
   const mime = (file.type || asset.mimeType || '').toLowerCase()
   const name = (file.name || asset.fileName || '').toLowerCase()
   return mime.startsWith('text/') || mime.includes('json') || name.endsWith('.json') || name.endsWith('.txt') || name.endsWith('.srt')
@@ -585,6 +769,10 @@ onBeforeUnmount(stopAllTracking)
 .quick-render-page {
   display: grid;
   gap: 16px;
+}
+
+.quick-render-page--embedded {
+  gap: 14px;
 }
 
 .quick-head {
@@ -641,6 +829,13 @@ onBeforeUnmount(stopAllTracking)
   gap: 16px;
 }
 
+.quick-source-grid {
+  display: grid;
+  grid-template-columns: minmax(260px, 1.2fr) repeat(2, minmax(220px, 1fr));
+  gap: 12px;
+  align-items: stretch;
+}
+
 .quick-upload {
   display: grid;
   min-height: 112px;
@@ -682,13 +877,34 @@ onBeforeUnmount(stopAllTracking)
 
 .quick-material {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) 220px 64px;
+  grid-template-columns: minmax(0, 1fr) 150px 64px;
   gap: 12px;
   align-items: center;
   border: 1px solid #edf0f6;
   border-radius: 8px;
   background: #fff;
   padding: 10px 12px;
+}
+
+.quick-material-role {
+  display: grid;
+  gap: 2px;
+  justify-items: start;
+  border-radius: 8px;
+  background: #f6f4ff;
+  padding: 8px 10px;
+}
+
+.quick-material-role strong {
+  color: #5e50df;
+  font-size: 12.5px;
+  font-weight: 850;
+}
+
+.quick-material-role small {
+  color: #98a2b3;
+  font-size: 11px;
+  font-weight: 750;
 }
 
 .quick-material-main {
@@ -751,6 +967,45 @@ onBeforeUnmount(stopAllTracking)
   display: grid;
   grid-template-columns: repeat(4, minmax(0, 1fr));
   gap: 14px;
+}
+
+.quick-grid-compact {
+  grid-template-columns: repeat(auto-fit, minmax(220px, 320px));
+}
+
+.quick-smart-grid {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.quick-smart-grid > div {
+  display: grid;
+  gap: 6px;
+  min-height: 92px;
+  align-content: start;
+  border: 1px solid #e8ebf5;
+  border-radius: 8px;
+  background: linear-gradient(180deg, #ffffff 0%, #fbfcff 100%);
+  padding: 14px;
+}
+
+.quick-smart-grid span {
+  color: #98a2b3;
+  font-size: 12px;
+  font-weight: 850;
+}
+
+.quick-smart-grid strong {
+  color: #1f2540;
+  font-size: 15px;
+  font-weight: 900;
+}
+
+.quick-smart-grid small {
+  color: #667085;
+  font-size: 12px;
+  line-height: 1.5;
 }
 
 .quick-field {
@@ -860,6 +1115,8 @@ onBeforeUnmount(stopAllTracking)
   }
 
   .quick-grid,
+  .quick-smart-grid,
+  .quick-source-grid,
   .quick-summary dl {
     grid-template-columns: 1fr 1fr;
   }
@@ -871,6 +1128,8 @@ onBeforeUnmount(stopAllTracking)
 
 @media (max-width: 560px) {
   .quick-grid,
+  .quick-smart-grid,
+  .quick-source-grid,
   .quick-summary dl {
     grid-template-columns: 1fr;
   }

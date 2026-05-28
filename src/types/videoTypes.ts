@@ -121,6 +121,7 @@ export type QuickRenderAssetRole =
   | 'voice_script'
   | 'storyboard_json'
   | 'benchmark_json'
+  | 'car_model_bundle'
   | 'material_video'
   | 'host_video'
   | 'reference_video'
@@ -133,6 +134,8 @@ export interface QuickRenderRequest {
   assetTextContents?: Record<string, string>
   aspectRatio: '9:16' | '16:9' | 'auto'
   subtitleMode: 'off' | 'auto' | 'upload'
+  subtitleLanguage?: string
+  nativeVoiceLanguage?: string
   burnInSubtitle: boolean
   customSubtitle?: string
   audioPolicy: 'auto' | 'none' | 'voiceover' | 'bgm'
@@ -176,6 +179,7 @@ export interface DigitalHumanVideoRequest {
 export interface TextToVideoRequest {
   prompt: string
   duration?: number
+  ratio?: string
   model?: string
 }
 
@@ -184,6 +188,7 @@ export interface FirstFrameVideoRequest {
   imageUrl: string
   prompt?: string
   duration?: number
+  ratio?: string
   model?: string
 }
 
@@ -193,6 +198,7 @@ export interface FirstLastFrameVideoRequest {
   lastFrameUrl: string
   prompt?: string
   duration?: number
+  ratio?: string
   model?: string
 }
 
@@ -201,6 +207,7 @@ export interface ReferenceVideoRequest {
   imageUrls: string[]
   prompt?: string
   duration?: number
+  ratio?: string
   model?: string
 }
 
@@ -233,6 +240,8 @@ export interface CarSalesVideoRequest {
   scriptContext?: string
   prompt?: string
   subtitle?: string
+  subtitleMode?: 'off' | 'auto' | 'custom'
+  subtitleLanguage?: string
   audioUrl?: string
   audioMode?: 'none' | 'post_mix' | 'reference' | 'model_native'
   bgmUrl?: string
@@ -244,6 +253,7 @@ export interface CarSalesVideoRequest {
   autoTtsSpeed?: number
   autoTtsVolume?: number
   autoTtsPitch?: number
+  nativeVoiceLanguage?: string
   nativeVoiceStyle?: string
   nativeSpeechStyle?: string
   ignoredStoryboardFields?: string[]
