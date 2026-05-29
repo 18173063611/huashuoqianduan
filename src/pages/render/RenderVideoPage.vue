@@ -398,7 +398,7 @@
                 :selected-url="carStoryboardAssetUrl"
                 :source-types="['STORYBOARD_GENERATE', 'VIDEO_SCRIPT_ANALYZE', 'VIDEO_SCRIPT_URL_ANALYZE']"
                 :role-options="CAR_STORYBOARD_ROLE_OPTIONS"
-                source-hint="分镜只用于段落节奏和镜头意图，车辆、人物、场景事实以参考图和文案为准"
+                source-hint="分镜只用于段落节奏、景别、运镜和构图，车辆、人物、场景事实以参考图和文案为准"
                 placeholder="搜索分镜生成结果..."
                 @select="handleCarStoryboardAssetSelect"
               />
@@ -821,7 +821,7 @@
                   :disabled="busy"
                   rows="4"
                   maxlength="4000"
-                  placeholder="选择分镜资产后会自动填入；生成时只保留镜头意图和段落节奏"
+                  placeholder="选择分镜资产后会自动填入；生成时只保留镜头意图、景别、运镜和段落节奏"
                 />
               </div>
 
@@ -2792,7 +2792,16 @@ function stringField(record: StoryboardRecord, keys: string[]) {
   return ''
 }
 
-const STORYBOARD_IGNORED_FIELD_KEYS = ['content', 'voiceText', 'backgroundMusic']
+const STORYBOARD_IGNORED_FIELD_KEYS = [
+  'content',
+  'voiceText',
+  'backgroundMusic',
+  'narration',
+  'script',
+  'voiceover',
+  'subtitle',
+  'bgm',
+]
 
 function parseJsonSafely(raw: string): unknown | null {
   try {
@@ -2888,31 +2897,71 @@ function applyBenchmarkVoiceText(raw: string) {
   }
 }
 
+function storyboardArrayFromParsed(parsed: unknown, depth = 0): unknown[] {
+  if (depth > 3) {
+    return []
+  }
+  if (Array.isArray(parsed)) {
+    return parsed
+  }
+  const record = asRecord(parsed)
+  if (!record) {
+    return []
+  }
+  for (const key of ['scripts', 'storyboard', 'shots', 'scenes', 'segments']) {
+    const value = record[key]
+    if (Array.isArray(value)) {
+      return value
+    }
+  }
+  for (const key of ['result', 'data', 'parseResult', 'storyboardResult', 'output']) {
+    const nested = storyboardArrayFromParsed(record[key], depth + 1)
+    if (nested.length) {
+      return nested
+    }
+  }
+  return []
+}
+
 function extractStoryboardShots(raw: string): VideoScriptShotItem[] {
   const parsed = parseJsonSafely(raw.trim())
-  const source = Array.isArray(parsed)
-    ? parsed
-    : Array.isArray(asRecord(parsed)?.scripts)
-      ? (asRecord(parsed)?.scripts as unknown[])
-      : Array.isArray(asRecord(parsed)?.shots)
-        ? (asRecord(parsed)?.shots as unknown[])
-        : []
+  const source = storyboardArrayFromParsed(parsed)
   return source
-    .map((item, idx) => {
+    .map((item, idx): VideoScriptShotItem | null => {
       const record = asRecord(item)
       if (!record) return null
-      const orderValue = record.order
+      const orderValue = record.order ?? record.index ?? record.segmentIndex
       const order = typeof orderValue === 'number' ? orderValue : Number(orderValue) || idx + 1
+      const camera = stringField(record, ['camera', 'cameraMotion', 'movement', 'motion'])
+      const shotType = stringField(record, ['shotType', 'framing', 'lens', 'angle'])
+      const composition = stringField(record, ['composition', 'layout'])
+      const transition = stringField(record, ['transition', 'cut', 'rhythm'])
       return {
         order,
-        time: stringField(record, ['time', 'duration', 'range']),
-        page: stringField(record, ['page', 'visual', 'scene', 'shot', 'picture']),
+        time: stringField(record, ['time', 'duration', 'durationSec', 'estDurationSec', 'range']),
+        page: stringField(record, ['page', 'visualPrompt', 'visual', 'scene', 'shot', 'picture', 'prompt', 'description']),
+        visualPrompt: stringField(record, ['visualPrompt', 'visual']),
+        prompt: stringField(record, ['prompt']),
+        camera,
+        cameraMotion: camera,
+        movement: stringField(record, ['movement', 'motion']),
+        shotType,
+        framing: shotType,
+        composition,
+        transition,
         backgroundMusic: stringField(record, ['backgroundMusic', 'bgm']),
-        content: stringField(record, ['content', 'voiceText', 'script', 'voiceover', 'subtitle']),
-        highlight: stringField(record, ['highlight', 'intent', 'goal']),
+        content: stringField(record, ['content', 'voiceText', 'script', 'voiceover', 'subtitle', 'narration']),
+        highlight: stringField(record, ['highlight', 'intent', 'goal', 'purpose', 'tips']),
       }
     })
-    .filter((item): item is VideoScriptShotItem => !!item && (!!item.page || !!item.highlight))
+    .filter((item): item is VideoScriptShotItem => !!item && (
+      !!item.page ||
+      !!item.highlight ||
+      !!item.camera ||
+      !!item.shotType ||
+      !!item.composition ||
+      !!item.transition
+    ))
 }
 
 function collectStoryboardIgnoredFields(raw: string) {
@@ -3148,18 +3197,130 @@ function storyboardIntentText(text: string) {
   return intents.length ? intents.join('，') : '按当前口播安排镜头转场和展示节奏'
 }
 
+function containsAnyText(value: string, keywords: string[]) {
+  return keywords.some((keyword) => value.includes(keyword.toLowerCase()))
+}
+
+function storyboardShotSourceText(shot: VideoScriptShotItem) {
+  return [
+    shot.page,
+    shot.visualPrompt,
+    shot.prompt,
+    shot.highlight,
+    shot.camera,
+    shot.cameraMotion,
+    shot.movement,
+    shot.shotType,
+    shot.framing,
+    shot.composition,
+    shot.transition,
+  ].filter(Boolean).join(' ')
+}
+
+function storyboardShotPlanText(text: string, idx: number, total: number) {
+  const value = text.toLowerCase()
+  const safeTotal = Math.max(1, total || 1)
+  const safeIndex = Math.max(1, Math.min(idx + 1, safeTotal))
+  const interior = containsAnyText(value, ['内饰', '座椅', '中控', '空间', '前排', '后排', '方向盘', '仪表', '后备箱', 'interior', 'seat', 'dashboard', 'trunk'])
+  const detail = containsAnyText(value, ['车灯', '灯光', '轮毂', 'logo', '标识', '细节', '材质', '特写', 'light', 'wheel', 'detail', 'close', 'macro'])
+  const exterior = containsAnyText(value, ['外观', '车头', '车身', '整车', '正面', '侧面', '背面', '环绕', 'exterior', 'front', 'side', 'rear'])
+  const conversion = containsAnyText(value, ['展厅', '门店', '到店', '试驾', '邀约', '联系', '咨询', '转化', '优惠', 'showroom', 'store', 'dealer', 'cta'])
+  const lifestyle = containsAnyText(value, ['户外', '城市', '公路', '道路', '山路', '夜景', '通勤', '出行', '家庭', 'road', 'city', 'outdoor', 'night', 'drive'])
+  const opening = safeIndex === 1 || containsAnyText(value, ['开场', '介绍', '打招呼', 'hello', 'hi'])
+  const closing = safeIndex === safeTotal || containsAnyText(value, ['收口', '结尾', '关注', '预约', '下单'])
+
+  const shotSize = detail
+    ? '特写/近景，突出一个车辆细节'
+    : interior
+      ? '中近景，展示座舱空间和配置层次'
+      : conversion
+        ? '中景/全景，保留门店、车辆和咨询氛围'
+        : lifestyle
+          ? '中远景/跟拍，展示车辆和使用场景关系'
+          : exterior || opening
+            ? '全景到中景，先建立整车轮廓'
+            : '中景，主体清楚，适合短视频裁切'
+
+  const cameraMotion = containsAnyText(value, ['环绕', '360', 'orbit'])
+    ? '平稳小幅环绕车辆'
+    : containsAnyText(value, ['推进', '推近', '推入', 'zoom in', 'dolly in'])
+      ? '慢速推进到展示重点'
+      : containsAnyText(value, ['拉远', '后退', 'zoom out', 'dolly out'])
+        ? '轻微拉远扩大空间'
+        : containsAnyText(value, ['横移', '侧移', '平移', 'pan', 'track', 'tracking'])
+          ? '平滑横移或跟拍，方向保持单一'
+          : containsAnyText(value, ['俯拍', '航拍', '上帝视角', 'aerial', 'top'])
+            ? '轻微俯拍下探，车辆保持完整'
+            : detail
+              ? '锁定或微距慢推'
+              : interior
+                ? '沿座舱结构平稳横移'
+                : lifestyle
+                  ? '顺车辆行进方向轻跟拍'
+                  : '稳定慢推，避免突然换角度'
+
+  const composition = interior
+    ? '前景放配置或座椅，背景保留座舱纵深'
+    : detail
+      ? '细节居中或三分构图，背景干净'
+      : lifestyle
+        ? '车辆与道路/城市/生活环境同框'
+        : conversion
+          ? '车辆、门店或权益氛围同框'
+          : '车辆主体居中偏三分线，保留车身比例'
+
+  const subjectAction = detail
+    ? '锁定灯组、轮毂、Logo、材质或车漆反光之一'
+    : interior
+      ? '从中控、座椅或后排空间掠过'
+      : lifestyle
+        ? '车辆在真实使用场景中自然通过或静态展示'
+        : conversion
+          ? (carHostAppearanceEnabled.value ? '销售顾问可在边侧完成试驾邀约，车辆仍是主角' : '落在车辆、门店、权益氛围和咨询入口上')
+          : opening
+            ? '先建立整车轮廓，再展示车头或车身高光'
+            : '围绕当前卖点做一个清楚的可视化展示'
+
+  const pacing = containsAnyText(value, ['快节奏', '快速', '卡点', 'fast'])
+    ? '快节奏，一段内只做一到两次重点转移'
+    : containsAnyText(value, ['慢', '高级', '质感', 'slow', 'cinematic'])
+      ? '慢节奏，动作克制'
+      : opening
+        ? '开场两秒内建立主体'
+        : closing
+          ? '结尾放慢半拍，留稳定画面'
+          : '中等节奏，动作连续'
+
+  const transition = opening
+    ? '干净开场'
+    : closing
+      ? '稳定收束'
+      : '结尾保持主体、运动方向和色彩稳定'
+
+  return [
+    `画面目标=${storyboardIntentText(value)}`,
+    `景别=${shotSize}`,
+    `镜头运动=${cameraMotion}`,
+    `构图=${composition}`,
+    `主体动作=${subjectAction}`,
+    `节奏=${pacing}`,
+    `转场=${transition}`,
+  ].join('；')
+}
+
 function storyboardVisualText(shot: VideoScriptShotItem, idx: number) {
-  const sourceText = `${shot.page || ''} ${shot.highlight || ''}`
+  const sourceText = storyboardShotSourceText(shot)
   const pieces = [`镜头${shot.order || idx + 1}`]
   if (shot.time) pieces.push(`时间 ${shot.time}`)
   pieces.push(`镜头意图 ${storyboardIntentText(sourceText)}`)
+  pieces.push(`导演执行 ${storyboardShotPlanText(sourceText, idx, carSegmentCount.value)}`)
   return pieces.join('；')
 }
 
 function summarizeStoryboardForPrompt(raw: string) {
   const shots = extractStoryboardShots(raw)
   if (!shots.length) {
-    return storyboardIntentText(raw)
+    return `镜头意图 ${storyboardIntentText(raw)}；导演执行 ${storyboardShotPlanText(raw, 0, 1)}`
   }
   return shots.map(storyboardVisualText).join('\n')
 }
@@ -3518,7 +3679,7 @@ const carGenerationBasisSummary = computed(() => {
     return '本次视频只选择了 BGM，它只会作为背景音乐混入，不会生成口播、字幕或口型。'
   }
   if (carStoryboardContext.value.trim()) {
-    return '本次视频将只使用分镜的段落节奏和镜头意图，主体车辆、人物和场景以参考图与文案场景为准。'
+    return '本次视频将只使用分镜的段落节奏、景别、运镜和镜头意图，主体车辆、人物和场景以参考图与文案场景为准。'
   }
   return '本次视频将以车型图、补充提示词和销售信息作为主要生成依据。'
 })
@@ -3526,7 +3687,7 @@ const carGenerationBasisSummary = computed(() => {
 function buildCarScriptContext() {
   const parts: string[] = []
   if (carStoryboardContext.value.trim()) {
-    parts.push(`分镜节奏参考（仅保留镜头意图，不作为车辆、人物、场景事实来源）：${summarizeStoryboardForPrompt(carStoryboardContext.value)}`)
+    parts.push(`分镜节奏参考（仅保留镜头意图、景别、运镜、构图和转场，不作为车辆、人物、场景事实来源）：${summarizeStoryboardForPrompt(carStoryboardContext.value)}`)
   }
   if (!carHostAppearanceEnabled.value) {
     parts.push('人物策略：数字人不出镜，生成时必须忽略所有人物、主播、销售顾问、客户、路人、司机和乘客描述，只展示车辆与场景。')
@@ -3675,18 +3836,38 @@ function buildCarSalesScenes() {
       }
     })
   }
-  const titles = ['外观开场', '内饰空间', '核心卖点', '到店转化', '用车场景', '优惠收口']
+  const titles = [
+    '外观开场',
+    '车头灯光',
+    '内饰座舱',
+    '座椅空间',
+    '核心卖点',
+    '用车场景',
+    '细节质感',
+    '门店试驾',
+    '安全智能',
+    '尾部收束',
+    '生活氛围',
+    '优惠收口',
+  ]
   const prompts = [
-    '展示车辆外观、车头、车身线条和灯光质感，镜头稳定推进。',
-    '展示内饰、座椅、空间、屏幕和舒适体验。',
-    '突出动力、智能、安全、油耗/续航或核心配置卖点。',
-    '展示试驾邀约、到店权益、咨询引导和成交氛围。',
-    '展示城市通勤、家庭出行或周末短途场景。',
-    '用车身高光细节和优惠信息氛围收口。',
+    '整车外观作为开场建立，车头和车身线条清晰，镜头慢速推进。',
+    '围绕车头、灯组、前脸和车身高光做近景展示，镜头小幅横移。',
+    '展示中控屏、方向盘、仪表、座舱氛围和材质，镜头从前排空间平稳扫过。',
+    '展示座椅、后排腿部空间、储物和乘坐舒适性，镜头从座椅延伸到空间纵深。',
+    '突出动力、智能、安全、油耗/续航或核心配置卖点，画面干净有销售说服力。',
+    '展示城市通勤、家庭出行或周末短途场景，让车辆与真实生活需求结合。',
+    '用车灯、轮毂、Logo、座椅材质或车漆反光做特写，镜头稳定停留在一个细节重点。',
+    '展示试驾邀约、到店权益、咨询引导和成交氛围，车辆仍是画面主角。',
+    '展示辅助驾驶、屏幕交互、安全配置或舒适配置的视觉化表达。',
+    '展示车尾、尾灯、后备箱或车身侧后方，作为视觉收束并承接下一段。',
+    '展示车辆与真实生活场景的关系，画面温和可信，让目标客户能代入使用。',
+    '用整车高光和优惠咨询氛围收口，镜头稳定，强化立即咨询和预约试驾。',
   ]
   return Array.from({ length: carSegmentCount.value }, (_, idx) => {
-    const title = titles[idx] || `片段 ${idx + 1}`
-    const visualPrompt = prompts[idx] || prompts[prompts.length - 1]
+    const templateIndex = idx % titles.length
+    const title = titles[templateIndex] || `片段 ${idx + 1}`
+    const visualPrompt = prompts[templateIndex] || prompts[prompts.length - 1]
     const imageUrls = carSceneImageUrls(title, visualPrompt, idx)
     return {
       segmentIndex: idx + 1,

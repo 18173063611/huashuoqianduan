@@ -40,6 +40,17 @@ export interface VideoScriptShotItem {
   time: string
   /** 画面内容（人物 / 场景 / 动作 / 视觉元素） */
   page: string
+  /** 可选画面提示词，兼容后端 storyboard/scenes/segments 等结构 */
+  visualPrompt?: string
+  prompt?: string
+  /** 可选镜头控制字段，兼容外部或后续结构化分镜 */
+  camera?: string
+  cameraMotion?: string
+  movement?: string
+  shotType?: string
+  framing?: string
+  composition?: string
+  transition?: string
   /** 背景音乐风格、节奏或具体音乐，无值时返回 "无" */
   backgroundMusic: string
   /** 口播文案 / 旁白 / 字幕分析，无值时返回 "无" */

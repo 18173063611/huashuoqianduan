@@ -20,7 +20,7 @@ export function getScripts() {
   return request<ScriptVersionItem[]>('/scripts')
 }
 
-/** 分镜生成占位 */
+/** 分镜生成 */
 export function generateStoryboard(payload: StoryboardGenerateRequest) {
   return request<StoryboardGenerateResponse>('/storyboards/generate', {
     method: 'POST',
