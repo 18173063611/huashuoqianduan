@@ -517,6 +517,17 @@ function buildFallbackPreview(asset: AssetItem): AssetPickerPreview {
   const parsedSource = parsedVideoSourceLabel(null, meta)
   const sourceUrl = parsedVideoSourceUrl(null, meta)
   const sourceTime = parsedVideoSourceTime(null, meta, null)
+  const previewText = ellipsis(firstText(
+    textAt(meta, 'previewText'),
+    textAt(meta, 'contentPreview'),
+    textAt(meta, 'shotSummary'),
+    textAt(meta, 'firstShotPreview'),
+    textAt(meta, 'transcriptPreview'),
+    textAt(meta, 'summary'),
+    textAt(meta, 'description'),
+    textAt(meta, 'originalText'),
+    textAt(meta, 'content'),
+  ), 180)
   const title = firstText(
     assetNormalizedRole(asset) === 'benchmark_json' && parsedSource ? `爆款对标：${parsedSource}` : '',
     assetNormalizedRole(asset) === 'storyboard_json' && parsedSource ? `分镜：${parsedSource}` : '',
@@ -545,19 +556,15 @@ function buildFallbackPreview(asset: AssetItem): AssetPickerPreview {
     sourceLabel: parsedSource,
     sourceUrl,
     sourceTime,
-    previewLabel: '',
-    previewText: firstText(
-      textAt(meta, 'summary'),
-      textAt(meta, 'description'),
-      textAt(meta, 'originalText'),
-    ),
+    previewLabel: firstText(textAt(meta, 'previewLabel'), rolePreviewLabel(assetNormalizedRole(asset))),
+    previewText,
   }
 }
 
 function buildJsonPreview(asset: AssetItem, text: string): AssetPickerPreview {
   const parsed = parseObject(text)
   if (!parsed) {
-    return buildFallbackPreview(asset)
+    return buildPlainTextPreview(asset, text)
   }
   if (textAt(parsed, 'bundleType') === 'car_model' || textAt(parsed, 'assetRole') === 'car_model_bundle') {
     const images = arrayAt(parsed, 'images')
@@ -579,23 +586,38 @@ function buildJsonPreview(asset: AssetItem, text: string): AssetPickerPreview {
   const parseResult = objectAt(parsed, 'parseResult')
   const transcriptResult = objectAt(parsed, 'transcriptResult')
   const author = objectAt(parseResult, 'author')
-  const scripts = arrayAt(parsed, 'scripts')
-  const storyboard = arrayAt(parsed, 'storyboard')
-  const shots = storyboard.length > 0 ? storyboard : scripts
+  const shots = firstArrayAt(parsed, ['storyboard', 'scripts', 'shots', 'scenes', 'segments'])
 
   const benchmarkTitle = firstText(
     textAt(parseResult, 'title'),
     textAt(meta, 'title'),
+    textAt(parsed, 'title'),
   )
   const sourceUrl = parsedVideoSourceUrl(parseResult, meta)
   const parsedSource = parsedVideoSourceLabel(parseResult, meta)
   const sourceTime = parsedVideoSourceTime(parseResult, meta, parsed)
-  const transcript = firstText(textAt(transcriptResult, 'originalText'), textAt(parsed, 'originalText'))
+  const transcript = firstText(
+    textAt(transcriptResult, 'originalText'),
+    textAt(parsed, 'originalText'),
+    textAt(parsed, 'voiceText'),
+    textAt(parsed, 'copywriting'),
+    textAt(parsed, 'script'),
+    textAt(parsed, 'content'),
+    textAt(meta, 'previewText'),
+    findTextDeep(parsed, ['originalText', 'transcript', 'voiceText', 'copywriting', 'scriptText']),
+  )
   const authorName = firstText(textAt(author, 'nickname'), textAt(author, 'uniqueId'))
   const coverUrl = resolveUrl(firstText(textAt(parseResult, 'coverUrl'), textAt(meta, 'coverUrl'), textAt(parsed, 'coverUrl')))
+  const normalizedRole = assetNormalizedRole(asset)
 
-  if (benchmarkTitle || transcript || sourceTypeLabel(asset.sourceType).includes('爆款')) {
-    const previewText = ellipsis(firstText(transcript, sourceUrl, '暂无口播转写，选择后会作为口播参考。'), 150)
+  if (normalizedRole === 'benchmark_json' || benchmarkTitle || transcript || sourceTypeLabel(asset.sourceType).includes('爆款')) {
+    const previewText = ellipsis(firstText(
+      transcript,
+      textAt(meta, 'previewText'),
+      benchmarkTitle,
+      parsedSource,
+      '暂无口播转写，选择后会作为口播参考。',
+    ), 220)
     return {
       title: `爆款对标：${firstText(benchmarkTitle, parsedSource, asset.fileName)}`,
       subtitle: [sourceTypeLabel(asset.sourceType), authorName ? `作者：${authorName}` : '', durationLabel(textAt(parseResult, 'durationSeconds'))]
@@ -616,13 +638,15 @@ function buildJsonPreview(asset: AssetItem, text: string): AssetPickerPreview {
     }
   }
 
-  if (shots.length > 0) {
+  if (shots.length > 0 || normalizedRole === 'storyboard_json') {
     const firstShot = objectAt(shots[0])
     const shotText = firstText(
+      storyboardPreviewText(shots),
       textAt(firstShot, 'visual'),
       textAt(firstShot, 'content'),
       textAt(firstShot, 'narration'),
       textAt(firstShot, 'page'),
+      textAt(meta, 'previewText'),
     )
     const source = firstText(parsedSource, sourceUrl, textAt(meta, 'scriptVersionId') ? `脚本版本 ${textAt(meta, 'scriptVersionId')}` : '')
     const previewText = ellipsis(firstText(
@@ -642,12 +666,67 @@ function buildJsonPreview(asset: AssetItem, text: string): AssetPickerPreview {
       sourceLabel: firstText(parsedSource, sourceUrl),
       sourceUrl,
       sourceTime,
-      previewLabel: '首镜预览',
+      previewLabel: shots.length > 1 ? '分镜预览' : '首镜预览',
       previewText,
     }
   }
 
   return buildFallbackPreview(asset)
+}
+
+function buildPlainTextPreview(asset: AssetItem, text: string): AssetPickerPreview {
+  const fallback = buildFallbackPreview(asset)
+  const normalized = ellipsis(text.replace(/\s+/g, ' ').trim(), 220)
+  if (!normalized) {
+    return fallback
+  }
+  const role = assetNormalizedRole(asset)
+  return {
+    ...fallback,
+    previewLabel: rolePreviewLabel(role) || '内容预览',
+    previewText: normalized,
+    detail: normalized,
+  }
+}
+
+function rolePreviewLabel(role: string) {
+  if (role === 'benchmark_json') return '口播预览'
+  if (role === 'storyboard_json') return '分镜预览'
+  return ''
+}
+
+function firstArrayAt(record: Record<string, unknown> | null, keys: string[]) {
+  if (!record) {
+    return []
+  }
+  for (const key of keys) {
+    const items = arrayAt(record, key)
+    if (items.length) {
+      return items
+    }
+  }
+  return []
+}
+
+function storyboardPreviewText(shots: unknown[]) {
+  return shots
+    .slice(0, 3)
+    .map((raw, idx) => {
+      const shot = objectAt(raw)
+      if (!shot) return ''
+      const order = firstText(textAt(shot, 'order'), textAt(shot, 'index'), String(idx + 1))
+      const time = firstText(textAt(shot, 'time'), textAt(shot, 'duration'), textAt(shot, 'estDurationSec'))
+      const content = firstText(
+        textAt(shot, 'visual'),
+        textAt(shot, 'content'),
+        textAt(shot, 'narration'),
+        textAt(shot, 'highlight'),
+        textAt(shot, 'page'),
+      )
+      return content ? `镜头${order}${time ? ` ${time}` : ''}：${content}` : ''
+    })
+    .filter(Boolean)
+    .join('；')
 }
 
 function assetListSubtitle(asset: AssetItem) {
@@ -1401,9 +1480,9 @@ function formatFileSize(size: number) {
 
 .asset-picker-preview-text {
   display: -webkit-box;
-  min-height: 34px;
+  min-height: 50px;
   -webkit-box-orient: vertical;
-  -webkit-line-clamp: 2;
+  -webkit-line-clamp: 3;
 }
 
 .asset-picker-source-link {

@@ -4,14 +4,14 @@
       <header class="car-bundle-head">
         <div>
           <strong>创建车型素材包</strong>
-          <p>上传同一款车型的车辆部位图片，保存后可在视频生成页按分镜自动取用。</p>
+          <p>上传或从资产中心选择同一款车型的车辆部位图片，保存后可在视频生成页按分镜自动取用。</p>
         </div>
         <button class="app-secondary-button" type="button" :disabled="saving" @click="emit('close')">关闭</button>
       </header>
 
       <div class="car-bundle-guidance">
         <strong>素材准备建议</strong>
-        <span>优先上传分镜会展示的部位。常用组合是正面、侧面、45 度角、中控台、前排和后排；细节镜头再补车灯、轮毂、Logo 或座椅材质。展厅、道路、门店等场景图请在视频制作页的“场景图片”单独上传，便于替换地点。</span>
+        <span>优先补齐分镜会展示的部位。常用组合是正面、侧面、45 度角、中控台、前排和后排；已有图片可直接从资产中心加入，不需要重复上传。</span>
       </div>
 
       <div class="car-bundle-grid">
@@ -26,12 +26,63 @@
       </div>
 
       <div class="car-bundle-role-grid">
-        <label v-for="role in carRoleOptions" :key="role.value" class="car-bundle-role">
-          <span>{{ role.label }}</span>
+        <article
+          v-for="role in carRoleOptions"
+          :key="role.value"
+          class="car-bundle-role"
+          :class="{ 'car-bundle-role-selected': hasRoleSelection(role.value) }"
+        >
+          <div class="car-bundle-role-head">
+            <span>{{ role.label }}</span>
+            <button type="button" :disabled="saving" @click="openAssetPicker(role.value)">从资产中心选</button>
+          </div>
+          <img v-if="rolePreviewUrl(role.value)" :src="rolePreviewUrl(role.value)" alt="" />
           <input type="file" accept="image/*" :disabled="saving" @change="handleRoleFile(role.value, $event)" />
-          <small>{{ fileNameByRole[role.value] || '未上传' }}</small>
-        </label>
+          <small>{{ roleSelectedName(role.value) }}</small>
+          <button
+            v-if="hasRoleSelection(role.value)"
+            class="car-bundle-clear-role"
+            type="button"
+            :disabled="saving"
+            @click="clearRole(role.value)"
+          >
+            移除
+          </button>
+        </article>
       </div>
+
+      <section v-if="assetPickerRole" class="car-bundle-asset-picker" aria-label="从资产中心选择图片">
+        <header>
+          <div>
+            <strong>选择{{ roleLabel(assetPickerRole) }}图片</strong>
+            <small>可选公共图片和当前账号私有图片；选择后会写入车型素材包角色。</small>
+          </div>
+          <button class="app-secondary-button" type="button" @click="assetPickerRole = null">收起</button>
+        </header>
+        <div class="car-bundle-asset-tools">
+          <input v-model.trim="assetKeyword" type="search" placeholder="搜索文件名、分组或来源..." />
+          <button class="app-secondary-button" type="button" :disabled="assetLoading" @click="loadImageAssets">
+            {{ assetLoading ? '加载中...' : '刷新图片' }}
+          </button>
+        </div>
+        <p v-if="assetError" class="app-error">{{ assetError }}</p>
+        <div v-else-if="assetLoading" class="car-bundle-asset-empty">正在加载资产中心图片...</div>
+        <div v-else-if="filteredImageAssets.length === 0" class="car-bundle-asset-empty">暂无匹配图片</div>
+        <div v-else class="car-bundle-asset-grid">
+          <button
+            v-for="asset in filteredImageAssets"
+            :key="asset.assetId"
+            type="button"
+            class="car-bundle-asset-card"
+            :class="{ active: selectedAssetIds.has(asset.assetId) }"
+            @click="selectAssetForRole(asset)"
+          >
+            <img :src="resolveUrl(asset.thumbnailUrl || asset.fileUrl)" alt="" />
+            <strong>{{ asset.fileName }}</strong>
+            <small>{{ asset.assetGroup || sourceTypeLabel(asset.sourceType) }}</small>
+          </button>
+        </div>
+      </section>
 
       <label class="car-bundle-field">
         <span>备注</span>
@@ -51,8 +102,9 @@
 </template>
 
 <script setup lang="ts">
-import { computed, ref } from 'vue'
-import { uploadMaterialAsset } from '../../services/assetApi'
+import { computed, onMounted, ref } from 'vue'
+import { getAssets, publishAsset, uploadMaterialAsset } from '../../services/assetApi'
+import { API_ORIGIN } from '../../services/request'
 import type { AssetItem } from '../../types/assetTypes'
 
 const props = defineProps<{
@@ -85,10 +137,50 @@ const color = ref('')
 const notes = ref('')
 const filesByRole = ref<Record<string, File>>({})
 const fileNameByRole = ref<Record<string, string>>({})
+const selectedAssetsByRole = ref<Record<string, AssetItem>>({})
+const imageAssets = ref<AssetItem[]>([])
+const assetPickerRole = ref<string | null>(null)
+const assetKeyword = ref('')
+const assetLoading = ref(false)
+const assetError = ref('')
 const saving = ref(false)
 const errorMessage = ref('')
 
-const selectedCount = computed(() => Object.keys(filesByRole.value).length)
+const selectedCount = computed(() => {
+  const roles = new Set([
+    ...Object.keys(filesByRole.value),
+    ...Object.keys(selectedAssetsByRole.value),
+  ])
+  return roles.size
+})
+
+const selectedAssetIds = computed(() =>
+  new Set(
+    Object.values(selectedAssetsByRole.value)
+      .map((asset) => asset.assetId)
+      .filter((assetId): assetId is number => Number.isFinite(assetId)),
+  ),
+)
+
+const filteredImageAssets = computed(() => {
+  const q = assetKeyword.value.trim().toLowerCase()
+  if (!q) {
+    return imageAssets.value
+  }
+  return imageAssets.value.filter((asset) =>
+    [
+      asset.fileName,
+      asset.assetGroup,
+      asset.sourceType,
+      sourceTypeLabel(asset.sourceType),
+      asset.metadataJson,
+    ].some((value) => String(value || '').toLowerCase().includes(q)),
+  )
+})
+
+onMounted(() => {
+  void loadImageAssets()
+})
 
 function handleRoleFile(role: string, event: Event) {
   const input = event.target as HTMLInputElement
@@ -99,6 +191,80 @@ function handleRoleFile(role: string, event: Event) {
   }
   filesByRole.value = { ...filesByRole.value, [role]: file }
   fileNameByRole.value = { ...fileNameByRole.value, [role]: file.name }
+  const nextAssets = { ...selectedAssetsByRole.value }
+  delete nextAssets[role]
+  selectedAssetsByRole.value = nextAssets
+}
+
+async function loadImageAssets() {
+  assetLoading.value = true
+  assetError.value = ''
+  try {
+    imageAssets.value = await getAssets({
+      scope: 'all',
+      assetType: 'IMAGE',
+      sort: 'createdAtDesc',
+    })
+  } catch (error) {
+    assetError.value = error instanceof Error ? error.message : '资产中心图片加载失败'
+  } finally {
+    assetLoading.value = false
+  }
+}
+
+function openAssetPicker(role: string) {
+  assetPickerRole.value = role
+  assetError.value = ''
+  if (!imageAssets.value.length) {
+    void loadImageAssets()
+  }
+}
+
+function selectAssetForRole(asset: AssetItem) {
+  if (!assetPickerRole.value) {
+    return
+  }
+  const role = assetPickerRole.value
+  selectedAssetsByRole.value = {
+    ...selectedAssetsByRole.value,
+    [role]: asset,
+  }
+  const nextFiles = { ...filesByRole.value }
+  const nextNames = { ...fileNameByRole.value }
+  delete nextFiles[role]
+  delete nextNames[role]
+  filesByRole.value = nextFiles
+  fileNameByRole.value = nextNames
+  assetPickerRole.value = null
+}
+
+function clearRole(role: string) {
+  const nextFiles = { ...filesByRole.value }
+  const nextNames = { ...fileNameByRole.value }
+  const nextAssets = { ...selectedAssetsByRole.value }
+  delete nextFiles[role]
+  delete nextNames[role]
+  delete nextAssets[role]
+  filesByRole.value = nextFiles
+  fileNameByRole.value = nextNames
+  selectedAssetsByRole.value = nextAssets
+}
+
+function hasRoleSelection(role: string) {
+  return Boolean(filesByRole.value[role] || selectedAssetsByRole.value[role])
+}
+
+function roleSelectedName(role: string) {
+  return fileNameByRole.value[role] || selectedAssetsByRole.value[role]?.fileName || '未选择'
+}
+
+function rolePreviewUrl(role: string) {
+  const asset = selectedAssetsByRole.value[role]
+  return asset ? resolveUrl(asset.thumbnailUrl || asset.fileUrl) : ''
+}
+
+function roleLabel(role: string | null) {
+  return carRoleOptions.find((item) => item.value === role)?.label || '车型'
 }
 
 async function saveBundle() {
@@ -112,24 +278,41 @@ async function saveBundle() {
     const imageItems = []
     for (const role of carRoleOptions) {
       const file = filesByRole.value[role.value]
-      if (!file) continue
-      const asset = await uploadMaterialAsset(file, {
-        publish: props.publish,
-        metadataJson: JSON.stringify({
-          from: 'car_model_bundle_image',
-          assetRole: role.value,
-          assetGroup: '汽车素材包',
-          brandModel: brandModel.value,
-          color: color.value,
-        }),
-      })
-      imageItems.push({
-        role: role.value,
-        label: role.label,
-        assetId: asset.assetId,
-        url: asset.fileUrl,
-        fileName: asset.fileName,
-      })
+      if (file) {
+        const asset = await uploadMaterialAsset(file, {
+          publish: props.publish,
+          metadataJson: JSON.stringify({
+            from: 'car_model_bundle_image',
+            assetRole: role.value,
+            assetGroup: '汽车素材包',
+            brandModel: brandModel.value,
+            color: color.value,
+          }),
+        })
+        imageItems.push({
+          role: role.value,
+          label: role.label,
+          assetId: asset.assetId,
+          url: asset.fileUrl,
+          fileName: asset.fileName,
+          source: 'uploaded',
+        })
+        continue
+      }
+      const selectedAsset = selectedAssetsByRole.value[role.value]
+      if (selectedAsset) {
+        const asset = props.publish && String(selectedAsset.visibility || '').toUpperCase() !== 'PUBLIC'
+          ? await publishAsset(selectedAsset.assetId)
+          : selectedAsset
+        imageItems.push({
+          role: role.value,
+          label: role.label,
+          assetId: asset.assetId,
+          url: asset.fileUrl,
+          fileName: asset.fileName,
+          source: 'asset_center',
+        })
+      }
     }
     const payload = {
       bundleType: 'car_model',
@@ -161,6 +344,28 @@ async function saveBundle() {
   } finally {
     saving.value = false
   }
+}
+
+function sourceTypeLabel(sourceType: string | null | undefined) {
+  const key = String(sourceType || '').trim().toUpperCase()
+  const labels: Record<string, string> = {
+    USER_UPLOAD: '上传素材',
+    AI_GENERATED: 'AI生成',
+    AVATAR_GENERATE: '数字人形象',
+    SEEDANCE_TEXT_VIDEO: '文生视频',
+    SEEDANCE_FIRST_FRAME_VIDEO: '图生视频',
+    SEEDANCE_FIRST_LAST_FRAME_VIDEO: '图生视频',
+    SEEDANCE_REFERENCE_VIDEO: '图生视频',
+    SEEDANCE_CAR_SALES_VIDEO: '汽车销售成片',
+  }
+  return labels[key] || key || '未知来源'
+}
+
+function resolveUrl(url: string | null | undefined) {
+  if (!url) {
+    return ''
+  }
+  return url.startsWith('http') ? url : `${API_ORIGIN}${url.startsWith('/') ? url : `/${url}`}`
 }
 </script>
 
@@ -241,7 +446,7 @@ async function saveBundle() {
 }
 
 .car-bundle-field span,
-.car-bundle-role span {
+.car-bundle-role-head span {
   color: #344054;
   font-size: 12.5px;
   font-weight: 850;
@@ -271,6 +476,44 @@ async function saveBundle() {
   padding: 10px;
 }
 
+.car-bundle-role-selected {
+  border-style: solid;
+  border-color: #7c6bff;
+  background: #f8f7ff;
+}
+
+.car-bundle-role-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.car-bundle-role-head button,
+.car-bundle-clear-role {
+  border: 1px solid #d8d2ff;
+  border-radius: 7px;
+  background: #fff;
+  color: #5541d7;
+  padding: 5px 8px;
+  font-size: 11.5px;
+  font-weight: 850;
+  cursor: pointer;
+}
+
+.car-bundle-clear-role {
+  width: fit-content;
+  border-color: #fecaca;
+  color: #dc2626;
+}
+
+.car-bundle-role img {
+  width: 100%;
+  aspect-ratio: 4 / 3;
+  border-radius: 8px;
+  object-fit: cover;
+}
+
 .car-bundle-role input {
   width: 100%;
   color: #667085;
@@ -283,6 +526,110 @@ async function saveBundle() {
   font-size: 12px;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+
+.car-bundle-asset-picker {
+  display: grid;
+  gap: 12px;
+  border: 1px solid #e3e7f0;
+  border-radius: 10px;
+  background: #fcfdff;
+  padding: 14px;
+}
+
+.car-bundle-asset-picker header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.car-bundle-asset-picker header strong {
+  display: block;
+  color: #111827;
+  font-size: 14px;
+  font-weight: 900;
+}
+
+.car-bundle-asset-picker header small {
+  display: block;
+  margin-top: 4px;
+  color: #667085;
+  font-size: 12px;
+  line-height: 1.5;
+}
+
+.car-bundle-asset-tools {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 10px;
+}
+
+.car-bundle-asset-tools input {
+  border: 1px solid #e1e6f0;
+  border-radius: 8px;
+  padding: 9px 11px;
+  outline: none;
+}
+
+.car-bundle-asset-empty {
+  display: grid;
+  min-height: 100px;
+  place-items: center;
+  border: 1px dashed #dbe1ec;
+  border-radius: 8px;
+  color: #667085;
+  font-size: 13px;
+}
+
+.car-bundle-asset-grid {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 10px;
+  max-height: 320px;
+  overflow: auto;
+  padding-right: 2px;
+}
+
+.car-bundle-asset-card {
+  display: grid;
+  gap: 6px;
+  border: 1px solid #e5e9f2;
+  border-radius: 9px;
+  background: #fff;
+  padding: 8px;
+  text-align: left;
+  cursor: pointer;
+}
+
+.car-bundle-asset-card.active {
+  border-color: #7c6bff;
+  box-shadow: 0 0 0 2px rgba(124, 107, 255, 0.14);
+}
+
+.car-bundle-asset-card img {
+  width: 100%;
+  aspect-ratio: 4 / 3;
+  border-radius: 7px;
+  object-fit: cover;
+  background: #eef2f8;
+}
+
+.car-bundle-asset-card strong,
+.car-bundle-asset-card small {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.car-bundle-asset-card strong {
+  color: #232838;
+  font-size: 12px;
+}
+
+.car-bundle-asset-card small {
+  color: #667085;
+  font-size: 11.5px;
 }
 
 .car-bundle-actions {
@@ -302,7 +649,9 @@ async function saveBundle() {
 
 @media (max-width: 720px) {
   .car-bundle-grid,
-  .car-bundle-role-grid {
+  .car-bundle-role-grid,
+  .car-bundle-asset-tools,
+  .car-bundle-asset-grid {
     grid-template-columns: 1fr;
   }
 }

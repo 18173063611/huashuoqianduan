@@ -378,10 +378,11 @@
     <div v-if="groupModalOpen" class="asset-modal-backdrop" @click.self="closeGroupEditor">
       <div class="asset-modal asset-group-editor">
         <div class="asset-modal-header">
-          <strong>资产分组</strong>
+          <strong>手动分类</strong>
           <button class="app-secondary-button" type="button" @click="closeGroupEditor">关闭</button>
         </div>
         <p v-if="groupEditingAsset" class="app-muted asset-modal-subtitle">{{ groupEditingAsset.fileName }}</p>
+        <p class="app-muted asset-modal-subtitle">公共资产仅管理员可分类；私有资产仅资产所属用户可分类。</p>
         <label class="asset-group-field">
           <span>分组名称</span>
           <input v-model.trim="groupInput" list="asset-group-presets" maxlength="60" placeholder="例如：汽车素材包" />
@@ -1555,9 +1556,9 @@ function canManageAssetGroup(asset: AssetItem) {
   }
   const visibility = String(asset.visibility || '').toUpperCase()
   if (visibility === 'PUBLIC' || listScope.value === 'global') {
-    return currentUser.value?.role === 'ADMIN'
+    return String(currentUser.value?.role || '').toUpperCase() === 'ADMIN'
   }
-  return asset.ownerUserId != null && (!currentUser.value?.userId || asset.ownerUserId === currentUser.value.userId)
+  return asset.ownerUserId != null && currentUser.value?.userId != null && asset.ownerUserId === currentUser.value.userId
 }
 
 function openGroupEditor(asset: AssetItem) {

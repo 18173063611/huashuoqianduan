@@ -399,7 +399,7 @@
                 :source-types="['STORYBOARD_GENERATE', 'VIDEO_SCRIPT_ANALYZE', 'VIDEO_SCRIPT_URL_ANALYZE', 'USER_UPLOAD']"
                 :asset-roles="['storyboard_json']"
                 :role-options="CAR_STORYBOARD_ROLE_OPTIONS"
-                source-hint="分镜只用于段落节奏、景别、运镜和构图，车辆、人物、场景事实以参考图和文案为准"
+                source-hint="旧分镜无需重新生成；系统会在视频制作时智能合并相邻短镜头，只保留段落节奏、景别、运镜和构图"
                 placeholder="搜索分镜生成结果..."
                 @select="handleCarStoryboardAssetSelect"
               />
@@ -2704,6 +2704,12 @@ async function handleCarStoryboardAssetSelect(payload: { asset: AssetItem; url: 
     const shots = extractStoryboardShots(carStoryboardContext.value)
     if (shots.length > 0) {
       applyCarRecommendation(false)
+      const groups = groupStoryboardShots(shots, selectedSeedanceModel.value.maxDuration, carSegmentCount.value)
+      ElMessage.success(
+        groups.length < shots.length
+          ? `已载入分镜，${shots.length} 个镜头将智能合并为 ${groups.length} 个连续段落`
+          : '已载入分镜，视频制作会按当前模型时长自动规划段落',
+      )
     }
   } catch (error) {
     errorMessage.value = error instanceof Error ? error.message : '分镜资产读取失败'
