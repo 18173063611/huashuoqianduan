@@ -224,13 +224,6 @@ import type { AvatarGenerateRequest, AvatarGenerateTaskResult, AvatarItem } from
 
 const sourceMode = ref<'AI' | 'UPLOAD'>('AI')
 const loggedIn = ref(false)
-// 与后端 createTask 实际预扣金额完全一致；自带 balance/enoughBalance/insufficientHint。
-const avatarEstimate = useBillingEstimate({ taskType: 'AVATAR_GENERATE' })
-
-async function refreshLocalBalance() {
-  await avatarEstimate.refresh()
-}
-
 const form = reactive<AvatarGenerateRequest>({
   avatarName: '',
   prompt: '生成一位适合知识口播的数字人形象，干净背景，正面半身，商业摄影质感',
@@ -239,6 +232,17 @@ const form = reactive<AvatarGenerateRequest>({
   imageCount: 4,
   size: '2K',
 })
+// 与后端 createTask 实际预扣金额完全一致；数字人形象按张数动态预估，更贴近实际结算。
+const avatarEstimate = useBillingEstimate({
+  taskType: 'AVATAR_GENERATE',
+  watchKeys: () => form.imageCount,
+  buildRequest: () => ({ imageCount: form.imageCount }),
+})
+
+async function refreshLocalBalance() {
+  await avatarEstimate.refresh()
+}
+
 const uploadName = ref('')
 const uploadFile = ref<File | null>(null)
 

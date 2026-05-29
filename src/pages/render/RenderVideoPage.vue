@@ -1065,7 +1065,7 @@
         <div>
           <h2>生成结果</h2>
           <p class="app-muted">
-            多段成片会按设置好的段落并行生成，再按原分镜顺序合成为完整视频；完成的片段会先展示。
+            系统会先把相邻短分镜合并为连续段落，超过模型单段上限时再分段生成并按顺序合成；完成的片段会先展示。
           </p>
         </div>
       </div>
@@ -1200,6 +1200,12 @@ type SeedanceModelValue = 'doubao-seedance-1-5-pro-251215' | 'ep-20260512233524-
 type CarMaterialGroup = 'exterior' | 'interior' | 'detail' | 'scene' | 'host'
 type RenderProductionMode = 'quick' | 'manual'
 type RenderAspectRatio = '9:16' | '16:9' | 'auto'
+
+interface StoryboardShotGroup {
+  shots: VideoScriptShotItem[]
+  startIndex: number
+  duration: number
+}
 
 interface ModelRequirement {
   model: SeedanceModelValue
@@ -1535,22 +1541,29 @@ const loggedIn = ref(false)
 
 /**
  * 当前 Tab 对应的预扣 task_type：
- *   文生视频 → TEXT_TO_VIDEO_SEEDANCE_1_5（默认主力模型；2.0 价格不同，但前端展示以 1.5 为基线，
- *              提交时后端 createTask 会按真实 request 的 modelCode 重新解析，依旧能保证"前后一致"）
- *   图生视频（首帧 / 首尾帧） → IMAGE_TO_VIDEO_SEEDANCE_1_5
- *   图生视频（参照图）         → IMAGE_TO_VIDEO_SEEDANCE_2_0_FAST
+ *   文生视频 / 图生视频使用后端实际落库的 SEEDANCE_* 任务类型，保证页面预估与 createTask 预扣一致。
+ *   汽车销售成片按 segmentCount * 220 动态预估。
  *   数字人口播                 → DIGITAL_HUMAN_GENERATE
  */
 const currentRenderTaskType = computed(() => {
   if (mainTab.value === 'digitalHuman') return 'DIGITAL_HUMAN_GENERATE'
   if (mainTab.value === 'carSales') return 'SEEDANCE_CAR_SALES_VIDEO'
-  if (mainTab.value === 'text') return 'TEXT_TO_VIDEO_SEEDANCE_1_5'
-  if (imageSubTab.value === 'reference') return 'IMAGE_TO_VIDEO_SEEDANCE_2_0_FAST'
-  return 'IMAGE_TO_VIDEO_SEEDANCE_1_5'
+  if (mainTab.value === 'text') return 'SEEDANCE_TEXT_VIDEO'
+  if (imageSubTab.value === 'reference') return 'SEEDANCE_REFERENCE_VIDEO'
+  if (imageSubTab.value === 'firstLast') return 'SEEDANCE_FIRST_LAST_FRAME_VIDEO'
+  return 'SEEDANCE_FIRST_FRAME_VIDEO'
 })
 
 // 一份预估 + Tab 切换自动重取；与后端 createTask 实际预扣金额保持一致，不允许任何前端写死。
-const renderEstimate = useBillingEstimate({ taskType: () => currentRenderTaskType.value })
+const renderEstimate = useBillingEstimate({
+  taskType: () => currentRenderTaskType.value,
+  watchKeys: () => [mainTab.value, imageSubTab.value, carSegmentCount.value],
+  buildRequest: () => (
+    mainTab.value === 'carSales'
+      ? { segmentCount: carSegmentCount.value }
+      : {}
+  ),
+})
 
 async function refreshLocalBalance() {
   await renderEstimate.refresh()
@@ -1670,7 +1683,7 @@ const audioReferenceHint = computed(() => {
   if (!isSeedance2Selected.value) {
     return '参考音频生成仅支持 seedance2.0；seedance1.5 只能后期口播配音。'
   }
-  if (carSegmentCount.value !== 1) {
+  if (plannedCarSceneCount.value !== 1) {
     return '参考音频生成当前仅支持 1 段视频；多段成片建议使用后期口播配音。'
   }
   return 'seedance2.0 会把音频作为生成参考，并在成片中使用该音频。'
@@ -1932,11 +1945,15 @@ const carStoryboardNeededVehicleRoles = computed(() => {
       roles.push(role)
     }
   }
-  const shots = storyboardShotsForRecommendation.value.slice(0, carSegmentCount.value)
-  if (shots.length > 0) {
-    shots.forEach((shot, idx) => {
-      const title = `镜头 ${shot.order || idx + 1}`
-      const visualPrompt = storyboardVisualText(shot, idx)
+  const groups = groupStoryboardShots(
+    storyboardShotsForRecommendation.value,
+    selectedSeedanceModel.value.maxDuration,
+    carSegmentCount.value,
+  )
+  if (groups.length > 0) {
+    groups.forEach((group, idx) => {
+      const title = `段落 ${idx + 1}`
+      const visualPrompt = storyboardGroupVisualText(group, idx, groups.length)
       carSceneRolePriority(title, visualPrompt, idx).forEach(pushRole)
     })
   } else {
@@ -1963,7 +1980,7 @@ const carStoryboardBundleNeedText = computed(() => {
   const prefix = labels.length
     ? `当前分镜建议优先准备：${labels.join('、')}`
     : '建议按分镜会出现的车身、内饰和细节部位准备素材'
-  return `${prefix}。生成时会按每段分镜从素材包中取对应部位，Seedance2 单段最多使用 ${SEEDANCE2_MAX_REFERENCE_IMAGES} 张参考图。`
+  return `${prefix}。生成时会先合并相邻短分镜，再按每个连续段落从素材包中取对应部位，Seedance2 单段最多使用 ${SEEDANCE2_MAX_REFERENCE_IMAGES} 张参考图。`
 })
 const carMaterialMissingText = computed(() =>
   carStoryboardMissingVehicleRoleLabels.value.length
@@ -2017,9 +2034,12 @@ const carVoicePolicyDescription = computed(() => {
 
 const storyboardShotsForRecommendation = computed(() => extractStoryboardShots(carStoryboardContext.value))
 const storyboardDurationSeconds = computed(() => storyboardTotalDuration(storyboardShotsForRecommendation.value))
+const storyboardShotGroupsForRecommendation = computed(() =>
+  groupStoryboardShots(storyboardShotsForRecommendation.value, selectedSeedanceModel.value.maxDuration),
+)
 const storyboardTimingSignature = computed(() =>
   storyboardShotsForRecommendation.value
-    .map((shot, idx) => `${idx + 1}:${shot.order}:${shot.time || ''}`)
+    .map((shot, idx) => `${idx + 1}:${shot.order}:${shot.time || ''}:${shot.content || ''}`)
     .join('|'),
 )
 const maxStoryboardSegmentDurationRaw = computed(() => {
@@ -2032,26 +2052,33 @@ const carRecommendedSegmentCount = computed(() => {
   if (carAudioMode.value === 'reference' && carAudioUrl.value.trim()) {
     return 1
   }
-  const shotCount = storyboardShotsForRecommendation.value.length
-  if (shotCount > 0) {
-    return Math.max(1, Math.min(12, shotCount))
+  const groupedShotCount = storyboardShotGroupsForRecommendation.value.length
+  const audioCount = carAudioDurationSeconds.value && carAudioDurationSeconds.value > 0
+    ? Math.max(1, Math.min(12, Math.ceil(carAudioDurationSeconds.value / selectedSeedanceModel.value.maxDuration)))
+    : 0
+  if (groupedShotCount > 0) {
+    return Math.max(1, Math.min(12, Math.max(groupedShotCount, audioCount || 1)))
   }
   if (carAudioDurationSeconds.value && carAudioDurationSeconds.value > 0) {
-    return Math.max(1, Math.min(12, Math.ceil(carAudioDurationSeconds.value / selectedSeedanceModel.value.maxDuration)))
+    return audioCount
   }
   return Math.max(1, Math.min(12, carSegmentCount.value || 4))
 })
 const carRecommendedSegmentDurations = computed(() => {
   const count = carRecommendedSegmentCount.value
-  const storyboardShots = storyboardShotsForRecommendation.value.slice(0, count)
   if (carAudioMode.value === 'reference' && carAudioDurationSeconds.value) {
     return [clampCarSegmentDuration(Math.ceil(carAudioDurationSeconds.value))]
   }
-  if (storyboardShots.length > 0) {
-    return Array.from({ length: count }, (_, idx) => {
-      const raw = parseStoryboardDurationRaw(storyboardShots[idx]?.time || '')
-      return clampCarSegmentDuration(raw || carSegmentDuration.value || 8)
-    })
+  const groups = storyboardShotGroupsForRecommendation.value
+  if (groups.length > 0) {
+    const durations = groups.map((group) => clampCarSegmentDuration(group.duration))
+    if (durations.length === count) {
+      return durations
+    }
+    const total = carAudioDurationSeconds.value && carAudioDurationSeconds.value > sumDurations(durations)
+      ? Math.ceil(carAudioDurationSeconds.value)
+      : sumDurations(durations)
+    return distributeDurationAcrossSegments(total, count)
   }
   if (carAudioDurationSeconds.value) {
     return distributeDurationAcrossSegments(Math.ceil(carAudioDurationSeconds.value), count)
@@ -2070,7 +2097,8 @@ const carRecommendationReasonText = computed(() => {
   const reasons: string[] = []
   const shotCount = storyboardShotsForRecommendation.value.length
   if (shotCount > 0) {
-    reasons.push(`已选分镜包含 ${shotCount} 个镜头`)
+    const groupCount = storyboardShotGroupsForRecommendation.value.length || shotCount
+    reasons.push(`已选分镜包含 ${shotCount} 个镜头，已合并为 ${groupCount} 个连续段落`)
   }
   if (storyboardDurationSeconds.value) {
     reasons.push(`分镜标注时长约 ${formatSeconds(storyboardDurationSeconds.value)}`)
@@ -2084,6 +2112,12 @@ const carRecommendationReasonText = computed(() => {
   reasons.push(`${selectedSeedanceModel.value.label} 单段最长 ${selectedSeedanceModel.value.maxDuration} 秒`)
   return reasons.join('；')
 })
+const carRecommendationSignature = computed(() => [
+  storyboardTimingSignature.value,
+  selectedModel.value,
+  carAudioDurationSeconds.value || '',
+  carAudioMode.value,
+].join('|'))
 const carSegmentDurationSummary = computed(() =>
   `总约 ${carTotalDuration.value} 秒（${formatDurationList(normalizedCarSegmentDurations.value)}）`,
 )
@@ -2091,7 +2125,7 @@ const carSegmentDurationPanelHint = computed(() =>
   carSegmentTimingTouched.value
     ? '已按手动设置提交，分镜变化后会重新推荐'
     : storyboardShotsForRecommendation.value.length
-    ? '已按分镜时间自动填写，可逐段微调'
+    ? '已按分镜时长智能合并为连续段落，可逐段微调'
     : '没有分镜时间时使用默认均匀时长，可逐段调整',
 )
 const carSegmentTimingNotice = computed(() => {
@@ -2100,7 +2134,10 @@ const carSegmentTimingNotice = computed(() => {
     return `部分分镜超过 ${selectedSeedanceModel.value.maxDuration} 秒，已按当前模型单段上限截断；更长镜头建议拆成多个分镜。`
   }
   if (storyboardShotsForRecommendation.value.length) {
-    return '分镜时间变化后会重新给出推荐分段；你手动调整后，提交时会按这里的每段时长生成。'
+    if (storyboardShotGroupsForRecommendation.value.length < storyboardShotsForRecommendation.value.length) {
+      return '相邻短镜头会在模型时长上限内合并成一段生成，减少拼接割裂；你手动调整后，提交时会按这里的段落时长生成。'
+    }
+    return '分镜时间变化后会重新给出推荐段落；你手动调整后，提交时会按这里的每段时长生成。'
   }
   return ''
 })
@@ -2165,7 +2202,7 @@ watch(
 )
 
 watch(
-  () => storyboardTimingSignature.value,
+  () => carRecommendationSignature.value,
   (signature, previous) => {
     if (!signature || signature === previous || mainTab.value !== 'carSales' || busy.value) {
       return
@@ -3056,13 +3093,12 @@ function collectStoryboardIgnoredFields(raw: string) {
   return Array.from(ignored)
 }
 
-function parseStoryboardDuration(time: string) {
-  const seconds = parseStoryboardDurationRaw(time)
-  if (seconds == null) return undefined
-  return clampCarSegmentDuration(seconds)
-}
-
 function parseStoryboardDurationRaw(time: string) {
+  const plain = time.match(/^\s*(\d+(?:\.\d+)?)\s*(?:s|sec|secs|second|seconds|秒)?\s*$/i)
+  if (plain) {
+    const seconds = Math.round(Number(plain[1]))
+    return Number.isFinite(seconds) && seconds > 0 ? seconds : undefined
+  }
   const match = time.match(/(\d{1,2}):(\d{2}):(\d{2})(?:\.\d+)?\s*[-~—]\s*(\d{1,2}):(\d{2}):(\d{2})(?:\.\d+)?/)
   if (!match) return undefined
   const start = Number(match[1]) * 3600 + Number(match[2]) * 60 + Number(match[3])
@@ -3076,6 +3112,105 @@ function storyboardTotalDuration(shots: VideoScriptShotItem[]) {
   const durations = shots.map((shot) => parseStoryboardDurationRaw(shot.time)).filter((n): n is number => !!n)
   if (!durations.length) return null
   return durations.reduce((sum, value) => sum + value, 0)
+}
+
+function storyboardShotEstimatedDuration(shot: VideoScriptShotItem) {
+  const explicit = parseStoryboardDurationRaw(shot.time)
+  if (explicit) return explicit
+  const narration = [shot.content, shot.highlight].filter(Boolean).join('')
+  if (narration.trim()) {
+    const cjk = /[\u4e00-\u9fff]/.test(narration)
+    const seconds = Math.ceil(narration.length / (cjk ? 7 : 14))
+    return Math.max(4, Math.min(selectedSeedanceModel.value.maxDuration, seconds))
+  }
+  return Math.min(5, selectedSeedanceModel.value.maxDuration)
+}
+
+function makeStoryboardGroup(shots: VideoScriptShotItem[], startIndex: number): StoryboardShotGroup {
+  const total = shots.reduce((sum, shot) => sum + storyboardShotEstimatedDuration(shot), 0)
+  return {
+    shots,
+    startIndex,
+    duration: clampCarSegmentDuration(total),
+  }
+}
+
+function reindexStoryboardGroups(groups: StoryboardShotGroup[]) {
+  let cursor = 0
+  return groups.map((group) => {
+    const next = makeStoryboardGroup(group.shots, cursor)
+    cursor += group.shots.length
+    return next
+  })
+}
+
+function splitStoryboardGroupsToCount(groups: StoryboardShotGroup[], desiredCount: number) {
+  const result = groups.map((group) => ({ ...group, shots: group.shots.slice() }))
+  while (result.length < desiredCount) {
+    const splitIndex = result
+      .map((group, idx) => ({ idx, count: group.shots.length }))
+      .filter((item) => item.count > 1)
+      .sort((a, b) => b.count - a.count)[0]?.idx
+    if (splitIndex == null) break
+    const group = result[splitIndex]
+    const mid = Math.ceil(group.shots.length / 2)
+    result.splice(
+      splitIndex,
+      1,
+      makeStoryboardGroup(group.shots.slice(0, mid), group.startIndex),
+      makeStoryboardGroup(group.shots.slice(mid), group.startIndex + mid),
+    )
+  }
+  return reindexStoryboardGroups(result)
+}
+
+function mergeStoryboardGroupsToCount(groups: StoryboardShotGroup[], desiredCount: number, maxDuration: number) {
+  const result = groups.map((group) => ({ ...group, shots: group.shots.slice() }))
+  while (result.length > desiredCount) {
+    let merged = false
+    for (let idx = 0; idx < result.length - 1; idx += 1) {
+      const combinedShots = result[idx].shots.concat(result[idx + 1].shots)
+      const combinedDuration = combinedShots.reduce((sum, shot) => sum + storyboardShotEstimatedDuration(shot), 0)
+      if (combinedDuration <= maxDuration) {
+        result.splice(idx, 2, makeStoryboardGroup(combinedShots, result[idx].startIndex))
+        merged = true
+        break
+      }
+    }
+    if (!merged) break
+  }
+  return reindexStoryboardGroups(result)
+}
+
+function groupStoryboardShots(shots: VideoScriptShotItem[], maxDuration: number, desiredCount?: number) {
+  const max = Math.max(4, Math.round(maxDuration || selectedSeedanceModel.value.maxDuration || 15))
+  if (!shots.length) return []
+  const groups: StoryboardShotGroup[] = []
+  let current: VideoScriptShotItem[] = []
+  let currentStart = 0
+  let currentDuration = 0
+  shots.forEach((shot, idx) => {
+    const duration = Math.max(1, storyboardShotEstimatedDuration(shot))
+    if (current.length && currentDuration + duration > max) {
+      groups.push(makeStoryboardGroup(current, currentStart))
+      current = []
+      currentDuration = 0
+      currentStart = idx
+    }
+    current.push(shot)
+    currentDuration += duration
+  })
+  if (current.length) {
+    groups.push(makeStoryboardGroup(current, currentStart))
+  }
+  const count = desiredCount == null ? groups.length : normalizeCarSegmentCount(desiredCount)
+  if (count > groups.length) {
+    return splitStoryboardGroupsToCount(groups, count)
+  }
+  if (count < groups.length) {
+    return mergeStoryboardGroupsToCount(groups, count, max)
+  }
+  return reindexStoryboardGroups(groups)
 }
 
 function clampCarSegmentDuration(value: number) {
@@ -3376,6 +3511,19 @@ function storyboardVisualText(shot: VideoScriptShotItem, idx: number) {
   pieces.push(`镜头意图 ${storyboardIntentText(sourceText)}`)
   pieces.push(`导演执行 ${storyboardShotPlanText(sourceText, idx, carSegmentCount.value)}`)
   return pieces.join('；')
+}
+
+function storyboardGroupVisualText(group: StoryboardShotGroup, groupIndex: number, totalGroups: number) {
+  const orders = group.shots.map((shot, idx) => shot.order || group.startIndex + idx + 1)
+  const rangeText = orders.length === 1 ? `${orders[0]}` : orders.join('、')
+  const lines = [
+    `段落${groupIndex + 1}/${Math.max(1, totalGroups)}，合并原分镜 ${rangeText}，总时长约 ${group.duration} 秒`,
+    '请在同一条视频内连续完成这些子镜头，主体车辆、人物、场景、光线和运动方向保持一致；用自然运镜和小幅转场承接，不要像多条视频硬拼接。',
+  ]
+  group.shots.forEach((shot, idx) => {
+    lines.push(`子镜头${idx + 1}：${storyboardVisualText(shot, group.startIndex + idx)}`)
+  })
+  return lines.join('\n')
 }
 
 function summarizeStoryboardForPrompt(raw: string) {
@@ -3714,7 +3862,17 @@ const carVisualSourceLabel = computed(() => {
   return sources.length ? sources.join('、') : '未选择'
 })
 
-const carSegmentModeLabel = computed(() => (carSegmentCount.value === 1 ? '单段' : `多段（${carSegmentCount.value} 段）`))
+const plannedCarSceneCount = computed(() => {
+  const shots = extractStoryboardShots(carStoryboardContext.value)
+  if (!shots.length) return carSegmentCount.value
+  return groupStoryboardShots(shots, selectedSeedanceModel.value.maxDuration, carSegmentCount.value).length
+})
+
+const carSegmentModeLabel = computed(() => {
+  const count = plannedCarSceneCount.value
+  if (count === 1) return '单段'
+  return `智能分段（${count} 段）`
+})
 
 const carGenerationBlockingMessages = computed(() => {
   if (mainTab.value !== 'carSales') return []
@@ -3722,7 +3880,7 @@ const carGenerationBlockingMessages = computed(() => {
   if (carAudioMode.value === 'reference' && !isSeedance2Selected.value) {
     messages.push('参考音频生成仅支持 Seedance 2.0')
   }
-  if (carAudioMode.value === 'reference' && carSegmentCount.value > 1) {
+  if (carAudioMode.value === 'reference' && plannedCarSceneCount.value > 1) {
     messages.push('当前参考音频生成仅支持单段视频，多段请使用后期口播配音或拆段生成')
   }
   if (usesModelNativeVoiceover() && carVoiceTextSource.value === 'benchmark' && !carBenchmarkVoiceText.value.trim()) {
@@ -3828,11 +3986,11 @@ function buildCarScriptContext() {
   if (hasSelectedVoiceAudio()) {
     parts.push('内容主导：已选择口播/配音音频，口型和节奏以该音频为准；字幕按当前字幕设置处理；分镜和爆款对标文案只作为画面参考。')
     if (effectiveVoiceTextPreview.value) {
-      parts.push(`口播原文已按 ${carSegmentCount.value} 段写入 scenes.voiceText；每段生成时只使用对应片段，不重复整条文案。`)
+      parts.push(`口播原文已按 ${plannedCarSceneCount.value} 个连续段落写入 scenes.voiceText；每段生成时只使用对应片段，不重复整条文案。`)
     }
   } else if (usesModelNativeVoiceover()) {
     parts.push(`内容主导：视频模型按口播文案直接生成画面和原生音频，文案来源为${carVoiceTextSourceLabel.value}，风格为${carNativeVoiceStyleSummary.value}；BGM 只作为背景音乐。`)
-    parts.push(`口播原文已按 ${carSegmentCount.value} 段写入 scenes.voiceText；每段生成时只使用对应片段，不重复整条文案，不对台词做改写。`)
+    parts.push(`口播原文已按 ${plannedCarSceneCount.value} 个连续段落写入 scenes.voiceText；每段生成时只使用对应片段，不重复整条文案，不对台词做改写。`)
   } else if (carVoiceContext.value.trim()) {
     parts.push(`口播文案参考：${carVoiceContext.value.trim()}`)
   }
@@ -3950,12 +4108,18 @@ function buildCarSubtitleValue() {
 
 function buildCarSalesScenes() {
   const storyboardShots = extractStoryboardShots(carStoryboardContext.value)
-  const voiceChunks = splitVoiceTextForSegments(effectiveVoiceTextPreview.value, carSegmentCount.value)
-  const segmentDurations = normalizedCarSegmentDurations.value
   if (storyboardShots.length > 0) {
-    return storyboardShots.slice(0, carSegmentCount.value).map((shot, idx) => {
-      const title = `镜头 ${shot.order || idx + 1}`
-      const visualPrompt = storyboardVisualText(shot, idx)
+    const groups = groupStoryboardShots(
+      storyboardShots,
+      selectedSeedanceModel.value.maxDuration,
+      carSegmentCount.value,
+    )
+    const voiceChunks = splitVoiceTextForSegments(effectiveVoiceTextPreview.value, groups.length)
+    const segmentDurations = normalizeCarSegmentDurations(carSegmentDurations.value, groups.length)
+    return groups.map((group, idx) => {
+      const orders = group.shots.map((shot, localIdx) => shot.order || group.startIndex + localIdx + 1)
+      const title = orders.length === 1 ? `镜头 ${orders[0]}` : `连续镜头 ${orders.join('、')}`
+      const visualPrompt = storyboardGroupVisualText(group, idx, groups.length)
       const imageUrls = carSceneImageUrls(title, visualPrompt, idx)
       return {
         segmentIndex: idx + 1,
@@ -3965,10 +4129,12 @@ function buildCarSalesScenes() {
         imageUrls,
         referenceImage: imageUrls[0],
         voiceText: voiceChunks[idx] || undefined,
-        duration: segmentDurations[idx] || parseStoryboardDuration(shot.time) || carSegmentDuration.value,
+        duration: segmentDurations[idx] || group.duration || carSegmentDuration.value,
       }
     })
   }
+  const voiceChunks = splitVoiceTextForSegments(effectiveVoiceTextPreview.value, carSegmentCount.value)
+  const segmentDurations = normalizedCarSegmentDurations.value
   const titles = [
     '外观开场',
     '车头灯光',
@@ -4029,7 +4195,11 @@ function carAudioModeForRequest(): CarAudioMode {
 }
 
 function carFinalVoiceTextForRequest() {
-  const chunks = splitVoiceTextForSegments(effectiveVoiceTextPreview.value, carSegmentCount.value)
+  const storyboardShots = extractStoryboardShots(carStoryboardContext.value)
+  const count = storyboardShots.length
+    ? groupStoryboardShots(storyboardShots, selectedSeedanceModel.value.maxDuration, carSegmentCount.value).length
+    : carSegmentCount.value
+  const chunks = splitVoiceTextForSegments(effectiveVoiceTextPreview.value, count)
   return chunks.length ? chunks.join('\n') : undefined
 }
 
@@ -4229,6 +4399,7 @@ async function handleGenerate() {
       }
       return
     } else if (mainTab.value === 'carSales') {
+      const carScenes = buildCarSalesScenes()
       const submitted = await generateCarSalesVideo({
         carImageUrls: carImageUrls.value,
         brandModel: carBrandModel.value.trim() || undefined,
@@ -4256,9 +4427,9 @@ async function handleGenerate() {
         renderMode: 'manual',
         aspectRatio: aspectRatioForRequest(),
         assetRoleBindings: buildCarAssetRoleBindings(),
-        segmentCount: carSegmentCount.value,
-        segmentDuration: carSegmentDuration.value,
-        scenes: buildCarSalesScenes(),
+        segmentCount: carScenes.length || carSegmentCount.value,
+        segmentDuration: averageSegmentDuration(carScenes.map((scene) => Number(scene.duration) || carSegmentDuration.value)),
+        scenes: carScenes,
         model: selectedModel.value,
       })
       submittedTaskId = submitted.taskId

@@ -449,6 +449,24 @@
         <div v-else-if="previewLoading" class="asset-preview-empty">正在加载预览...</div>
 
         <template v-else>
+          <article v-if="previewSourceInfo.visible" class="asset-preview-source-info">
+            <div>
+              <strong>{{ previewSourceInfo.title || '来源视频' }}</strong>
+              <p v-if="previewSourceInfo.url">
+                解析视频：
+                <a :href="resolveFileUrl(previewSourceInfo.url)" target="_blank" rel="noreferrer">
+                  {{ previewSourceInfo.url }}
+                </a>
+              </p>
+              <small>
+                <template v-if="previewSourceInfo.sourceTime">视频上传/发布时间：{{ previewSourceInfo.sourceTime }}</template>
+                <template v-if="previewSourceInfo.assetTime">
+                  {{ previewSourceInfo.sourceTime ? ' · ' : '' }}资产产出时间：{{ previewSourceInfo.assetTime }}
+                </template>
+              </small>
+            </div>
+          </article>
+
           <div v-if="isCarBundlePreview" class="asset-preview-car-bundle">
             <div class="asset-preview-car-head">
               <strong>{{ carBundleTitle }}</strong>
@@ -831,6 +849,42 @@ const filteredVoices = computed(() => {
 })
 
 const previewRecord = computed(() => (isRecord(previewPayload.value) ? previewPayload.value : null))
+
+const previewSourceInfo = computed(() => {
+  const metadata = previewAsset.value ? parseJsonObject(previewAsset.value.metadataJson) : null
+  const parseResult = isRecord(previewRecord.value?.parseResult) ? previewRecord.value.parseResult : null
+  const url = firstNonEmptyText(
+    stringField(metadata, 'sourceUrl'),
+    stringField(metadata, 'originalUrl'),
+    stringField(metadata, 'shareUrl'),
+    stringField(metadata, 'url'),
+    stringField(parseResult, 'sourceUrl'),
+    stringField(parseResult, 'shareUrl'),
+    stringField(parseResult, 'playUrl'),
+    stringField(metadata, 'playUrl'),
+  )
+  const title = firstNonEmptyText(
+    stringField(parseResult, 'title'),
+    stringField(metadata, 'sourceTitle'),
+    stringField(metadata, 'title'),
+    generatedAssetSourceLabel(previewAsset.value),
+    url,
+  )
+  const sourceTime = formatSourceDate(firstNonEmptyText(
+    textFromRecord(parseResult, SOURCE_TIME_KEYS),
+    textFromRecord(metadata, SOURCE_TIME_KEYS),
+    findTextDeep(isRecord(parseResult?.rawData) ? parseResult.rawData : null, SOURCE_TIME_KEYS),
+    findTextDeep(previewRecord.value, SOURCE_TIME_KEYS),
+  ))
+  const assetTime = previewAsset.value?.createdAt ? formatTime(previewAsset.value.createdAt) : ''
+  return {
+    visible: Boolean(title || url || sourceTime),
+    title,
+    url,
+    sourceTime,
+    assetTime,
+  }
+})
 
 const previewTaskType = computed(() => {
   const asset = previewAsset.value
@@ -1602,6 +1656,96 @@ function numberField(value: Record<string, unknown> | null | undefined, field: s
   return typeof raw === 'number' && Number.isFinite(raw) ? raw : 0
 }
 
+const SOURCE_TIME_KEYS = [
+  'publishTime',
+  'publishedAt',
+  'publishAt',
+  'pubdate',
+  'pubDate',
+  'createTime',
+  'createdAt',
+  'create_time',
+  'uploadTime',
+  'uploadedAt',
+  'datePublished',
+  'timestamp',
+]
+
+function textFromRecord(record: Record<string, unknown> | null | undefined, keys: string[]) {
+  if (!record) {
+    return ''
+  }
+  for (const key of keys) {
+    const value = primitiveText(record[key])
+    if (value) {
+      return value
+    }
+  }
+  return ''
+}
+
+function findTextDeep(value: unknown, keys: string[], depth = 0): string {
+  if (depth > 4 || value == null) {
+    return ''
+  }
+  const keySet = new Set(keys.map((key) => key.toLowerCase()))
+  if (Array.isArray(value)) {
+    for (const item of value.slice(0, 12)) {
+      const found = findTextDeep(item, keys, depth + 1)
+      if (found) {
+        return found
+      }
+    }
+    return ''
+  }
+  if (!isRecord(value)) {
+    return ''
+  }
+  for (const [key, raw] of Object.entries(value)) {
+    if (keySet.has(key.toLowerCase())) {
+      const found = primitiveText(raw)
+      if (found) {
+        return found
+      }
+    }
+  }
+  for (const raw of Object.values(value)) {
+    const found = findTextDeep(raw, keys, depth + 1)
+    if (found) {
+      return found
+    }
+  }
+  return ''
+}
+
+function primitiveText(value: unknown) {
+  if (typeof value === 'string') {
+    return value.trim()
+  }
+  if (typeof value === 'number' && Number.isFinite(value)) {
+    return String(value)
+  }
+  return ''
+}
+
+function formatSourceDate(value: string) {
+  const text = value.trim()
+  if (!text) {
+    return ''
+  }
+  if (/^\d{10,13}$/.test(text)) {
+    const numeric = Number(text)
+    const millis = text.length === 10 ? numeric * 1000 : numeric
+    return formatTime(new Date(millis).toISOString())
+  }
+  const normalized = text.includes(' ') && !text.includes('T') ? text.replace(' ', 'T') : text
+  const date = new Date(normalized)
+  if (!Number.isNaN(date.getTime())) {
+    return formatTime(date.toISOString())
+  }
+  return text
+}
+
 function isPreviewScriptShot(value: unknown): value is PreviewScriptShot {
   return isRecord(value) && typeof value.order === 'number'
 }
@@ -2340,6 +2484,46 @@ async function playVoiceSample(voice: VoicePresetItem) {
 .asset-preview-benchmark {
   display: grid;
   gap: 14px;
+}
+
+.asset-preview-source-info {
+  margin-bottom: 14px;
+  border: 1px solid #edf0f6;
+  border-radius: 12px;
+  background: #fbfcff;
+  padding: 12px 14px;
+}
+
+.asset-preview-source-info strong {
+  display: block;
+  overflow: hidden;
+  color: #111827;
+  font-size: 15px;
+  font-weight: 900;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.asset-preview-source-info p,
+.asset-preview-source-info small {
+  display: block;
+  margin: 6px 0 0;
+  overflow: hidden;
+  color: #667085;
+  font-size: 13px;
+  line-height: 1.5;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.asset-preview-source-info a {
+  color: #4f46e5;
+  font-weight: 800;
+  text-decoration: none;
+}
+
+.asset-preview-source-info a:hover {
+  text-decoration: underline;
 }
 
 .asset-preview-video-info {

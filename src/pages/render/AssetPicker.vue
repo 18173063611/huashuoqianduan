@@ -52,32 +52,63 @@
         <div v-else-if="!busy && filteredAssets.length === 0" class="asset-picker-empty">{{ emptyResultText }}</div>
 
         <div v-else class="asset-picker-list" :class="{ 'asset-picker-list-rich': richJsonMode }">
-          <button
-            v-for="asset in filteredAssets"
-            :key="asset.assetId"
-            class="asset-picker-item"
-            :class="{ 'asset-picker-item-rich': richJsonMode, active: selectedAssetId === asset.assetId }"
-            type="button"
-            :disabled="busy"
-            @click="selectAsset(asset)"
-          >
-            <template v-if="richJsonMode">
-              <img
-                v-if="assetPreview(asset).coverUrl"
-                class="asset-picker-cover"
-                :src="assetPreview(asset).coverUrl"
-                alt=""
-              />
-              <span v-else class="asset-picker-icon asset-picker-icon-rich">{{ assetIcon(asset) }}</span>
-              <span class="asset-picker-meta asset-picker-meta-rich">
-                <strong>{{ assetPreview(asset).title }}</strong>
-                <small>{{ assetPreview(asset).subtitle }}</small>
-                <span v-if="assetRoleLabel(asset)" class="asset-picker-role-tag">{{ assetRoleLabel(asset) }}</span>
-                <span class="asset-picker-preview-text">{{ assetPreview(asset).detail }}</span>
-                <span class="asset-picker-date">产出时间：{{ formatDateTime(asset.createdAt) }}</span>
-              </span>
-            </template>
-            <template v-else>
+          <template v-for="asset in filteredAssets" :key="asset.assetId">
+            <article
+              v-if="richJsonMode"
+              class="asset-picker-item asset-picker-item-rich"
+              :class="{ active: selectedAssetId === asset.assetId }"
+            >
+              <div class="asset-picker-rich-main">
+                <img
+                  v-if="assetPreview(asset).coverUrl"
+                  class="asset-picker-cover"
+                  :src="assetPreview(asset).coverUrl"
+                  alt=""
+                />
+                <span v-else class="asset-picker-icon asset-picker-icon-rich">{{ assetIcon(asset) }}</span>
+                <span class="asset-picker-meta asset-picker-meta-rich">
+                  <strong>{{ assetPreview(asset).title }}</strong>
+                  <small>{{ assetPreview(asset).subtitle }}</small>
+                  <span v-if="assetRoleLabel(asset)" class="asset-picker-role-tag">{{ assetRoleLabel(asset) }}</span>
+                </span>
+              </div>
+
+              <div class="asset-picker-rich-lines">
+                <span v-if="assetPreview(asset).sourceLabel" class="asset-picker-source-line">
+                  <b>解析视频：</b>{{ assetPreview(asset).sourceLabel }}
+                </span>
+                <span v-if="assetPreview(asset).sourceTime" class="asset-picker-date">
+                  视频上传/发布时间：{{ assetPreview(asset).sourceTime }}
+                </span>
+                <span v-if="assetPreview(asset).previewText" class="asset-picker-preview-text">
+                  <b>{{ assetPreview(asset).previewLabel || '预览' }}：</b>{{ assetPreview(asset).previewText }}
+                </span>
+                <span v-else class="asset-picker-preview-text">{{ assetPreview(asset).detail }}</span>
+                <span class="asset-picker-date">资产产出时间：{{ formatDateTime(asset.createdAt) }}</span>
+                <a
+                  v-if="assetPreview(asset).sourceUrl"
+                  class="asset-picker-source-link"
+                  :href="assetPreview(asset).sourceUrl"
+                  target="_blank"
+                  rel="noreferrer"
+                  @click.stop
+                >
+                  打开来源视频
+                </a>
+              </div>
+
+              <div class="asset-picker-actions">
+                <button class="asset-picker-button" type="button" :disabled="busy" @click="selectAsset(asset)">选择</button>
+              </div>
+            </article>
+            <button
+              v-else
+              class="asset-picker-item"
+              :class="{ active: selectedAssetId === asset.assetId }"
+              type="button"
+              :disabled="busy"
+              @click="selectAsset(asset)"
+            >
               <img v-if="isImage" :src="resolveUrl(asset.thumbnailUrl || asset.fileUrl)" alt="" />
               <span v-else class="asset-picker-icon">{{ assetIcon(asset) }}</span>
               <span class="asset-picker-meta">
@@ -86,8 +117,8 @@
                 <span v-if="assetRoleLabel(asset)" class="asset-picker-role-tag">{{ assetRoleLabel(asset) }}</span>
                 <span class="asset-picker-date">产出时间：{{ formatDateTime(asset.createdAt) }}</span>
               </span>
-            </template>
-          </button>
+            </button>
+          </template>
         </div>
       </section>
     </div>
@@ -200,6 +231,11 @@ interface AssetPickerPreview {
   subtitle: string
   detail: string
   coverUrl: string
+  sourceLabel?: string
+  sourceUrl?: string
+  sourceTime?: string
+  previewLabel?: string
+  previewText?: string
 }
 
 const ASSET_ROLE_LABELS: Record<string, string> = {
@@ -479,6 +515,8 @@ function assetPreview(asset: AssetItem) {
 function buildFallbackPreview(asset: AssetItem): AssetPickerPreview {
   const meta = parseObject(asset.metadataJson)
   const parsedSource = parsedVideoSourceLabel(null, meta)
+  const sourceUrl = parsedVideoSourceUrl(null, meta)
+  const sourceTime = parsedVideoSourceTime(null, meta, null)
   const title = firstText(
     assetNormalizedRole(asset) === 'benchmark_json' && parsedSource ? `爆款对标：${parsedSource}` : '',
     assetNormalizedRole(asset) === 'storyboard_json' && parsedSource ? `分镜：${parsedSource}` : '',
@@ -499,11 +537,20 @@ function buildFallbackPreview(asset: AssetItem): AssetPickerPreview {
     subtitle: subtitleParts.filter(Boolean).join(' · '),
     detail: firstText(
       parsedSource ? `解析视频：${parsedSource}` : '',
-      textAt(meta, 'sourceUrl'),
+      sourceUrl,
       textAt(meta, 'videoId'),
       '点击选择后会自动填入到视频制作上下文。',
     ),
     coverUrl: '',
+    sourceLabel: parsedSource,
+    sourceUrl,
+    sourceTime,
+    previewLabel: '',
+    previewText: firstText(
+      textAt(meta, 'summary'),
+      textAt(meta, 'description'),
+      textAt(meta, 'originalText'),
+    ),
   }
 }
 
@@ -542,11 +589,13 @@ function buildJsonPreview(asset: AssetItem, text: string): AssetPickerPreview {
   )
   const sourceUrl = parsedVideoSourceUrl(parseResult, meta)
   const parsedSource = parsedVideoSourceLabel(parseResult, meta)
+  const sourceTime = parsedVideoSourceTime(parseResult, meta, parsed)
   const transcript = firstText(textAt(transcriptResult, 'originalText'), textAt(parsed, 'originalText'))
   const authorName = firstText(textAt(author, 'nickname'), textAt(author, 'uniqueId'))
   const coverUrl = resolveUrl(firstText(textAt(parseResult, 'coverUrl'), textAt(meta, 'coverUrl'), textAt(parsed, 'coverUrl')))
 
   if (benchmarkTitle || transcript || sourceTypeLabel(asset.sourceType).includes('爆款')) {
+    const previewText = ellipsis(firstText(transcript, sourceUrl, '暂无口播转写，选择后会作为口播参考。'), 150)
     return {
       title: `爆款对标：${firstText(benchmarkTitle, parsedSource, asset.fileName)}`,
       subtitle: [sourceTypeLabel(asset.sourceType), authorName ? `作者：${authorName}` : '', durationLabel(textAt(parseResult, 'durationSeconds'))]
@@ -559,6 +608,11 @@ function buildJsonPreview(asset: AssetItem, text: string): AssetPickerPreview {
         '暂无口播转写，选择后会作为口播参考。',
       ), 110),
       coverUrl,
+      sourceLabel: firstText(parsedSource, sourceUrl),
+      sourceUrl,
+      sourceTime,
+      previewLabel: transcript ? '口播预览' : '文案预览',
+      previewText,
     }
   }
 
@@ -571,6 +625,11 @@ function buildJsonPreview(asset: AssetItem, text: string): AssetPickerPreview {
       textAt(firstShot, 'page'),
     )
     const source = firstText(parsedSource, sourceUrl, textAt(meta, 'scriptVersionId') ? `脚本版本 ${textAt(meta, 'scriptVersionId')}` : '')
+    const previewText = ellipsis(firstText(
+      shotText,
+      parsedSource ? `来自 ${parsedSource}` : '',
+      '暂无镜头摘要，选择后会自动填入分镜控制内容。',
+    ), 150)
     return {
       title: `分镜：${firstText(source, asset.fileName)}`,
       subtitle: `${sourceTypeLabel(asset.sourceType)} · ${shots.length} 个镜头 · ${asset.assetType}`,
@@ -580,6 +639,11 @@ function buildJsonPreview(asset: AssetItem, text: string): AssetPickerPreview {
         '暂无镜头摘要，选择后会自动填入分镜控制内容。',
       ), 110),
       coverUrl: '',
+      sourceLabel: firstText(parsedSource, sourceUrl),
+      sourceUrl,
+      sourceTime,
+      previewLabel: '首镜预览',
+      previewText,
     }
   }
 
@@ -721,6 +785,110 @@ function parsedVideoSourceLabel(parseResult: Record<string, unknown> | null, met
     textAt(parseResult, 'videoId'),
     textAt(meta, 'videoId'),
   )
+}
+
+const SOURCE_TIME_KEYS = [
+  'publishTime',
+  'publishedAt',
+  'publishAt',
+  'pubdate',
+  'pubDate',
+  'createTime',
+  'createdAt',
+  'create_time',
+  'uploadTime',
+  'uploadedAt',
+  'datePublished',
+  'timestamp',
+]
+
+function parsedVideoSourceTime(
+  parseResult: Record<string, unknown> | null,
+  meta: Record<string, unknown> | null,
+  payload: Record<string, unknown> | null,
+) {
+  return formatSourceDate(firstText(
+    textFromRecord(parseResult, SOURCE_TIME_KEYS),
+    textFromRecord(meta, SOURCE_TIME_KEYS),
+    findTextDeep(objectAt(parseResult, 'rawData'), SOURCE_TIME_KEYS),
+    findTextDeep(payload, SOURCE_TIME_KEYS),
+  ))
+}
+
+function textFromRecord(record: Record<string, unknown> | null, keys: string[]) {
+  if (!record) {
+    return ''
+  }
+  for (const key of keys) {
+    const value = primitiveText(record[key])
+    if (value) {
+      return value
+    }
+  }
+  return ''
+}
+
+function findTextDeep(value: unknown, keys: string[], depth = 0): string {
+  if (depth > 4 || value == null) {
+    return ''
+  }
+  const keySet = new Set(keys.map((key) => key.toLowerCase()))
+  if (Array.isArray(value)) {
+    for (const item of value.slice(0, 12)) {
+      const found = findTextDeep(item, keys, depth + 1)
+      if (found) {
+        return found
+      }
+    }
+    return ''
+  }
+  if (typeof value !== 'object') {
+    return ''
+  }
+  const record = value as Record<string, unknown>
+  for (const [key, raw] of Object.entries(record)) {
+    if (keySet.has(key.toLowerCase())) {
+      const found = primitiveText(raw)
+      if (found) {
+        return found
+      }
+    }
+  }
+  for (const raw of Object.values(record)) {
+    const found = findTextDeep(raw, keys, depth + 1)
+    if (found) {
+      return found
+    }
+  }
+  return ''
+}
+
+function primitiveText(value: unknown) {
+  if (typeof value === 'string') {
+    return value.trim()
+  }
+  if (typeof value === 'number' && Number.isFinite(value)) {
+    return String(value)
+  }
+  return ''
+}
+
+function formatSourceDate(value: string) {
+  const text = value.trim()
+  if (!text) {
+    return ''
+  }
+  if (/^\d{10,13}$/.test(text)) {
+    const numeric = Number(text)
+    const millis = text.length === 10 ? numeric * 1000 : numeric
+    return formatDateTime(new Date(millis).toISOString())
+  }
+  const normalized = text.includes(' ') && !text.includes('T') ? text.replace(' ', 'T') : text
+  const date = new Date(normalized)
+  if (!Number.isNaN(date.getTime())) {
+    return formatDateTime(date.toISOString())
+  }
+  return text
 }
 
 function roleDisplayLabel(role: string) {
@@ -1103,10 +1271,28 @@ function formatFileSize(size: number) {
 }
 
 .asset-picker-item-rich {
-  grid-template-columns: 74px minmax(0, 1fr);
+  grid-template-columns: minmax(0, 1fr);
   align-items: start;
-  min-height: 126px;
+  min-height: 196px;
   padding: 12px;
+}
+
+.asset-picker-rich-main {
+  display: grid;
+  grid-template-columns: 74px minmax(0, 1fr);
+  gap: 10px;
+  min-width: 0;
+}
+
+.asset-picker-rich-lines {
+  display: grid;
+  gap: 5px;
+  min-width: 0;
+}
+
+.asset-picker-actions {
+  display: flex;
+  justify-content: flex-end;
 }
 
 .asset-picker-item.active,
@@ -1192,6 +1378,7 @@ function formatFileSize(size: number) {
   white-space: nowrap;
 }
 
+.asset-picker-source-line,
 .asset-picker-preview-text,
 .asset-picker-date {
   display: block;
@@ -1202,11 +1389,33 @@ function formatFileSize(size: number) {
   line-height: 1.45;
 }
 
+.asset-picker-source-line {
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.asset-picker-source-line b,
+.asset-picker-preview-text b {
+  color: #344054;
+}
+
 .asset-picker-preview-text {
   display: -webkit-box;
   min-height: 34px;
   -webkit-box-orient: vertical;
   -webkit-line-clamp: 2;
+}
+
+.asset-picker-source-link {
+  width: fit-content;
+  color: #4f46e5;
+  font-size: 12px;
+  font-weight: 800;
+  text-decoration: none;
+}
+
+.asset-picker-source-link:hover {
+  text-decoration: underline;
 }
 
 .asset-picker-date {

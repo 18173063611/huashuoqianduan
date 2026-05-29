@@ -49,6 +49,7 @@ export interface BillingEstimateRequest {
   usageUnit?: string
   inputTextLength?: number
   imageCount?: number
+  segmentCount?: number
   durationSeconds?: number
   providerCredits?: number
 }

@@ -30,6 +30,7 @@ export function getBillingEstimate(req: BillingEstimateRequest) {
   if (req.usageUnit != null && req.usageUnit !== '') qs.set('usageUnit', req.usageUnit)
   if (req.inputTextLength != null) qs.set('inputTextLength', String(req.inputTextLength))
   if (req.imageCount != null) qs.set('imageCount', String(req.imageCount))
+  if (req.segmentCount != null) qs.set('segmentCount', String(req.segmentCount))
   if (req.durationSeconds != null) qs.set('durationSeconds', String(req.durationSeconds))
   if (req.providerCredits != null) qs.set('providerCredits', String(req.providerCredits))
   return request<BillingEstimateResponse>(`/billing/estimate?${qs.toString()}`)

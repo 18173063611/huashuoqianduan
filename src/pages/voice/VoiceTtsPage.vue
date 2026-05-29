@@ -159,14 +159,6 @@ const selectedVoiceId = ref<number | null>(null)
 const voiceKeyword = ref('')
 const voiceGenderFilter = ref('')
 
-// 统一预估：与后端 createTask 预扣金额严格一致；自带 balance / enoughBalance / insufficientHint。
-const ttsEstimate = useBillingEstimate({ taskType: 'TTS_GENERATE' })
-
-async function refreshLocalBalance() {
-  // 兼容旧代码路径：触发 estimate 重取以刷新 balance / enoughBalance。
-  await ttsEstimate.refresh()
-}
-
 const scriptText = ref('')
 /** 仅当文案来自 `script_version` 表时传给后端 scriptId；writer 已应用文案只用 text，避免 ID 混用 */
 const loadedScriptVersionId = ref<number | null>(null)
@@ -181,6 +173,18 @@ const taskStatus = ref('')
 const taskProgress = ref<number | null>(null)
 const taskError = ref('')
 let stopTaskTracking: (() => void) | null = null
+
+// 统一预估：与后端 createTask 预扣金额严格一致；TTS 按当前文本长度动态预估，更贴近实际结算。
+const ttsEstimate = useBillingEstimate({
+  taskType: 'TTS_GENERATE',
+  watchKeys: () => scriptText.value.length,
+  buildRequest: () => ({ inputTextLength: scriptText.value.trim().length }),
+})
+
+async function refreshLocalBalance() {
+  // 兼容旧代码路径：触发 estimate 重取以刷新 balance / enoughBalance。
+  await ttsEstimate.refresh()
+}
 
 const { showTaskProgressBar, barProgressPercent, reset: resetSmoothProgress } = useSmoothTaskProgress(
   taskStatus,
