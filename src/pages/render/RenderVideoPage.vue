@@ -396,7 +396,8 @@
                 title="分镜生成结果（控制段落节奏）"
                 asset-type="JSON"
                 :selected-url="carStoryboardAssetUrl"
-                :source-types="['STORYBOARD_GENERATE', 'VIDEO_SCRIPT_ANALYZE', 'VIDEO_SCRIPT_URL_ANALYZE']"
+                :source-types="['STORYBOARD_GENERATE', 'VIDEO_SCRIPT_ANALYZE', 'VIDEO_SCRIPT_URL_ANALYZE', 'USER_UPLOAD']"
+                :asset-roles="['storyboard_json']"
                 :role-options="CAR_STORYBOARD_ROLE_OPTIONS"
                 source-hint="分镜只用于段落节奏、景别、运镜和构图，车辆、人物、场景事实以参考图和文案为准"
                 placeholder="搜索分镜生成结果..."
@@ -407,6 +408,7 @@
                 asset-type="JSON"
                 :selected-url="carBenchmarkAssetUrl"
                 :source-types="['DOUYIN_BENCHMARK', 'DOUYIN_PARSE_TRANSCRIPT', 'DOUYIN_REWRITE', 'DOUYIN_TRANSCRIPT', 'USER_UPLOAD']"
+                :asset-roles="['benchmark_json']"
                 :role-options="CAR_BENCHMARK_ROLE_OPTIONS"
                 source-hint="爆款解析文案主要用于声音生成或口播参考"
                 placeholder="搜索爆款对标文案..."
@@ -432,7 +434,8 @@
                     title="口播/配音音频"
                     asset-type="AUDIO"
                     :selected-url="carAudioUrl"
-                    :source-types="['TTS_GENERATE', 'VOICE_SAMPLE']"
+                    :source-types="['TTS_GENERATE', 'VOICE_SAMPLE', 'USER_UPLOAD']"
+                    :asset-roles="['voiceover', 'reference_audio']"
                     :role-options="CAR_VOICE_AUDIO_ROLE_OPTIONS"
                     source-hint="口播音频会作为字幕、口型和节奏的主导来源"
                     placeholder="搜索口播音频资产..."
@@ -629,6 +632,7 @@
                     asset-type="AUDIO"
                     :selected-url="carBgmUrl"
                     :source-types="['USER_UPLOAD']"
+                    :asset-roles="['bgm']"
                     :role-options="CAR_BGM_AUDIO_ROLE_OPTIONS"
                     source-hint="BGM 只作为背景音乐，不参与口播、字幕或口型生成"
                     placeholder="搜索 BGM 音频资产..."
@@ -674,6 +678,7 @@
                   asset-type="IMAGE"
                   :selected-url="carHostImageUrl"
                   :source-types="['AVATAR_GENERATE', 'USER_UPLOAD', 'MANUAL_CREATED', 'AI_GENERATED']"
+                  :asset-roles="['host_image']"
                   :role-options="CAR_HOST_IMAGE_ROLE_OPTIONS"
                   source-hint="选择数字人形象图片，生成时会作为销售顾问/主播参考图"
                   placeholder="搜索数字人形象或上传图片..."
@@ -692,6 +697,7 @@
                     asset-type="VIDEO"
                     :selected-url="carMaterialVideoUrl"
                     :source-types="['USER_UPLOAD', 'SEEDANCE_TEXT_VIDEO', 'SEEDANCE_FIRST_FRAME_VIDEO', 'SEEDANCE_FIRST_LAST_FRAME_VIDEO', 'SEEDANCE_REFERENCE_VIDEO', 'SEEDANCE_CAR_SALES_VIDEO']"
+                    :asset-roles="['material_video', 'host_video', 'reference_video']"
                     :role-options="CAR_VIDEO_ROLE_OPTIONS"
                     source-hint="选择上传或视频制作阶段产出的素材"
                     placeholder="搜索视频素材..."
@@ -1242,7 +1248,6 @@ const CAR_BGM_AUDIO_ROLE_OPTIONS = [{ value: 'bgm', label: 'BGM' }]
 const CAR_STORYBOARD_ROLE_OPTIONS = [{ value: 'storyboard_json', label: '分镜' }]
 const CAR_BENCHMARK_ROLE_OPTIONS = [
   { value: 'benchmark_json', label: '爆款对标' },
-  { value: 'voice_script', label: '口播文案' },
 ]
 const CAR_VIDEO_ROLE_OPTIONS = [
   { value: 'material_video', label: '视频素材' },
@@ -2376,7 +2381,49 @@ function carAssetRoleFromAsset(asset: AssetItem) {
   if (metadataRole) {
     return metadataRole
   }
+  const inferredRole = inferCarAssetRoleFromAsset(asset, metadata)
+  if (inferredRole) {
+    return inferredRole
+  }
   return normalizeCarAssetRole(asset.kind)
+}
+
+function inferCarAssetRoleFromAsset(asset: AssetItem, metadata: Record<string, unknown> | null) {
+  const sourceType = String(asset.sourceType || '').trim().toUpperCase()
+  const source = metadata ? firstRecordText(metadata, ['source']) : ''
+  const name = [
+    asset.fileName,
+    metadata ? firstRecordText(metadata, ['originalFileName', 'title', 'sourceTitle']) : '',
+  ].filter(Boolean).join(' ').toLowerCase()
+
+  if (
+    sourceType === 'AVATAR_GENERATE' ||
+    source.toUpperCase() === 'DOUBAO_SEEDREAM' ||
+    name.includes('avatar') ||
+    name.includes('host') ||
+    name.includes('主播') ||
+    name.includes('数字人')
+  ) {
+    return 'host_image'
+  }
+  if (name.includes('side') || name.includes('侧面') || name.includes('车侧')) return 'car_exterior_side'
+  if (name.includes('rear') || name.includes('back') || name.includes('尾部') || name.includes('车尾') || name.includes('背面')) return 'car_exterior_rear'
+  if (name.includes('45')) return 'car_exterior_45'
+  if (name.includes('dashboard') || name.includes('interior') || name.includes('内饰') || name.includes('中控')) return 'car_interior_dashboard'
+  if (name.includes('front_seat') || name.includes('前排')) return 'car_interior_front_seat'
+  if (name.includes('back_seat') || name.includes('rear_seat') || name.includes('后排')) return 'car_interior_back_seat'
+  if (name.includes('steering') || name.includes('方向盘') || name.includes('仪表')) return 'car_interior_steering'
+  if (name.includes('trunk') || name.includes('后备箱')) return 'car_interior_trunk'
+  if (name.includes('wheel') || name.includes('轮毂') || name.includes('轮胎')) return 'car_detail_wheel'
+  if (name.includes('logo') || name.includes('车标') || name.includes('标识')) return 'car_detail_logo'
+  if (name.includes('light') || name.includes('灯')) return 'car_detail_light'
+  if (name.includes('seat') || name.includes('座椅') || name.includes('材质')) return 'car_detail_seat_material'
+  if (name.includes('showroom') || name.includes('展厅') || name.includes('门店')) return 'scene_showroom'
+  if (name.includes('road') || name.includes('highway') || name.includes('山路') || name.includes('公路') || name.includes('道路')) return 'scene_road'
+  if (name.includes('night') || name.includes('夜景')) return 'scene_night'
+  if (name.includes('outdoor') || name.includes('city') || name.includes('户外') || name.includes('城市')) return 'scene_outdoor'
+  if (name.includes('front') || name.includes('car') || name.includes('车头') || name.includes('正面') || name.includes('外观')) return 'car_exterior_front'
+  return ''
 }
 
 function rememberCarImageAsset(asset: AssetItem, url: string) {
@@ -2717,7 +2764,14 @@ async function handleCarAudioUpload(event: Event) {
   carAudioUploadName.value = file.name
   errorMessage.value = ''
   try {
-    const asset = await uploadMaterialAsset(file)
+    const asset = await uploadMaterialAsset(file, {
+      metadataJson: JSON.stringify({
+        from: 'car_sales_voice_upload',
+        assetRole: 'voiceover',
+        originalFileName: file.name,
+        source: 'render_video',
+      }),
+    })
     carAudioUrl.value = normalizePublicUrl(asset.fileUrl)
     carAudioAssetId.value = asset.assetId
     carAudioSourceType.value = asset.sourceType || 'USER_UPLOAD'
@@ -2750,7 +2804,14 @@ async function handleCarBgmUpload(event: Event) {
   carBgmUploadName.value = file.name
   errorMessage.value = ''
   try {
-    const asset = await uploadMaterialAsset(file)
+    const asset = await uploadMaterialAsset(file, {
+      metadataJson: JSON.stringify({
+        from: 'car_sales_bgm_upload',
+        assetRole: 'bgm',
+        originalFileName: file.name,
+        source: 'render_video',
+      }),
+    })
     carBgmUrl.value = normalizePublicUrl(asset.fileUrl)
     carBgmAssetId.value = asset.assetId
     carBgmSourceType.value = asset.sourceType || 'USER_UPLOAD'
@@ -3392,7 +3453,7 @@ function splitVoiceTextForSegments(text: string, total: number) {
     return [clean]
   }
   const clauses = clean
-    .split(/(?<=[。！？!?；;，,、])|\n+/)
+    .split(/(?<=[。！？!?；;，,、.])|\n+/)
     .map((item) => item.trim())
     .filter(Boolean)
   if (clauses.length <= 1) {
@@ -3414,7 +3475,7 @@ function splitVoiceTextForSegments(text: string, total: number) {
       chunks.push(current)
       current = clause
     } else {
-      current += clause
+      current = joinVoiceChunk(current, clause)
     }
   })
   if (current) {
@@ -3438,15 +3499,87 @@ function splitTextByLength(text: string, total: number) {
     return clean ? [clean] : []
   }
   const chunks: string[] = []
-  for (let i = 0; i < count; i += 1) {
-    const start = Math.floor((clean.length * i) / count)
-    const end = Math.floor((clean.length * (i + 1)) / count)
-    const chunk = clean.slice(start, end).trim()
+  let cursor = 0
+  while (chunks.length < count - 1 && cursor < clean.length) {
+    const remainingSlots = count - chunks.length
+    const remainingLength = clean.length - cursor
+    const preferredEnd = cursor + Math.ceil(remainingLength / remainingSlots)
+    const end = smartVoiceSplitBoundary(clean, cursor, preferredEnd)
+    const chunk = clean.slice(cursor, end).trim()
     if (chunk) {
       chunks.push(chunk)
     }
+    cursor = skipVoiceWhitespace(clean, end)
+  }
+  const tail = clean.slice(cursor).trim()
+  if (tail) {
+    chunks.push(tail)
   }
   return chunks
+}
+
+function smartVoiceSplitBoundary(text: string, start: number, preferredEnd: number) {
+  const minEnd = Math.min(text.length, start + 1)
+  const clamped = Math.max(minEnd, Math.min(text.length, preferredEnd))
+  if (clamped >= text.length) {
+    return text.length
+  }
+  const window = 28
+  const leftLimit = Math.max(start + 1, clamped - window)
+  const rightLimit = Math.min(text.length - 1, clamped + window)
+  for (let i = clamped; i >= leftLimit; i -= 1) {
+    if (isPreferredVoiceBreak(text[i - 1])) {
+      return skipVoiceWhitespace(text, i)
+    }
+  }
+  for (let i = clamped; i <= rightLimit; i += 1) {
+    if (isPreferredVoiceBreak(text[i - 1])) {
+      return skipVoiceWhitespace(text, i)
+    }
+  }
+  if (isAsciiWordChar(text[clamped - 1]) && isAsciiWordChar(text[clamped])) {
+    for (let i = clamped; i >= leftLimit; i -= 1) {
+      if (!isAsciiWordChar(text[i - 1])) {
+        return skipVoiceWhitespace(text, i)
+      }
+    }
+    for (let i = clamped; i <= rightLimit; i += 1) {
+      if (!isAsciiWordChar(text[i])) {
+        return skipVoiceWhitespace(text, i + 1)
+      }
+    }
+    for (let i = rightLimit + 1; i < text.length; i += 1) {
+      if (!isAsciiWordChar(text[i])) {
+        return skipVoiceWhitespace(text, i + 1)
+      }
+    }
+    return text.length
+  }
+  return clamped
+}
+
+function joinVoiceChunk(left: string, right: string) {
+  if (!left) return right
+  if (!right) return left
+  const last = left[left.length - 1]
+  const first = right[0]
+  return isAsciiWordChar(last) && isAsciiWordChar(first) ? `${left} ${right}` : `${left}${right}`
+}
+
+function skipVoiceWhitespace(text: string, index: number) {
+  let next = Math.max(0, Math.min(text.length, index))
+  while (next < text.length && /\s/.test(text[next])) {
+    next += 1
+  }
+  return next
+}
+
+function isPreferredVoiceBreak(char: string | undefined) {
+  return !!char && /[\s。！？!?；;，,、.]/.test(char)
+}
+
+function isAsciiWordChar(char: string | undefined) {
+  return !!char && /[A-Za-z0-9'_+-]/.test(char)
 }
 
 const modelNativeVoiceTextPreview = computed(() => modelNativeVoiceTextForRequest())

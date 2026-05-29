@@ -463,7 +463,15 @@ async function handleFilesSelected(event: Event) {
   errorMessage.value = ''
   try {
     for (const file of files) {
-      const asset = await uploadMaterialAsset(file)
+      const inferredRole = inferUploadedAssetRoleForMetadata(file)
+      const asset = await uploadMaterialAsset(file, {
+        metadataJson: JSON.stringify({
+          from: 'quick_render_upload',
+          assetRole: inferredRole || undefined,
+          originalFileName: file.name,
+          source: 'quick_render',
+        }),
+      })
       await appendMaterial(asset, { name: file.name, type: file.type })
     }
   } catch (error) {
@@ -696,9 +704,68 @@ function digitalHumanDetailToVideoResult(detail: DigitalHumanTaskDetailResponse)
 }
 
 function inferRole(file: QuickFileLike, asset: AssetItem): QuickRenderAssetRole {
-  const name = `${file.name} ${asset.fileName || ''}`.toLowerCase()
-  const mime = (file.type || asset.mimeType || '').toLowerCase()
-  if (isCarModelBundleAsset(asset) || name.includes('车型素材包') || name.includes('car_model_bundle')) {
+  const metadata = parseQuickAssetMetadata(asset.metadataJson)
+  const explicitRole = normalizeQuickAssetRole(
+    quickMetadataText(metadata, 'assetRole') || quickMetadataText(metadata, 'role'),
+  )
+  if (explicitRole) {
+    return explicitRole
+  }
+  const sourceType = String(asset.sourceType || '').trim().toUpperCase()
+  const metadataSource = quickMetadataText(metadata, 'source').toUpperCase()
+  if (
+    asset.assetType === 'JSON' &&
+    ['DOUYIN_BENCHMARK', 'DOUYIN_PARSE_TRANSCRIPT', 'DOUYIN_REWRITE', 'DOUYIN_TRANSCRIPT'].includes(sourceType)
+  ) {
+    return 'benchmark_json'
+  }
+  if (
+    asset.assetType === 'JSON' &&
+    ['STORYBOARD_GENERATE', 'VIDEO_SCRIPT_ANALYZE', 'VIDEO_SCRIPT_URL_ANALYZE'].includes(sourceType)
+  ) {
+    return 'storyboard_json'
+  }
+  if (asset.assetType === 'AUDIO' && ['TTS_GENERATE', 'VOICE_SAMPLE'].includes(sourceType)) {
+    return 'voiceover'
+  }
+  if (asset.assetType === 'VIDEO' && sourceType === 'DIGITAL_HUMAN_GENERATE') {
+    return 'host_video'
+  }
+  if (
+    asset.assetType === 'IMAGE' &&
+    (sourceType === 'AVATAR_GENERATE' || metadataSource === 'DOUBAO_SEEDREAM' || quickMetadataText(metadata, 'avatarName'))
+  ) {
+    return 'host_image'
+  }
+  const name = [
+    file.name,
+    asset.fileName,
+    quickMetadataText(metadata, 'originalFileName'),
+    quickMetadataText(metadata, 'title'),
+    quickMetadataText(metadata, 'sourceTitle'),
+  ].filter(Boolean).join(' ')
+  if (isCarModelBundleAsset(asset) || name.includes('车型素材包') || name.toLowerCase().includes('car_model_bundle')) {
+    return 'car_model_bundle'
+  }
+  const mime = file.type || asset.mimeType || ''
+  return inferRoleFromNameAndMime(name, mime)
+}
+
+function inferUploadedAssetRoleForMetadata(file: File): QuickRenderAssetRole | '' {
+  const role = inferRoleFromNameAndMime(file.name, file.type)
+  if (role === 'material') {
+    return ''
+  }
+  if (role === 'scene_outdoor' && !hasExplicitOutdoorImageSignal(file.name)) {
+    return ''
+  }
+  return role
+}
+
+function inferRoleFromNameAndMime(nameText: string, mimeText: string | null | undefined): QuickRenderAssetRole {
+  const name = nameText.toLowerCase()
+  const mime = String(mimeText || '').toLowerCase()
+  if (name.includes('车型素材包') || name.includes('car_model_bundle')) {
     return 'car_model_bundle'
   }
   if (mime.startsWith('audio/')) {
@@ -735,6 +802,55 @@ function inferRole(file: QuickFileLike, asset: AssetItem): QuickRenderAssetRole 
     return 'scene_outdoor'
   }
   return 'material'
+}
+
+function hasExplicitOutdoorImageSignal(nameText: string) {
+  const name = nameText.toLowerCase()
+  return ['outdoor', 'city', '户外', '城市', '街景', '外景'].some((token) => name.includes(token))
+}
+
+function parseQuickAssetMetadata(value: string | null | undefined): Record<string, unknown> | null {
+  if (!value || !value.trim()) {
+    return null
+  }
+  try {
+    const parsed = JSON.parse(value) as unknown
+    return parsed && typeof parsed === 'object' && !Array.isArray(parsed)
+      ? parsed as Record<string, unknown>
+      : null
+  } catch {
+    return null
+  }
+}
+
+function quickMetadataText(metadata: Record<string, unknown> | null, key: string) {
+  const value = metadata?.[key]
+  return typeof value === 'string' ? value.trim() : ''
+}
+
+function normalizeQuickAssetRole(role: string | null | undefined): QuickRenderAssetRole | '' {
+  const normalized = String(role || '').trim().toLowerCase().replace(/[\s-]+/g, '_')
+  const aliases: Record<string, QuickRenderAssetRole> = {
+    voice: 'voiceover',
+    voice_over: 'voiceover',
+    tts: 'voiceover',
+    music: 'bgm',
+    background_music: 'bgm',
+    storyboard: 'storyboard_json',
+    benchmark: 'benchmark_json',
+    script: 'voice_script',
+    subtitle_text: 'subtitle',
+    car_bundle: 'car_model_bundle',
+    model_bundle: 'car_model_bundle',
+    host: 'host_image',
+    avatar: 'host_image',
+    host_video_asset: 'host_video',
+    reference: 'reference_video',
+  }
+  const roleValue = aliases[normalized] || normalized
+  return roleOptions.some((option) => option.value === roleValue)
+    ? roleValue as QuickRenderAssetRole
+    : ''
 }
 
 function isCarModelBundleAsset(asset: AssetItem) {

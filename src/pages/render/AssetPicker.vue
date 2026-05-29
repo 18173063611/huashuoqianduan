@@ -185,8 +185,8 @@ const filteredAssets = computed(() => {
     if (allowed.length > 0 && !allowed.includes(role)) {
       return false
     }
-    if (selected && role && role !== selected) {
-      return false
+    if (selected) {
+      return role === selected
     }
     return true
   })
@@ -478,8 +478,12 @@ function assetPreview(asset: AssetItem) {
 
 function buildFallbackPreview(asset: AssetItem): AssetPickerPreview {
   const meta = parseObject(asset.metadataJson)
+  const parsedSource = parsedVideoSourceLabel(null, meta)
   const title = firstText(
+    assetNormalizedRole(asset) === 'benchmark_json' && parsedSource ? `爆款对标：${parsedSource}` : '',
+    assetNormalizedRole(asset) === 'storyboard_json' && parsedSource ? `分镜：${parsedSource}` : '',
     textAt(meta, 'title'),
+    textAt(meta, 'sourceTitle'),
     textAt(meta, 'sourceUrl'),
     asset.fileName,
   )
@@ -493,7 +497,12 @@ function buildFallbackPreview(asset: AssetItem): AssetPickerPreview {
   return {
     title,
     subtitle: subtitleParts.filter(Boolean).join(' · '),
-    detail: firstText(textAt(meta, 'sourceUrl'), textAt(meta, 'videoId'), '点击选择后会自动填入到视频制作上下文。'),
+    detail: firstText(
+      parsedSource ? `解析视频：${parsedSource}` : '',
+      textAt(meta, 'sourceUrl'),
+      textAt(meta, 'videoId'),
+      '点击选择后会自动填入到视频制作上下文。',
+    ),
     coverUrl: '',
   }
 }
@@ -531,18 +540,24 @@ function buildJsonPreview(asset: AssetItem, text: string): AssetPickerPreview {
     textAt(parseResult, 'title'),
     textAt(meta, 'title'),
   )
-  const sourceUrl = firstText(textAt(meta, 'sourceUrl'), textAt(parseResult, 'playUrl'), textAt(parseResult, 'sourceUrl'))
+  const sourceUrl = parsedVideoSourceUrl(parseResult, meta)
+  const parsedSource = parsedVideoSourceLabel(parseResult, meta)
   const transcript = firstText(textAt(transcriptResult, 'originalText'), textAt(parsed, 'originalText'))
   const authorName = firstText(textAt(author, 'nickname'), textAt(author, 'uniqueId'))
-  const coverUrl = resolveUrl(firstText(textAt(parseResult, 'coverUrl'), textAt(parsed, 'coverUrl')))
+  const coverUrl = resolveUrl(firstText(textAt(parseResult, 'coverUrl'), textAt(meta, 'coverUrl'), textAt(parsed, 'coverUrl')))
 
   if (benchmarkTitle || transcript || sourceTypeLabel(asset.sourceType).includes('爆款')) {
     return {
-      title: firstText(benchmarkTitle, asset.fileName),
+      title: `爆款对标：${firstText(benchmarkTitle, parsedSource, asset.fileName)}`,
       subtitle: [sourceTypeLabel(asset.sourceType), authorName ? `作者：${authorName}` : '', durationLabel(textAt(parseResult, 'durationSeconds'))]
         .filter(Boolean)
         .join(' · '),
-      detail: ellipsis(firstText(transcript, sourceUrl, '暂无口播转写，选择后会作为口播参考。'), 92),
+      detail: ellipsis(firstText(
+        parsedSource ? `解析视频：${parsedSource}${transcript ? ` · 口播：${transcript}` : ''}` : '',
+        transcript,
+        sourceUrl,
+        '暂无口播转写，选择后会作为口播参考。',
+      ), 110),
       coverUrl,
     }
   }
@@ -555,11 +570,15 @@ function buildJsonPreview(asset: AssetItem, text: string): AssetPickerPreview {
       textAt(firstShot, 'narration'),
       textAt(firstShot, 'page'),
     )
-    const source = firstText(sourceUrl, textAt(meta, 'scriptVersionId') ? `脚本版本 ${textAt(meta, 'scriptVersionId')}` : '')
+    const source = firstText(parsedSource, sourceUrl, textAt(meta, 'scriptVersionId') ? `脚本版本 ${textAt(meta, 'scriptVersionId')}` : '')
     return {
-      title: firstText(source, asset.fileName),
+      title: `分镜：${firstText(source, asset.fileName)}`,
       subtitle: `${sourceTypeLabel(asset.sourceType)} · ${shots.length} 个镜头 · ${asset.assetType}`,
-      detail: ellipsis(firstText(shotText, '暂无镜头摘要，选择后会自动填入分镜控制内容。'), 92),
+      detail: ellipsis(firstText(
+        parsedSource ? `解析视频：${parsedSource}${shotText ? ` · 首镜：${shotText}` : ''}` : '',
+        shotText,
+        '暂无镜头摘要，选择后会自动填入分镜控制内容。',
+      ), 110),
       coverUrl: '',
     }
   }
@@ -585,9 +604,15 @@ function assetNormalizedRole(asset: AssetItem) {
   const explicit = normalizeAssetRole(firstText(
     textAt(meta, 'assetRole'),
     textAt(meta, 'role'),
-    typeof asset.kind === 'string' ? asset.kind : '',
   ))
-  return explicit || inferAssetRole(asset, meta)
+  if (explicit) {
+    return explicit
+  }
+  const inferred = inferAssetRole(asset, meta)
+  if (inferred) {
+    return inferred
+  }
+  return roleFromKind(asset.kind)
 }
 
 function inferAssetRole(asset: AssetItem, meta: Record<string, unknown> | null) {
@@ -596,35 +621,106 @@ function inferAssetRole(asset: AssetItem, meta: Record<string, unknown> | null) 
   const from = textAt(meta, 'from').toLowerCase()
   const source = textAt(meta, 'source').toUpperCase()
   const bundleType = textAt(meta, 'bundleType').toLowerCase()
+  const name = `${asset.fileName || ''} ${textAt(meta, 'originalFileName')} ${textAt(meta, 'title')} ${textAt(meta, 'sourceTitle')}`.toLowerCase()
   if (assetType === 'IMAGE') {
     if (
       sourceType === 'AVATAR_GENERATE' ||
       from.includes('avatar') ||
       source === 'DOUBAO_SEEDREAM' ||
+      name.includes('avatar') ||
+      name.includes('host') ||
+      name.includes('主播') ||
+      name.includes('数字人') ||
       Boolean(textAt(meta, 'avatarName'))
     ) {
       return 'host_image'
     }
+    if (name.includes('side') || name.includes('侧面') || name.includes('车侧')) return 'car_exterior_side'
+    if (name.includes('rear') || name.includes('back') || name.includes('尾部') || name.includes('车尾') || name.includes('背面')) return 'car_exterior_rear'
+    if (name.includes('45')) return 'car_exterior_45'
+    if (name.includes('dashboard') || name.includes('interior') || name.includes('内饰') || name.includes('中控')) return 'car_interior_dashboard'
+    if (name.includes('front_seat') || name.includes('前排')) return 'car_interior_front_seat'
+    if (name.includes('back_seat') || name.includes('rear_seat') || name.includes('后排')) return 'car_interior_back_seat'
+    if (name.includes('steering') || name.includes('方向盘') || name.includes('仪表')) return 'car_interior_steering'
+    if (name.includes('trunk') || name.includes('后备箱')) return 'car_interior_trunk'
+    if (name.includes('wheel') || name.includes('轮毂') || name.includes('轮胎')) return 'car_detail_wheel'
+    if (name.includes('logo') || name.includes('车标') || name.includes('标识')) return 'car_detail_logo'
+    if (name.includes('light') || name.includes('灯')) return 'car_detail_light'
+    if (name.includes('seat') || name.includes('座椅') || name.includes('材质')) return 'car_detail_seat_material'
+    if (name.includes('showroom') || name.includes('展厅') || name.includes('门店')) return 'scene_showroom'
+    if (name.includes('road') || name.includes('highway') || name.includes('山路') || name.includes('公路') || name.includes('道路')) return 'scene_road'
+    if (name.includes('night') || name.includes('夜景')) return 'scene_night'
+    if (name.includes('outdoor') || name.includes('city') || name.includes('户外') || name.includes('城市')) return 'scene_outdoor'
+    if (name.includes('front') || name.includes('car') || name.includes('车头') || name.includes('正面') || name.includes('外观')) return 'car_exterior_front'
     return ''
   }
   if (assetType === 'JSON') {
     if (bundleType === 'car_model') {
       return 'car_model_bundle'
     }
-    if (['DOUYIN_BENCHMARK', 'DOUYIN_PARSE_TRANSCRIPT', 'DOUYIN_REWRITE', 'DOUYIN_TRANSCRIPT'].includes(sourceType)) {
+    if (
+      ['DOUYIN_BENCHMARK', 'DOUYIN_PARSE_TRANSCRIPT', 'DOUYIN_REWRITE', 'DOUYIN_TRANSCRIPT'].includes(sourceType) ||
+      name.includes('douyin-benchmark') ||
+      name.includes('benchmark') ||
+      name.includes('爆款') ||
+      name.includes('对标')
+    ) {
       return 'benchmark_json'
     }
-    if (['STORYBOARD_GENERATE', 'VIDEO_SCRIPT_ANALYZE', 'VIDEO_SCRIPT_URL_ANALYZE'].includes(sourceType)) {
+    if (
+      ['STORYBOARD_GENERATE', 'VIDEO_SCRIPT_ANALYZE', 'VIDEO_SCRIPT_URL_ANALYZE'].includes(sourceType) ||
+      name.includes('storyboard') ||
+      name.includes('video-script') ||
+      name.includes('分镜')
+    ) {
       return 'storyboard_json'
     }
   }
-  if (assetType === 'AUDIO' && ['TTS_GENERATE', 'VOICE_SAMPLE'].includes(sourceType)) {
-    return 'voiceover'
+  if (assetType === 'AUDIO') {
+    if (name.includes('bgm') || name.includes('music') || name.includes('背景音乐')) return 'bgm'
+    if (name.includes('ref') || name.includes('reference') || name.includes('参考音频')) return 'reference_audio'
+    if (['TTS_GENERATE', 'VOICE_SAMPLE'].includes(sourceType) || name.includes('voice') || name.includes('口播') || name.includes('配音')) {
+      return 'voiceover'
+    }
   }
   if (assetType === 'VIDEO' && sourceType === 'DIGITAL_HUMAN_GENERATE') {
     return 'host_video'
   }
+  if (assetType === 'VIDEO') {
+    if (name.includes('host') || name.includes('avatar') || name.includes('主播') || name.includes('口播') || name.includes('数字人')) return 'host_video'
+    if (name.includes('ref') || name.includes('reference') || name.includes('benchmark') || name.includes('对标')) return 'reference_video'
+    return 'material_video'
+  }
+  if (assetType === 'TEXT') {
+    if (name.includes('subtitle') || name.includes('srt') || name.includes('字幕')) return 'subtitle'
+    if (name.includes('script') || name.includes('文案') || name.includes('口播')) return 'voice_script'
+  }
   return ''
+}
+
+function parsedVideoSourceUrl(parseResult: Record<string, unknown> | null, meta: Record<string, unknown> | null) {
+  return firstText(
+    textAt(meta, 'sourceUrl'),
+    textAt(meta, 'originalUrl'),
+    textAt(meta, 'shareUrl'),
+    textAt(meta, 'url'),
+    textAt(parseResult, 'sourceUrl'),
+    textAt(parseResult, 'shareUrl'),
+    textAt(parseResult, 'playUrl'),
+    textAt(meta, 'playUrl'),
+  )
+}
+
+function parsedVideoSourceLabel(parseResult: Record<string, unknown> | null, meta: Record<string, unknown> | null) {
+  return firstText(
+    textAt(parseResult, 'title'),
+    textAt(meta, 'sourceTitle'),
+    textAt(meta, 'title'),
+    textAt(meta, 'originalFileName'),
+    parsedVideoSourceUrl(parseResult, meta),
+    textAt(parseResult, 'videoId'),
+    textAt(meta, 'videoId'),
+  )
 }
 
 function roleDisplayLabel(role: string) {
@@ -638,6 +734,14 @@ function roleDisplayLabel(role: string) {
 function normalizeAssetRole(role: string | null | undefined) {
   const normalized = String(role || '').trim().toLowerCase().replace(/[\s-]+/g, '_')
   return normalized ? ASSET_ROLE_ALIASES[normalized] || normalized : ''
+}
+
+function roleFromKind(kind: string | null | undefined) {
+  const normalized = normalizeAssetRole(kind)
+  if (!normalized || ['generated', 'upload', 'uploaded', 'user_upload', 'manual_created'].includes(normalized)) {
+    return ''
+  }
+  return ASSET_ROLE_LABELS[normalized] ? normalized : ''
 }
 
 function dedupeRoleOptions(options: AssetRoleOption[]) {

@@ -519,8 +519,9 @@
                 <strong>{{ benchmarkParse.title || '对标视频信息' }}</strong>
                 <p>{{ benchmarkParse.authorName || '对标账号' }}</p>
                 <small>
-                  <template v-if="benchmarkParse.durationText">时长 {{ benchmarkParse.durationText }}</template>
-                  <template v-if="benchmarkParse.videoId"> · 视频 ID {{ benchmarkParse.videoId }}</template>
+                  <template v-if="benchmarkParse.sourceLabel">解析视频 {{ benchmarkParse.sourceLabel }}</template>
+                  <template v-if="benchmarkParse.durationText">{{ benchmarkParse.sourceLabel ? ' · ' : '' }}时长 {{ benchmarkParse.durationText }}</template>
+                  <template v-if="benchmarkParse.videoId">{{ benchmarkParse.sourceLabel || benchmarkParse.durationText ? ' · ' : '' }}视频 ID {{ benchmarkParse.videoId }}</template>
                 </small>
               </div>
             </article>
@@ -868,13 +869,15 @@ const previewStoryboardShots = computed<PreviewStoryboardShot[]>(() => {
 
 const benchmarkParse = computed(() => {
   const parseResult = isRecord(previewRecord.value?.parseResult) ? previewRecord.value.parseResult : null
+  const metadata = previewAsset.value ? parseJsonObject(previewAsset.value.metadataJson) : null
   const author = isRecord(parseResult?.author) ? parseResult.author : null
-  const durationSeconds = numberField(parseResult, 'durationSeconds')
+  const durationSeconds = numberField(parseResult, 'durationSeconds') || numberField(metadata, 'durationSeconds')
   return {
-    coverUrl: stringField(parseResult, 'coverUrl'),
-    title: stringField(parseResult, 'title'),
-    videoId: stringField(parseResult, 'videoId'),
-    authorName: stringField(author, 'nickname'),
+    coverUrl: stringField(parseResult, 'coverUrl') || stringField(metadata, 'coverUrl'),
+    title: stringField(parseResult, 'title') || stringField(metadata, 'title') || stringField(metadata, 'sourceTitle'),
+    videoId: stringField(parseResult, 'videoId') || stringField(metadata, 'videoId'),
+    authorName: stringField(author, 'nickname') || stringField(metadata, 'authorName'),
+    sourceLabel: generatedAssetSourceLabel(previewAsset.value),
     durationText: durationSeconds > 0 ? formatDuration(durationSeconds) : '',
   }
 })
@@ -1262,8 +1265,53 @@ function resultAssetLabel(asset: AssetItem) {
   return asset.sourceType ? `${sourceTypeLabel(asset.sourceType)}结果` : '生成结果'
 }
 
+function resultAssetBaseLabel(asset: AssetItem) {
+  const label = resultAssetLabel(asset)
+  return label.endsWith('结果') ? label.slice(0, -2) : label
+}
+
+function generatedAssetSourceLabel(asset: AssetItem | null | undefined) {
+  if (!asset) {
+    return ''
+  }
+  const metadata = parseJsonObject(asset.metadataJson)
+  return compactSourceLabel(firstNonEmptyText(
+    stringField(metadata, 'sourceTitle'),
+    stringField(metadata, 'title'),
+    stringField(metadata, 'originalFileName'),
+    stringField(metadata, 'sourceUrl'),
+    stringField(metadata, 'originalUrl'),
+    stringField(metadata, 'shareUrl'),
+    stringField(metadata, 'url'),
+    stringField(metadata, 'videoId'),
+    stringField(metadata, 'playUrl'),
+  ))
+}
+
+function firstNonEmptyText(...values: Array<string | null | undefined>) {
+  for (const value of values) {
+    const text = String(value || '').trim()
+    if (text) {
+      return text
+    }
+  }
+  return ''
+}
+
+function compactSourceLabel(value: string) {
+  const text = value.trim()
+  if (text.length <= 56) {
+    return text
+  }
+  return `${text.slice(0, 34)}...${text.slice(-16)}`
+}
+
 function displayAssetTitle(asset: AssetItem) {
   if (isJson(asset) && asset.kind === 'GENERATED') {
+    const sourceLabel = generatedAssetSourceLabel(asset)
+    if (sourceLabel) {
+      return `${resultAssetBaseLabel(asset)}：${sourceLabel}`
+    }
     return resultAssetLabel(asset)
   }
   return asset.fileName
@@ -1274,7 +1322,12 @@ function displayAssetMeta(asset: AssetItem) {
     const type = assetTaskType(asset)
     const label = taskTypeLabel(type)
     const readable = label && label !== '其他任务' && label !== '暂无' ? label : sourceTypeLabel(asset.sourceType)
-    return readable ? `生成结果 · ${readable}` : '生成结果'
+    const sourceLabel = generatedAssetSourceLabel(asset)
+    return [
+      '生成结果',
+      readable,
+      sourceLabel ? `解析视频：${sourceLabel}` : '',
+    ].filter(Boolean).join(' · ')
   }
   return `${asset.assetType} · ${formatFileSize(asset.fileSize)} · ${sourceTypeLabel(asset.sourceType)}`
 }
