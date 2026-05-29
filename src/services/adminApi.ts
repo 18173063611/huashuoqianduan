@@ -175,6 +175,7 @@ export function listAdminAssets(params: AdminAssetQuery) {
       status: params.status?.trim(),
       assetType: params.assetType?.trim(),
       sourceType: params.sourceType?.trim(),
+      assetGroup: params.assetGroup?.trim(),
       keyword: params.keyword?.trim(),
       pageNo: params.pageNo,
       pageSize: params.pageSize,

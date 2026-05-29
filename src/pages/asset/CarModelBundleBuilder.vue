@@ -118,6 +118,7 @@ async function saveBundle() {
         metadataJson: JSON.stringify({
           from: 'car_model_bundle_image',
           assetRole: role.value,
+          assetGroup: '汽车素材包',
           brandModel: brandModel.value,
           color: color.value,
         }),
@@ -148,6 +149,7 @@ async function saveBundle() {
       metadataJson: JSON.stringify({
         from: 'car_model_bundle',
         assetRole: 'car_model_bundle',
+        assetGroup: '汽车素材包',
         bundleType: 'car_model',
         brandModel: brandModel.value,
         color: color.value,

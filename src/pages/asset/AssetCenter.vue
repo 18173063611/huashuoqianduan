@@ -120,6 +120,11 @@
           <option value="">全部来源</option>
           <option v-for="item in sourceTypeOptions" :key="item" :value="item">{{ sourceTypeLabel(item) }}</option>
         </select>
+        <select v-if="activeCategory === 'materials'" v-model="selectedAssetGroup" class="asset-type-select" :disabled="loading">
+          <option value="">全部分组</option>
+          <option :value="UNGROUPED_GROUP_KEY">未分组</option>
+          <option v-for="group in assetGroupOptions" :key="group" :value="group">{{ group }}</option>
+        </select>
         <select v-if="activeCategory === 'materials'" v-model="sortKey" class="asset-type-select" :disabled="loading">
           <option value="createdAtDesc">按时间（新到旧）</option>
           <option value="createdAtAsc">按时间（旧到新）</option>
@@ -275,6 +280,9 @@
             {{ displayAssetMeta(asset) }}
             <template v-if="asset.createdAt"> · {{ formatTime(asset.createdAt) }}</template>
           </p>
+          <div v-if="asset.assetGroup" class="asset-row-tags">
+            <span class="asset-group-pill">{{ asset.assetGroup }}</span>
+          </div>
           <div class="asset-row-preview">
             <template v-if="isImage(asset)">
               <img :src="resolveFileUrl(asset.thumbnailUrl || asset.fileUrl)" alt="asset preview" />
@@ -337,6 +345,15 @@
             下架
           </button>
           <button
+            v-if="canManageAssetGroup(asset)"
+            class="app-secondary-button"
+            type="button"
+            :disabled="loading"
+            @click="openGroupEditor(asset)"
+          >
+            分组
+          </button>
+          <button
             v-if="asset.metadataJson"
             class="app-secondary-button"
             type="button"
@@ -353,6 +370,42 @@
             @click="handleDelete(asset)"
           >
             删除
+          </button>
+        </div>
+      </div>
+    </div>
+
+    <div v-if="groupModalOpen" class="asset-modal-backdrop" @click.self="closeGroupEditor">
+      <div class="asset-modal asset-group-editor">
+        <div class="asset-modal-header">
+          <strong>资产分组</strong>
+          <button class="app-secondary-button" type="button" @click="closeGroupEditor">关闭</button>
+        </div>
+        <p v-if="groupEditingAsset" class="app-muted asset-modal-subtitle">{{ groupEditingAsset.fileName }}</p>
+        <label class="asset-group-field">
+          <span>分组名称</span>
+          <input v-model.trim="groupInput" list="asset-group-presets" maxlength="60" placeholder="例如：汽车素材包" />
+          <datalist id="asset-group-presets">
+            <option v-for="group in assetGroupOptions" :key="group" :value="group" />
+          </datalist>
+        </label>
+        <div class="asset-group-presets">
+          <button
+            v-for="group in assetGroupOptions"
+            :key="group"
+            class="asset-group-preset"
+            type="button"
+            @click="groupInput = group"
+          >
+            {{ group }}
+          </button>
+        </div>
+        <div class="asset-modal-actions">
+          <button class="app-secondary-button asset-danger" type="button" :disabled="loading || !groupEditingAsset?.assetGroup" @click="handleClearAssetGroup">
+            删除分组
+          </button>
+          <button class="app-primary-button" type="button" :disabled="loading" @click="handleSaveAssetGroup">
+            保存分组
           </button>
         </div>
       </div>
@@ -499,10 +552,12 @@ import {
   publishAsset,
   saveAsset,
   unpublishAsset,
+  updateAssetGroup,
   uploadMaterialAsset,
 } from '../../services/assetApi'
 import type { AssetListScope, AssetListSort } from '../../services/assetApi'
 import { API_ORIGIN, getAuthToken } from '../../services/request'
+import { getAuthUser, type AuthUser } from '../../services/authSession'
 import type { AssetItem, AssetType } from '../../types/assetTypes'
 import {
   addVoiceToMyLibrary,
@@ -649,6 +704,17 @@ const WORKFLOW_STAGE_OPTIONS = [
 
 type WorkflowStageKey = (typeof WORKFLOW_STAGE_OPTIONS)[number]['key']
 
+const UNGROUPED_GROUP_KEY = '__ungrouped'
+const CAR_MODEL_BUNDLE_GROUP = '汽车素材包'
+const ASSET_GROUP_PRESETS = [
+  CAR_MODEL_BUNDLE_GROUP,
+  '爆款对标',
+  '分镜脚本',
+  '口播文案',
+  '数字人素材',
+  '成片视频',
+] as const
+
 const assets = ref<AssetItem[]>([])
 const voices = ref<VoicePresetItem[]>([])
 const loading = ref(false)
@@ -657,6 +723,7 @@ const highlightedId = ref<number | null>(null)
 const jumpHint = ref('')
 const selectedType = ref<'' | AssetType>('')
 const selectedSourceType = ref<string>('')
+const selectedAssetGroup = ref<string>('')
 const selectedWorkflowStage = ref<WorkflowStageKey>('')
 const sortKey = ref<AssetListSort>('createdAtDesc')
 const keyword = ref('')
@@ -664,6 +731,7 @@ const listScope = ref<AssetListScope>('global')
 const activeCategory = ref<'materials' | 'voices'>('materials')
 const voiceListScope = ref<'private' | 'public'>('private')
 const hasToken = ref(false)
+const currentUser = ref<AuthUser | null>(null)
 const materialUploadInputRef = ref<HTMLInputElement | null>(null)
 const uploadPublishToPublic = ref(false)
 const carBundleBuilderOpen = ref(false)
@@ -686,6 +754,9 @@ const metadataModalOpen = ref(false)
 const metadataPretty = ref('')
 const metadataTitle = ref('')
 const metadataLink = ref('#')
+const groupModalOpen = ref(false)
+const groupEditingAsset = ref<AssetItem | null>(null)
+const groupInput = ref('')
 const previewModalOpen = ref(false)
 const previewLoading = ref(false)
 const previewError = ref('')
@@ -725,6 +796,20 @@ const sourceTypeOptions = computed(() => {
     }
   }
   return Array.from(set).sort((a, b) => a.localeCompare(b))
+})
+
+const assetGroupOptions = computed(() => {
+  const set = new Set<string>(ASSET_GROUP_PRESETS)
+  for (const asset of assets.value) {
+    const group = (asset.assetGroup || '').trim()
+    if (group) {
+      set.add(group)
+    }
+  }
+  if (selectedAssetGroup.value && selectedAssetGroup.value !== UNGROUPED_GROUP_KEY) {
+    set.add(selectedAssetGroup.value)
+  }
+  return Array.from(set)
 })
 
 const workflowStageOptions = computed(() => WORKFLOW_STAGE_OPTIONS)
@@ -851,7 +936,7 @@ onMounted(() => {
   void refreshCurrent()
 })
 
-watch([activeCategory, listScope, voiceListScope, selectedType, selectedSourceType, selectedWorkflowStage, sortKey], () => {
+watch([activeCategory, listScope, voiceListScope, selectedType, selectedSourceType, selectedAssetGroup, selectedWorkflowStage, sortKey], () => {
   scheduleReload()
 })
 
@@ -894,6 +979,7 @@ async function loadAssets() {
   loading.value = true
   errorMessage.value = ''
   hasToken.value = !!getAuthToken()
+  currentUser.value = getAuthUser()
   try {
     if (activeCategory.value === 'voices') {
       if (voiceListScope.value === 'private') {
@@ -913,6 +999,7 @@ async function loadAssets() {
       scope: listScope.value,
       assetType: selectedType.value || undefined,
       sourceType: selectedWorkflowStage.value ? undefined : selectedSourceType.value || undefined,
+      assetGroup: selectedAssetGroup.value || undefined,
       keyword: keyword.value || undefined,
       sort: sortKey.value,
     })
@@ -960,10 +1047,14 @@ async function handleMaterialUploadChange(event: Event) {
   errorMessage.value = ''
   jumpHint.value = ''
   const publishAfterUpload = uploadPublishToPublic.value
+  const uploadGroup = currentWritableAssetGroup()
   let latestAssetId: number | null = null
   try {
     for (const file of files) {
-      const uploaded = await uploadMaterialAsset(file, { publish: publishAfterUpload })
+      const uploaded = await uploadMaterialAsset(file, {
+        publish: publishAfterUpload,
+        metadataJson: uploadGroup ? JSON.stringify({ assetGroup: uploadGroup }) : undefined,
+      })
       latestAssetId = uploaded.assetId
     }
     selectedType.value = ''
@@ -1003,6 +1094,7 @@ async function handleCarBundleCreated(asset: AssetItem) {
   carBundleBuilderOpen.value = false
   selectedType.value = 'JSON'
   selectedSourceType.value = ''
+  selectedAssetGroup.value = CAR_MODEL_BUNDLE_GROUP
   selectedWorkflowStage.value = 'material'
   keyword.value = ''
   sortKey.value = 'createdAtDesc'
@@ -1031,6 +1123,11 @@ function selectSpecificSourceType() {
   if (selectedSourceType.value) {
     selectedWorkflowStage.value = ''
   }
+}
+
+function currentWritableAssetGroup() {
+  const group = selectedAssetGroup.value.trim()
+  return group && group !== UNGROUPED_GROUP_KEY ? group : ''
 }
 
 function matchesWorkflowStage(asset: AssetItem) {
@@ -1345,6 +1442,61 @@ async function handleUnpublish(asset: AssetItem) {
   }
 }
 
+function canManageAssetGroup(asset: AssetItem) {
+  if (!hasToken.value) {
+    return false
+  }
+  const visibility = String(asset.visibility || '').toUpperCase()
+  if (visibility === 'PUBLIC' || listScope.value === 'global') {
+    return currentUser.value?.role === 'ADMIN'
+  }
+  return asset.ownerUserId != null && (!currentUser.value?.userId || asset.ownerUserId === currentUser.value.userId)
+}
+
+function openGroupEditor(asset: AssetItem) {
+  if (!canManageAssetGroup(asset)) {
+    errorMessage.value = '当前账号没有权限管理该资产分组'
+    return
+  }
+  groupEditingAsset.value = asset
+  groupInput.value = asset.assetGroup || ''
+  groupModalOpen.value = true
+}
+
+function closeGroupEditor() {
+  groupModalOpen.value = false
+  groupEditingAsset.value = null
+  groupInput.value = ''
+}
+
+async function handleSaveAssetGroup() {
+  await persistAssetGroup(groupInput.value)
+}
+
+async function handleClearAssetGroup() {
+  await persistAssetGroup(null)
+}
+
+async function persistAssetGroup(assetGroup: string | null) {
+  const asset = groupEditingAsset.value
+  if (!asset || loading.value) {
+    return
+  }
+  loading.value = true
+  errorMessage.value = ''
+  try {
+    const updated = await updateAssetGroup(asset.assetId, assetGroup && assetGroup.trim() ? assetGroup.trim() : null)
+    assets.value = assets.value.map((item) => (item.assetId === updated.assetId ? updated : item))
+    jumpHint.value = updated.assetGroup ? `已归入「${updated.assetGroup}」` : '已清除资产分组'
+    closeGroupEditor()
+    await loadAssets()
+  } catch (e) {
+    errorMessage.value = e instanceof Error ? e.message : '资产分组更新失败'
+  } finally {
+    loading.value = false
+  }
+}
+
 function openMetadata(asset: AssetItem) {
   metadataModalOpen.value = true
   metadataTitle.value = `${asset.fileName}（${asset.assetType} · ${asset.sourceType}）`
@@ -1566,7 +1718,7 @@ async function playVoiceSample(voice: VoicePresetItem) {
 
 .asset-header-actions {
   display: grid;
-  grid-template-columns: repeat(3, minmax(118px, 1fr)) minmax(180px, 1.2fr) auto;
+  grid-template-columns: repeat(4, minmax(118px, 1fr)) minmax(180px, 1.2fr) auto;
   align-items: center;
   gap: 10px;
 }
@@ -1830,6 +1982,26 @@ async function playVoiceSample(voice: VoicePresetItem) {
   font-size: 13px;
 }
 
+.asset-row-tags {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin: -2px 0 10px;
+}
+
+.asset-group-pill {
+  display: inline-flex;
+  min-height: 24px;
+  align-items: center;
+  border: 1px solid #d8d2ff;
+  border-radius: 999px;
+  background: #f5f3ff;
+  color: #5e50df;
+  padding: 0 10px;
+  font-size: 12px;
+  font-weight: 800;
+}
+
 .asset-row-actions {
   display: flex;
   flex-shrink: 0;
@@ -1943,6 +2115,60 @@ async function playVoiceSample(voice: VoicePresetItem) {
   justify-content: flex-end;
   gap: 10px;
   margin-top: 12px;
+}
+
+.asset-group-editor {
+  width: min(560px, 100%);
+}
+
+.asset-group-field {
+  display: grid;
+  gap: 8px;
+  margin-top: 12px;
+}
+
+.asset-group-field span {
+  color: rgba(226, 232, 240, 0.95);
+  font-size: 13px;
+  font-weight: 850;
+}
+
+.asset-group-field input {
+  height: 40px;
+  border: 1px solid rgba(148, 163, 184, 0.35);
+  border-radius: 10px;
+  background: rgba(255, 255, 255, 0.94);
+  color: #111827;
+  padding: 0 12px;
+  outline: none;
+}
+
+.asset-group-field input:focus {
+  border-color: #a79bff;
+  box-shadow: 0 0 0 3px rgba(124, 108, 255, 0.18);
+}
+
+.asset-group-presets {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 12px;
+}
+
+.asset-group-preset {
+  min-height: 30px;
+  border: 1px solid rgba(167, 155, 255, 0.5);
+  border-radius: 999px;
+  background: rgba(245, 243, 255, 0.12);
+  color: rgba(237, 233, 254, 0.95);
+  padding: 0 12px;
+  font-size: 12px;
+  font-weight: 800;
+  cursor: pointer;
+}
+
+.asset-group-preset:hover {
+  background: rgba(245, 243, 255, 0.22);
 }
 
 .asset-preview-modal {

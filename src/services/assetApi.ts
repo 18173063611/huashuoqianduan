@@ -11,6 +11,7 @@ export interface ListAssetsParams {
   assetType?: AssetType
   keyword?: string
   sourceType?: string
+  assetGroup?: string
   sort?: AssetListSort
 }
 
@@ -30,6 +31,9 @@ export async function getAssets(params?: ListAssetsParams) {
   }
   if (params?.sourceType && params.sourceType.trim()) {
     search.set('sourceType', params.sourceType.trim())
+  }
+  if (params?.assetGroup && params.assetGroup.trim()) {
+    search.set('assetGroup', params.assetGroup.trim())
   }
   if (params?.sort) {
     search.set('sort', params.sort)
@@ -114,6 +118,13 @@ export function publishAsset(assetId: number) {
 export function unpublishAsset(assetId: number) {
   return request<AssetItem>(`/assets/${assetId}/unpublish`, {
     method: 'POST',
+  })
+}
+
+export function updateAssetGroup(assetId: number, assetGroup: string | null) {
+  return request<AssetItem>(`/assets/${assetId}/group`, {
+    method: 'PATCH',
+    body: JSON.stringify({ assetGroup }),
   })
 }
 

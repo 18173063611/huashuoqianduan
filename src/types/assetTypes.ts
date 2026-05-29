@@ -18,6 +18,7 @@ export interface AssetItem {
   mimeType: string | null
   fileSize: number
   sourceType: string
+  assetGroup?: string | null
   metadataJson: string | null
   createdAt: string
   updatedAt: string

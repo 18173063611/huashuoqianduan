@@ -722,7 +722,7 @@
             <div class="render-form-field render-form-field-inline">
               <label>分段数量</label>
               <select :value="carSegmentCount" :disabled="busy" @change="handleCarSegmentCountChange">
-                <option v-for="n in [1, 2, 3, 4, 5, 6]" :key="n" :value="n">{{ n }} 段</option>
+                <option v-for="n in carSegmentCountOptions" :key="n" :value="n">{{ n }} 段</option>
               </select>
               <span class="app-muted render-duration-hint">会分别生成并入库</span>
             </div>
@@ -1059,7 +1059,7 @@
         <div>
           <h2>生成结果</h2>
           <p class="app-muted">
-            多段成片会按片段依次生成，再合成为完整视频；完成的片段会先展示，最终成片完成后可预览或下载。
+            多段成片会按设置好的段落并行生成，再按原分镜顺序合成为完整视频；完成的片段会先展示。
           </p>
         </div>
       </div>
@@ -1082,7 +1082,7 @@
         <span>{{ barProgressPercent }}%</span>
       </div>
       <p v-if="showTaskProgress && currentTaskIsCarSales" class="app-muted render-progress-note">
-        进度按“素材准备、逐段生成、成片合成、音频处理、入库保存”计算；总耗时会随段数和模型排队波动。
+        进度按“素材准备、并行分段生成、成片合成、音频处理、入库保存”计算；总耗时会随段数和模型排队波动。
       </p>
       <p v-if="digitalHumanTaskError" class="app-error">{{ digitalHumanTaskError }}</p>
 
@@ -1519,6 +1519,7 @@ const carHostAppearanceEnabled = ref(false)
 const carMaterialVideoUrl = ref('')
 const carMaterialVideoAssetId = ref<number | null>(null)
 const carSegmentCount = ref(4)
+const carSegmentCountOptions = Array.from({ length: 12 }, (_, idx) => idx + 1)
 const carSegmentDuration = ref(8)
 const carSegmentDurations = ref<number[]>([])
 const carSegmentTimingTouched = ref(false)
@@ -1600,7 +1601,7 @@ const renderTaskStatusText = computed(() => {
     return result.value.stage
   }
   if (taskStatus.value === 'QUEUED') {
-    return '任务已进入队列，等待开始分段生成。'
+    return '任务已进入队列，等待开始并行分段生成。'
   }
   const progress = taskProgress.value ?? barProgressPercent.value
   const total = renderSegmentCount.value
@@ -1609,9 +1610,9 @@ const renderTaskStatusText = computed(() => {
     return '分段视频已完成，正在合成整条视频并处理音频。'
   }
   if (completed > 0) {
-    return `已完成 ${completed} / ${total} 段，完成的片段可先在下方预览。`
+    return `并行生成中，已完成 ${completed} / ${total} 段，完成的片段可先在下方预览。`
   }
-  return `正在生成第 1 / ${total} 段，完成后会先展示片段预览。`
+  return `正在并行生成 ${total} 段视频，完成后会先展示片段预览。`
 })
 
 const selectedSeedanceModel = computed(
@@ -2028,12 +2029,12 @@ const carRecommendedSegmentCount = computed(() => {
   }
   const shotCount = storyboardShotsForRecommendation.value.length
   if (shotCount > 0) {
-    return Math.max(1, Math.min(6, shotCount))
+    return Math.max(1, Math.min(12, shotCount))
   }
   if (carAudioDurationSeconds.value && carAudioDurationSeconds.value > 0) {
-    return Math.max(1, Math.min(6, Math.ceil(carAudioDurationSeconds.value / selectedSeedanceModel.value.maxDuration)))
+    return Math.max(1, Math.min(12, Math.ceil(carAudioDurationSeconds.value / selectedSeedanceModel.value.maxDuration)))
   }
-  return Math.max(1, Math.min(6, carSegmentCount.value || 4))
+  return Math.max(1, Math.min(12, carSegmentCount.value || 4))
 })
 const carRecommendedSegmentDurations = computed(() => {
   const count = carRecommendedSegmentCount.value
@@ -2976,7 +2977,7 @@ function clampCarSegmentDuration(value: number) {
 
 function normalizeCarSegmentCount(value: number) {
   const parsed = Math.round(Number(value))
-  return Math.max(1, Math.min(6, Number.isFinite(parsed) ? parsed : 1))
+  return Math.max(1, Math.min(12, Number.isFinite(parsed) ? parsed : 1))
 }
 
 function normalizeCarSegmentDurations(values: number[], count: number) {

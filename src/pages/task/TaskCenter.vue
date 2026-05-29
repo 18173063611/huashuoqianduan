@@ -940,7 +940,7 @@ function taskProgressCaption(task: TaskItem) {
     return ''
   }
   if (task.status === 'QUEUED') {
-    return '已进入队列，等待开始分段生成。'
+    return '已进入队列，等待开始并行分段生成；如果长时间未被消费，系统会自动重新投递。'
   }
   if (task.status !== 'RUNNING') {
     return ''
@@ -959,9 +959,9 @@ function taskProgressCaption(task: TaskItem) {
     return '分段视频已完成，正在合成整条视频并处理音频。'
   }
   if (completed > 0) {
-    return `已完成 ${completed} / ${total} 段，可点击“查看进度”预览已完成片段。`
+    return `并行生成中，已完成 ${completed} / ${total} 段，可点击“查看进度”预览已完成片段。`
   }
-  return `正在生成第 1 / ${total} 段，首段完成后可预览。`
+  return `正在并行生成 ${total} 段视频，完成的片段会先进入进度详情。`
 }
 
 function taskSmoothProgressCeil(task: TaskItem) {

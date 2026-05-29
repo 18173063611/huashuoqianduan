@@ -172,6 +172,7 @@ export interface AdminAssetItem {
   mimeType?: string | null
   fileSize?: number | null
   sourceType?: string | null
+  assetGroup?: string | null
   metadataJson?: string | null
   createdAt?: string
   updatedAt?: string
@@ -183,6 +184,7 @@ export interface AdminAssetQuery {
   status?: string
   assetType?: string
   sourceType?: string
+  assetGroup?: string
   keyword?: string
   pageNo?: number
   pageSize?: number
