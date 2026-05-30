@@ -305,10 +305,10 @@
             <template v-else-if="isVideo(asset)">
               <video :src="resolveFileUrl(asset.fileUrl)" controls preload="none" />
             </template>
-            <template v-else-if="isJson(asset)">
+            <template v-else-if="canOpenStructuredPreview(asset)">
               <div class="asset-result-card">
                 <strong>{{ resultAssetLabel(asset) }}</strong>
-                <span>点击预览查看结构化结果。</span>
+                <span>{{ structuredPreviewHint(asset) }}</span>
               </div>
             </template>
             <template v-else>
@@ -319,7 +319,7 @@
 
         <div class="asset-row-actions">
           <button
-            v-if="isJson(asset)"
+            v-if="canOpenStructuredPreview(asset)"
             class="app-secondary-button asset-open"
             type="button"
             :disabled="previewLoading"
@@ -579,7 +579,7 @@
               </div>
             </article>
             <section class="asset-preview-text-panel">
-              <h4>ASR 原文案</h4>
+              <h4>{{ benchmarkTranscriptTitle }}</h4>
               <p>{{ benchmarkTranscriptText || '暂无转写原文。' }}</p>
             </section>
           </div>
@@ -731,17 +731,30 @@ const KNOWN_SOURCE_TYPES = [
   'IMAGE_TO_VIDEO_SEEDANCE_2_0_FAST',
 ] as const
 
+const UNGROUPED_GROUP_KEY = '__ungrouped'
+const GROUP_BENCHMARK = '爆款对标'
+const GROUP_STORYBOARD = '分镜脚本'
+const CAR_MODEL_BUNDLE_GROUP = '汽车素材包'
+
 const WORKFLOW_STAGE_OPTIONS = [
   { key: '', label: '全部功能', sourceTypes: [] },
   {
     key: 'benchmark',
     label: '爆款对标',
     sourceTypes: ['DOUYIN_BENCHMARK', 'DOUYIN_PARSE_TRANSCRIPT', 'DOUYIN_REWRITE', 'DOUYIN_TRANSCRIPT'],
+    assetRoles: ['benchmark_json', 'voice_script'],
+    assetGroups: [GROUP_BENCHMARK],
+    defaultAssetGroup: GROUP_BENCHMARK,
+    defaultAssetRole: 'benchmark_json',
   },
   {
     key: 'storyboard',
     label: '分镜生成',
     sourceTypes: ['STORYBOARD_GENERATE', 'VIDEO_SCRIPT_ANALYZE', 'VIDEO_SCRIPT_URL_ANALYZE'],
+    assetRoles: ['storyboard_json'],
+    assetGroups: [GROUP_STORYBOARD],
+    defaultAssetGroup: GROUP_STORYBOARD,
+    defaultAssetRole: 'storyboard_json',
   },
   {
     key: 'voice',
@@ -783,12 +796,10 @@ const WORKFLOW_STAGE_OPTIONS = [
 
 type WorkflowStageKey = (typeof WORKFLOW_STAGE_OPTIONS)[number]['key']
 
-const UNGROUPED_GROUP_KEY = '__ungrouped'
-const CAR_MODEL_BUNDLE_GROUP = '汽车素材包'
 const ASSET_GROUP_PRESETS = [
   CAR_MODEL_BUNDLE_GROUP,
-  '爆款对标',
-  '分镜脚本',
+  GROUP_BENCHMARK,
+  GROUP_STORYBOARD,
   '口播文案',
   '数字人素材',
   '成片视频',
@@ -1012,12 +1023,26 @@ const benchmarkParse = computed(() => {
 
 const benchmarkTranscriptText = computed(() => {
   const transcript = isRecord(previewRecord.value?.transcriptResult) ? previewRecord.value.transcriptResult : null
-  return stringField(transcript, 'originalText')
+  const record = previewRecord.value
+  return firstNonEmptyText(
+    stringField(transcript, 'originalText'),
+    stringField(record, 'originalText'),
+    stringField(record, 'rewrittenText'),
+    stringField(record, 'translatedText'),
+    stringField(record, 'voiceText'),
+    stringField(record, 'copywriting'),
+    stringField(record, 'script'),
+    stringField(record, 'content'),
+  )
 })
+
+const benchmarkTranscriptTitle = computed(() =>
+  String(previewAsset.value?.sourceType || '').trim().toUpperCase().includes('DOUYIN') ? 'ASR 原文案' : '口播文案',
+)
 
 const isBenchmarkPreview = computed(() => {
   const type = previewTaskType.value
-  return type === 'DOUYIN_PARSE_TRANSCRIPT' || previewAsset.value?.sourceType === 'DOUYIN_BENCHMARK'
+  return type === 'DOUYIN_PARSE_TRANSCRIPT' || isBenchmarkAsset(previewAsset.value)
 })
 
 const isCarBundlePreview = computed(() =>
@@ -1178,13 +1203,13 @@ async function handleMaterialUploadChange(event: Event) {
   errorMessage.value = ''
   jumpHint.value = ''
   const publishAfterUpload = uploadPublishToPublic.value
-  const uploadGroup = currentWritableAssetGroup()
+  const uploadMetadata = currentWritableAssetMetadata()
   let latestAssetId: number | null = null
   try {
     for (const file of files) {
       const uploaded = await uploadMaterialAsset(file, {
         publish: publishAfterUpload,
-        metadataJson: uploadGroup ? JSON.stringify({ assetGroup: uploadGroup }) : undefined,
+        metadataJson: uploadMetadata ? JSON.stringify(uploadMetadata) : undefined,
       })
       latestAssetId = uploaded.assetId
     }
@@ -1338,7 +1363,29 @@ function selectSpecificSourceType() {
 
 function currentWritableAssetGroup() {
   const group = selectedAssetGroup.value.trim()
-  return group && group !== UNGROUPED_GROUP_KEY ? group : ''
+  if (group && group !== UNGROUPED_GROUP_KEY) {
+    return group
+  }
+  const stage = currentWorkflowStageOption()
+  return stage && 'defaultAssetGroup' in stage ? stage.defaultAssetGroup : ''
+}
+
+function currentWritableAssetMetadata() {
+  const meta: Record<string, string> = {}
+  const group = currentWritableAssetGroup()
+  const stage = currentWorkflowStageOption()
+  const role = stage && 'defaultAssetRole' in stage ? stage.defaultAssetRole : ''
+  if (group) {
+    meta.assetGroup = group
+  }
+  if (role) {
+    meta.assetRole = role
+  }
+  return Object.keys(meta).length ? meta : null
+}
+
+function currentWorkflowStageOption() {
+  return WORKFLOW_STAGE_OPTIONS.find((item) => item.key === selectedWorkflowStage.value)
 }
 
 function matchesWorkflowStage(asset: AssetItem) {
@@ -1355,8 +1402,21 @@ function matchesWorkflowStage(asset: AssetItem) {
   ) {
     return true
   }
-  const stage = WORKFLOW_STAGE_OPTIONS.find((item) => item.key === selectedWorkflowStage.value)
+  const stage = currentWorkflowStageOption()
   if (!stage || stage.sourceTypes.length === 0) {
+    return true
+  }
+  const role = normalizedAssetRole(asset)
+  const assetGroup = String(asset.assetGroup || '').trim()
+  const allowedRoles = 'assetRoles' in stage ? Array.from(stage.assetRoles as readonly string[]) : []
+  const allowedGroups = 'assetGroups' in stage ? Array.from(stage.assetGroups as readonly string[]) : []
+  if (allowedRoles.includes(role) || allowedGroups.includes(assetGroup)) {
+    return true
+  }
+  if (selectedWorkflowStage.value === 'benchmark' && isBenchmarkAsset(asset)) {
+    return true
+  }
+  if (selectedWorkflowStage.value === 'storyboard' && isStoryboardAsset(asset)) {
     return true
   }
   const allowed = Array.from(stage.sourceTypes as readonly string[])
@@ -1467,6 +1527,28 @@ function isJson(asset: AssetItem) {
   )
 }
 
+function isText(asset: AssetItem) {
+  return (
+    asset.assetType === 'TEXT' ||
+    (asset.mimeType || '').toLowerCase().startsWith('text/') ||
+    /\.(txt|md)$/i.test(asset.fileName)
+  )
+}
+
+function canOpenStructuredPreview(asset: AssetItem) {
+  return isJson(asset) || (isText(asset) && (isBenchmarkAsset(asset) || isStoryboardAsset(asset)))
+}
+
+function structuredPreviewHint(asset: AssetItem) {
+  if (isBenchmarkAsset(asset)) {
+    return '点击预览查看爆款对标文案。'
+  }
+  if (isStoryboardAsset(asset)) {
+    return '点击预览查看分镜结构。'
+  }
+  return '点击预览查看结构化结果。'
+}
+
 function isCarModelBundleAsset(asset: AssetItem) {
   if (!isJson(asset)) {
     return false
@@ -1513,6 +1595,12 @@ function carBundleAssetTitle(asset: AssetItem) {
 function resultAssetLabel(asset: AssetItem) {
   if (isCarModelBundleAsset(asset)) {
     return '车型素材包'
+  }
+  if (isBenchmarkAsset(asset)) {
+    return '爆款对标结果'
+  }
+  if (isStoryboardAsset(asset)) {
+    return '分镜生成结果'
   }
   const type = assetTaskType(asset)
   const label = taskTypeLabel(type)
@@ -1567,6 +1655,12 @@ function displayAssetTitle(asset: AssetItem) {
   if (isCarModelBundleAsset(asset)) {
     return carBundleAssetTitle(asset)
   }
+  if (isBenchmarkAsset(asset)) {
+    return `爆款对标：${generatedAssetSourceLabel(asset) || asset.fileName}`
+  }
+  if (isStoryboardAsset(asset)) {
+    return `分镜：${generatedAssetSourceLabel(asset) || asset.fileName}`
+  }
   if (isJson(asset) && asset.kind === 'GENERATED') {
     const sourceLabel = generatedAssetSourceLabel(asset)
     if (sourceLabel) {
@@ -1581,6 +1675,16 @@ function displayAssetMeta(asset: AssetItem) {
   if (isCarModelBundleAsset(asset)) {
     const visibilityLabel = String(asset.visibility || '').toUpperCase() === 'PUBLIC' ? '公共素材包' : '私有素材包'
     return `${visibilityLabel} · JSON · ${sourceTypeLabel(asset.sourceType)}`
+  }
+  if (isBenchmarkAsset(asset) || isStoryboardAsset(asset)) {
+    const sourceLabel = generatedAssetSourceLabel(asset)
+    return [
+      '生成结果',
+      isBenchmarkAsset(asset) ? '爆款对标' : '分镜生成',
+      sourceLabel ? `解析视频：${sourceLabel}` : '',
+      asset.assetType,
+      formatFileSize(asset.fileSize),
+    ].filter(Boolean).join(' · ')
   }
   if (isJson(asset) && asset.kind === 'GENERATED') {
     const type = assetTaskType(asset)
@@ -1607,6 +1711,12 @@ function assetTaskType(asset: AssetItem | null) {
   if (!asset) {
     return ''
   }
+  if (isBenchmarkAsset(asset)) {
+    return 'DOUYIN_PARSE_TRANSCRIPT'
+  }
+  if (isStoryboardAsset(asset)) {
+    return 'STORYBOARD_GENERATE'
+  }
   const metadata = parseJsonObject(asset.metadataJson)
   const fromMeta = stringField(metadata, 'taskType')
   if (fromMeta) {
@@ -1616,6 +1726,59 @@ function assetTaskType(asset: AssetItem | null) {
     return 'DOUYIN_PARSE_TRANSCRIPT'
   }
   return asset.sourceType || ''
+}
+
+function normalizedAssetRole(asset: AssetItem | null | undefined) {
+  if (!asset) {
+    return ''
+  }
+  const metadata = parseJsonObject(asset.metadataJson)
+  const role = firstNonEmptyText(
+    stringField(metadata, 'assetRole'),
+    stringField(metadata, 'role'),
+  ).trim().toLowerCase()
+  if (role === 'benchmark' || role === 'douyin_benchmark') {
+    return 'benchmark_json'
+  }
+  if (role === 'storyboard' || role === 'script_storyboard') {
+    return 'storyboard_json'
+  }
+  return role
+}
+
+function isBenchmarkAsset(asset: AssetItem | null | undefined) {
+  if (!asset) {
+    return false
+  }
+  const sourceType = String(asset.sourceType || '').trim().toUpperCase()
+  const group = String(asset.assetGroup || '').trim()
+  const role = normalizedAssetRole(asset)
+  const fileName = asset.fileName.toLowerCase()
+  return (
+    sourceType.includes('DOUYIN') ||
+    role === 'benchmark_json' ||
+    role === 'voice_script' ||
+    group === GROUP_BENCHMARK ||
+    (isText(asset) && (fileName.includes('口播文案') || fileName.includes('爆款对标')))
+  )
+}
+
+function isStoryboardAsset(asset: AssetItem | null | undefined) {
+  if (!asset) {
+    return false
+  }
+  const sourceType = String(asset.sourceType || '').trim().toUpperCase()
+  const group = String(asset.assetGroup || '').trim()
+  const role = normalizedAssetRole(asset)
+  const fileName = asset.fileName.toLowerCase()
+  return (
+    sourceType === 'STORYBOARD_GENERATE' ||
+    sourceType === 'VIDEO_SCRIPT_ANALYZE' ||
+    sourceType === 'VIDEO_SCRIPT_URL_ANALYZE' ||
+    role === 'storyboard_json' ||
+    group === GROUP_STORYBOARD ||
+    fileName.includes('分镜')
+  )
 }
 
 function formatFileSize(size: number) {

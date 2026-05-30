@@ -187,42 +187,26 @@
         </template>
 
         <template v-if="mainTab === 'carSales'">
-          <div class="render-car-workflow-strip" aria-label="视频制作主流程">
-            <span><strong>1</strong>基础信息</span>
-            <span><strong>2</strong>素材与车型</span>
-            <span><strong>3</strong>文案与分镜</span>
-            <span><strong>4</strong>自动编排</span>
-            <span><strong>5</strong>可选包装</span>
-            <small>从上到下按执行顺序配置；自动分段、时长和推荐会根据已填内容在下方更新。</small>
-          </div>
-
-          <section class="render-manual-module render-manual-module-core" aria-label="基础信息">
-            <div class="render-module-title">
-              <div>
-                <h3>基础信息</h3>
-                <small>先确认全局输出设置；分段时长会在填写素材、文案和分镜后自动推荐。</small>
-              </div>
-              <span>常用</span>
-            </div>
-            <div class="render-grid-two">
-              <div class="render-form-field render-form-field-inline">
-                <label>成片比例</label>
-                <select v-model="renderAspectRatio" :disabled="busy">
-                  <option v-for="item in renderAspectRatioOptions" :key="item.value" :value="item.value">
-                    {{ item.label }}
-                  </option>
-                </select>
-                <span class="app-muted render-duration-hint">{{ renderAspectRatioHint }}</span>
-              </div>
-              <div class="render-form-field render-form-field-inline">
-                <label>分段数量</label>
-                <select :value="carSegmentCount" :disabled="busy" @change="handleCarSegmentCountChange">
-                  <option v-for="n in carSegmentCountOptions" :key="n" :value="n">{{ n }} 段</option>
-                </select>
-                <span class="app-muted render-duration-hint">后续会按分镜和音频推荐，可在自动编排里调整</span>
-              </div>
+          <section class="render-aspect-panel" aria-label="成片比例">
+            <div class="render-form-field render-form-field-inline">
+              <label>成片比例</label>
+              <select v-model="renderAspectRatio" :disabled="busy">
+                <option v-for="item in renderAspectRatioOptions" :key="item.value" :value="item.value">
+                  {{ item.label }}
+                </option>
+              </select>
+              <span class="app-muted render-duration-hint">{{ renderAspectRatioHint }}</span>
             </div>
           </section>
+
+          <div class="render-car-workflow-strip" aria-label="视频制作主流程">
+            <span><strong>1</strong>素材与车型</span>
+            <span><strong>2</strong>爆款对标/分镜</span>
+            <span><strong>3</strong>基础信息</span>
+            <span><strong>4</strong>自动编排</span>
+            <span><strong>5</strong>可选包装</span>
+            <small>先选素材和爆款对标结果；基础信息与分段数量会结合输入内容自动推荐，可在下方执行前确认。</small>
+          </div>
 
           <div class="render-digital-workspace">
               <section class="render-digital-section">
@@ -561,13 +545,14 @@
                 @select="handleCarStoryboardAssetSelect"
               />
               <AssetPicker
-                title="爆款对标文案（口播参考）"
+                title="爆款对标结果（口播文案）"
                 asset-type="JSON"
+                :asset-types="['JSON', 'TEXT']"
                 :selected-url="carBenchmarkAssetUrl"
                 :source-types="['DOUYIN_BENCHMARK', 'DOUYIN_PARSE_TRANSCRIPT', 'DOUYIN_REWRITE', 'DOUYIN_TRANSCRIPT', 'USER_UPLOAD']"
-                :asset-roles="['benchmark_json']"
+                :asset-roles="['benchmark_json', 'voice_script']"
                 :role-options="CAR_BENCHMARK_ROLE_OPTIONS"
-                source-hint="爆款解析文案主要用于声音生成或口播参考"
+                source-hint="爆款对标产出的口播文案，可直接用于模型原生口播、配音或分镜台词替换"
                 placeholder="搜索爆款对标文案..."
                 @select="handleCarBenchmarkAssetSelect"
               />
@@ -584,10 +569,17 @@
               <section class="render-auto-plan-panel" aria-label="自动分段与时长">
                 <div class="render-auto-plan-head">
                   <div>
-                    <strong>自动分段与时长</strong>
-                    <small>根据已选车型包、分镜、口播音频和模型上限自动推荐；不填写也会使用默认策略。</small>
+                    <strong>基础信息与自动编排</strong>
+                    <small>根据已选车型包、爆款文案、分镜、口播音频和模型上限自动推荐；不填写也会使用默认策略。</small>
                   </div>
                   <span>执行前确认</span>
+                </div>
+                <div class="render-form-field render-form-field-inline render-segment-count-field">
+                  <label>分段数量</label>
+                  <select :value="carSegmentCount" :disabled="busy" @change="handleCarSegmentCountChange">
+                    <option v-for="n in carSegmentCountOptions" :key="n" :value="n">{{ n }} 段</option>
+                  </select>
+                  <span class="app-muted render-duration-hint">会按素材、分镜和口播内容推荐，可在这里最终确认</span>
                 </div>
                 <section class="render-recommend-panel">
                   <div class="render-recommend-main">
@@ -6336,6 +6328,19 @@ onBeforeUnmount(() => {
   font-weight: 850;
 }
 
+.render-aspect-panel {
+  display: flex;
+  align-items: center;
+  border: 1px solid #d9e2ff;
+  border-radius: 8px;
+  background: #fff;
+  padding: 12px 14px;
+}
+
+.render-aspect-panel .render-form-field {
+  width: 100%;
+}
+
 .render-car-workflow-strip {
   display: grid;
   grid-template-columns: repeat(5, minmax(110px, 1fr));
@@ -6645,6 +6650,13 @@ onBeforeUnmount(() => {
 
 .render-auto-plan-panel .render-recommend-panel {
   background: #fff;
+}
+
+.render-segment-count-field {
+  border: 1px solid #edf0f6;
+  border-radius: 8px;
+  background: #fff;
+  padding: 12px;
 }
 
 .render-auto-current-plan {

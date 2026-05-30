@@ -145,6 +145,7 @@ interface AssetRoleOption {
 const props = defineProps<{
   title: string
   assetType: AssetType
+  assetTypes?: AssetType[]
   selectedUrl?: string
   placeholder?: string
   sourceTypes?: string[]
@@ -167,8 +168,18 @@ const selectedRoleFilter = ref('all')
 const modalOpen = ref(false)
 const previewByAssetId = ref<Record<number, AssetPickerPreview>>({})
 
-const isImage = computed(() => props.assetType === 'IMAGE' || props.assetType === 'COVER')
-const richJsonMode = computed(() => props.assetType === 'JSON')
+const assetTypesToLoad = computed(() => {
+  const values = props.assetTypes?.length ? props.assetTypes : [props.assetType]
+  return Array.from(new Set(values))
+})
+const isImage = computed(() => assetTypesToLoad.value.every((type) => type === 'IMAGE' || type === 'COVER'))
+const richJsonMode = computed(() =>
+  assetTypesToLoad.value.includes('JSON') ||
+  (
+    assetTypesToLoad.value.includes('TEXT') &&
+    (props.assetRoles || []).map(normalizeAssetRole).some((role) => role === 'benchmark_json' || role === 'storyboard_json' || role === 'voice_script')
+  ),
+)
 const shouldLoadAvatarProfiles = computed(() =>
   props.assetType === 'IMAGE' &&
   (
@@ -180,10 +191,11 @@ const shouldLoadAvatarProfiles = computed(() =>
 const sourceHintText = computed(() => props.sourceHint || '')
 const emptyLabel = computed(() => {
   if (isImage.value) return '从资产中心选择图片'
-  if (props.assetType === 'AUDIO') return '从资产中心选择音频'
-  if (props.assetType === 'VIDEO') return '从资产中心选择视频'
-  if (props.assetType === 'JSON') return '从资产中心选择脚本/分镜'
-  if (props.assetType === 'TEXT') return '从资产中心选择文案/字幕'
+  if (assetTypesToLoad.value.length > 1 && assetTypesToLoad.value.includes('TEXT') && assetTypesToLoad.value.includes('JSON')) return '从资产中心选择脚本/文案'
+  if (assetTypesToLoad.value.includes('AUDIO')) return '从资产中心选择音频'
+  if (assetTypesToLoad.value.includes('VIDEO')) return '从资产中心选择视频'
+  if (assetTypesToLoad.value.includes('JSON')) return '从资产中心选择脚本/分镜'
+  if (assetTypesToLoad.value.includes('TEXT')) return '从资产中心选择文案/字幕'
   return '从资产中心选择资产'
 })
 const selectedLabel = computed(() => {
@@ -357,12 +369,17 @@ async function loadAssets() {
   busy.value = true
   errorMessage.value = ''
   try {
-    let rows = await getAssets({
-      scope: 'all',
-      assetType: props.assetType,
-      keyword: keyword.value || undefined,
-      sort: 'createdAtDesc',
-    })
+    const lists = await Promise.all(
+      assetTypesToLoad.value.map((assetType) =>
+        getAssets({
+          scope: 'all',
+          assetType,
+          keyword: keyword.value || undefined,
+          sort: 'createdAtDesc',
+        }),
+      ),
+    )
+    let rows = dedupeAssets(lists.flat())
     if (shouldLoadAvatarProfiles.value) {
       rows = mergeAvatarProfileAssets(rows, await loadAvatarProfileAssets(keyword.value))
     }
@@ -373,6 +390,17 @@ async function loadAssets() {
   } finally {
     busy.value = false
   }
+}
+
+function dedupeAssets(items: AssetItem[]) {
+  const seen = new Set<number>()
+  return items.filter((item) => {
+    if (seen.has(item.assetId)) {
+      return false
+    }
+    seen.add(item.assetId)
+    return true
+  })
 }
 
 async function loadAvatarProfileAssets(searchText: string) {
@@ -472,9 +500,9 @@ async function loadAssetPreviews() {
     return
   }
 
-  const jsonAssets = assets.value.filter((asset) => asset.assetType === 'JSON').slice(0, 30)
+  const previewAssets = assets.value.filter((asset) => asset.assetType === 'JSON' || asset.assetType === 'TEXT').slice(0, 30)
   await Promise.all(
-    jsonAssets.map(async (asset) => {
+    previewAssets.map(async (asset) => {
       try {
         const text = await getAssetTextContent(asset)
         previewByAssetId.value = {
@@ -532,8 +560,11 @@ function buildFallbackPreview(asset: AssetItem): AssetPickerPreview {
     textAt(meta, 'originalText'),
     textAt(meta, 'content'),
   ), 180)
+  const normalizedRole = assetNormalizedRole(asset)
+  const isBenchmarkLike = normalizedRole === 'benchmark_json' || normalizedRole === 'voice_script' || asset.assetGroup === '爆款对标'
   const title = firstText(
-    assetNormalizedRole(asset) === 'benchmark_json' && parsedSource ? `爆款对标：${parsedSource}` : '',
+    isBenchmarkLike && parsedSource ? `爆款对标：${parsedSource}` : '',
+    isBenchmarkLike ? `爆款对标：${asset.fileName}` : '',
     assetNormalizedRole(asset) === 'storyboard_json' && parsedSource ? `分镜：${parsedSource}` : '',
     textAt(meta, 'title'),
     textAt(meta, 'sourceTitle'),
@@ -695,6 +726,7 @@ function buildPlainTextPreview(asset: AssetItem, text: string): AssetPickerPrevi
 
 function rolePreviewLabel(role: string) {
   if (role === 'benchmark_json') return '口播预览'
+  if (role === 'voice_script') return '口播预览'
   if (role === 'storyboard_json') return '分镜预览'
   return ''
 }
@@ -765,10 +797,14 @@ function assetNormalizedRole(asset: AssetItem) {
 function inferAssetRole(asset: AssetItem, meta: Record<string, unknown> | null) {
   const assetType = String(asset.assetType || '').trim().toUpperCase()
   const sourceType = String(asset.sourceType || '').trim().toUpperCase()
+  const assetGroup = String(asset.assetGroup || '').trim()
   const from = textAt(meta, 'from').toLowerCase()
   const source = textAt(meta, 'source').toUpperCase()
   const bundleType = textAt(meta, 'bundleType').toLowerCase()
   const name = `${asset.fileName || ''} ${textAt(meta, 'originalFileName')} ${textAt(meta, 'title')} ${textAt(meta, 'sourceTitle')}`.toLowerCase()
+  if (assetGroup === '爆款对标') return 'benchmark_json'
+  if (assetGroup === '分镜脚本') return 'storyboard_json'
+  if (assetGroup === '汽车素材包') return 'car_model_bundle'
   if (assetType === 'IMAGE') {
     if (
       sourceType === 'AVATAR_GENERATE' ||
