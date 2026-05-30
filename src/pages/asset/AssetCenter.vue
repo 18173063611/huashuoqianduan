@@ -156,7 +156,7 @@
           class="app-secondary-button asset-upload-button"
           type="button"
           :disabled="loading"
-          @click="carBundleBuilderOpen = true"
+          @click="openCarBundleCreator"
         >
           创建车型素材包
         </button>
@@ -336,6 +336,15 @@
             发布到公共
           </button>
           <button
+            v-if="canEditCarBundle(asset)"
+            class="app-secondary-button"
+            type="button"
+            :disabled="loading"
+            @click="openCarBundleEditor(asset)"
+          >
+            编辑
+          </button>
+          <button
             v-if="listScope === 'global' && hasToken && canUnpublish(asset)"
             class="app-secondary-button asset-danger"
             type="button"
@@ -429,9 +438,12 @@
 
     <CarModelBundleBuilder
       v-if="carBundleBuilderOpen"
-      :publish="uploadPublishToPublic"
-      @close="carBundleBuilderOpen = false"
+      :publish="carBundleEditorPublish"
+      :editing-asset="carBundleEditingAsset"
+      :initial-bundle="carBundleInitialPayload"
+      @close="closeCarBundleBuilder"
       @created="handleCarBundleCreated"
+      @updated="handleCarBundleUpdated"
     />
 
     <div v-if="previewModalOpen" class="asset-modal-backdrop" @click.self="closeAssetPreview">
@@ -623,6 +635,26 @@ interface PreviewStoryboardShot {
   estDurationSec: number
 }
 
+interface CarBundleImageItem {
+  role?: string
+  label?: string
+  assetId?: number | null
+  url?: string
+  fileName?: string
+  source?: string
+}
+
+interface CarModelBundlePayload {
+  bundleType?: string
+  assetRole?: string
+  brandModel?: string
+  color?: string
+  notes?: string
+  images?: CarBundleImageItem[]
+  createdAt?: string
+  updatedAt?: string
+}
+
 const router = useRouter()
 
 const embedPanel = computed(() => props.panelMode === 'materials' || props.panelMode === 'voices')
@@ -755,6 +787,8 @@ const currentUser = ref<AuthUser | null>(null)
 const materialUploadInputRef = ref<HTMLInputElement | null>(null)
 const uploadPublishToPublic = ref(false)
 const carBundleBuilderOpen = ref(false)
+const carBundleEditingAsset = ref<AssetItem | null>(null)
+const carBundleInitialPayload = ref<CarModelBundlePayload | null>(null)
 let keywordReloadTimer: number | null = null
 let highlightClearTimer: number | null = null
 
@@ -833,6 +867,14 @@ const assetGroupOptions = computed(() => {
 })
 
 const workflowStageOptions = computed(() => WORKFLOW_STAGE_OPTIONS)
+
+const carBundleEditorPublish = computed(() => {
+  const editingAsset = carBundleEditingAsset.value
+  if (!editingAsset) {
+    return uploadPublishToPublic.value
+  }
+  return String(editingAsset.visibility || '').toUpperCase() === 'PUBLIC' || uploadPublishToPublic.value
+})
 
 const filteredVoices = computed(() => {
   const q = keyword.value.trim().toLowerCase()
@@ -1148,8 +1190,43 @@ async function handleMaterialUploadChange(event: Event) {
   }
 }
 
-async function handleCarBundleCreated(asset: AssetItem) {
+function openCarBundleCreator() {
+  carBundleEditingAsset.value = null
+  carBundleInitialPayload.value = null
+  carBundleBuilderOpen.value = true
+}
+
+function closeCarBundleBuilder() {
   carBundleBuilderOpen.value = false
+  carBundleEditingAsset.value = null
+  carBundleInitialPayload.value = null
+}
+
+async function openCarBundleEditor(asset: AssetItem) {
+  if (!canEditCarBundle(asset)) {
+    errorMessage.value = '当前账号没有权限编辑该车型素材包'
+    return
+  }
+  loading.value = true
+  errorMessage.value = ''
+  try {
+    const text = await getAssetTextContent(asset)
+    const parsed = parseJsonObject(text)
+    if (!parsed || !isCarBundlePayloadRecord(parsed)) {
+      throw new Error('该车型素材包内容格式不正确')
+    }
+    carBundleEditingAsset.value = asset
+    carBundleInitialPayload.value = parsed as CarModelBundlePayload
+    carBundleBuilderOpen.value = true
+  } catch (e) {
+    errorMessage.value = e instanceof Error ? e.message : '加载车型素材包失败'
+  } finally {
+    loading.value = false
+  }
+}
+
+async function handleCarBundleCreated(asset: AssetItem) {
+  closeCarBundleBuilder()
   selectedType.value = 'JSON'
   selectedSourceType.value = ''
   selectedAssetGroup.value = CAR_MODEL_BUNDLE_GROUP
@@ -1158,11 +1235,28 @@ async function handleCarBundleCreated(asset: AssetItem) {
   sortKey.value = 'createdAtDesc'
   listScope.value = uploadPublishToPublic.value ? 'global' : 'private'
   jumpHint.value = '车型素材包已保存，可在视频生成页直接选择。'
+  await reloadAndHighlightAsset(asset.assetId)
+}
+
+async function handleCarBundleUpdated(asset: AssetItem) {
+  closeCarBundleBuilder()
+  selectedType.value = 'JSON'
+  selectedSourceType.value = ''
+  selectedAssetGroup.value = CAR_MODEL_BUNDLE_GROUP
+  selectedWorkflowStage.value = 'material'
+  keyword.value = ''
+  sortKey.value = 'createdAtDesc'
+  listScope.value = String(asset.visibility || '').toUpperCase() === 'PUBLIC' ? 'global' : 'private'
+  jumpHint.value = '车型素材包已更新。'
+  await reloadAndHighlightAsset(asset.assetId)
+}
+
+async function reloadAndHighlightAsset(assetId: number) {
   await loadAssets()
-  highlightedId.value = asset.assetId
+  highlightedId.value = assetId
   clearHighlightTimer()
   await nextTick()
-  document.getElementById(assetRowDomId(asset.assetId))?.scrollIntoView({ behavior: 'smooth', block: 'center' })
+  document.getElementById(assetRowDomId(assetId))?.scrollIntoView({ behavior: 'smooth', block: 'center' })
   highlightClearTimer = window.setTimeout(() => {
     highlightedId.value = null
     jumpHint.value = ''
@@ -1311,7 +1405,43 @@ function isJson(asset: AssetItem) {
   )
 }
 
+function isCarModelBundleAsset(asset: AssetItem) {
+  if (!isJson(asset)) {
+    return false
+  }
+  const metadata = parseJsonObject(asset.metadataJson)
+  return (
+    stringField(metadata, 'bundleType') === 'car_model' ||
+    stringField(metadata, 'assetRole') === 'car_model_bundle' ||
+    stringField(metadata, 'from') === 'car_model_bundle' ||
+    asset.assetGroup === CAR_MODEL_BUNDLE_GROUP
+  )
+}
+
+function isCarBundlePayloadRecord(record: Record<string, unknown>) {
+  return stringField(record, 'bundleType') === 'car_model' || stringField(record, 'assetRole') === 'car_model_bundle'
+}
+
+function canEditCarBundle(asset: AssetItem) {
+  if (!hasToken.value || !currentUser.value || !isCarModelBundleAsset(asset)) {
+    return false
+  }
+  const userId = currentUser.value.userId
+  const visibility = String(asset.visibility || '').toUpperCase()
+  if (visibility === 'PUBLIC' || listScope.value === 'global') {
+    return (
+      String(currentUser.value.role || '').toUpperCase() === 'ADMIN' ||
+      asset.createdByUserId === userId ||
+      asset.ownerUserId === userId
+    )
+  }
+  return asset.ownerUserId === userId
+}
+
 function resultAssetLabel(asset: AssetItem) {
+  if (isCarModelBundleAsset(asset)) {
+    return '车型素材包'
+  }
   const type = assetTaskType(asset)
   const label = taskTypeLabel(type)
   if (label && label !== '其他任务' && label !== '暂无') {

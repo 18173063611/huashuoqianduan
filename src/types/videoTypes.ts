@@ -231,6 +231,11 @@ export interface CarSalesVideoSceneRequest {
   referenceImage?: string
   voiceText?: string
   duration?: number
+  carPackageId?: string
+  carIndex?: number
+  carRole?: string
+  compareDimension?: string
+  shotPurpose?: string
 }
 
 export interface CarSalesAssetRoleBinding {
@@ -239,6 +244,23 @@ export interface CarSalesAssetRoleBinding {
   assetType?: string
   assetRole?: string
   label?: string
+  carPackageId?: string
+  carIndex?: number
+}
+
+export interface CarSalesCarPackageRequest {
+  packageId?: string
+  packageAssetId?: number
+  packageName?: string
+  carIndex?: number
+  role?: string
+  brandModel?: string
+  color?: string
+  sellingPoints?: string
+  materialCompleteness?: string
+  imageUrls?: string[]
+  sceneImageUrls?: string[]
+  assetRoleBindings?: CarSalesAssetRoleBinding[]
 }
 
 export interface CarSalesTextOverlayRequest {
@@ -254,6 +276,7 @@ export interface CarSalesTextOverlayRequest {
 export interface CarSalesVideoRequest {
   projectId?: number | null
   carImageUrls: string[]
+  taskMode?: 'car_sales' | 'multi_car_compare'
   brandModel?: string
   sellingPoints?: string
   audience?: string
@@ -288,6 +311,7 @@ export interface CarSalesVideoRequest {
   aspectRatio?: string
   quickAssetIds?: number[]
   assetRoleBindings?: CarSalesAssetRoleBinding[]
+  carPackages?: CarSalesCarPackageRequest[]
   segmentCount?: number
   segmentDuration?: number
   scenes?: CarSalesVideoSceneRequest[]

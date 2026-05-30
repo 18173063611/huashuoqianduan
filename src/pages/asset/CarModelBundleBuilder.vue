@@ -1,10 +1,10 @@
 <template>
   <div class="car-bundle-backdrop" @click.self="emit('close')">
-    <section class="car-bundle-modal" role="dialog" aria-modal="true" aria-label="创建车型素材包">
+    <section class="car-bundle-modal" role="dialog" aria-modal="true" :aria-label="modalTitle">
       <header class="car-bundle-head">
         <div>
-          <strong>创建车型素材包</strong>
-          <p>上传或从资产中心选择同一款车型的车辆部位图片，保存后可在视频生成页按分镜自动取用。</p>
+          <strong>{{ modalTitle }}</strong>
+          <p>{{ modalDescription }}</p>
         </div>
         <button class="app-secondary-button" type="button" :disabled="saving" @click="emit('close')">关闭</button>
       </header>
@@ -94,7 +94,7 @@
       <footer class="car-bundle-actions">
         <span>{{ selectedCount }} 张图片</span>
         <button class="app-primary-button" type="button" :disabled="saving || selectedCount === 0" @click="saveBundle">
-          {{ saving ? '保存中...' : '保存车型素材包' }}
+          {{ saving ? '保存中...' : isEditing ? '保存更改' : '保存车型素材包' }}
         </button>
       </footer>
     </section>
@@ -102,18 +102,41 @@
 </template>
 
 <script setup lang="ts">
-import { computed, onMounted, ref } from 'vue'
-import { getAssets, publishAsset, uploadMaterialAsset } from '../../services/assetApi'
+import { computed, onMounted, ref, watch } from 'vue'
+import { getAssets, publishAsset, updateCarModelBundleAsset, uploadMaterialAsset } from '../../services/assetApi'
 import { API_ORIGIN } from '../../services/request'
 import type { AssetItem } from '../../types/assetTypes'
 
+interface CarBundleImageItem {
+  role?: string
+  label?: string
+  assetId?: number | null
+  url?: string
+  fileName?: string
+  source?: string
+}
+
+interface CarModelBundlePayload {
+  bundleType?: string
+  assetRole?: string
+  brandModel?: string
+  color?: string
+  notes?: string
+  images?: CarBundleImageItem[]
+  createdAt?: string
+  updatedAt?: string
+}
+
 const props = defineProps<{
   publish?: boolean
+  editingAsset?: AssetItem | null
+  initialBundle?: CarModelBundlePayload | null
 }>()
 
 const emit = defineEmits<{
   close: []
   created: [asset: AssetItem]
+  updated: [asset: AssetItem]
 }>()
 
 const carRoleOptions = [
@@ -145,6 +168,14 @@ const assetLoading = ref(false)
 const assetError = ref('')
 const saving = ref(false)
 const errorMessage = ref('')
+
+const isEditing = computed(() => Boolean(props.editingAsset))
+const modalTitle = computed(() => (isEditing.value ? '编辑车型素材包' : '创建车型素材包'))
+const modalDescription = computed(() =>
+  isEditing.value
+    ? '调整车型名称、备注和车辆部位图片，保存后视频生成页会使用最新素材包。'
+    : '上传或从资产中心选择同一款车型的车辆部位图片，保存后可在视频生成页按分镜自动取用。',
+)
 
 const selectedCount = computed(() => {
   const roles = new Set([
@@ -181,6 +212,35 @@ const filteredImageAssets = computed(() => {
 onMounted(() => {
   void loadImageAssets()
 })
+
+watch(
+  () => props.initialBundle,
+  (bundle) => {
+    hydrateInitialBundle(bundle)
+  },
+  { immediate: true },
+)
+
+function hydrateInitialBundle(bundle: CarModelBundlePayload | null | undefined) {
+  if (!bundle) {
+    return
+  }
+  brandModel.value = bundle.brandModel || ''
+  color.value = bundle.color || ''
+  notes.value = bundle.notes || ''
+  filesByRole.value = {}
+  fileNameByRole.value = {}
+  const nextAssets: Record<string, AssetItem> = {}
+  for (const item of Array.isArray(bundle.images) ? bundle.images : []) {
+    const role = String(item.role || '').trim()
+    const url = String(item.url || '').trim()
+    if (!role || !url) {
+      continue
+    }
+    nextAssets[role] = bundleImageToAsset(item, role)
+  }
+  selectedAssetsByRole.value = nextAssets
+}
 
 function handleRoleFile(role: string, event: Event) {
   const input = event.target as HTMLInputElement
@@ -275,7 +335,7 @@ async function saveBundle() {
   saving.value = true
   errorMessage.value = ''
   try {
-    const imageItems = []
+    const imageItems: CarBundleImageItem[] = []
     for (const role of carRoleOptions) {
       const file = filesByRole.value[role.value]
       if (file) {
@@ -301,13 +361,17 @@ async function saveBundle() {
       }
       const selectedAsset = selectedAssetsByRole.value[role.value]
       if (selectedAsset) {
-        const asset = props.publish && String(selectedAsset.visibility || '').toUpperCase() !== 'PUBLIC'
+        const shouldPublishSelected =
+          selectedAsset.assetId > 0 &&
+          props.publish &&
+          String(selectedAsset.visibility || '').toUpperCase() !== 'PUBLIC'
+        const asset = shouldPublishSelected
           ? await publishAsset(selectedAsset.assetId)
           : selectedAsset
         imageItems.push({
           role: role.value,
           label: role.label,
-          assetId: asset.assetId,
+          assetId: asset.assetId > 0 ? asset.assetId : undefined,
           url: asset.fileUrl,
           fileName: asset.fileName,
           source: 'asset_center',
@@ -321,28 +385,69 @@ async function saveBundle() {
       color: color.value,
       notes: notes.value,
       images: imageItems,
-      createdAt: new Date().toISOString(),
+      createdAt: props.initialBundle?.createdAt || new Date().toISOString(),
+      updatedAt: new Date().toISOString(),
     }
     const safeName = (brandModel.value || '车型素材包').replace(/[\\/:*?"<>|]+/g, '_')
-    const file = new File([JSON.stringify(payload, null, 2)], `${safeName}-车型素材包.json`, {
+    const fileName = `${safeName}-车型素材包.json`
+    const contentJson = JSON.stringify(payload, null, 2)
+    const metadataJson = JSON.stringify({
+      from: 'car_model_bundle',
+      assetRole: 'car_model_bundle',
+      assetGroup: '汽车素材包',
+      bundleType: 'car_model',
+      brandModel: brandModel.value,
+      color: color.value,
+    })
+    if (props.editingAsset) {
+      const bundleAsset = await updateCarModelBundleAsset(props.editingAsset.assetId, {
+        fileName,
+        contentJson,
+        metadataJson,
+      })
+      emit('updated', bundleAsset)
+      return
+    }
+    const file = new File([contentJson], fileName, {
       type: 'application/json',
     })
     const bundleAsset = await uploadMaterialAsset(file, {
       publish: props.publish,
-      metadataJson: JSON.stringify({
-        from: 'car_model_bundle',
-        assetRole: 'car_model_bundle',
-        assetGroup: '汽车素材包',
-        bundleType: 'car_model',
-        brandModel: brandModel.value,
-        color: color.value,
-      }),
+      metadataJson,
     })
     emit('created', bundleAsset)
   } catch (error) {
     errorMessage.value = error instanceof Error ? error.message : '车型素材包保存失败'
   } finally {
     saving.value = false
+  }
+}
+
+function bundleImageToAsset(item: CarBundleImageItem, role: string): AssetItem {
+  const assetId = typeof item.assetId === 'number' && Number.isFinite(item.assetId) ? item.assetId : 0
+  const fileName = item.fileName || roleLabel(role)
+  return {
+    assetId,
+    ownerUserId: null,
+    createdByUserId: null,
+    projectId: null,
+    taskId: null,
+    assetType: 'IMAGE',
+    kind: 'MATERIAL',
+    visibility: 'PUBLIC',
+    status: 'ACTIVE',
+    publishedAt: null,
+    fileName,
+    filePath: null,
+    fileUrl: item.url || '',
+    thumbnailUrl: item.url || null,
+    mimeType: null,
+    fileSize: 0,
+    sourceType: item.source || 'USER_UPLOAD',
+    assetGroup: '汽车素材包',
+    metadataJson: null,
+    createdAt: '',
+    updatedAt: '',
   }
 }
 

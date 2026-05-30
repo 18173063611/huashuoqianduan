@@ -300,6 +300,93 @@
                 </span>
                 <span v-else>{{ carBundleLoadError }}</span>
               </div>
+              <section class="render-multi-car-panel" aria-label="多车型对比">
+                <div class="render-multi-car-head">
+                  <div>
+                    <strong>多车型对比 <em>可选</em></strong>
+                    <small>选择 2 个车型素材包后，按车型章节分别介绍，再做固定维度对比和总结。</small>
+                  </div>
+                  <button
+                    type="button"
+                    class="app-secondary-button render-mini-btn"
+                    :disabled="busy"
+                    @click="multiCarCompareEnabled = !multiCarCompareEnabled"
+                  >
+                    {{ multiCarCompareEnabled ? '关闭对比' : '开启对比' }}
+                  </button>
+                </div>
+                <div v-if="multiCarCompareEnabled" class="render-multi-car-body">
+                  <AssetPicker
+                    title="添加对比车型素材包"
+                    asset-type="JSON"
+                    :selected-url="compareBundlePickedUrl"
+                    :source-types="['USER_UPLOAD']"
+                    :asset-roles="['car_model_bundle']"
+                    :role-options="CAR_MODEL_BUNDLE_ROLE_OPTIONS"
+                    source-hint="每次选择一款车型素材包，会加入下方对比列表并保留车型身份"
+                    placeholder="搜索并添加车型素材包..."
+                    @select="handleCompareCarBundleAssetSelect"
+                  />
+                  <div v-if="compareBundleLoadError" class="render-car-bundle-status error">
+                    <strong>对比素材包读取失败</strong>
+                    <span>{{ compareBundleLoadError }}</span>
+                  </div>
+                  <div v-if="compareCarPackages.length" class="render-multi-car-list">
+                    <article
+                      v-for="(pkg, idx) in compareCarPackages"
+                      :key="pkg.localId"
+                      class="render-multi-car-item"
+                    >
+                      <div class="render-multi-car-item-head">
+                        <strong>车型 {{ idx + 1 }} · {{ pkg.brandModel || pkg.packageName || '未命名车型' }}</strong>
+                        <div class="render-multi-car-actions">
+                          <button type="button" :disabled="busy || idx === 0" @click="moveCompareCarPackage(idx, -1)">上移</button>
+                          <button type="button" :disabled="busy || idx === compareCarPackages.length - 1" @click="moveCompareCarPackage(idx, 1)">下移</button>
+                          <button type="button" :disabled="busy" @click="removeCompareCarPackage(idx)">移除</button>
+                        </div>
+                      </div>
+                      <div class="render-multi-car-fields">
+                        <label>
+                          <span>角色</span>
+                          <select v-model="pkg.role" :disabled="busy" @change="reindexCompareCarPackages">
+                            <option v-for="option in COMPARE_CAR_ROLE_OPTIONS" :key="option.value" :value="option.value">
+                              {{ option.label }}
+                            </option>
+                          </select>
+                        </label>
+                        <label>
+                          <span>车型名</span>
+                          <input v-model.trim="pkg.brandModel" :disabled="busy" placeholder="例如 Model Y" />
+                        </label>
+                        <label>
+                          <span>颜色</span>
+                          <input v-model.trim="pkg.color" :disabled="busy" placeholder="例如 珍珠白" />
+                        </label>
+                        <label>
+                          <span>卖点</span>
+                          <input v-model.trim="pkg.sellingPoints" :disabled="busy" placeholder="空间、续航、智能配置等" />
+                        </label>
+                      </div>
+                      <p>
+                        {{ compareCarRoleLabel(pkg.role) }} · 车辆图 {{ pkg.images.length }} 张
+                        <template v-if="pkg.sceneImages.length"> · 场景图 {{ pkg.sceneImages.length }} 张</template>
+                        <template v-if="pkg.materialCompleteness"> · {{ pkg.materialCompleteness }}</template>
+                      </p>
+                    </article>
+                  </div>
+                  <div v-else class="render-multi-car-empty">
+                    还没有添加对比车型。先添加 2 个车型素材包即可生成双车对比结构。
+                  </div>
+                  <label class="render-multi-car-dimensions">
+                    <span>固定对比维度</span>
+                    <input
+                      v-model.trim="compareDimensionText"
+                      :disabled="busy"
+                      placeholder="外观质感、座舱空间、配置亮点、推荐建议"
+                    />
+                  </label>
+                </div>
+              </section>
               <div class="render-car-bundle-guidance">
                 <strong>分镜优先素材</strong>
                 <span>{{ carStoryboardBundleNeedText }}</span>
@@ -695,6 +782,11 @@
                         <strong>{{ scene.title }}</strong>
                         <span>{{ formatSeconds(scene.duration) }}</span>
                       </div>
+                      <div v-if="scene.compareDimension || scene.shotPurpose" class="render-scene-voice-tags">
+                        <span v-if="scene.carIndex != null">车型 {{ scene.carIndex + 1 }}</span>
+                        <span v-if="scene.compareDimension">{{ scene.compareDimension }}</span>
+                        <span v-if="scene.shotPurpose">{{ scene.shotPurpose }}</span>
+                      </div>
                       <p class="render-scene-visual">{{ scene.visualPrompt }}</p>
                       <p class="render-scene-voice">{{ scene.voiceText || '此段暂无口播台词' }}</p>
                     </article>
@@ -745,7 +837,7 @@
                         {{ item.label }}
                       </option>
                     </select>
-                    <small>字幕只在成片拼接后统一识别/烧录，视频生成模型不会直接生成字幕文字。</small>
+                    <small>字幕优先按最终口播文案烧录；缺少文案时才识别成片音频，视频生成模型不会直接生成字幕文字。</small>
                   </div>
                   <section class="render-text-poster-panel" aria-label="视频大字报设置">
                     <div class="render-text-poster-head">
@@ -1415,6 +1507,7 @@ import {
 } from '../../services/videoApi'
 import type {
   CarSalesAssetRoleBinding,
+  CarSalesCarPackageRequest,
   DigitalHumanTaskDetailResponse,
   VideoScriptShotItem,
   VideoTaskVO,
@@ -1435,6 +1528,7 @@ type SeedanceModelValue = 'doubao-seedance-1-5-pro-251215' | 'ep-20260512233524-
 type CarMaterialGroup = 'exterior' | 'interior' | 'detail' | 'scene' | 'host'
 type RenderProductionMode = 'quick' | 'manual'
 type RenderAspectRatio = '9:16' | '16:9' | 'auto'
+type CompareCarRole = 'main' | 'compare' | 'alternative'
 
 interface StoryboardShotGroup {
   shots: VideoScriptShotItem[]
@@ -1445,6 +1539,45 @@ interface StoryboardShotGroup {
 interface ModelRequirement {
   model: SeedanceModelValue
   reason: string
+}
+
+interface CarBundleImageEntry {
+  url: string
+  role: string
+  assetId?: number
+  label?: string
+  fileName?: string
+}
+
+interface CompareCarPackage {
+  localId: string
+  packageAssetId?: number
+  packageAssetUrl: string
+  packageName: string
+  carIndex: number
+  role: CompareCarRole
+  brandModel: string
+  color: string
+  sellingPoints: string
+  materialCompleteness: string
+  images: CarBundleImageEntry[]
+  sceneImages: CarBundleImageEntry[]
+}
+
+interface CarSalesSceneDraft {
+  segmentIndex?: number
+  title?: string
+  visualPrompt?: string
+  prompt?: string
+  imageUrls: string[]
+  referenceImage?: string
+  voiceText?: string
+  duration?: number
+  carPackageId?: string
+  carIndex?: number
+  carRole?: string
+  compareDimension?: string
+  shotPurpose?: string
 }
 
 const MAX_REFERENCE = 9
@@ -1481,6 +1614,12 @@ const CAR_SCENE_IMAGE_ROLE_OPTIONS = CAR_MATERIAL_TARGETS
   .map((item) => ({ value: item.role, label: item.label }))
 const CAR_HOST_IMAGE_ROLE_OPTIONS = [{ value: 'host_image', label: '数字人形象' }]
 const CAR_MODEL_BUNDLE_ROLE_OPTIONS = [{ value: 'car_model_bundle', label: '车型素材包' }]
+const COMPARE_CAR_ROLE_OPTIONS: Array<{ value: CompareCarRole; label: string }> = [
+  { value: 'main', label: '主推' },
+  { value: 'compare', label: '对比' },
+  { value: 'alternative', label: '备选' },
+]
+const DEFAULT_COMPARE_DIMENSIONS = ['外观质感', '座舱空间', '配置亮点', '用车场景', '推荐建议']
 const CAR_VOICE_AUDIO_ROLE_OPTIONS = [
   { value: 'voiceover', label: '口播' },
   { value: 'reference_audio', label: '参考音频' },
@@ -1796,6 +1935,11 @@ const carBundleLoadedName = ref('')
 const carBundleImageCount = ref(0)
 const carBundleLoadError = ref('')
 const carBundleSaving = ref(false)
+const multiCarCompareEnabled = ref(false)
+const compareBundlePickedUrl = ref('')
+const compareBundleLoadError = ref('')
+const compareCarPackages = ref<CompareCarPackage[]>([])
+const compareDimensionText = ref(DEFAULT_COMPARE_DIMENSIONS.slice(0, 4).join('、'))
 const carPickedImageUrl = ref('')
 const carPickedSceneImageUrl = ref('')
 const carBrandModel = ref('')
@@ -2012,6 +2156,12 @@ const activeModelRequirement = computed<ModelRequirement | null>(() => {
   if (mainTab.value !== 'carSales') {
     return null
   }
+  if (multiCarCompareEnabled.value) {
+    return {
+      model: SEEDANCE_2_MODEL,
+      reason: '多车型对比需要多参考图隔离每款车型素材',
+    }
+  }
   if (carAudioMode.value === 'reference' && carAudioUrl.value.trim()) {
     return {
       model: SEEDANCE_2_MODEL,
@@ -2198,6 +2348,27 @@ const digitalHumanAudioReady = computed(() => {
 
 const carImageUrls = computed(() => carImages.value.map((url) => url.trim()).filter((url) => url.length > 0))
 const carSceneMaterialUrls = computed(() => carSceneImages.value.map((url) => url.trim()).filter((url) => url.length > 0))
+const isMultiCarCompareMode = computed(() =>
+  multiCarCompareEnabled.value && compareCarPackages.value.length >= 2,
+)
+const orderedCompareCarPackages = computed(() =>
+  compareCarPackages.value
+    .map((pkg, idx) => ({ ...pkg, carIndex: idx }))
+    .filter((pkg) => pkg.images.some((image) => image.url.trim())),
+)
+const compareDimensionList = computed(() => {
+  const custom = compareDimensionText.value
+    .split(/[、,，/|]/)
+    .map((item) => item.trim())
+    .filter(Boolean)
+  return (custom.length ? custom : DEFAULT_COMPARE_DIMENSIONS).slice(0, 5)
+})
+const comparePackageImageUrls = computed<string[]>(() =>
+  orderedCompareCarPackages.value.flatMap((pkg) => [
+    ...pkg.images.map((image) => image.url.trim()),
+    ...pkg.sceneImages.map((image) => image.url.trim()),
+  ]).filter(Boolean),
+)
 const carImageSceneReferenceUrls = computed(() =>
   carImageUrls.value.filter((url, idx) => CAR_SCENE_REFERENCE_ROLES.includes(carImageRoleForUrl(url, idx))),
 )
@@ -2207,6 +2378,20 @@ function collectProvidedCarMaterialRoles() {
   const providedRoles = new Set<string>()
   const untaggedImages: string[] = []
   const untaggedSceneImages: string[] = []
+
+  if (isMultiCarCompareMode.value) {
+    orderedCompareCarPackages.value.forEach((pkg) => {
+      pkg.images.forEach((image, idx) => {
+        const role = normalizeCarAssetRole(image.role) || FALLBACK_CAR_IMAGE_ROLES[idx]
+        if (role) providedRoles.add(role)
+      })
+      pkg.sceneImages.forEach((image, idx) => {
+        const role = normalizeCarAssetRole(image.role) || FALLBACK_CAR_SCENE_IMAGE_ROLES[idx]
+        if (role) providedRoles.add(role)
+      })
+    })
+    return providedRoles
+  }
 
   for (const url of carImageUrls.value) {
     const role = normalizeCarAssetRole(carImageAssetRoleByUrl.value[url])
@@ -2351,6 +2536,9 @@ const carStoryboardMissingVehicleRoleLabels = computed(() => {
     .map(carRoleLabel)
 })
 const carStoryboardBundleNeedText = computed(() => {
+  if (isMultiCarCompareMode.value) {
+    return `已进入多车型对比：${orderedCompareCarPackages.value.length} 个车型包会按章节强隔离参考图，对比镜头只使用明确绑定的车型锚点图。`
+  }
   const labels = carStoryboardNeededVehicleRoleLabels.value
   const prefix = labels.length
     ? `当前分镜建议优先准备：${labels.join('、')}`
@@ -2393,6 +2581,9 @@ const carVoicePolicyDescription = computed(() => {
     return '本次将先生成画面，再用口播音频替换或混入最终音轨；BGM 不参与口播、字幕或口型。'
   }
   if (usesModelNativeVoiceover()) {
+    if (isMultiCarCompareMode.value) {
+      return `将按多车型对比结构生成画面和模型原生音频；风格：${carNativeVoiceStyleSummary.value}。`
+    }
     if (carVoiceTextSource.value === 'benchmark' && carBenchmarkVoiceText.value.trim()) {
       return `将按爆款对标文案生成画面和模型原生音频；风格：${carNativeVoiceStyleSummary.value}。`
     }
@@ -2424,6 +2615,10 @@ const maxStoryboardSegmentDurationRaw = computed(() => {
   return durations.length ? Math.max(...durations) : null
 })
 const carRecommendedSegmentCount = computed(() => {
+  if (isMultiCarCompareMode.value) {
+    const packageCount = orderedCompareCarPackages.value.length
+    return Math.max(4, Math.min(12, packageCount <= 4 ? packageCount * 2 + 3 : packageCount + 3))
+  }
   if (carAudioMode.value === 'reference' && carAudioUrl.value.trim()) {
     return 1
   }
@@ -2441,6 +2636,9 @@ const carRecommendedSegmentCount = computed(() => {
 })
 const carRecommendedSegmentDurations = computed(() => {
   const count = carRecommendedSegmentCount.value
+  if (isMultiCarCompareMode.value) {
+    return Array.from({ length: count }, (_, idx) => clampCarSegmentDuration(idx === 0 ? 5 : idx >= count - 2 ? 6 : 7))
+  }
   if (carAudioMode.value === 'reference' && carAudioDurationSeconds.value) {
     return [clampCarSegmentDuration(Math.ceil(carAudioDurationSeconds.value))]
   }
@@ -2470,6 +2668,10 @@ const carRecommendationSummary = computed(
 )
 const carRecommendationReasonText = computed(() => {
   const reasons: string[] = []
+  if (isMultiCarCompareMode.value) {
+    reasons.push(`多车型对比已选择 ${orderedCompareCarPackages.value.length} 个车型包`)
+    reasons.push(`固定维度：${compareDimensionList.value.join('、')}`)
+  }
   const shotCount = storyboardShotsForRecommendation.value.length
   if (shotCount > 0) {
     const groupCount = storyboardShotGroupsForRecommendation.value.length || shotCount
@@ -2488,6 +2690,8 @@ const carRecommendationReasonText = computed(() => {
   return reasons.join('；')
 })
 const carRecommendationSignature = computed(() => [
+  multiCarCompareEnabled.value ? orderedCompareCarPackages.value.map((pkg) => `${pkg.localId}:${pkg.brandModel}:${pkg.role}`).join(',') : '',
+  compareDimensionList.value.join(','),
   storyboardTimingSignature.value,
   selectedModel.value,
   carAudioDurationSeconds.value || '',
@@ -2627,7 +2831,8 @@ const canSubmit = computed(() => {
     return prompt.value.trim().length > 0
   }
   if (mainTab.value === 'carSales') {
-    return carImageUrls.value.length > 0 && carGenerationBlockingMessages.value.length === 0
+    const hasMaterial = isMultiCarCompareMode.value ? orderedCompareCarPackages.value.length >= 2 : carImageUrls.value.length > 0
+    return hasMaterial && carGenerationBlockingMessages.value.length === 0
   }
   if (imageSubTab.value === 'first') {
     return firstFrame.value.trim().length > 0
@@ -2959,6 +3164,55 @@ function carSceneImageRoleLabelForUrl(url: string, index: number) {
   return role ? carRoleLabel(role) : '选择场景'
 }
 
+function compareCarRoleLabel(role: string) {
+  return COMPARE_CAR_ROLE_OPTIONS.find((item) => item.value === role)?.label || '对比'
+}
+
+function parseCarBundleText(text: string) {
+  const parsed = JSON.parse(text) as unknown
+  if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) {
+    throw new Error('车型素材包格式不正确')
+  }
+  const bundle = parsed as Record<string, unknown>
+  const images = Array.isArray(bundle.images) ? bundle.images : []
+  const vehicleImages: CarBundleImageEntry[] = []
+  const sceneImages: CarBundleImageEntry[] = []
+  for (const raw of images) {
+    if (!raw || typeof raw !== 'object' || Array.isArray(raw)) continue
+    const item = raw as Record<string, unknown>
+    const url = firstRecordText(item, ['url', 'fileUrl', 'previewUrl', 'imageUrl'])
+    if (!url) continue
+    const role = normalizeCarAssetRole(firstRecordText(item, ['role', 'assetRole', 'type']))
+    const assetId = toPositiveNumber(item.assetId)
+    const entry: CarBundleImageEntry = {
+      url,
+      role,
+      assetId: assetId || undefined,
+      label: firstRecordText(item, ['label', 'name', 'roleName']) || (role ? carRoleLabel(role) : ''),
+      fileName: firstRecordText(item, ['fileName', 'name']) || url.split('/').pop() || '',
+    }
+    if (CAR_SCENE_REFERENCE_ROLES.includes(role)) {
+      sceneImages.push(entry)
+    } else {
+      vehicleImages.push(entry)
+    }
+  }
+  if (!vehicleImages.length) {
+    throw new Error('车型素材包内没有可用图片')
+  }
+  const brandModel = typeof bundle.brandModel === 'string' ? bundle.brandModel.trim() : ''
+  const color = typeof bundle.color === 'string' ? bundle.color.trim() : ''
+  const sellingPoints = firstRecordText(bundle, ['sellingPoints', 'sellingPoint', 'highlights', 'notes'])
+  return {
+    bundle,
+    brandModel,
+    color,
+    sellingPoints,
+    vehicleImages,
+    sceneImages,
+  }
+}
+
 async function handleCarBundleAssetSelect(payload: { asset: AssetItem; url: string }) {
   carBundleAssetUrl.value = payload.url
   carBundleAssetId.value = payload.asset.assetId
@@ -2967,45 +3221,32 @@ async function handleCarBundleAssetSelect(payload: { asset: AssetItem; url: stri
   carBundleLoadError.value = ''
   try {
     const text = await getAssetTextContent(payload.asset)
-    const parsed = JSON.parse(text) as unknown
-    if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) {
-      throw new Error('车型素材包格式不正确')
-    }
-    const bundle = parsed as Record<string, unknown>
-    const images = Array.isArray(bundle.images) ? bundle.images : []
     const nextImages: string[] = []
     const nextIds: Record<string, number> = {}
     const nextRoles: Record<string, string> = {}
     const nextSceneImages: string[] = []
     const nextSceneIds: Record<string, number> = {}
     const nextSceneRoles: Record<string, string> = {}
-    for (const raw of images) {
-      if (!raw || typeof raw !== 'object' || Array.isArray(raw)) continue
-      const item = raw as Record<string, unknown>
-      const url = firstRecordText(item, ['url', 'fileUrl', 'previewUrl', 'imageUrl'])
-      if (!url) continue
-      const role = normalizeCarAssetRole(firstRecordText(item, ['role', 'assetRole', 'type']))
-      const assetId = toPositiveNumber(item.assetId)
-      if (CAR_SCENE_REFERENCE_ROLES.includes(role)) {
-        if (nextSceneImages.length >= MAX_REFERENCE) continue
-        nextSceneImages.push(url)
-        if (assetId) {
-          nextSceneIds[url] = assetId
-        }
-        nextSceneRoles[url] = role
-      } else {
-        if (nextImages.length >= MAX_REFERENCE) continue
-        nextImages.push(url)
-        if (assetId) {
-          nextIds[url] = assetId
-        }
-        if (role) {
-          nextRoles[url] = role
-        }
+    const parsed = parseCarBundleText(text)
+    for (const image of parsed.vehicleImages) {
+      if (nextImages.length >= MAX_REFERENCE) continue
+      nextImages.push(image.url)
+      if (image.assetId) {
+        nextIds[image.url] = image.assetId
+      }
+      if (image.role) {
+        nextRoles[image.url] = image.role
       }
     }
-    if (!nextImages.length) {
-      throw new Error('车型素材包内没有可用图片')
+    for (const image of parsed.sceneImages) {
+      if (nextSceneImages.length >= MAX_REFERENCE) continue
+      nextSceneImages.push(image.url)
+      if (image.assetId) {
+        nextSceneIds[image.url] = image.assetId
+      }
+      if (image.role) {
+        nextSceneRoles[image.url] = image.role
+      }
     }
     carImages.value = nextImages
     carImageAssetIdsByUrl.value = nextIds
@@ -3016,10 +3257,9 @@ async function handleCarBundleAssetSelect(payload: { asset: AssetItem; url: stri
       carSceneImageAssetRoleByUrl.value = nextSceneRoles
       carPickedSceneImageUrl.value = nextSceneImages[0] || ''
     }
-    const brandModel = typeof bundle.brandModel === 'string' ? bundle.brandModel.trim() : ''
-    if (brandModel) {
-      carBrandModel.value = brandModel
-      carBundleLoadedName.value = brandModel
+    if (parsed.brandModel) {
+      carBrandModel.value = parsed.brandModel
+      carBundleLoadedName.value = parsed.brandModel
     }
     carBundleImageCount.value = nextImages.length + nextSceneImages.length
     carPickedImageUrl.value = nextImages[0] || ''
@@ -3028,6 +3268,87 @@ async function handleCarBundleAssetSelect(payload: { asset: AssetItem; url: stri
     carBundleLoadError.value = error instanceof Error ? error.message : '车型素材包读取失败'
     errorMessage.value = error instanceof Error ? error.message : '车型素材包读取失败'
   }
+}
+
+function materialCompletenessText(images: CarBundleImageEntry[], sceneImages: CarBundleImageEntry[]) {
+  const roles = new Set([...images, ...sceneImages].map((item) => item.role).filter(Boolean))
+  const coreRoles = [
+    'car_exterior_front',
+    'car_exterior_side',
+    'car_interior_dashboard',
+    'car_interior_front_seat',
+  ]
+  const covered = coreRoles.filter((role) => roles.has(role)).length
+  if (covered >= coreRoles.length) return '核心素材完整'
+  if (images.length >= 4) return '基础素材可用'
+  return '素材偏少，建议补图'
+}
+
+function reindexCompareCarPackages() {
+  compareCarPackages.value = compareCarPackages.value.map((pkg, idx) => ({
+    ...pkg,
+    carIndex: idx,
+    role: idx === 0 && pkg.role === 'compare' ? 'main' : pkg.role,
+  }))
+}
+
+async function handleCompareCarBundleAssetSelect(payload: { asset: AssetItem; url: string }) {
+  compareBundlePickedUrl.value = payload.url
+  compareBundleLoadError.value = ''
+  multiCarCompareEnabled.value = true
+  try {
+    const text = await getAssetTextContent(payload.asset)
+    const parsed = parseCarBundleText(text)
+    const exists = compareCarPackages.value.some((pkg) =>
+      (pkg.packageAssetId && pkg.packageAssetId === payload.asset.assetId) || pkg.packageAssetUrl === payload.url,
+    )
+    if (exists) {
+      ElMessage.warning('该车型素材包已在对比列表中')
+      return
+    }
+    const nextIndex = compareCarPackages.value.length
+    const packageName = parsed.brandModel || payload.asset.fileName || `车型 ${nextIndex + 1}`
+    compareCarPackages.value = [
+      ...compareCarPackages.value,
+      {
+        localId: `car-pkg-${payload.asset.assetId || Date.now()}-${nextIndex}`,
+        packageAssetId: payload.asset.assetId,
+        packageAssetUrl: payload.url,
+        packageName,
+        carIndex: nextIndex,
+        role: nextIndex === 0 ? 'main' : 'compare',
+        brandModel: parsed.brandModel || packageName,
+        color: parsed.color,
+        sellingPoints: parsed.sellingPoints,
+        materialCompleteness: materialCompletenessText(parsed.vehicleImages, parsed.sceneImages),
+        images: parsed.vehicleImages,
+        sceneImages: parsed.sceneImages,
+      },
+    ]
+    reindexCompareCarPackages()
+    if (!carBrandModel.value.trim()) {
+      carBrandModel.value = compareCarPackages.value.map((pkg) => pkg.brandModel || pkg.packageName).join(' vs ')
+    }
+    ElMessage.success('已加入对比车型')
+  } catch (error) {
+    compareBundleLoadError.value = error instanceof Error ? error.message : '车型素材包读取失败'
+    errorMessage.value = compareBundleLoadError.value
+  }
+}
+
+function moveCompareCarPackage(index: number, direction: -1 | 1) {
+  const nextIndex = index + direction
+  if (nextIndex < 0 || nextIndex >= compareCarPackages.value.length) return
+  const next = compareCarPackages.value.slice()
+  const [item] = next.splice(index, 1)
+  next.splice(nextIndex, 0, item)
+  compareCarPackages.value = next
+  reindexCompareCarPackages()
+}
+
+function removeCompareCarPackage(index: number) {
+  compareCarPackages.value = compareCarPackages.value.filter((_, idx) => idx !== index)
+  reindexCompareCarPackages()
 }
 
 async function saveCurrentCarBundle() {
@@ -3989,6 +4310,9 @@ function usesModelNativeVoiceover() {
 }
 
 function buildAutoCarVoiceText() {
+  if (isMultiCarCompareMode.value) {
+    return buildAutoMultiCarCompareVoiceText()
+  }
   const parts: string[] = []
   if (carBrandModel.value.trim()) {
     parts.push(`今天带大家看 ${carBrandModel.value.trim()}`)
@@ -4008,6 +4332,25 @@ function buildAutoCarVoiceText() {
     parts.push(carCallToAction.value.trim())
   }
   return `${parts.join('。')}。`
+}
+
+function buildAutoMultiCarCompareVoiceText() {
+  const packages = orderedCompareCarPackages.value
+  const names = packages.map((pkg) => pkg.brandModel || pkg.packageName || `车型${pkg.carIndex + 1}`)
+  const lines: string[] = []
+  lines.push(`今天我们把${names.join('和')}放在同一条视频里对比，先逐一看重点，再给出购买建议。`)
+  packages.forEach((pkg, idx) => {
+    const name = pkg.brandModel || pkg.packageName || `第${idx + 1}款车`
+    const color = pkg.color ? `，这台是${pkg.color}` : ''
+    const points = pkg.sellingPoints || (idx === 0 ? carSellingPoints.value.trim() : '')
+    lines.push(`${name}${color}，定位是${compareCarRoleLabel(pkg.role)}车型，${points ? `重点看${points}` : '重点看外观、空间和配置表现'}。`)
+  })
+  lines.push(`对比维度主要看${compareDimensionList.value.join('、')}，每一段都会明确对应车型，避免把两台车的卖点混在一起。`)
+  if (carAudience.value.trim()) {
+    lines.push(`如果你是${carAudience.value.trim()}，可以重点关注空间、配置和用车成本的取舍。`)
+  }
+  lines.push(carCallToAction.value.trim() || '想了解哪款更适合你，私信预约试驾和到店权益。')
+  return lines.join('')
 }
 
 function sanitizeSpeechText(value: string | null | undefined) {
@@ -4376,6 +4719,9 @@ const carSceneVoiceStructurePreview = computed(() =>
     visualPrompt: scene.visualPrompt || scene.prompt || '',
     voiceText: scene.voiceText || '',
     duration: scene.duration || carSegmentDuration.value,
+    carIndex: scene.carIndex,
+    compareDimension: scene.compareDimension,
+    shotPurpose: scene.shotPurpose,
   })),
 )
 const hasExplicitNativeVoiceText = computed(() => {
@@ -4384,11 +4730,13 @@ const hasExplicitNativeVoiceText = computed(() => {
   return false
 })
 const shouldShowNativeVoiceStylePanel = computed(() =>
-  usesModelNativeVoiceover() && hasExplicitNativeVoiceText.value,
+  usesModelNativeVoiceover() && (hasExplicitNativeVoiceText.value || isMultiCarCompareMode.value),
 )
 const shouldShowNativeVoiceLanguagePanel = computed(() => usesModelNativeVoiceover())
 const shouldShowSceneVoiceStructure = computed(() =>
-  shouldShowNativeVoiceStylePanel.value && Boolean(carStoryboardContext.value.trim()) && carSceneVoiceStructurePreview.value.length > 0,
+  shouldShowNativeVoiceStylePanel.value &&
+  (Boolean(carStoryboardContext.value.trim()) || isMultiCarCompareMode.value) &&
+  carSceneVoiceStructurePreview.value.length > 0,
 )
 
 const storyboardIgnoredFields = computed(() => collectStoryboardIgnoredFields(carStoryboardContext.value))
@@ -4516,9 +4864,12 @@ const carHeadlineSourceLabel = computed(() => {
 
 const carVisualSourceLabel = computed(() => {
   const sources: string[] = []
+  if (isMultiCarCompareMode.value) {
+    sources.push(`${orderedCompareCarPackages.value.length} 个车型素材包`)
+  }
   if (prompt.value.trim()) sources.push('用户输入提示词')
   if (carStoryboardContext.value.trim()) sources.push('分镜节奏参考')
-  if (carImageUrls.value.length > 0) {
+  if (!isMultiCarCompareMode.value && carImageUrls.value.length > 0) {
     sources.push(isSeedance2Selected.value ? '参考图 / 车型图' : '车型图')
   }
   sources.push(carHostAppearanceEnabled.value ? '虚拟人物出镜' : '无人物出镜')
@@ -4527,6 +4878,9 @@ const carVisualSourceLabel = computed(() => {
 })
 
 const plannedCarSceneCount = computed(() => {
+  if (isMultiCarCompareMode.value) {
+    return buildMultiCarCompareScenes().length
+  }
   const shots = extractStoryboardShots(carStoryboardContext.value)
   if (!shots.length) return carSegmentCount.value
   return groupStoryboardShots(shots, selectedSeedanceModel.value.maxDuration, carSegmentCount.value).length
@@ -4541,6 +4895,15 @@ const carSegmentModeLabel = computed(() => {
 const carGenerationBlockingMessages = computed(() => {
   if (mainTab.value !== 'carSales') return []
   const messages: string[] = []
+  if (multiCarCompareEnabled.value && orderedCompareCarPackages.value.length < 2) {
+    messages.push('多车型对比至少需要 2 个车型素材包')
+  }
+  if (multiCarCompareEnabled.value && orderedCompareCarPackages.value.some((pkg) => pkg.images.length === 0)) {
+    messages.push('每个对比车型素材包至少需要 1 张车辆图片')
+  }
+  if (multiCarCompareEnabled.value && orderedCompareCarPackages.value.length > 5) {
+    messages.push('多车型对比首期建议最多选择 5 个车型素材包')
+  }
   if (carAudioMode.value === 'reference' && !isSeedance2Selected.value) {
     messages.push('参考音频生成仅支持 Seedance 2.0')
   }
@@ -4568,9 +4931,14 @@ const carGenerationWarnings = computed(() => {
   if (usesModelNativeVoiceover() && carVoiceTextSource.value === 'manual' && !carVoiceContext.value.trim()) {
     warnings.push('已选择手写文案，但口播文案参考为空，系统将回退到车型卖点、文案场景和转化引导整理口播')
   } else if (usesModelNativeVoiceover() && carVoiceTextSource.value === 'auto') {
-    warnings.push('未填写口播文案，系统将根据车型卖点、文案场景和转化引导自动整理口播，并替换分镜旧台词')
+    warnings.push(isMultiCarCompareMode.value
+      ? '未填写口播文案，系统将按“开场-逐车介绍-维度对比-总结推荐”自动整理口播'
+      : '未填写口播文案，系统将根据车型卖点、文案场景和转化引导自动整理口播，并替换分镜旧台词')
   } else if (!hasSelectedVoiceAudio() && !usesModelNativeVoiceover()) {
     warnings.push('未选择口播音频，系统不会把 BGM 或分镜旧台词当作口播来源')
+  }
+  if (isMultiCarCompareMode.value && carStoryboardContext.value.trim()) {
+    warnings.push('多车型对比会优先使用固定章节结构，已选分镜仅作为镜头节奏补充，不会覆盖车型绑定')
   }
   if (usesModelNativeVoiceover() && strictVoiceTextForRequest()) {
     const stats = voiceLanguageStats(strictVoiceTextForRequest())
@@ -4594,12 +4962,12 @@ const carGenerationWarnings = computed(() => {
   if (carHostAppearanceEnabled.value && carHostHumanEvidence.value.count === 0) {
     warnings.push('当前爆款对标/分镜/文案没有明显人物出镜信息，硬加入虚拟人物可能割裂；建议确认原视频是否有人物讲解，或关闭虚拟人物出镜。')
   }
-  if (carMaterialCompleteness.value.providedCount < 4) {
+  if (!isMultiCarCompareMode.value && carMaterialCompleteness.value.providedCount < 4) {
     warnings.push(`车辆一致性素材偏少，建议补充：${carMaterialMissingText.value}`)
-  } else if (carMaterialCompleteness.value.providedCount < 8) {
+  } else if (!isMultiCarCompareMode.value && carMaterialCompleteness.value.providedCount < 8) {
     warnings.push(`车辆一致性素材仍可补充：${carMaterialMissingText.value}`)
   }
-  if (!isSeedance2Selected.value && carImageUrls.value.length > 1) {
+  if (!isSeedance2Selected.value && (carImageUrls.value.length > 1 || isMultiCarCompareMode.value)) {
     warnings.push('当前模型每段只使用最关键 1 张首帧图，一致性弱于 Seedance 2.0 多参考图模式')
   }
   if (!isSeedance2Selected.value && carSceneMaterialUrls.value.length > 0) {
@@ -4615,6 +4983,7 @@ const carGenerationWarnings = computed(() => {
 })
 
 const carGenerationBasisRows = computed(() => [
+  { label: '制作模式', value: isMultiCarCompareMode.value ? `多车型对比（${orderedCompareCarPackages.value.length} 款）` : '单车销售成片' },
   { label: '视频模型', value: selectedSeedanceModel.value.label },
   { label: '视频段数', value: carSegmentModeLabel.value },
   { label: '画面来源', value: carVisualSourceLabel.value },
@@ -4631,6 +5000,10 @@ const carGenerationBasisRows = computed(() => [
 ])
 
 const carGenerationBasisSummary = computed(() => {
+  if (isMultiCarCompareMode.value) {
+    const names = orderedCompareCarPackages.value.map((pkg) => pkg.brandModel || pkg.packageName).join('、')
+    return `本次将生成多车型对比视频：${names}。每个单车章节只使用对应车型素材包，对比镜头会明确按“${compareDimensionList.value.join('、')}”做并列或总结，避免口播和画面串车。`
+  }
   if (hasSelectedVoiceAudio()) {
     const bgmSentence = carBgmUrl.value.trim() ? 'BGM 只会作为背景音乐混入，不参与口型和字幕。' : ''
     const storyboardSentence = storyboardHasOldLines.value
@@ -4666,6 +5039,9 @@ const carGenerationBasisSummary = computed(() => {
 
 function buildCarScriptContext() {
   const parts: string[] = []
+  if (isMultiCarCompareMode.value) {
+    parts.push(`多车型对比模式：车型顺序为 ${orderedCompareCarPackages.value.map((pkg, idx) => `${idx + 1}. ${pkg.brandModel || pkg.packageName}（${compareCarRoleLabel(pkg.role)}）`).join('；')}。单车章节只能使用对应车型素材包，对比章节必须明确是并列对比或过渡总结，不得隐式混用参考图。固定对比维度：${compareDimensionList.value.join('、')}。`)
+  }
   if (carStoryboardContext.value.trim()) {
     const peoplePolicy = carHostAppearanceEnabled.value
       ? '人物策略：保留分镜中的人物站位、动作和出镜节奏；人物身份、人脸和服装以当前数字人形象/设置为准。'
@@ -4686,7 +5062,7 @@ function buildCarScriptContext() {
     }
   } else if (usesModelNativeVoiceover()) {
     parts.push(`内容主导：视频模型按口播文案直接生成画面和原生音频，文案来源为${carVoiceTextSourceLabel.value}，风格为${carNativeVoiceStyleSummary.value}；BGM 只作为背景音乐。`)
-    parts.push('字幕只在成片拼接后统一识别/烧录，生成模型不要在画面里生成任何字幕文字。')
+    parts.push('字幕只在成片拼接后处理，优先按最终口播文案烧录；缺少文案时才识别成片音频，生成模型不要在画面里生成任何字幕文字。')
     if (strictVoiceTextForRequest()) {
       parts.push('口播严格使用已传入文案，仅按语义边界切分；分镜 content/voiceText 不参与口播。')
     } else {
@@ -4885,7 +5261,155 @@ function buildCarHeadlineOverlayForRequest() {
   }
 }
 
-function buildCarSalesScenes() {
+function comparePackageVehicleImageUrls(pkg: CompareCarPackage, preferredRoles: string[] = []) {
+  const selected: string[] = []
+  const addRole = (role: string) => {
+    const found = pkg.images.find((image) => image.role === role && !selected.includes(image.url))
+    if (found) selected.push(found.url)
+  }
+  preferredRoles.forEach(addRole)
+  CAR_IDENTITY_ANCHOR_ROLES.forEach(addRole)
+  pkg.images.forEach((image) => {
+    if (!selected.includes(image.url)) selected.push(image.url)
+  })
+  return selected.slice(0, SEEDANCE2_MAX_REFERENCE_IMAGES)
+}
+
+function comparePackageSceneImageUrls(pkg: CompareCarPackage, preferredRoles: string[] = []) {
+  const sceneUrls = pkg.sceneImages.map((image) => image.url).filter(Boolean)
+  const vehicleUrls = comparePackageVehicleImageUrls(pkg, preferredRoles)
+  return [...sceneUrls.slice(0, 1), ...vehicleUrls].slice(0, SEEDANCE2_MAX_REFERENCE_IMAGES)
+}
+
+function compareAnchorImageUrls() {
+  const selected: string[] = []
+  orderedCompareCarPackages.value.forEach((pkg) => {
+    const [anchor] = comparePackageVehicleImageUrls(pkg, CAR_IDENTITY_ANCHOR_ROLES)
+    if (anchor && !selected.includes(anchor)) selected.push(anchor)
+  })
+  return selected.slice(0, SEEDANCE2_MAX_REFERENCE_IMAGES)
+}
+
+function compareSceneVoiceText(pkg: CompareCarPackage, purpose: string, dimension?: string) {
+  const name = pkg.brandModel || pkg.packageName || `车型${pkg.carIndex + 1}`
+  if (purpose === 'exterior') {
+    return `${name}先看外观，重点展示车身比例、颜色质感和第一眼辨识度。`
+  }
+  if (purpose === 'selling') {
+    const points = pkg.sellingPoints || carSellingPoints.value.trim()
+    return points
+      ? `${name}的核心卖点是${points}，这一段只围绕这款车讲清楚。`
+      : `${name}继续看座舱、空间和配置，把这款车适合的人群讲清楚。`
+  }
+  return `${name}在${dimension || '这个维度'}上有自己的侧重点，画面和口播都只对应这款车。`
+}
+
+function buildMultiCarCompareScenes(): CarSalesSceneDraft[] {
+  const packages = orderedCompareCarPackages.value
+  if (packages.length < 2) {
+    return []
+  }
+  const scenes: CarSalesSceneDraft[] = []
+  const pushScene = (scene: Omit<(typeof scenes)[number], 'segmentIndex' | 'referenceImage'> & { referenceImage?: string }) => {
+    const imageUrls = scene.imageUrls.filter(Boolean).slice(0, SEEDANCE2_MAX_REFERENCE_IMAGES)
+    scenes.push({
+      ...scene,
+      segmentIndex: scenes.length + 1,
+      imageUrls,
+      referenceImage: scene.referenceImage || imageUrls[0],
+    })
+  }
+
+  const names = packages.map((pkg) => pkg.brandModel || pkg.packageName || `车型${pkg.carIndex + 1}`)
+  pushScene({
+    title: '对比开场',
+    visualPrompt: `开场建立 ${names.join(' vs ')} 的双车对比主题，画面可以用并列车型锚点图形成清楚对比，不混淆车型身份。`,
+    prompt: `开场建立 ${names.join(' vs ')} 的双车对比主题，画面可以用并列车型锚点图形成清楚对比，不混淆车型身份。`,
+    imageUrls: compareAnchorImageUrls(),
+    voiceText: `今天把${names.join('和')}放在一起看，先逐一介绍，再做维度对比。`,
+    duration: carSegmentDurationAt(0),
+    compareDimension: 'opening',
+    shotPurpose: 'opening',
+  })
+
+  const useTwoScenesPerCar = packages.length <= 4
+  packages.forEach((pkg) => {
+    const name = pkg.brandModel || pkg.packageName || `车型${pkg.carIndex + 1}`
+    pushScene({
+      title: useTwoScenesPerCar ? `${name}外观介绍` : `${name}单车重点`,
+      visualPrompt: useTwoScenesPerCar
+        ? `${name}单车介绍章节，只展示该车型素材包内的外观、车身线条、颜色和第一眼质感；不要出现其他车型。`
+        : `${name}单车介绍章节，只展示该车型素材包内的外观、空间、配置或核心卖点；不要出现其他车型。`,
+      prompt: useTwoScenesPerCar
+        ? `${name}单车介绍章节，只展示该车型素材包内的外观、车身线条、颜色和第一眼质感；不要出现其他车型。`
+        : `${name}单车介绍章节，只展示该车型素材包内的外观、空间、配置或核心卖点；不要出现其他车型。`,
+      imageUrls: useTwoScenesPerCar
+        ? comparePackageVehicleImageUrls(pkg, ['car_exterior_front', 'car_exterior_side', 'car_exterior_45'])
+        : comparePackageSceneImageUrls(pkg, ['car_exterior_front', 'car_interior_dashboard', 'car_interior_front_seat']),
+      voiceText: compareSceneVoiceText(pkg, useTwoScenesPerCar ? 'exterior' : 'selling'),
+      duration: carSegmentDurationAt(scenes.length),
+      carPackageId: pkg.localId,
+      carIndex: pkg.carIndex,
+      carRole: pkg.role,
+      compareDimension: useTwoScenesPerCar ? '外观质感' : '车型重点',
+      shotPurpose: 'single_car_intro',
+    })
+    if (!useTwoScenesPerCar) {
+      return
+    }
+    pushScene({
+      title: `${name}空间配置`,
+      visualPrompt: `${name}继续单车介绍，只使用该车型素材包展示内饰、空间、配置或核心卖点，口播事实只对应这款车。`,
+      prompt: `${name}继续单车介绍，只使用该车型素材包展示内饰、空间、配置或核心卖点，口播事实只对应这款车。`,
+      imageUrls: comparePackageSceneImageUrls(pkg, ['car_interior_dashboard', 'car_interior_front_seat', 'car_interior_back_seat']),
+      voiceText: compareSceneVoiceText(pkg, 'selling'),
+      duration: carSegmentDurationAt(scenes.length),
+      carPackageId: pkg.localId,
+      carIndex: pkg.carIndex,
+      carRole: pkg.role,
+      compareDimension: '座舱空间',
+      shotPurpose: 'single_car_intro',
+    })
+  })
+
+  const dimensions = compareDimensionList.value.slice(0, 3)
+  pushScene({
+    title: '维度对比',
+    visualPrompt: `并列对比 ${names.join(' vs ')}，只围绕${dimensions.join('、')}做清楚取舍；允许同屏或连续切换展示两款车，但每个画面必须明确车型身份，不把 A 车细节说成 B 车。`,
+    prompt: `并列对比 ${names.join(' vs ')}，只围绕${dimensions.join('、')}做清楚取舍；允许同屏或连续切换展示两款车，但每个画面必须明确车型身份，不把 A 车细节说成 B 车。`,
+    imageUrls: compareAnchorImageUrls(),
+    voiceText: `${dimensions.join('、')}这几个维度放在一起看，重点是找到更适合自己使用场景的那台车。`,
+    duration: carSegmentDurationAt(scenes.length),
+    compareDimension: dimensions.join(' / '),
+    shotPurpose: 'dimension_compare',
+  })
+  pushScene({
+    title: '总结推荐',
+    visualPrompt: `总结推荐段落，画面以双车锚点或主推车型高光收束，强调不同人群的选择建议和到店咨询，不新增未提供的车型事实。`,
+    prompt: `总结推荐段落，画面以双车锚点或主推车型高光收束，强调不同人群的选择建议和到店咨询，不新增未提供的车型事实。`,
+    imageUrls: compareAnchorImageUrls(),
+    voiceText: carAudience.value.trim()
+      ? `如果你是${carAudience.value.trim()}，可以按预算、空间和配置重点做选择。${carCallToAction.value.trim() || '想看实车可以私信预约试驾。'}`
+      : `${carCallToAction.value.trim() || '想看实车可以私信预约试驾，我们帮你按需求做推荐。'}`,
+    duration: carSegmentDurationAt(scenes.length),
+    compareDimension: 'summary',
+    shotPurpose: 'summary_recommendation',
+  })
+
+  const strictText = strictVoiceTextForRequest()
+  if (strictText) {
+    const chunks = splitVoiceTextForSegments(strictText, scenes.length)
+    scenes.forEach((scene, idx) => {
+      scene.voiceText = chunks[idx] || scene.voiceText
+    })
+  }
+  return scenes.slice(0, 12)
+}
+
+function buildCarSalesScenes(): CarSalesSceneDraft[] {
+  if (isMultiCarCompareMode.value) {
+    return buildMultiCarCompareScenes()
+  }
   const storyboardShots = extractStoryboardShots(carStoryboardContext.value)
   if (storyboardShots.length > 0) {
     const groups = groupStoryboardShots(
@@ -4985,6 +5509,68 @@ function carFinalVoiceTextForRequest() {
 }
 
 function buildCarAssetRoleBindings(): CarSalesAssetRoleBinding[] {
+  if (isMultiCarCompareMode.value) {
+    const bindings: CarSalesAssetRoleBinding[] = []
+    orderedCompareCarPackages.value.forEach((pkg) => {
+      bindings.push({
+        assetId: pkg.packageAssetId,
+        url: pkg.packageAssetUrl,
+        assetType: 'JSON',
+        assetRole: 'car_model_bundle',
+        label: pkg.brandModel || pkg.packageName,
+        carPackageId: pkg.localId,
+        carIndex: pkg.carIndex,
+      })
+      ;[...pkg.images, ...pkg.sceneImages].forEach((image) => {
+        bindings.push({
+          assetId: image.assetId,
+          url: image.url,
+          assetType: 'IMAGE',
+          assetRole: image.role || undefined,
+          label: image.label || (image.role ? carRoleLabel(image.role) : undefined),
+          carPackageId: pkg.localId,
+          carIndex: pkg.carIndex,
+        })
+      })
+    })
+    if (carAudioUrl.value.trim()) {
+      bindings.push({
+        assetId: carAudioAssetId.value || undefined,
+        url: carAudioUrl.value.trim(),
+        assetType: 'AUDIO',
+        assetRole: 'voiceover',
+        label: '口播',
+      })
+    }
+    if (carBgmUrl.value.trim()) {
+      bindings.push({
+        assetId: carBgmAssetId.value || undefined,
+        url: carBgmUrl.value.trim(),
+        assetType: 'AUDIO',
+        assetRole: 'bgm',
+        label: 'BGM',
+      })
+    }
+    if (carHostAppearanceEnabled.value && carHostImageUrl.value.trim()) {
+      bindings.push({
+        assetId: carHostImageAssetId.value || undefined,
+        url: carHostImageUrl.value.trim(),
+        assetType: 'IMAGE',
+        assetRole: 'host_image',
+        label: carRoleLabel('host_image'),
+      })
+    }
+    if (carBenchmarkAssetUrl.value.trim()) {
+      bindings.push({
+        assetId: carBenchmarkAssetId.value || undefined,
+        url: carBenchmarkAssetUrl.value.trim(),
+        assetType: 'JSON',
+        assetRole: 'benchmark_json',
+        label: '爆款对标文案',
+      })
+    }
+    return bindings.filter((item) => item.url)
+  }
   const bindings: CarSalesAssetRoleBinding[] = carImageUrls.value.map((url, idx) => {
     const role = carImageRoleForUrl(url, idx)
     return {
@@ -5044,7 +5630,49 @@ function buildCarAssetRoleBindings(): CarSalesAssetRoleBinding[] {
   return bindings.filter((item) => item.url)
 }
 
+function buildCompareCarPackagesForRequest(): CarSalesCarPackageRequest[] | undefined {
+  if (!isMultiCarCompareMode.value) {
+    return undefined
+  }
+  return orderedCompareCarPackages.value.map((pkg) => ({
+    packageId: pkg.localId,
+    packageAssetId: pkg.packageAssetId,
+    packageName: pkg.packageName,
+    carIndex: pkg.carIndex,
+    role: pkg.role,
+    brandModel: pkg.brandModel || pkg.packageName,
+    color: pkg.color || undefined,
+    sellingPoints: pkg.sellingPoints || undefined,
+    materialCompleteness: pkg.materialCompleteness || undefined,
+    imageUrls: pkg.images.map((image) => image.url).filter(Boolean),
+    sceneImageUrls: pkg.sceneImages.map((image) => image.url).filter(Boolean),
+    assetRoleBindings: [...pkg.images, ...pkg.sceneImages].map((image) => ({
+      assetId: image.assetId,
+      url: image.url,
+      assetType: 'IMAGE',
+      assetRole: image.role || undefined,
+      label: image.label || (image.role ? carRoleLabel(image.role) : undefined),
+      carPackageId: pkg.localId,
+      carIndex: pkg.carIndex,
+    })),
+  }))
+}
+
 function carSourceAssetIds() {
+  if (isMultiCarCompareMode.value) {
+    const ids = orderedCompareCarPackages.value.flatMap((pkg) => [
+      pkg.packageAssetId,
+      ...pkg.images.map((image) => image.assetId),
+      ...pkg.sceneImages.map((image) => image.assetId),
+      carStoryboardAssetId.value,
+      carBenchmarkAssetId.value,
+      carAudioAssetId.value,
+      carBgmAssetId.value,
+      carHostAppearanceEnabled.value ? carHostImageAssetId.value : null,
+      carMaterialVideoAssetId.value,
+    ]).filter((id): id is number => typeof id === 'number' && id > 0)
+    return Array.from(new Set(ids))
+  }
   const carImageAssetIds = carImageUrls.value
     .map((url) => carImageAssetIdsByUrl.value[url])
     .filter((id): id is number => typeof id === 'number' && id > 0)
@@ -5181,10 +5809,18 @@ async function handleGenerate() {
       return
     } else if (mainTab.value === 'carSales') {
       const carScenes = buildCarSalesScenes()
+      const requestCarImageUrls = isMultiCarCompareMode.value
+        ? Array.from(new Set(comparePackageImageUrls.value)).slice(0, 45)
+        : carImageUrls.value
       const submitted = await generateCarSalesVideo({
-        carImageUrls: carImageUrls.value,
-        brandModel: carBrandModel.value.trim() || undefined,
-        sellingPoints: carSellingPoints.value.trim() || undefined,
+        carImageUrls: requestCarImageUrls,
+        taskMode: isMultiCarCompareMode.value ? 'multi_car_compare' : 'car_sales',
+        brandModel: isMultiCarCompareMode.value
+          ? orderedCompareCarPackages.value.map((pkg) => pkg.brandModel || pkg.packageName).join(' vs ')
+          : carBrandModel.value.trim() || undefined,
+        sellingPoints: isMultiCarCompareMode.value
+          ? compareDimensionList.value.join('、')
+          : carSellingPoints.value.trim() || undefined,
         audience: carAudience.value.trim() || undefined,
         callToAction: carCallToAction.value.trim() || undefined,
         scriptContext: buildCarScriptContext() || undefined,
@@ -5210,6 +5846,7 @@ async function handleGenerate() {
         renderMode: 'manual',
         aspectRatio: aspectRatioForRequest(),
         assetRoleBindings: buildCarAssetRoleBindings(),
+        carPackages: buildCompareCarPackagesForRequest(),
         segmentCount: carScenes.length || carSegmentCount.value,
         segmentDuration: averageSegmentDuration(carScenes.map((scene) => Number(scene.duration) || carSegmentDuration.value)),
         scenes: carScenes,
@@ -6751,6 +7388,22 @@ onBeforeUnmount(() => {
   font-weight: 800;
 }
 
+.render-scene-voice-tags {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.render-scene-voice-tags span {
+  border: 1px solid #dce3f2;
+  border-radius: 999px;
+  background: #fff;
+  color: #4f586c;
+  padding: 3px 8px;
+  font-size: 11.5px;
+  font-weight: 850;
+}
+
 .render-scene-voice-list {
   display: grid;
   max-height: 380px;
@@ -6852,6 +7505,129 @@ onBeforeUnmount(() => {
 .render-car-bundle-guidance span {
   font-size: 12.5px;
   line-height: 1.55;
+}
+
+.render-multi-car-panel {
+  display: grid;
+  gap: 12px;
+  border: 1px solid #dce3f2;
+  border-radius: 8px;
+  background: #fff;
+  padding: 12px;
+}
+
+.render-multi-car-head,
+.render-multi-car-item-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.render-multi-car-head > div {
+  display: grid;
+  gap: 4px;
+}
+
+.render-multi-car-head strong {
+  color: #2d3446;
+  font-size: 13px;
+  font-weight: 900;
+}
+
+.render-multi-car-head em {
+  color: #98a2b3;
+  font-style: normal;
+}
+
+.render-multi-car-head small,
+.render-multi-car-item p,
+.render-multi-car-empty {
+  color: #667085;
+  font-size: 12.5px;
+  line-height: 1.55;
+}
+
+.render-multi-car-body,
+.render-multi-car-list {
+  display: grid;
+  gap: 10px;
+}
+
+.render-multi-car-item {
+  display: grid;
+  gap: 10px;
+  border: 1px solid #edf0f6;
+  border-radius: 8px;
+  background: #fbfcff;
+  padding: 10px;
+}
+
+.render-multi-car-item-head strong {
+  color: #111827;
+  font-size: 13px;
+  font-weight: 900;
+}
+
+.render-multi-car-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.render-multi-car-actions button {
+  min-height: 28px;
+  border: 1px solid #dce3f2;
+  border-radius: 8px;
+  background: #fff;
+  color: #4f586c;
+  font-size: 12px;
+  font-weight: 800;
+  cursor: pointer;
+}
+
+.render-multi-car-actions button:disabled {
+  cursor: not-allowed;
+  opacity: 0.55;
+}
+
+.render-multi-car-fields {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(132px, 1fr));
+  gap: 8px;
+}
+
+.render-multi-car-fields label,
+.render-multi-car-dimensions {
+  display: grid;
+  gap: 6px;
+}
+
+.render-multi-car-fields span,
+.render-multi-car-dimensions span {
+  color: #344054;
+  font-size: 12px;
+  font-weight: 900;
+}
+
+.render-multi-car-fields input,
+.render-multi-car-fields select,
+.render-multi-car-dimensions input {
+  min-width: 0;
+  height: 36px;
+  border: 1px solid #e1e6f0;
+  border-radius: 8px;
+  background: #fff;
+  color: #111827;
+  padding: 0 10px;
+  outline: none;
+}
+
+.render-multi-car-empty {
+  border: 1px dashed #dce3f2;
+  border-radius: 8px;
+  background: #fbfcff;
+  padding: 10px;
 }
 
 .render-scene-material-block {
