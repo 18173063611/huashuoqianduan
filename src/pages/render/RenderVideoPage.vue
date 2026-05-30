@@ -4,7 +4,7 @@
       <div>
         <h1>视频制作</h1>
         <p>
-          一键成片适合直接上传素材包自动判断；手动制作保留完整参数控制，适合精修分镜、口播和成片一致性。
+          手动制作按基础信息和可选模块展开；素材、分镜、讲述、字幕包装和高级参数都可以按需配置。
         </p>
       </div>
       <div class="render-mode-switch" aria-label="视频制作模式">
@@ -187,14 +187,101 @@
 
         <template v-if="mainTab === 'carSales'">
           <div class="render-car-workflow-strip" aria-label="视频制作主流程">
-            <span><strong>1</strong>素材</span>
-            <span><strong>2</strong>分镜</span>
-            <span><strong>3</strong>口播</span>
-            <small>配音、BGM、数字人和已有视频素材按需展开</small>
+            <span><strong>1</strong>基础信息</span>
+            <span><strong>2</strong>素材与车型</span>
+            <span><strong>3</strong>可选模块</span>
+            <small>只配置基础信息和素材也能提交；分镜、讲述、字幕包装和高级参数按需展开。</small>
           </div>
+
+          <section class="render-manual-module render-manual-module-core" aria-label="基础信息">
+            <div class="render-module-title">
+              <div>
+                <h3>基础信息</h3>
+                <small>先确认成片比例、段数和时长；其他能力都可以保持默认。</small>
+              </div>
+              <span>常用</span>
+            </div>
+            <div class="render-grid-three">
+              <div class="render-form-field render-form-field-inline">
+                <label>分段数量</label>
+                <select :value="carSegmentCount" :disabled="busy" @change="handleCarSegmentCountChange">
+                  <option v-for="n in carSegmentCountOptions" :key="n" :value="n">{{ n }} 段</option>
+                </select>
+                <span class="app-muted render-duration-hint">会分别生成并入库</span>
+              </div>
+              <div class="render-form-field render-form-field-inline">
+                <label>出片时长</label>
+                <strong class="render-duration-summary">{{ carSegmentDurationSummary }}</strong>
+                <span class="app-muted render-duration-hint">{{ carDurationHint }}</span>
+              </div>
+              <div class="render-form-field render-form-field-inline">
+                <label>成片比例</label>
+                <select v-model="renderAspectRatio" :disabled="busy">
+                  <option v-for="item in renderAspectRatioOptions" :key="item.value" :value="item.value">
+                    {{ item.label }}
+                  </option>
+                </select>
+                <span class="app-muted render-duration-hint">{{ renderAspectRatioHint }}</span>
+              </div>
+            </div>
+
+            <section class="render-segment-duration-panel">
+              <div class="render-segment-duration-head">
+                <strong>每段时长</strong>
+                <span>{{ carSegmentDurationPanelHint }}</span>
+              </div>
+              <div class="render-segment-duration-grid">
+                <label
+                  v-for="(_, index) in normalizedCarSegmentDurations"
+                  :key="index"
+                  class="render-segment-duration-item"
+                >
+                  <span>
+                    第{{ index + 1 }}段
+                    <small>{{ carSegmentDurationSourceLabel(index) }}</small>
+                  </span>
+                  <select
+                    :value="carSegmentDurationAt(index)"
+                    :disabled="busy"
+                    @change="handleCarSegmentDurationChange(index, $event)"
+                  >
+                    <option v-for="n in carSegmentDurationOptions" :key="n" :value="n">
+                      {{ n }} 秒
+                    </option>
+                  </select>
+                </label>
+              </div>
+              <p v-if="carSegmentTimingNotice" class="render-segment-duration-notice">
+                {{ carSegmentTimingNotice }}
+              </p>
+            </section>
+
+            <section class="render-recommend-panel">
+              <div class="render-recommend-main">
+                <span>推荐出片设置</span>
+                <strong>{{ carRecommendationSummary }}</strong>
+                <p>{{ carRecommendationReasonText }}</p>
+              </div>
+              <button
+                type="button"
+                class="app-secondary-button render-mini-btn"
+                :disabled="busy || recommendationMatchesCurrent"
+                @click="applyCarRecommendation()"
+              >
+                {{ recommendationMatchesCurrent ? '已采用' : '应用推荐' }}
+              </button>
+            </section>
+          </section>
+
           <div class="render-digital-workspace">
               <section class="render-digital-section">
-              <h3>车辆图片</h3>
+              <div class="render-module-title render-module-title-compact">
+                <div>
+                  <h3>素材与车型</h3>
+                  <small>车辆图片或车型素材包是最常用输入；场景图和保存素材包都是可选。</small>
+                </div>
+                <span>常用</span>
+              </div>
               <AssetPicker
                 title="车型素材包"
                 asset-type="JSON"
@@ -217,6 +304,32 @@
                 <strong>分镜优先素材</strong>
                 <span>{{ carStoryboardBundleNeedText }}</span>
               </div>
+              <section v-if="carStoryboardFunctionReferenceRows.length" class="render-function-reference-panel">
+                <div class="render-function-reference-head">
+                  <div>
+                    <strong>车辆功能镜头补图提示</strong>
+                    <small>分镜里出现功能展示时，请补对应部位的参考图，生成会更稳定。</small>
+                  </div>
+                  <span :class="{ missing: carStoryboardFunctionMissingLabels.length > 0 }">
+                    {{ carStoryboardFunctionMissingLabels.length ? '需补图' : '已覆盖' }}
+                  </span>
+                </div>
+                <div class="render-function-reference-list">
+                  <article
+                    v-for="row in carStoryboardFunctionReferenceRows"
+                    :key="row.key"
+                    class="render-function-reference-item"
+                  >
+                    <div>
+                      <strong>{{ row.label }}</strong>
+                      <small>建议上传并标记：{{ row.roleLabels.join('、') }}</small>
+                    </div>
+                    <span :class="{ ok: row.missingLabels.length === 0 }">
+                      {{ row.missingLabels.length ? `缺少 ${row.missingLabels.join('、')}` : '已提供参考图' }}
+                    </span>
+                  </article>
+                </div>
+              </section>
               <AssetPicker
                 title="从资产中心选择车辆图片"
                 asset-type="IMAGE"
@@ -283,8 +396,8 @@
               </button>
               <details class="render-scene-material-block render-optional-group">
                 <summary class="render-scene-material-head">
-                  <strong>场景图片</strong>
-                  <span>用于替换分镜里的展厅、道路、门店等地点，车辆与人物仍由上方素材控制。</span>
+                  <span>场景图片 <em>可选</em></span>
+                  <small>用于替换分镜里的展厅、道路、门店等地点，车辆与人物仍由上方素材控制。</small>
                 </summary>
                 <AssetPicker
                   title="从资产中心选择场景图片"
@@ -391,7 +504,13 @@
             </section>
 
             <section class="render-digital-section">
-              <h3>分镜与口播</h3>
+              <div class="render-module-title render-module-title-compact">
+                <div>
+                  <h3>文案与分镜</h3>
+                  <small>不配置时会按车型素材整理基础口播；需要精修节奏时再选择分镜或爆款文案。</small>
+                </div>
+                <span>可选</span>
+              </div>
               <AssetPicker
                 title="分镜生成结果（控制段落节奏）"
                 asset-type="JSON"
@@ -426,7 +545,7 @@
               </label>
               <details class="render-optional-group">
                 <summary>
-                  <span>可选配音</span>
+                  <span>讲述与声音 <em>可选</em></span>
                   <small>默认按口播文案驱动模型；已有音频时再展开配置。</small>
                 </summary>
                 <div class="render-optional-body">
@@ -589,116 +708,185 @@
                 <strong>{{ carVoicePolicyTitle }}</strong>
                 <p>{{ carVoicePolicyDescription }}</p>
               </div>
-              <div class="render-form-field">
-                <label>字幕</label>
-                <div class="render-audio-mode render-subtitle-mode">
-                  <button
-                    v-for="option in carSubtitleOptions"
-                    :key="option.key"
-                    type="button"
-                    :class="{ active: carSubtitleMode === option.key }"
-                    :disabled="busy"
-                    @click="carSubtitleMode = option.key"
-                  >
-                    {{ option.label }}
-                  </button>
-                </div>
-              </div>
-              <div v-if="carSubtitleMode === 'custom'" class="render-form-field">
-                <textarea
-                  v-model="carSubtitleText"
-                  :disabled="busy"
-                  rows="4"
-                  maxlength="8000"
-                  placeholder="输入或粘贴自定义字幕内容"
-                />
-              </div>
-              <div v-if="carSubtitleMode !== 'off'" class="render-form-field">
-                <label>字幕语言</label>
-                <select v-model="carSubtitleLanguage" :disabled="busy">
-                  <option v-for="item in carSubtitleLanguageOptions" :key="item.value" :value="item.value">
-                    {{ item.label }}
-                  </option>
-                </select>
-                <small>字幕只在成片拼接后统一识别/烧录，视频生成模型不会直接生成字幕文字。</small>
-              </div>
-              <section class="render-text-poster-panel" aria-label="视频大字报设置">
-                <div class="render-text-poster-head">
-                  <div class="render-text-poster-title">
-                    <label>大字报</label>
-                    <small>叠加在成片画面上，可选择是否显示、文案、字体和颜色。</small>
-                  </div>
-                  <div class="render-text-poster-switch">
-                    <button
-                      type="button"
-                      :class="{ active: !carHeadlineEnabled }"
-                      :disabled="busy"
-                      @click="carHeadlineEnabled = false"
-                    >
-                      不显示
-                    </button>
-                    <button
-                      type="button"
-                      :class="{ active: carHeadlineEnabled }"
-                      :disabled="busy"
-                      @click="carHeadlineEnabled = true"
-                    >
-                      显示
-                    </button>
-                  </div>
-                </div>
-                <template v-if="carHeadlineEnabled">
+              <details class="render-optional-group render-packaging-group">
+                <summary>
+                  <span>字幕与画面包装 <em>可选</em></span>
+                  <small>默认后期处理；自动字幕、自定义字幕和大字报都可单独打开或关闭。</small>
+                </summary>
+                <div class="render-optional-body">
                   <div class="render-form-field">
-                    <label>大字报文案</label>
+                    <label>字幕</label>
+                    <div class="render-audio-mode render-subtitle-mode">
+                      <button
+                        v-for="option in carSubtitleOptions"
+                        :key="option.key"
+                        type="button"
+                        :class="{ active: carSubtitleMode === option.key }"
+                        :disabled="busy"
+                        @click="carSubtitleMode = option.key"
+                      >
+                        {{ option.label }}
+                      </button>
+                    </div>
+                  </div>
+                  <div v-if="carSubtitleMode === 'custom'" class="render-form-field">
                     <textarea
-                      v-model="carHeadlineText"
+                      v-model="carSubtitleText"
                       :disabled="busy"
-                      rows="2"
-                      maxlength="120"
-                      placeholder="输入要显示在画面上的大字报文案"
+                      rows="4"
+                      maxlength="8000"
+                      placeholder="输入或粘贴自定义字幕内容"
                     />
                   </div>
-                  <div class="render-text-poster-controls">
-                    <div class="render-form-field">
-                      <label>字体</label>
-                      <select v-model="carHeadlineFontFamily" :disabled="busy">
-                        <option v-for="item in carHeadlineFontOptions" :key="item.value" :value="item.value">
-                          {{ item.label }}
-                        </option>
-                      </select>
-                    </div>
-                    <div class="render-form-field">
-                      <label>摆放区域</label>
-                      <select v-model="carHeadlinePosition" :disabled="busy">
-                        <option v-for="item in carHeadlinePositionOptions" :key="item.value" :value="item.value">
-                          {{ item.label }}
-                        </option>
-                      </select>
-                    </div>
-                    <div class="render-form-field">
-                      <label>字号</label>
-                      <input v-model.number="carHeadlineFontSize" type="number" min="48" max="156" step="4" :disabled="busy" />
-                    </div>
-                    <div class="render-form-field">
-                      <label>文字颜色</label>
-                      <input v-model="carHeadlineTextColor" type="color" :disabled="busy" />
-                    </div>
-                    <div class="render-form-field">
-                      <label>描边颜色</label>
-                      <input v-model="carHeadlineOutlineColor" type="color" :disabled="busy" />
-                    </div>
+                  <div v-if="carSubtitleMode !== 'off'" class="render-form-field">
+                    <label>字幕语言</label>
+                    <select v-model="carSubtitleLanguage" :disabled="busy">
+                      <option v-for="item in carSubtitleLanguageOptions" :key="item.value" :value="item.value">
+                        {{ item.label }}
+                      </option>
+                    </select>
+                    <small>字幕只在成片拼接后统一识别/烧录，视频生成模型不会直接生成字幕文字。</small>
                   </div>
-                  <div class="render-text-poster-preview-wrap">
-                    <label>样式预览</label>
-                    <div class="render-text-poster-preview" :class="`pos-${carHeadlinePosition}`">
-                      <span :style="carHeadlinePreviewStyle">{{ carHeadlinePreviewText }}</span>
+                  <section class="render-text-poster-panel" aria-label="视频大字报设置">
+                    <div class="render-text-poster-head">
+                      <div class="render-text-poster-title">
+                        <label>大字报</label>
+                        <small>叠加在成片画面上，可选择是否显示、文案、字体和颜色。</small>
+                      </div>
+                      <div class="render-text-poster-switch">
+                        <button
+                          type="button"
+                          :class="{ active: !carHeadlineEnabled }"
+                          :disabled="busy"
+                          @click="carHeadlineEnabled = false"
+                        >
+                          不显示
+                        </button>
+                        <button
+                          type="button"
+                          :class="{ active: carHeadlineEnabled }"
+                          :disabled="busy"
+                          @click="carHeadlineEnabled = true"
+                        >
+                          显示
+                        </button>
+                      </div>
                     </div>
+                    <template v-if="carHeadlineEnabled">
+                      <div class="render-form-field">
+                        <label>大字报文案</label>
+                        <textarea
+                          v-model="carHeadlineText"
+                          :disabled="busy"
+                          rows="2"
+                          maxlength="120"
+                          placeholder="输入要显示在画面上的大字报文案"
+                        />
+                      </div>
+                      <div class="render-text-poster-controls">
+                        <div class="render-form-field">
+                          <label>字体</label>
+                          <select v-model="carHeadlineFontFamily" :disabled="busy">
+                            <option v-for="item in carHeadlineFontOptions" :key="item.value" :value="item.value">
+                              {{ item.label }}
+                            </option>
+                          </select>
+                        </div>
+                        <div class="render-form-field">
+                          <label>摆放区域</label>
+                          <select v-model="carHeadlinePosition" :disabled="busy">
+                            <option v-for="item in carHeadlinePositionOptions" :key="item.value" :value="item.value">
+                              {{ item.label }}
+                            </option>
+                          </select>
+                        </div>
+                        <div class="render-form-field">
+                          <label>字号</label>
+                          <input v-model.number="carHeadlineFontSize" type="number" min="48" max="156" step="4" :disabled="busy" />
+                        </div>
+                      </div>
+                      <div class="render-color-grid" aria-label="大字报颜色设置">
+                        <div class="render-form-field render-color-field">
+                          <label>文字颜色</label>
+                          <div class="render-color-row">
+                            <span class="render-color-current" :style="{ backgroundColor: carHeadlineTextColor }" aria-hidden="true" />
+                            <input v-model="carHeadlineTextColor" type="color" :disabled="busy" aria-label="微调文字颜色" />
+                            <input
+                              v-model.trim="carHeadlineTextColor"
+                              type="text"
+                              :disabled="busy"
+                              placeholder="#FFFFFF"
+                              aria-label="文字颜色 HEX"
+                              @blur="normalizeCarHeadlineTextColor"
+                            />
+                          </div>
+                          <div class="render-color-swatches" aria-label="常用文字颜色">
+                            <button
+                              v-for="item in carHeadlineColorPresets"
+                              :key="`text-${item.value}`"
+                              type="button"
+                              class="render-color-swatch"
+                              :class="{ active: isCarHeadlineTextColorPreset(item.value) }"
+                              :style="{ backgroundColor: item.value }"
+                              :disabled="busy"
+                              :title="item.label"
+                              :aria-label="`选择文字颜色：${item.label}`"
+                              @click="setCarHeadlineTextColor(item.value)"
+                            >
+                              <span class="render-sr-only">{{ item.label }}</span>
+                            </button>
+                          </div>
+                        </div>
+                        <div class="render-form-field render-color-field">
+                          <label>描边颜色</label>
+                          <div class="render-color-row">
+                            <span class="render-color-current" :style="{ backgroundColor: carHeadlineOutlineColor }" aria-hidden="true" />
+                            <input v-model="carHeadlineOutlineColor" type="color" :disabled="busy" aria-label="微调描边颜色" />
+                            <input
+                              v-model.trim="carHeadlineOutlineColor"
+                              type="text"
+                              :disabled="busy"
+                              placeholder="#111111"
+                              aria-label="描边颜色 HEX"
+                              @blur="normalizeCarHeadlineOutlineColor"
+                            />
+                          </div>
+                          <div class="render-color-swatches" aria-label="常用描边颜色">
+                            <button
+                              v-for="item in carHeadlineColorPresets"
+                              :key="`outline-${item.value}`"
+                              type="button"
+                              class="render-color-swatch"
+                              :class="{ active: isCarHeadlineOutlineColorPreset(item.value) }"
+                              :style="{ backgroundColor: item.value }"
+                              :disabled="busy"
+                              :title="item.label"
+                              :aria-label="`选择描边颜色：${item.label}`"
+                              @click="setCarHeadlineOutlineColor(item.value)"
+                            >
+                              <span class="render-sr-only">{{ item.label }}</span>
+                            </button>
+                          </div>
+                        </div>
+                      </div>
+                      <div class="render-text-poster-preview-wrap">
+                        <label>样式预览</label>
+                        <div class="render-text-poster-preview" :class="`pos-${carHeadlinePosition}`">
+                          <span :style="carHeadlinePreviewStyle">{{ carHeadlinePreviewText }}</span>
+                        </div>
+                      </div>
+                    </template>
+                  </section>
+                  <div class="render-packaging-toggles" aria-label="其他画面包装">
+                    <span>水印 <em>可选，默认关闭</em></span>
+                    <span>封面 <em>可选，默认关闭</em></span>
+                    <span>标题条 <em>可选，默认关闭</em></span>
                   </div>
-                </template>
-              </section>
+                </div>
+              </details>
               <details class="render-optional-group">
                 <summary>
-                  <span>更多可选素材</span>
+                  <span>更多可选素材 <em>可选</em></span>
                   <small>BGM、数字人出镜和已有视频素材按需配置。</small>
                 </summary>
                 <div class="render-optional-body">
@@ -783,80 +971,9 @@
             </section>
           </div>
 
-          <section class="render-recommend-panel">
-            <div class="render-recommend-main">
-              <span>推荐出片设置</span>
-              <strong>{{ carRecommendationSummary }}</strong>
-              <p>{{ carRecommendationReasonText }}</p>
-            </div>
-            <button
-              type="button"
-              class="app-secondary-button render-mini-btn"
-              :disabled="busy || recommendationMatchesCurrent"
-              @click="applyCarRecommendation()"
-            >
-              {{ recommendationMatchesCurrent ? '已采用' : '应用推荐' }}
-            </button>
-          </section>
-
-          <div class="render-grid-three">
-            <div class="render-form-field render-form-field-inline">
-              <label>分段数量</label>
-              <select :value="carSegmentCount" :disabled="busy" @change="handleCarSegmentCountChange">
-                <option v-for="n in carSegmentCountOptions" :key="n" :value="n">{{ n }} 段</option>
-              </select>
-              <span class="app-muted render-duration-hint">会分别生成并入库</span>
-            </div>
-            <div class="render-form-field render-form-field-inline">
-              <label>出片时长</label>
-              <strong class="render-duration-summary">{{ carSegmentDurationSummary }}</strong>
-              <span class="app-muted render-duration-hint">{{ carDurationHint }}</span>
-            </div>
-            <div class="render-form-field render-form-field-inline">
-              <label>成片比例</label>
-              <select v-model="renderAspectRatio" :disabled="busy">
-                <option v-for="item in renderAspectRatioOptions" :key="item.value" :value="item.value">
-                  {{ item.label }}
-                </option>
-              </select>
-              <span class="app-muted render-duration-hint">{{ renderAspectRatioHint }}</span>
-            </div>
-          </div>
-
-          <section class="render-segment-duration-panel">
-            <div class="render-segment-duration-head">
-              <strong>每段时长</strong>
-              <span>{{ carSegmentDurationPanelHint }}</span>
-            </div>
-            <div class="render-segment-duration-grid">
-              <label
-                v-for="(_, index) in normalizedCarSegmentDurations"
-                :key="index"
-                class="render-segment-duration-item"
-              >
-                <span>
-                  第{{ index + 1 }}段
-                  <small>{{ carSegmentDurationSourceLabel(index) }}</small>
-                </span>
-                <select
-                  :value="carSegmentDurationAt(index)"
-                  :disabled="busy"
-                  @change="handleCarSegmentDurationChange(index, $event)"
-                >
-                  <option v-for="n in carSegmentDurationOptions" :key="n" :value="n">
-                    {{ n }} 秒
-                  </option>
-                </select>
-              </label>
-            </div>
-            <p v-if="carSegmentTimingNotice" class="render-segment-duration-notice">
-              {{ carSegmentTimingNotice }}
-            </p>
-          </section>
-
           <details class="render-details">
             <summary>
-              <span>可选销售信息</span>
+              <span>销售信息 <em>可选</em></span>
               <small>车型、客户、卖点等应优先在脚本/分镜阶段整理，这里只做最终补充</small>
             </summary>
             <div class="render-details-body">
@@ -891,10 +1008,52 @@
 
           <details class="render-details">
             <summary>
-              <span>高级微调</span>
+              <span>高级生成参数 <em>可选</em></span>
               <small>一般不用改；前序改写、分镜和口播应在各自模块完成</small>
             </summary>
             <div class="render-details-body">
+              <div
+                v-if="showModelSelector"
+                class="render-form-field render-form-field-inline"
+              >
+                <label>生成模型</label>
+                <div
+                  ref="modelDropdownRef"
+                  class="render-model-dropdown"
+                  :class="{ open: modelDropdownOpen, disabled: busy }"
+                >
+                  <button
+                    type="button"
+                    class="render-model-trigger"
+                    :disabled="busy"
+                    :aria-expanded="modelDropdownOpen"
+                    aria-haspopup="listbox"
+                    @click="toggleModelDropdown"
+                    @keydown.esc.stop.prevent="closeModelDropdown"
+                  >
+                    <span>{{ selectedModelLabel }}</span>
+                    <span class="render-model-caret" aria-hidden="true">▾</span>
+                  </button>
+                  <ul v-if="modelDropdownOpen" class="render-model-options" role="listbox">
+                    <li
+                      v-for="opt in seedanceModelOptions"
+                      :key="opt.value"
+                      class="render-model-option"
+                      :class="{ active: selectedModel === opt.value, 'has-tip': !!opt.tip }"
+                      role="option"
+                      :aria-selected="selectedModel === opt.value"
+                      :data-tip="opt.tip || null"
+                      @click="selectModel(opt.value)"
+                    >
+                      <span>{{ opt.label }}</span>
+                    </li>
+                  </ul>
+                </div>
+                <span v-if="modelAutoHint" class="app-muted render-model-auto-hint">
+                  {{ modelAutoHint }}
+                </span>
+              </div>
+
               <div class="render-form-field">
                 <label>分镜节奏参考</label>
                 <textarea
@@ -1037,7 +1196,7 @@
         </div>
 
         <div
-          v-if="showModelSelector"
+          v-if="showModelSelector && mainTab !== 'carSales'"
           class="render-form-field render-form-field-inline"
         >
           <label>生成模型</label>
@@ -1449,6 +1608,56 @@ const CAR_SCENE_KEYWORD_ROLES: Array<{ keywords: string[]; roles: string[] }> = 
   { keywords: ['外观', '车头', '车身', '正面', '侧面', '背面'], roles: ['car_exterior_front', 'car_exterior_side', 'car_exterior_45', 'car_exterior_rear'] },
 ]
 
+const CAR_FUNCTION_REFERENCE_HINTS: Array<{
+  key: string
+  label: string
+  keywords: string[]
+  roles: string[]
+}> = [
+  {
+    key: 'lights',
+    label: '灯光/大灯功能',
+    keywords: ['车灯', '大灯', '尾灯', '灯光', '矩阵灯', '贯穿灯', '迎宾灯', '日行灯', '转向灯'],
+    roles: ['car_detail_light'],
+  },
+  {
+    key: 'wheel',
+    label: '轮毂/轮胎/底盘展示',
+    keywords: ['轮毂', '轮胎', '刹车', '卡钳', '底盘', '悬架', '悬挂'],
+    roles: ['car_detail_wheel'],
+  },
+  {
+    key: 'cockpit',
+    label: '智能座舱/车机屏幕',
+    keywords: ['中控', '车机', '大屏', '屏幕', '智能座舱', '仪表', 'hud', '导航', '语音交互', '方向盘'],
+    roles: ['car_interior_dashboard', 'car_interior_steering'],
+  },
+  {
+    key: 'seat',
+    label: '座椅舒适功能',
+    keywords: ['座椅', '通风', '加热', '按摩', '头枕', '腿托', '真皮', '座椅材质'],
+    roles: ['car_detail_seat_material', 'car_interior_front_seat'],
+  },
+  {
+    key: 'space',
+    label: '乘坐空间/后排体验',
+    keywords: ['空间', '后排', '腿部空间', '头部空间', '儿童座椅', '乘坐', '家用'],
+    roles: ['car_interior_back_seat'],
+  },
+  {
+    key: 'trunk',
+    label: '后备箱/装载能力',
+    keywords: ['后备箱', '尾箱', '储物', '装载', '露营装备', '行李箱'],
+    roles: ['car_interior_trunk'],
+  },
+  {
+    key: 'logo',
+    label: '品牌/车标/细节识别',
+    keywords: ['logo', '车标', '标识', '品牌标', '尾标', '铭牌'],
+    roles: ['car_detail_logo'],
+  },
+]
+
 const seedanceModelOptions: Array<{
   value: SeedanceModelValue
   label: string
@@ -1505,6 +1714,15 @@ const carHeadlinePositionOptions: Array<{ value: CarHeadlinePosition; label: str
   { value: 'top', label: '顶部' },
   { value: 'middle', label: '中部' },
   { value: 'bottom', label: '底部' },
+]
+const carHeadlineColorPresets = [
+  { label: '白色', value: '#ffffff' },
+  { label: '黑色', value: '#111111' },
+  { label: '红色', value: '#ef4444' },
+  { label: '黄色', value: '#facc15' },
+  { label: '蓝色', value: '#2563eb' },
+  { label: '绿色', value: '#22c55e' },
+  { label: '橙色', value: '#f97316' },
 ]
 const renderAspectRatioOptions: Array<{ value: RenderAspectRatio; label: string; hint: string }> = [
   { value: '9:16', label: '竖屏 9:16', hint: '适合抖音、视频号、竖版信息流' },
@@ -2073,10 +2291,55 @@ const carStoryboardNeededVehicleRoles = computed(() => {
       ;(CAR_SCENE_ROLE_PRIORITY[idx] || CAR_SCENE_ROLE_PRIORITY[0]).forEach(pushRole)
     }
   }
+  carStoryboardFunctionReferenceRows.value.forEach((row) => {
+    row.roles.forEach(pushRole)
+  })
   if (!roles.some((role) => CAR_IDENTITY_ANCHOR_ROLES.includes(role))) {
     CAR_IDENTITY_ANCHOR_ROLES.slice(0, 2).forEach(pushRole)
   }
   return roles
+})
+const carStoryboardFunctionReferenceRows = computed(() => {
+  const rawText = [
+    carStoryboardContext.value,
+    ...storyboardShotsForRecommendation.value.flatMap((shot) => [
+      shot.page,
+      shot.visualPrompt,
+      shot.prompt,
+      shot.camera,
+      shot.cameraMotion,
+      shot.movement,
+      shot.shotType,
+      shot.framing,
+      shot.composition,
+      shot.highlight,
+    ]),
+  ]
+    .filter((value): value is string => typeof value === 'string' && value.trim().length > 0)
+    .join(' ')
+    .toLowerCase()
+  if (!rawText.trim()) {
+    return []
+  }
+  const providedRoles = collectProvidedCarMaterialRoles()
+  return CAR_FUNCTION_REFERENCE_HINTS
+    .filter((item) => item.keywords.some((keyword) => rawText.includes(keyword.toLowerCase())))
+    .map((item) => {
+      const roleLabels = item.roles.map(carRoleLabel)
+      const missingLabels = item.roles.filter((role) => !providedRoles.has(role)).map(carRoleLabel)
+      return {
+        ...item,
+        roleLabels,
+        missingLabels,
+      }
+    })
+})
+const carStoryboardFunctionMissingLabels = computed(() => {
+  const set = new Set<string>()
+  carStoryboardFunctionReferenceRows.value.forEach((row) => {
+    row.missingLabels.forEach((label) => set.add(label))
+  })
+  return [...set]
 })
 const carStoryboardNeededVehicleRoleLabels = computed(() =>
   carStoryboardNeededVehicleRoles.value.map(carRoleLabel),
@@ -4345,6 +4608,9 @@ const carGenerationWarnings = computed(() => {
   if (isSeedance2Selected.value && carSceneMaterialUrls.value.length === 0) {
     warnings.push('未上传独立场景图时，场景会以参考图和补充文案为主；如需明确替换展厅/道路/门店，请补充场景图片')
   }
+  if (carStoryboardFunctionMissingLabels.value.length > 0) {
+    warnings.push(`分镜包含车辆功能展示，建议补充对应部位参考图：${carStoryboardFunctionMissingLabels.value.join('、')}`)
+  }
   return warnings
 })
 
@@ -4548,9 +4814,57 @@ const carHeadlinePreviewText = computed(() =>
 const carHeadlinePreviewStyle = computed(() => ({
   color: carHeadlineTextColor.value,
   fontFamily: carHeadlineFontFamily.value,
+  fontSize: `${Math.max(24, Math.min(58, Math.round((Number(carHeadlineFontSize.value) || 92) * 0.56)))}px`,
   WebkitTextStroke: `2px ${carHeadlineOutlineColor.value}`,
   textShadow: `0 2px 0 ${carHeadlineOutlineColor.value}, 0 -2px 0 ${carHeadlineOutlineColor.value}, 2px 0 0 ${carHeadlineOutlineColor.value}, -2px 0 0 ${carHeadlineOutlineColor.value}`,
 }))
+
+function normalizeHexColor(value: string, fallback: string) {
+  const source = value.trim()
+  if (/^#[0-9a-fA-F]{6}$/.test(source)) {
+    return source.toLowerCase()
+  }
+  if (/^[0-9a-fA-F]{6}$/.test(source)) {
+    return `#${source.toLowerCase()}`
+  }
+  if (/^#[0-9a-fA-F]{3}$/.test(source)) {
+    const [, r, g, b] = source
+    return `#${r}${r}${g}${g}${b}${b}`.toLowerCase()
+  }
+  if (/^[0-9a-fA-F]{3}$/.test(source)) {
+    const [r, g, b] = source
+    return `#${r}${r}${g}${g}${b}${b}`.toLowerCase()
+  }
+  return fallback
+}
+
+function colorMatches(current: string, preset: string) {
+  return normalizeHexColor(current, '').toLowerCase() === normalizeHexColor(preset, '').toLowerCase()
+}
+
+function setCarHeadlineTextColor(value: string) {
+  carHeadlineTextColor.value = normalizeHexColor(value, '#ffffff')
+}
+
+function setCarHeadlineOutlineColor(value: string) {
+  carHeadlineOutlineColor.value = normalizeHexColor(value, '#111111')
+}
+
+function normalizeCarHeadlineTextColor() {
+  carHeadlineTextColor.value = normalizeHexColor(carHeadlineTextColor.value, '#ffffff')
+}
+
+function normalizeCarHeadlineOutlineColor() {
+  carHeadlineOutlineColor.value = normalizeHexColor(carHeadlineOutlineColor.value, '#111111')
+}
+
+function isCarHeadlineTextColorPreset(value: string) {
+  return colorMatches(carHeadlineTextColor.value, value)
+}
+
+function isCarHeadlineOutlineColorPreset(value: string) {
+  return colorMatches(carHeadlineOutlineColor.value, value)
+}
 
 function buildCarHeadlineOverlayForRequest() {
   if (!carHeadlineEnabled.value) {
@@ -5346,6 +5660,138 @@ onBeforeUnmount(() => {
   line-height: 1.5;
 }
 
+.render-manual-module {
+  display: grid;
+  gap: 14px;
+  border: 1px solid #e3e7ef;
+  border-radius: 8px;
+  background: #fff;
+  padding: 14px;
+}
+
+.render-manual-module-core {
+  background: #fbfcff;
+}
+
+.render-module-title {
+  display: flex;
+  min-width: 0;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 14px;
+}
+
+.render-module-title-compact {
+  padding-bottom: 2px;
+}
+
+.render-module-title h3 {
+  margin: 0 0 4px;
+  color: #1d2939;
+  font-size: 15px;
+  font-weight: 900;
+}
+
+.render-module-title small {
+  color: #667085;
+  font-size: 12px;
+  line-height: 1.6;
+}
+
+.render-module-title > span {
+  flex: 0 0 auto;
+  border-radius: 999px;
+  background: #eef0f6;
+  color: #667085;
+  padding: 4px 10px;
+  font-size: 11px;
+  font-weight: 900;
+}
+
+.render-function-reference-panel {
+  display: grid;
+  gap: 10px;
+  border: 1px solid #fde68a;
+  border-radius: 8px;
+  background: #fffbeb;
+  padding: 12px;
+}
+
+.render-function-reference-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.render-function-reference-head div {
+  display: grid;
+  gap: 3px;
+}
+
+.render-function-reference-head strong {
+  color: #92400e;
+  font-size: 13px;
+  font-weight: 900;
+}
+
+.render-function-reference-head small {
+  color: #a16207;
+  font-size: 12px;
+  line-height: 1.5;
+}
+
+.render-function-reference-head > span,
+.render-function-reference-item > span {
+  flex: 0 0 auto;
+  border-radius: 999px;
+  background: #ecfdf3;
+  color: #067647;
+  padding: 3px 9px;
+  font-size: 11px;
+  font-weight: 900;
+}
+
+.render-function-reference-head > span.missing,
+.render-function-reference-item > span:not(.ok) {
+  background: #fff7ed;
+  color: #c2410c;
+}
+
+.render-function-reference-list {
+  display: grid;
+  gap: 8px;
+}
+
+.render-function-reference-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  border: 1px solid rgba(245, 158, 11, 0.22);
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.78);
+  padding: 9px 10px;
+}
+
+.render-function-reference-item div {
+  display: grid;
+  min-width: 0;
+  gap: 2px;
+}
+
+.render-function-reference-item strong {
+  color: #344054;
+  font-size: 12.5px;
+  font-weight: 900;
+}
+
+.render-function-reference-item small {
+  color: #667085;
+  font-size: 12px;
+  line-height: 1.45;
+}
+
 .render-optional-group {
   display: grid;
   gap: 12px;
@@ -5388,6 +5834,20 @@ onBeforeUnmount(() => {
   color: #344054;
   font-size: 13px;
   font-weight: 900;
+}
+
+.render-optional-group summary em,
+.render-details summary em {
+  display: inline-flex;
+  margin-left: 6px;
+  border-radius: 999px;
+  background: #eef0f6;
+  color: #667085;
+  padding: 2px 7px;
+  font-size: 11px;
+  font-style: normal;
+  font-weight: 900;
+  vertical-align: middle;
 }
 
 .render-optional-group summary small {
@@ -5599,6 +6059,7 @@ onBeforeUnmount(() => {
 
   .render-grid-two,
   .render-grid-three,
+  .render-color-grid,
   .render-basis-grid {
     grid-template-columns: 1fr;
   }
@@ -5611,7 +6072,12 @@ onBeforeUnmount(() => {
     grid-template-columns: 1fr;
   }
 
+  .render-packaging-toggles {
+    grid-template-columns: 1fr;
+  }
+
   .render-recommend-panel,
+  .render-module-title,
   .render-details summary {
     align-items: flex-start;
     flex-direction: column;
@@ -5860,6 +6326,89 @@ onBeforeUnmount(() => {
   padding: 4px;
 }
 
+.render-color-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.render-color-field {
+  border: 1px solid #edf0f6;
+  border-radius: 8px;
+  background: #fbfcff;
+  padding: 10px;
+}
+
+.render-color-row {
+  display: grid;
+  grid-template-columns: 32px 42px minmax(0, 1fr);
+  gap: 8px;
+  align-items: center;
+}
+
+.render-color-current {
+  width: 32px;
+  height: 32px;
+  border: 1px solid #d8dde8;
+  border-radius: 999px;
+  box-shadow: inset 0 0 0 2px rgba(255, 255, 255, 0.72);
+}
+
+.render-color-row input[type='color'] {
+  width: 42px;
+  height: 34px;
+  border: 1px solid #d8dde8;
+  border-radius: 8px;
+  background: #fff;
+  padding: 3px;
+}
+
+.render-color-row input[type='text'] {
+  min-width: 0;
+  height: 34px;
+  padding: 0 10px;
+  font-family: inherit;
+  font-size: 12.5px;
+  font-weight: 800;
+  text-transform: uppercase;
+}
+
+.render-color-swatches {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.render-color-swatch {
+  width: 30px;
+  height: 30px;
+  border: 2px solid #d8dde8;
+  border-radius: 999px;
+  box-shadow: inset 0 0 0 2px rgba(255, 255, 255, 0.74);
+  cursor: pointer;
+}
+
+.render-color-swatch.active {
+  border-color: #635bff;
+  box-shadow:
+    0 0 0 3px rgba(99, 91, 255, 0.16),
+    inset 0 0 0 2px rgba(255, 255, 255, 0.74);
+}
+
+.render-color-swatch:disabled {
+  cursor: not-allowed;
+  opacity: 0.6;
+}
+
+.render-sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+}
+
 .render-text-poster-preview-wrap {
   display: grid;
   gap: 8px;
@@ -5902,6 +6451,31 @@ onBeforeUnmount(() => {
   text-align: center;
   white-space: pre-wrap;
   word-break: normal;
+}
+
+.render-packaging-toggles {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.render-packaging-toggles span {
+  display: grid;
+  gap: 2px;
+  border: 1px dashed #dfe3ed;
+  border-radius: 8px;
+  background: #fafbff;
+  color: #344054;
+  padding: 10px;
+  font-size: 12.5px;
+  font-weight: 900;
+}
+
+.render-packaging-toggles em {
+  color: #98a2b3;
+  font-size: 11px;
+  font-style: normal;
+  font-weight: 800;
 }
 
 .render-audio-hint {

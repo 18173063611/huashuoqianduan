@@ -18,9 +18,43 @@
               <textarea
                 v-model.trim="form.prompt"
                 rows="7"
-                placeholder="例如：生成一位适合知识口播的数字人形象，干净背景，正面半身，商业摄影质感"
+                placeholder="例如：生成一位适合汽车讲解的数字人形象，干净背景，正面全身，商业摄影质感"
               />
             </label>
+            <section class="avatar-outfit-panel" aria-label="数字人全身与换装设置">
+              <div class="avatar-section-heading avatar-section-heading-compact">
+                <strong>全身照与穿着</strong>
+                <span>必选全身照</span>
+              </div>
+              <div class="avatar-fullbody-note">
+                <strong>固定生成全身照</strong>
+                <small>用于后续视频分镜保持同一个数字人的身形、站姿和服装风格，减少前后段拼接换人的问题。</small>
+              </div>
+              <div class="avatar-outfit-options" role="radiogroup" aria-label="常见穿着">
+                <button
+                  v-for="option in avatarOutfitOptions"
+                  :key="option.value"
+                  type="button"
+                  :class="{ active: form.outfitPreset === option.value }"
+                  @click="form.outfitPreset = option.value"
+                >
+                  <strong>{{ option.label }}</strong>
+                  <small>{{ option.description }}</small>
+                </button>
+              </div>
+              <label>
+                自定义穿着描述
+                <textarea
+                  v-model.trim="form.outfitDescription"
+                  rows="3"
+                  maxlength="500"
+                  placeholder="例如：深灰色修身西装，白衬衫，无领带，胸牌，黑色皮鞋"
+                />
+              </label>
+              <p class="avatar-prompt-preview">
+                <strong>生成补充：</strong>{{ avatarOutfitPromptPreview }}
+              </p>
+            </section>
             <div class="avatar-form-grid">
               <label>
                 风格
@@ -226,11 +260,54 @@ const sourceMode = ref<'AI' | 'UPLOAD'>('AI')
 const loggedIn = ref(false)
 const form = reactive<AvatarGenerateRequest>({
   avatarName: '',
-  prompt: '生成一位适合知识口播的数字人形象，干净背景，正面半身，商业摄影质感',
+  prompt: '生成一位适合汽车销售讲解的数字人形象，干净背景，正面全身，商业摄影质感',
   referenceAssetIds: [],
   style: 'REALISTIC',
+  framing: 'FULL_BODY',
+  outfitPreset: 'car_sales_suit',
+  outfitDescription: '',
   imageCount: 4,
   size: '2K',
+})
+const avatarOutfitOptions = [
+  {
+    value: 'car_sales_suit',
+    label: '汽车销售西装',
+    description: '深色西装、白衬衫、胸牌，适合门店讲解',
+    prompt: '深色合身商务西装，白衬衫，佩戴简洁胸牌，黑色皮鞋，汽车销售顾问气质',
+  },
+  {
+    value: 'white_shirt_slacks',
+    label: '白衬衫西裤',
+    description: '干净亲和，适合短视频口播',
+    prompt: '白色长袖衬衫，黑色西裤，简洁皮带，黑色皮鞋，亲和专业',
+  },
+  {
+    value: 'tech_casual',
+    label: '科技休闲',
+    description: '适合新能源、智能座舱讲解',
+    prompt: '浅色科技感夹克或针织外套，内搭纯色 T 恤，深色长裤，干净现代',
+  },
+  {
+    value: 'premium_black',
+    label: '高级黑商务',
+    description: '稳重、高端，适合豪华车型',
+    prompt: '全黑高级商务穿搭，黑色西装外套，深色内搭，黑色长裤，克制高级',
+  },
+  {
+    value: 'custom',
+    label: '自定义',
+    description: '使用下方自定义描述',
+    prompt: '',
+  },
+]
+const selectedAvatarOutfitOption = computed(() =>
+  avatarOutfitOptions.find((item) => item.value === form.outfitPreset) || avatarOutfitOptions[0],
+)
+const avatarOutfitPromptPreview = computed(() => {
+  const custom = form.outfitDescription?.trim()
+  const outfit = custom || selectedAvatarOutfitOption.value.prompt || '按用户自定义穿着生成'
+  return `全身照，单人正面站姿，从头到脚完整入镜，服装保持一致；穿着：${outfit}。`
 })
 // 与后端 createTask 实际预扣金额完全一致；数字人形象按张数动态预估，更贴近实际结算。
 const avatarEstimate = useBillingEstimate({
@@ -726,9 +803,107 @@ function visibilityLabel(avatar: AvatarItem) {
   margin-bottom: 14px;
 }
 
+.avatar-section-heading-compact {
+  margin-bottom: 10px;
+}
+
+.avatar-section-heading-compact strong {
+  color: var(--app-text-main);
+  font-size: 14px;
+}
+
+.avatar-section-heading-compact span {
+  border-radius: 999px;
+  background: var(--app-primary-soft);
+  color: var(--app-primary);
+  padding: 4px 10px;
+  font-size: 12px;
+  font-weight: 900;
+}
+
 .avatar-section-heading h3 {
   margin: 0;
   font-size: 18px;
+}
+
+.avatar-outfit-panel {
+  display: grid;
+  gap: 12px;
+  border: 1px solid var(--app-border);
+  border-radius: var(--app-radius-md);
+  background: var(--app-surface-soft);
+  padding: 14px;
+}
+
+.avatar-fullbody-note {
+  display: grid;
+  gap: 4px;
+  border: 1px solid rgba(99, 102, 241, 0.18);
+  border-radius: var(--app-radius-sm);
+  background: rgba(255, 255, 255, 0.74);
+  padding: 12px;
+}
+
+.avatar-fullbody-note strong {
+  color: var(--app-text-main);
+  font-size: 13px;
+}
+
+.avatar-fullbody-note small {
+  color: var(--app-text-secondary);
+  font-size: 12px;
+  line-height: 1.6;
+}
+
+.avatar-outfit-options {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.avatar-outfit-options button {
+  display: grid;
+  min-height: 72px;
+  gap: 4px;
+  border: 1px solid var(--app-border);
+  border-radius: var(--app-radius-sm);
+  background: #fff;
+  color: var(--app-text-main);
+  padding: 10px;
+  text-align: left;
+  cursor: pointer;
+}
+
+.avatar-outfit-options button.active {
+  border-color: var(--app-primary);
+  background: var(--app-primary-soft);
+  color: var(--app-primary);
+}
+
+.avatar-outfit-options strong {
+  font-size: 13px;
+  font-weight: 900;
+}
+
+.avatar-outfit-options small {
+  color: var(--app-text-secondary);
+  font-size: 12px;
+  line-height: 1.45;
+}
+
+.avatar-prompt-preview {
+  margin: 0;
+  border: 1px dashed var(--app-border-strong);
+  border-radius: var(--app-radius-sm);
+  background: #fff;
+  color: var(--app-text-secondary);
+  padding: 10px 12px;
+  font-size: 12px;
+  line-height: 1.65;
+}
+
+.avatar-prompt-preview strong {
+  color: var(--app-text-main);
 }
 
 .avatar-reference-list {

@@ -27,6 +27,9 @@ export interface AvatarGenerateRequest {
   prompt: string
   referenceAssetIds: number[]
   style: 'REALISTIC' | 'COMMERCIAL' | 'PROFESSIONAL' | string
+  framing?: 'FULL_BODY' | string
+  outfitPreset?: string
+  outfitDescription?: string
   imageCount: number
   size: string
 }
