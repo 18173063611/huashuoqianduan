@@ -149,6 +149,8 @@ export interface QuickRenderRequest {
   nativeVoiceLanguage?: string
   burnInSubtitle: boolean
   customSubtitle?: string
+  finalVoiceText?: string
+  strictVoiceText?: boolean
   audioPolicy: 'auto' | 'none' | 'voiceover' | 'bgm'
   model: string
   segmentCount?: number

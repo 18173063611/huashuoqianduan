@@ -114,9 +114,14 @@
           <small>{{ routeHint }}</small>
         </div>
         <div>
-          <span>口播/BGM</span>
+          <span>口播</span>
           <strong>{{ audioDecisionLabel }}</strong>
           <small>{{ audioDecisionHint }}</small>
+        </div>
+        <div v-if="selectedBgmMaterial">
+          <span>BGM</span>
+          <strong>{{ selectedBgmMaterial.asset.fileName }}</strong>
+          <small>后期统一混入</small>
         </div>
         <div>
           <span>字幕</span>
@@ -166,6 +171,38 @@
         <label>补充目标</label>
         <input v-model.trim="goalText" :disabled="busy" maxlength="120" placeholder="可选，例如：突出空间和低油耗" />
       </div>
+
+      <div v-if="showNarrationPanel" class="quick-narration-panel">
+        <div class="quick-narration-head">
+          <div>
+            <label>最终讲述文案</label>
+            <small>{{ narrationPanelHint }}</small>
+          </div>
+          <button
+            v-if="needsNarrationLocalization"
+            type="button"
+            :disabled="busy || narrationLocalizationLoading || !narrationSourceText"
+            @click="regenerateNarrationLocalization"
+          >
+            {{ narrationLocalizationLoading ? '生成中...' : '重新生成' }}
+          </button>
+        </div>
+        <textarea
+          v-model="finalNarrationText"
+          :disabled="busy || narrationLocalizationLoading"
+          rows="6"
+          maxlength="3000"
+          placeholder="确认后会作为模型讲述文案和后期字幕文案"
+          @input="narrationEdited = true"
+        />
+        <div v-if="narrationLocalizationLoading" class="quick-progress-row">
+          <div class="quick-progress-track">
+            <div class="quick-progress-fill" :style="{ width: `${narrationProgressPercent}%` }" />
+          </div>
+          <span>{{ narrationProgressPercent }}%</span>
+        </div>
+        <p v-if="narrationError" class="quick-error">{{ narrationError }}</p>
+      </div>
     </section>
 
     <section class="app-card quick-panel">
@@ -191,7 +228,7 @@
             <dt>字幕</dt>
             <dd>{{ subtitleLabel }}</dd>
           </div>
-          <div>
+          <div v-if="selectedBgmMaterial">
             <dt>BGM</dt>
             <dd>{{ bgmLabel }}</dd>
           </div>
@@ -231,6 +268,7 @@
         <div class="quick-result-meta">
           <span>任务 ID：{{ result.localTaskId || result.taskId }}</span>
           <span>模型：{{ result.model }}</span>
+          <span v-if="selectedBgmMaterial">BGM：{{ selectedBgmMaterial.asset.fileName }}</span>
         </div>
         <a class="app-secondary-button" :href="result.videoUrl" target="_blank" rel="noreferrer">打开视频</a>
       </div>
@@ -239,8 +277,9 @@
 </template>
 
 <script setup lang="ts">
-import { computed, onBeforeUnmount, ref } from 'vue'
+import { computed, onBeforeUnmount, ref, watch } from 'vue'
 import { getAssetTextContent, uploadMaterialAsset } from '../../services/assetApi'
+import { rewriteDouyinCopywriting } from '../../services/writerDouyinApi'
 import {
   getDigitalHumanVideoTask,
   newVideoIdempotencyKey,
@@ -255,6 +294,7 @@ import type {
   QuickRenderResponse,
   VideoTaskVO,
 } from '../../types/videoTypes'
+import type { DouyinRewriteWriterVO } from '../../types/writerDouyinTypes'
 import AssetPicker from './AssetPicker.vue'
 
 interface QuickMaterial {
@@ -337,8 +377,16 @@ const errorMessage = ref('')
 const taskStatus = ref('')
 const taskProgress = ref<number | null>(null)
 const result = ref<VideoTaskVO | null>(null)
+const finalNarrationText = ref('')
+const narrationEdited = ref(false)
+const narrationError = ref('')
+const narrationLocalizationLoading = ref(false)
+const narrationTaskProgress = ref<number | null>(null)
+const narrationResolvedKey = ref('')
 let stopTracking: (() => void) | null = null
+let stopNarrationTracking: (() => void) | null = null
 let digitalHumanPollTimer: number | null = null
+let narrationLocalizationPromise: Promise<string> | null = null
 
 const canSubmit = computed(() => materials.value.length > 0 && !uploading.value)
 const imageCount = computed(() => materials.value.filter((item) => item.asset.assetType === 'IMAGE').length)
@@ -347,9 +395,27 @@ const hasVoiceMaterial = computed(() =>
   materials.value.some((item) => item.role === 'voiceover' || item.role === 'reference_audio' || item.role === 'voice_script'),
 )
 const hasBgmMaterial = computed(() => materials.value.some((item) => item.role === 'bgm'))
+const selectedBgmMaterial = computed(() => materials.value.find((item) => item.role === 'bgm') || null)
 const uploadedSubtitleText = computed(() =>
   materials.value.find((item) => item.role === 'subtitle' && item.textContent?.trim())?.textContent?.trim() || '',
 )
+const narrationSourceText = computed(() => extractNarrationSourceText(materials.value))
+const narrationLocalizationKey = computed(() =>
+  `${voiceLanguage.value}:${stableTextKey(narrationSourceText.value)}`,
+)
+const needsNarrationLocalization = computed(() =>
+  narrationLanguageMismatch(narrationSourceText.value, voiceLanguage.value),
+)
+const showNarrationPanel = computed(() =>
+  Boolean(narrationSourceText.value || finalNarrationText.value || narrationLocalizationLoading.value),
+)
+const narrationPanelHint = computed(() => {
+  if (narrationLocalizationLoading.value) return `${voiceLanguageLabel.value}生成中`
+  if (needsNarrationLocalization.value && finalNarrationText.value) return `已生成${voiceLanguageLabel.value}，可编辑`
+  if (needsNarrationLocalization.value) return `需要生成${voiceLanguageLabel.value}`
+  return `与${voiceLanguageLabel.value}一致，可编辑`
+})
+const narrationProgressPercent = computed(() => Math.max(0, Math.min(100, narrationTaskProgress.value ?? 0)))
 const subtitleMode = computed<'off' | 'auto' | 'upload'>(() => {
   if (uploadedSubtitleText.value) return 'upload'
   if (hasVoiceMaterial.value) return 'auto'
@@ -424,22 +490,21 @@ const subtitleDecisionHint = computed(() => {
 const audioDecisionLabel = computed(() => {
   if (materials.value.some((item) => item.role === 'voiceover')) return '口播优先'
   if (materials.value.some((item) => item.role === 'reference_audio')) return '参考音频'
-  if (hasBgmMaterial.value) return '仅 BGM'
   if (materials.value.some((item) => item.role === 'voice_script')) return '文案驱动'
+  if (hasBgmMaterial.value) return '无口播'
   return '无音频'
 })
 
 const audioDecisionHint = computed(() => {
   if (materials.value.some((item) => item.role === 'voiceover')) return '口播音频会作为成片主音轨'
   if (materials.value.some((item) => item.role === 'reference_audio')) return '单段可参考音频，多段转后期配音'
-  if (hasBgmMaterial.value) return 'BGM 只作为背景音乐'
   if (materials.value.some((item) => item.role === 'voice_script')) return '使用文案拆分到各片段'
+  if (hasBgmMaterial.value) return '仅使用后期背景音乐'
   return '模型只按图片/视频素材生成画面'
 })
 
 const bgmLabel = computed(() => {
-  const bgm = materials.value.find((item) => item.role === 'bgm')
-  if (audioPolicy.value === 'none') return '无'
+  const bgm = selectedBgmMaterial.value
   return bgm ? `使用 ${bgm.asset.fileName}` : '未检测到 BGM'
 })
 
@@ -534,14 +599,153 @@ function roleLabel(role: QuickRenderAssetRole | string) {
   return roleOptions.find((item) => item.value === role)?.label || '自动素材'
 }
 
+async function ensureNarrationReadyForSubmit() {
+  const source = narrationSourceText.value.trim()
+  if (!source) {
+    return ''
+  }
+  if (!needsNarrationLocalization.value) {
+    if (!finalNarrationText.value.trim() || narrationResolvedKey.value !== narrationLocalizationKey.value) {
+      finalNarrationText.value = source
+      narrationResolvedKey.value = narrationLocalizationKey.value
+      narrationEdited.value = false
+    }
+    return finalNarrationText.value.trim()
+  }
+  try {
+    return await localizeNarrationCopy(false)
+  } catch {
+    errorMessage.value = narrationError.value || '讲述文案生成失败'
+    return null
+  }
+}
+
+function regenerateNarrationLocalization() {
+  narrationEdited.value = false
+  void localizeNarrationCopy(true).catch(() => undefined)
+}
+
+function refreshNarrationEditorForCurrentSource() {
+  stopNarrationTracking?.()
+  stopNarrationTracking = null
+  narrationLocalizationPromise = null
+  narrationTaskProgress.value = null
+  narrationError.value = ''
+  narrationLocalizationLoading.value = false
+  const source = narrationSourceText.value.trim()
+  if (!source) {
+    finalNarrationText.value = ''
+    narrationResolvedKey.value = ''
+    narrationEdited.value = false
+    return
+  }
+  if (!needsNarrationLocalization.value) {
+    finalNarrationText.value = source
+    narrationResolvedKey.value = narrationLocalizationKey.value
+    narrationEdited.value = false
+    return
+  }
+  finalNarrationText.value = ''
+  narrationResolvedKey.value = ''
+  narrationEdited.value = false
+  void localizeNarrationCopy(false).catch(() => undefined)
+}
+
+async function localizeNarrationCopy(force: boolean) {
+  const source = narrationSourceText.value.trim()
+  const key = narrationLocalizationKey.value
+  if (!source) {
+    return ''
+  }
+  if (!needsNarrationLocalization.value) {
+    finalNarrationText.value = source
+    narrationResolvedKey.value = key
+    narrationEdited.value = false
+    return source
+  }
+  if (!force && finalNarrationText.value.trim() && narrationResolvedKey.value === key) {
+    return finalNarrationText.value.trim()
+  }
+  if (!force && narrationLocalizationPromise) {
+    return narrationLocalizationPromise
+  }
+
+  stopNarrationTracking?.()
+  stopNarrationTracking = null
+  narrationError.value = ''
+  narrationLocalizationLoading.value = true
+  narrationTaskProgress.value = 0
+
+  const promise = (async () => {
+    const task = await rewriteDouyinCopywriting({
+      originalText: source,
+      style: narrationRewriteStyle(voiceLanguage.value),
+      introduce: narrationRewriteInstruction(voiceLanguage.value),
+    })
+    narrationTaskProgress.value = task.progress ?? 0
+    if (!task.taskId) {
+      throw new Error('文案生成任务未返回 taskId')
+    }
+    return await new Promise<string>((resolve, reject) => {
+      stopNarrationTracking = trackTaskResult<DouyinRewriteWriterVO>(task.taskId, {
+        onStatus(message) {
+          narrationTaskProgress.value = message.progress
+        },
+        onResult(taskResult) {
+          const text = normalizeNarrationText(taskResult.result?.translatedText || '')
+          if (!text) {
+            const error = new Error('豆包返回的讲述文案为空')
+            narrationError.value = error.message
+            reject(error)
+            return
+          }
+          finalNarrationText.value = text
+          narrationResolvedKey.value = key
+          narrationEdited.value = false
+          narrationTaskProgress.value = taskResult.progress ?? 100
+          stopNarrationTracking = null
+          resolve(text)
+        },
+        onFailure(message) {
+          const error = new Error(message.errorMessage || '讲述文案生成失败')
+          narrationTaskProgress.value = message.progress
+          narrationError.value = error.message
+          stopNarrationTracking = null
+          reject(error)
+        },
+        onError(error) {
+          narrationError.value = error.message
+          stopNarrationTracking = null
+          reject(error)
+        },
+      })
+    })
+  })()
+
+  narrationLocalizationPromise = promise
+  try {
+    return await promise
+  } catch (error) {
+    narrationError.value = error instanceof Error ? error.message : '讲述文案生成失败'
+    throw error
+  } finally {
+    narrationLocalizationLoading.value = false
+    narrationLocalizationPromise = null
+  }
+}
+
 async function submitQuickRender() {
   if (!canSubmit.value || busy.value) return
   errorMessage.value = ''
   result.value = null
   taskStatus.value = ''
   taskProgress.value = null
+  const finalNarration = await ensureNarrationReadyForSubmit()
+  if (finalNarration == null) {
+    return
+  }
   busy.value = true
-  stopAllTracking()
+  stopRenderTracking()
 
   const payload: QuickRenderRequest = {
     intent: 'auto',
@@ -558,6 +762,8 @@ async function submitQuickRender() {
     nativeVoiceLanguage: voiceLanguage.value,
     burnInSubtitle: subtitleMode.value !== 'off',
     customSubtitle: subtitleMode.value === 'upload' ? uploadedSubtitleText.value || undefined : undefined,
+    finalVoiceText: finalNarration || undefined,
+    strictVoiceText: Boolean(finalNarration),
     audioPolicy: audioPolicy.value,
     model: 'auto',
     segmentCount: segmentCount.value,
@@ -681,6 +887,12 @@ function stopDigitalHumanPoll() {
 }
 
 function stopAllTracking() {
+  stopRenderTracking()
+  stopNarrationTracking?.()
+  stopNarrationTracking = null
+}
+
+function stopRenderTracking() {
   stopTracking?.()
   stopTracking = null
   stopDigitalHumanPoll()
@@ -871,12 +1083,168 @@ async function readTextContent(asset: AssetItem) {
   return text.length > 20000 ? text.slice(0, 20000) : text
 }
 
+function extractNarrationSourceText(items: QuickMaterial[]) {
+  const preferredRoles: QuickRenderAssetRole[] = ['voice_script', 'subtitle', 'benchmark_json', 'storyboard_json']
+  for (const role of preferredRoles) {
+    for (const item of items) {
+      if (item.role !== role || !item.textContent?.trim()) {
+        continue
+      }
+      const text = role === 'voice_script' || role === 'subtitle'
+        ? normalizeNarrationText(item.textContent)
+        : extractNarrationFromJsonText(item.textContent)
+      if (text) {
+        return text
+      }
+    }
+  }
+  return ''
+}
+
+function extractNarrationFromJsonText(value: string) {
+  const raw = value.trim()
+  if (!raw) {
+    return ''
+  }
+  try {
+    const parsed = JSON.parse(raw) as unknown
+    const direct = firstJsonText(parsed, [
+      ['rewriteResult', 'translatedText'],
+      ['transcriptResult', 'translatedText'],
+      ['transcriptResult', 'originalText'],
+      ['translatedText'],
+      ['rewrittenText'],
+      ['finalScript'],
+      ['finalVoiceText'],
+      ['sourceScript'],
+      ['originalText'],
+    ])
+    if (direct) {
+      return normalizeNarrationText(direct)
+    }
+    const collected: string[] = []
+    collectJsonNarrationText(parsed, collected)
+    return normalizeNarrationText(collected.slice(0, 8).join('\n'))
+  } catch {
+    return normalizeNarrationText(raw)
+  }
+}
+
+function firstJsonText(value: unknown, paths: string[][]) {
+  for (const path of paths) {
+    let cursor = value as unknown
+    for (const key of path) {
+      if (!cursor || typeof cursor !== 'object' || Array.isArray(cursor)) {
+        cursor = undefined
+        break
+      }
+      cursor = (cursor as Record<string, unknown>)[key]
+    }
+    if (typeof cursor === 'string' && cursor.trim()) {
+      return cursor.trim()
+    }
+  }
+  return ''
+}
+
+function collectJsonNarrationText(value: unknown, output: string[]) {
+  if (!value || output.length >= 12) {
+    return
+  }
+  if (Array.isArray(value)) {
+    for (const item of value) {
+      collectJsonNarrationText(item, output)
+    }
+    return
+  }
+  if (typeof value !== 'object') {
+    return
+  }
+  const preferredKeys = new Set(['voiceText', 'content', 'narration', 'script', 'text', 'copywriting'])
+  const record = value as Record<string, unknown>
+  for (const [key, child] of Object.entries(record)) {
+    if (preferredKeys.has(key) && typeof child === 'string' && child.trim() && child.trim() !== '无') {
+      output.push(child.trim())
+    }
+  }
+  for (const child of Object.values(record)) {
+    collectJsonNarrationText(child, output)
+  }
+}
+
+function normalizeNarrationText(value: string) {
+  const withoutSrt = value
+    .replace(/\r\n/g, '\n')
+    .replace(/\r/g, '\n')
+    .split('\n')
+    .map((line) => line.trim())
+    .filter((line) => line && !/^\d+$/.test(line) && !/^\d{1,2}:\d{2}:\d{2}[,.]\d{1,3}\s+-->/i.test(line))
+    .join('\n')
+  const normalized = withoutSrt
+    .replace(/[\u200B-\u200D\uFEFF]/g, '')
+    .replace(/[ \t]+/g, ' ')
+    .replace(/[ \t]*\n[ \t]*/g, '\n')
+    .replace(/\n{3,}/g, '\n\n')
+    .trim()
+  return normalized.length > 3000 ? normalized.slice(0, 3000).trim() : normalized
+}
+
+function narrationLanguageMismatch(text: string, targetLanguage: string) {
+  const clean = normalizeNarrationText(text)
+  if (!clean) {
+    return false
+  }
+  const stats = narrationLanguageStats(clean)
+  if (targetLanguage === 'en-US') {
+    return stats.cjk > 0
+  }
+  if (stats.cjk === 0) {
+    return stats.latin >= 4
+  }
+  return stats.latin >= 12 && stats.latin > stats.cjk * 2
+}
+
+function narrationLanguageStats(text: string) {
+  let cjk = 0
+  let latin = 0
+  for (const char of text) {
+    if (/[\u4E00-\u9FFF]/.test(char)) {
+      cjk += 1
+    } else if (/[A-Za-z]/.test(char)) {
+      latin += 1
+    }
+  }
+  return { cjk, latin }
+}
+
+function stableTextKey(text: string) {
+  const normalized = normalizeNarrationText(text)
+  let hash = 0
+  for (let i = 0; i < normalized.length; i++) {
+    hash = ((hash << 5) - hash + normalized.charCodeAt(i)) | 0
+  }
+  return `${normalized.length}:${hash}`
+}
+
+function narrationRewriteStyle(language: string) {
+  return language === 'en-US' ? '自然英语口播翻译' : '自然中文口播翻译'
+}
+
+function narrationRewriteInstruction(language: string) {
+  if (language === 'en-US') {
+    return '将原文改写式翻译成自然、简洁、可直接讲述的英文口播。保留品牌、车型、价格、数字和单位，不添加不存在的卖点，不要生硬直译，只输出英文文案。'
+  }
+  return '将原文改写式翻译成自然、简洁、可直接讲述的中文普通话口播。保留品牌、车型、价格、数字和单位，不添加不存在的卖点，不要生硬直译，只输出中文文案。'
+}
+
 function formatSize(size: number | null | undefined) {
   const value = Number(size || 0)
   if (value < 1024) return `${value} B`
   if (value < 1024 * 1024) return `${(value / 1024).toFixed(1)} KB`
   return `${(value / 1024 / 1024).toFixed(1)} MB`
 }
+
+watch([narrationSourceText, voiceLanguage], () => refreshNarrationEditorForCurrentSource())
 
 onBeforeUnmount(stopAllTracking)
 </script>
@@ -1190,6 +1558,94 @@ onBeforeUnmount(stopAllTracking)
   padding: 10px 12px;
   font-size: 13px;
   line-height: 1.6;
+}
+
+.quick-narration-panel {
+  display: grid;
+  gap: 10px;
+  border: 1px solid #dce3f2;
+  border-radius: 8px;
+  background: #fbfcff;
+  padding: 14px;
+}
+
+.quick-narration-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.quick-narration-head > div {
+  display: grid;
+  gap: 4px;
+}
+
+.quick-narration-head label {
+  color: #2d3446;
+  font-size: 13px;
+  font-weight: 850;
+}
+
+.quick-narration-head small {
+  color: #667085;
+  font-size: 12px;
+  font-weight: 750;
+}
+
+.quick-narration-head button {
+  height: 34px;
+  border: 1px solid #d9ddff;
+  border-radius: 8px;
+  background: #fff;
+  color: #5e50df;
+  cursor: pointer;
+  font-size: 12.5px;
+  font-weight: 850;
+  padding: 0 12px;
+}
+
+.quick-narration-head button:disabled {
+  cursor: not-allowed;
+  opacity: 0.6;
+}
+
+.quick-narration-panel textarea {
+  width: 100%;
+  min-height: 132px;
+  border: 1px solid #e3e7ef;
+  border-radius: 8px;
+  background: #fff;
+  color: #232838;
+  padding: 10px;
+  font-size: 13px;
+  line-height: 1.6;
+  outline: none;
+  resize: vertical;
+}
+
+.quick-progress-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 42px;
+  gap: 10px;
+  align-items: center;
+  color: #5e50df;
+  font-size: 12px;
+  font-weight: 850;
+}
+
+.quick-progress-track {
+  height: 7px;
+  overflow: hidden;
+  border-radius: 999px;
+  background: #e9ecf5;
+}
+
+.quick-progress-fill {
+  height: 100%;
+  border-radius: inherit;
+  background: #635bff;
+  transition: width 0.2s ease;
 }
 
 .quick-empty,
