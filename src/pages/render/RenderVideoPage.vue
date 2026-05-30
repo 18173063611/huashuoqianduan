@@ -9,6 +9,7 @@
       </div>
       <div class="render-mode-switch" aria-label="视频制作模式">
         <button
+          v-if="ENABLE_QUICK_RENDER_MODE"
           type="button"
           :class="{ active: productionMode === 'quick' }"
           :disabled="busy || seedanceSubmitInFlight"
@@ -27,7 +28,7 @@
       </div>
     </header>
 
-    <QuickRenderPage v-if="productionMode === 'quick'" embedded />
+    <QuickRenderPage v-if="ENABLE_QUICK_RENDER_MODE && productionMode === 'quick'" embedded />
 
     <template v-else>
     <section class="app-card render-input">
@@ -1880,7 +1881,13 @@ const renderAspectRatioOptions: Array<{ value: RenderAspectRatio; label: string;
 
 const route = useRoute()
 const router = useRouter()
-const productionMode = ref<RenderProductionMode>(route.query.mode === 'quick' ? 'quick' : 'manual')
+
+/** 临时开关：设为 true 可恢复「一键成片」入口与 quick 模式直达。 */
+const ENABLE_QUICK_RENDER_MODE = false
+
+const productionMode = ref<RenderProductionMode>(
+  ENABLE_QUICK_RENDER_MODE && route.query.mode === 'quick' ? 'quick' : 'manual',
+)
 
 const mainTab = ref<MainTab>('carSales')
 const imageSubTab = ref<ImageSubTab>('first')
@@ -1898,14 +1905,15 @@ watch(
 watch(
   () => route.query.mode,
   (mode) => {
-    productionMode.value = mode === 'quick' ? 'quick' : 'manual'
+    productionMode.value = ENABLE_QUICK_RENDER_MODE && mode === 'quick' ? 'quick' : 'manual'
   },
 )
 
 function setProductionMode(mode: RenderProductionMode) {
-  productionMode.value = mode
+  const nextMode = ENABLE_QUICK_RENDER_MODE ? mode : 'manual'
+  productionMode.value = nextMode
   const query = { ...route.query }
-  if (mode === 'quick') {
+  if (nextMode === 'quick') {
     query.mode = 'quick'
   } else {
     delete query.mode

@@ -142,7 +142,7 @@ const routes: RouteRecordRaw[] = [
       },
       {
         path: 'quick-render',
-        redirect: { name: 'render', query: { mode: 'quick' } },
+        redirect: { name: 'render' },
       },
       {
         path: 'render',
