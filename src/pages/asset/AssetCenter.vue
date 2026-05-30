@@ -101,7 +101,12 @@
           </button>
         </div>
 
-        <select v-if="activeCategory === 'materials'" v-model="selectedType" class="asset-type-select" :disabled="loading">
+        <select
+          v-if="activeCategory === 'materials' && selectedWorkflowStage !== 'carBundle'"
+          v-model="selectedType"
+          class="asset-type-select"
+          :disabled="loading"
+        >
           <option value="">全部类型</option>
           <option value="TEXT">TEXT 文本</option>
           <option value="IMAGE">IMAGE 图片</option>
@@ -111,7 +116,7 @@
           <option value="JSON">JSON 数据</option>
         </select>
         <select
-          v-if="activeCategory === 'materials'"
+          v-if="activeCategory === 'materials' && selectedWorkflowStage !== 'carBundle'"
           v-model="selectedSourceType"
           class="asset-type-select"
           :disabled="loading"
@@ -120,7 +125,12 @@
           <option value="">全部来源</option>
           <option v-for="item in sourceTypeOptions" :key="item" :value="item">{{ sourceTypeLabel(item) }}</option>
         </select>
-        <select v-if="activeCategory === 'materials'" v-model="selectedAssetGroup" class="asset-type-select" :disabled="loading">
+        <select
+          v-if="activeCategory === 'materials' && selectedWorkflowStage !== 'carBundle'"
+          v-model="selectedAssetGroup"
+          class="asset-type-select"
+          :disabled="loading"
+        >
           <option value="">全部分组</option>
           <option :value="UNGROUPED_GROUP_KEY">未分组</option>
           <option v-for="group in assetGroupOptions" :key="group" :value="group">{{ group }}</option>
@@ -138,37 +148,6 @@
           :disabled="loading"
           :placeholder="activeCategory === 'materials' ? '搜索文件名...' : '搜索音色名称或 voice_type...'"
         />
-        <label v-if="activeCategory === 'materials' && hasToken" class="asset-upload-toggle">
-          <input v-model="uploadPublishToPublic" type="checkbox" :disabled="loading" />
-          <span>上传后发布公共</span>
-        </label>
-        <button
-          v-if="activeCategory === 'materials'"
-          class="app-secondary-button asset-upload-button"
-          type="button"
-          :disabled="loading"
-          @click="openMaterialUpload"
-        >
-          {{ loading ? '处理中...' : '上传素材' }}
-        </button>
-        <button
-          v-if="activeCategory === 'materials' && hasToken"
-          class="app-secondary-button asset-upload-button"
-          type="button"
-          :disabled="loading"
-          @click="openCarBundleCreator"
-        >
-          创建车型素材包
-        </button>
-        <button
-          v-if="activeCategory === 'materials'"
-          class="app-secondary-button asset-upload-button"
-          type="button"
-          :disabled="loading"
-          @click="showCarBundleAssets"
-        >
-          查看车型素材包
-        </button>
         <input
           ref="materialUploadInputRef"
           class="asset-hidden-file-input"
@@ -205,6 +184,35 @@
 
     <p v-if="jumpHint" class="asset-jump-hint app-muted">{{ jumpHint }}</p>
     <p v-if="errorMessage" class="app-error">{{ errorMessage }}</p>
+
+    <section v-if="showMaterialContextActions" class="asset-context-actions" aria-label="当前功能操作">
+      <template v-if="selectedWorkflowStage === 'material'">
+        <div>
+          <strong>上传素材</strong>
+          <span>图片、视频、文案和音频会进入当前账号资产，可选择是否直接发布为公共素材。</span>
+        </div>
+        <label v-if="hasToken" class="asset-upload-toggle">
+          <input v-model="uploadPublishToPublic" type="checkbox" :disabled="loading" />
+          <span>上传后发布公共</span>
+        </label>
+        <button class="app-primary-button" type="button" :disabled="loading" @click="openMaterialUpload">
+          {{ loading ? '处理中...' : '上传素材' }}
+        </button>
+      </template>
+      <template v-else-if="selectedWorkflowStage === 'carBundle'">
+        <div>
+          <strong>车型素材包</strong>
+          <span>把车辆图片按外观、内饰、细节和场景整理成一组，视频制作时可直接复用。</span>
+        </div>
+        <label v-if="hasToken" class="asset-upload-toggle">
+          <input v-model="uploadPublishToPublic" type="checkbox" :disabled="loading" />
+          <span>创建后发布公共</span>
+        </label>
+        <button v-if="hasToken" class="app-primary-button" type="button" :disabled="loading" @click="openCarBundleCreator">
+          创建车型素材包
+        </button>
+      </template>
+    </section>
 
     <div
       v-if="activeCategory === 'voices' && voiceListScope === 'private' && !hasToken"
@@ -307,8 +315,11 @@
             </template>
             <template v-else-if="canOpenStructuredPreview(asset)">
               <div class="asset-result-card">
-                <strong>{{ resultAssetLabel(asset) }}</strong>
-                <span>{{ structuredPreviewHint(asset) }}</span>
+                <div class="asset-result-card-head">
+                  <strong>{{ assetInlinePreview(asset).label || resultAssetLabel(asset) }}</strong>
+                  <small v-if="assetInlinePreview(asset).meta">{{ assetInlinePreview(asset).meta }}</small>
+                </div>
+                <p>{{ assetInlinePreview(asset).text || structuredPreviewHint(asset) }}</p>
               </div>
             </template>
             <template v-else>
@@ -348,13 +359,21 @@
             保存到私有
           </button>
           <button
-            v-if="listScope === 'private' && hasToken"
+            v-if="listScope === 'private' && hasToken && !isAlreadyPublishedAsset(asset)"
             class="app-secondary-button"
             type="button"
             :disabled="loading"
             @click="handlePublish(asset)"
           >
             发布到公共
+          </button>
+          <button
+            v-else-if="listScope === 'private' && hasToken && isAlreadyPublishedAsset(asset)"
+            class="app-secondary-button asset-status-button"
+            type="button"
+            disabled
+          >
+            已发布
           </button>
           <button
             v-if="canEditCarBundle(asset)"
@@ -657,6 +676,12 @@ interface PreviewStoryboardShot {
   estDurationSec: number
 }
 
+interface AssetInlinePreview {
+  label: string
+  text: string
+  meta?: string
+}
+
 interface CarBundleImageItem {
   role?: string
   label?: string
@@ -856,6 +881,8 @@ const previewError = ref('')
 const previewAsset = ref<AssetItem | null>(null)
 const previewPayload = ref<unknown>(null)
 const previewShotIndex = ref(-1)
+const inlinePreviewByAssetId = ref<Record<number, AssetInlinePreview>>({})
+let inlinePreviewLoadSeq = 0
 
 const voicesHeadTitle = computed(() =>
   activeCategory.value === 'voices'
@@ -909,6 +936,10 @@ const assetGroupOptions = computed(() => {
 })
 
 const workflowStageOptions = computed(() => WORKFLOW_STAGE_OPTIONS)
+const showMaterialContextActions = computed(() =>
+  activeCategory.value === 'materials' &&
+  (selectedWorkflowStage.value === 'material' || selectedWorkflowStage.value === 'carBundle'),
+)
 
 const carBundleEditorPublish = computed(() => {
   const editingAsset = carBundleEditingAsset.value
@@ -1160,6 +1191,7 @@ async function loadAssets() {
       sort: sortKey.value,
     })
     assets.value = rows.filter(matchesWorkflowStage)
+    void loadInlineAssetPreviews()
     await nextTick()
     if (props.highlightAssetId != null && props.highlightAssetId > 0) {
       applyHighlightWhenReady(props.highlightAssetId)
@@ -1173,6 +1205,179 @@ async function loadAssets() {
       applyHighlightWhenReady(props.highlightAssetId)
     }
   }
+}
+
+async function loadInlineAssetPreviews() {
+  const seq = ++inlinePreviewLoadSeq
+  const base: Record<number, AssetInlinePreview> = {}
+  for (const asset of assets.value) {
+    base[asset.assetId] = buildFallbackInlinePreview(asset)
+  }
+  inlinePreviewByAssetId.value = base
+
+  const previewable = assets.value
+    .filter((asset) => canOpenStructuredPreview(asset))
+    .slice(0, 36)
+  await Promise.all(
+    previewable.map(async (asset) => {
+      try {
+        const text = await getAssetTextContent(asset)
+        if (seq !== inlinePreviewLoadSeq) {
+          return
+        }
+        inlinePreviewByAssetId.value = {
+          ...inlinePreviewByAssetId.value,
+          [asset.assetId]: buildInlinePreviewFromContent(asset, text),
+        }
+      } catch {
+        // Keep metadata fallback if the preview endpoint is unavailable.
+      }
+    }),
+  )
+}
+
+function assetInlinePreview(asset: AssetItem) {
+  return inlinePreviewByAssetId.value[asset.assetId] || buildFallbackInlinePreview(asset)
+}
+
+function buildFallbackInlinePreview(asset: AssetItem): AssetInlinePreview {
+  const metadata = parseJsonObject(asset.metadataJson)
+  const label = isBenchmarkAsset(asset)
+    ? '口播文案'
+    : isStoryboardAsset(asset)
+      ? '分镜摘要'
+      : isCarModelBundleAsset(asset)
+        ? '车型素材包'
+        : resultAssetBaseLabel(asset)
+  const text = compactPreviewText(firstNonEmptyText(
+    stringField(metadata, 'previewText'),
+    stringField(metadata, 'contentPreview'),
+    stringField(metadata, 'summary'),
+    stringField(metadata, 'description'),
+    stringField(metadata, 'originalText'),
+    stringField(metadata, 'content'),
+  ))
+  return {
+    label,
+    text,
+    meta: inlinePreviewMeta(asset, metadata),
+  }
+}
+
+function buildInlinePreviewFromContent(asset: AssetItem, rawText: string): AssetInlinePreview {
+  const parsed = parseJsonObject(rawText)
+  if (!parsed) {
+    return {
+      ...buildFallbackInlinePreview(asset),
+      label: isBenchmarkAsset(asset) ? '口播文案' : '文本内容',
+      text: compactPreviewText(rawText),
+    }
+  }
+  if (isCarBundlePayloadRecord(parsed)) {
+    const images = Array.isArray(parsed.images) ? parsed.images.filter(isRecord) : []
+    const labels = images
+      .map((item) => firstNonEmptyText(stringField(item, 'label'), stringField(item, 'role'), stringField(item, 'fileName')))
+      .filter(Boolean)
+      .slice(0, 8)
+    return {
+      label: '车型素材包',
+      meta: `${images.length} 张图片`,
+      text: compactPreviewText([
+        firstNonEmptyText(stringField(parsed, 'brandModel'), stringField(parsed, 'title')),
+        stringField(parsed, 'color'),
+        labels.length ? `包含：${labels.join('、')}` : '',
+      ].filter(Boolean).join(' · ')),
+    }
+  }
+  if (isBenchmarkAsset(asset)) {
+    const transcript = isRecord(parsed.transcriptResult) ? parsed.transcriptResult : null
+    const parseResult = isRecord(parsed.parseResult) ? parsed.parseResult : null
+    return {
+      label: '口播文案',
+      meta: firstNonEmptyText(stringField(parseResult, 'title'), generatedAssetSourceLabel(asset)),
+      text: compactPreviewText(firstNonEmptyText(
+        stringField(transcript, 'originalText'),
+        stringField(parsed, 'originalText'),
+        stringField(parsed, 'rewrittenText'),
+        stringField(parsed, 'translatedText'),
+        stringField(parsed, 'voiceText'),
+        stringField(parsed, 'copywriting'),
+        stringField(parsed, 'script'),
+        stringField(parsed, 'content'),
+        findTextDeep(parsed, ['originalText', 'voiceText', 'copywriting', 'scriptText', 'content']),
+      )),
+    }
+  }
+  if (isStoryboardAsset(asset)) {
+    const shots = firstRecordArray(parsed, ['scripts', 'storyboard', 'shots', 'scenes', 'segments'])
+    return {
+      label: '分镜摘要',
+      meta: shots.length ? `${shots.length} 个场景` : '',
+      text: compactPreviewText(storyboardInlineText(shots) || firstNonEmptyText(
+        stringField(parsed, 'summary'),
+        stringField(parsed, 'description'),
+        findTextDeep(parsed, ['visual', 'content', 'narration', 'voiceText']),
+      )),
+    }
+  }
+  return {
+    ...buildFallbackInlinePreview(asset),
+    text: compactPreviewText(firstNonEmptyText(
+      stringField(parsed, 'summary'),
+      stringField(parsed, 'description'),
+      stringField(parsed, 'rewrittenText'),
+      stringField(parsed, 'originalText'),
+      stringField(parsed, 'content'),
+      findTextDeep(parsed, ['summary', 'description', 'content', 'text']),
+    )),
+  }
+}
+
+function inlinePreviewMeta(asset: AssetItem, metadata: Record<string, unknown> | null) {
+  if (isCarModelBundleAsset(asset)) {
+    return firstNonEmptyText(stringField(metadata, 'brandModel'), stringField(metadata, 'title'))
+  }
+  if (isBenchmarkAsset(asset) || isStoryboardAsset(asset)) {
+    return generatedAssetSourceLabel(asset)
+  }
+  return ''
+}
+
+function firstRecordArray(record: Record<string, unknown>, keys: string[]) {
+  for (const key of keys) {
+    const value = record[key]
+    if (Array.isArray(value)) {
+      return value.filter(isRecord)
+    }
+  }
+  return []
+}
+
+function storyboardInlineText(shots: Record<string, unknown>[]) {
+  return shots
+    .slice(0, 4)
+    .map((shot, index) => {
+      const order = firstNonEmptyText(primitiveText(shot.order), primitiveText(shot.index), String(index + 1))
+      const text = firstNonEmptyText(
+        stringField(shot, 'page'),
+        stringField(shot, 'visual'),
+        stringField(shot, 'content'),
+        stringField(shot, 'narration'),
+        stringField(shot, 'voiceText'),
+        stringField(shot, 'title'),
+      )
+      return text ? `场景${order}: ${text}` : ''
+    })
+    .filter(Boolean)
+    .join('；')
+}
+
+function compactPreviewText(value: string, maxLength = 220) {
+  const text = String(value || '').replace(/\s+/g, ' ').trim()
+  if (text.length <= maxLength) {
+    return text
+  }
+  return `${text.slice(0, maxLength)}...`
 }
 
 function refreshCurrent() {
@@ -1343,16 +1548,10 @@ function selectWorkflowStage(stage: WorkflowStageKey) {
   if (stage === 'carBundle') {
     selectedType.value = 'JSON'
     selectedAssetGroup.value = ''
+  } else if (stage === 'material') {
+    selectedType.value = ''
+    selectedAssetGroup.value = ''
   }
-}
-
-function showCarBundleAssets() {
-  activeCategory.value = 'materials'
-  selectedWorkflowStage.value = 'carBundle'
-  selectedType.value = 'JSON'
-  selectedSourceType.value = ''
-  selectedAssetGroup.value = ''
-  keyword.value = ''
 }
 
 function selectSpecificSourceType() {
@@ -1536,7 +1735,7 @@ function isText(asset: AssetItem) {
 }
 
 function canOpenStructuredPreview(asset: AssetItem) {
-  return isJson(asset) || (isText(asset) && (isBenchmarkAsset(asset) || isStoryboardAsset(asset)))
+  return isJson(asset) || isText(asset)
 }
 
 function structuredPreviewHint(asset: AssetItem) {
@@ -1728,6 +1927,20 @@ function assetTaskType(asset: AssetItem | null) {
   return asset.sourceType || ''
 }
 
+function isAlreadyPublishedAsset(asset: AssetItem) {
+  const visibility = String(asset.visibility || '').toUpperCase()
+  if (visibility === 'PUBLIC' || asset.publishedAt) {
+    return true
+  }
+  const metadata = parseJsonObject(asset.metadataJson)
+  return Boolean(
+    metadata?.forkFromAssetId ||
+    metadata?.publicAssetId ||
+    metadata?.sourcePublicAssetId ||
+    metadata?.publicTemplate,
+  )
+}
+
 function normalizedAssetRole(asset: AssetItem | null | undefined) {
   if (!asset) {
     return ''
@@ -1880,6 +2093,10 @@ async function handlePublish(asset: AssetItem) {
   if (loading.value) {
     return
   }
+  if (isAlreadyPublishedAsset(asset)) {
+    jumpHint.value = '该资产已发布到公共素材，无需重复发布。'
+    return
+  }
   const ok = window.confirm(`确认发布到公共素材？\n${asset.fileName}`)
   if (!ok) {
     return
@@ -1887,14 +2104,13 @@ async function handlePublish(asset: AssetItem) {
   loading.value = true
   errorMessage.value = ''
   try {
-    await publishAsset(asset.assetId)
+    const updated = await publishAsset(asset.assetId)
+    assets.value = assets.value.map((item) => (item.assetId === updated.assetId ? updated : item))
     jumpHint.value = '已发布到公共素材。'
-    listScope.value = 'global'
   } catch (e) {
     errorMessage.value = e instanceof Error ? e.message : '发布失败'
   } finally {
     loading.value = false
-    void loadAssets()
   }
 }
 
@@ -2447,6 +2663,35 @@ async function playVoiceSample(voice: VoicePresetItem) {
   font-size: 13px;
 }
 
+.asset-context-actions {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto auto;
+  align-items: center;
+  gap: 12px;
+  border: 1px solid #e2ddff;
+  border-radius: 10px;
+  background: #fbfaff;
+  padding: 12px 14px;
+}
+
+.asset-context-actions div {
+  display: grid;
+  min-width: 0;
+  gap: 4px;
+}
+
+.asset-context-actions strong {
+  color: #151a2d;
+  font-size: 14px;
+  font-weight: 900;
+}
+
+.asset-context-actions span {
+  color: #667085;
+  font-size: 12.5px;
+  line-height: 1.5;
+}
+
 .asset-file-list,
 .asset-empty,
 .voice-library-list {
@@ -2460,6 +2705,13 @@ async function playVoiceSample(voice: VoicePresetItem) {
   display: grid;
   gap: 12px;
   padding: 16px;
+}
+
+.asset-file-list .app-file-item {
+  align-items: flex-start;
+  border-radius: 10px;
+  background: #fcfcff;
+  padding: 18px;
 }
 
 .voice-library-list {
@@ -2595,24 +2847,43 @@ async function playVoiceSample(voice: VoicePresetItem) {
 }
 
 .asset-result-card {
-  display: inline-flex;
-  flex-direction: column;
+  display: grid;
   gap: 6px;
-  max-width: 360px;
+  width: min(680px, 100%);
   border: 1px solid #e6e8f2;
   border-radius: 10px;
-  background: #fbfcff;
+  background: #ffffff;
   padding: 12px 14px;
 }
 
-.asset-result-card strong {
+.asset-result-card-head {
+  display: flex;
+  min-width: 0;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.asset-result-card-head strong {
   color: #151a2d;
   font-size: 14px;
 }
 
-.asset-result-card span {
+.asset-result-card-head small {
+  flex: 0 0 auto;
   color: #667085;
   font-size: 12px;
+}
+
+.asset-result-card p {
+  display: -webkit-box;
+  overflow: hidden;
+  margin: 0;
+  color: #475467;
+  font-size: 13px;
+  line-height: 1.65;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 4;
 }
 
 .asset-open {
@@ -2620,6 +2891,13 @@ async function playVoiceSample(voice: VoicePresetItem) {
   align-items: center;
   justify-content: center;
   text-decoration: none;
+}
+
+.asset-status-button:disabled {
+  border-color: #bbf7d0;
+  background: #f0fdf4;
+  color: #15803d;
+  opacity: 1;
 }
 
 .asset-danger {
@@ -3044,6 +3322,10 @@ async function playVoiceSample(voice: VoicePresetItem) {
 
   .asset-header-actions .app-secondary-button {
     width: 100%;
+  }
+
+  .asset-context-actions {
+    grid-template-columns: 1fr;
   }
 }
 
