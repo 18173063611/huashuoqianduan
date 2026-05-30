@@ -559,6 +559,7 @@
                   <p class="render-tts-preview">
                     {{ modelNativeVoiceTextPreview || '暂无可用口播台词' }}
                   </p>
+                  <small class="render-tts-language-note">{{ carVoiceTextLanguageNormalizationHint }}</small>
                 </section>
                 <section v-if="shouldShowSceneVoiceStructure" class="render-tts-script-panel" aria-label="分镜台词结构">
                   <div class="render-tts-script-head">
@@ -619,8 +620,82 @@
                     {{ item.label }}
                   </option>
                 </select>
-                <small>用于生成后自动识别字幕；自定义字幕会按原文烧录。</small>
+                <small>字幕只在成片拼接后统一识别/烧录，视频生成模型不会直接生成字幕文字。</small>
               </div>
+              <section class="render-text-poster-panel" aria-label="视频大字报设置">
+                <div class="render-text-poster-head">
+                  <div class="render-text-poster-title">
+                    <label>大字报</label>
+                    <small>叠加在成片画面上，可选择是否显示、文案、字体和颜色。</small>
+                  </div>
+                  <div class="render-text-poster-switch">
+                    <button
+                      type="button"
+                      :class="{ active: !carHeadlineEnabled }"
+                      :disabled="busy"
+                      @click="carHeadlineEnabled = false"
+                    >
+                      不显示
+                    </button>
+                    <button
+                      type="button"
+                      :class="{ active: carHeadlineEnabled }"
+                      :disabled="busy"
+                      @click="carHeadlineEnabled = true"
+                    >
+                      显示
+                    </button>
+                  </div>
+                </div>
+                <template v-if="carHeadlineEnabled">
+                  <div class="render-form-field">
+                    <label>大字报文案</label>
+                    <textarea
+                      v-model="carHeadlineText"
+                      :disabled="busy"
+                      rows="2"
+                      maxlength="120"
+                      placeholder="输入要显示在画面上的大字报文案"
+                    />
+                  </div>
+                  <div class="render-text-poster-controls">
+                    <div class="render-form-field">
+                      <label>字体</label>
+                      <select v-model="carHeadlineFontFamily" :disabled="busy">
+                        <option v-for="item in carHeadlineFontOptions" :key="item.value" :value="item.value">
+                          {{ item.label }}
+                        </option>
+                      </select>
+                    </div>
+                    <div class="render-form-field">
+                      <label>摆放区域</label>
+                      <select v-model="carHeadlinePosition" :disabled="busy">
+                        <option v-for="item in carHeadlinePositionOptions" :key="item.value" :value="item.value">
+                          {{ item.label }}
+                        </option>
+                      </select>
+                    </div>
+                    <div class="render-form-field">
+                      <label>字号</label>
+                      <input v-model.number="carHeadlineFontSize" type="number" min="48" max="156" step="4" :disabled="busy" />
+                    </div>
+                    <div class="render-form-field">
+                      <label>文字颜色</label>
+                      <input v-model="carHeadlineTextColor" type="color" :disabled="busy" />
+                    </div>
+                    <div class="render-form-field">
+                      <label>描边颜色</label>
+                      <input v-model="carHeadlineOutlineColor" type="color" :disabled="busy" />
+                    </div>
+                  </div>
+                  <div class="render-text-poster-preview-wrap">
+                    <label>样式预览</label>
+                    <div class="render-text-poster-preview" :class="`pos-${carHeadlinePosition}`">
+                      <span :style="carHeadlinePreviewStyle">{{ carHeadlinePreviewText }}</span>
+                    </div>
+                  </div>
+                </template>
+              </section>
               <details class="render-optional-group">
                 <summary>
                   <span>更多可选素材</span>
@@ -1195,6 +1270,7 @@ type CarAudioMode = 'none' | 'post_mix' | 'reference' | 'model_native'
 type CarVoicePolicy = 'user_audio' | 'model_native' | 'none'
 type CarVoiceTextSource = 'auto' | 'benchmark' | 'manual'
 type CarSubtitleMode = 'off' | 'auto' | 'custom'
+type CarHeadlinePosition = 'top' | 'middle' | 'bottom'
 type NativeVoiceLanguage = 'zh-CN' | 'en-US'
 type SeedanceModelValue = 'doubao-seedance-1-5-pro-251215' | 'ep-20260512233524-85r4g'
 type CarMaterialGroup = 'exterior' | 'interior' | 'detail' | 'scene' | 'host'
@@ -1418,6 +1494,18 @@ const carSubtitleLanguageOptions = [
   { value: 'zh-CN', label: '中文普通话' },
   { value: 'en-US', label: '英语' },
 ]
+const carHeadlineFontOptions = [
+  { value: 'Microsoft YaHei', label: '微软雅黑' },
+  { value: 'Arial', label: 'Arial' },
+  { value: 'Impact', label: 'Impact' },
+  { value: 'Source Han Sans SC', label: '思源黑体' },
+  { value: 'Noto Sans CJK SC', label: 'Noto Sans' },
+]
+const carHeadlinePositionOptions: Array<{ value: CarHeadlinePosition; label: string }> = [
+  { value: 'top', label: '顶部' },
+  { value: 'middle', label: '中部' },
+  { value: 'bottom', label: '底部' },
+]
 const renderAspectRatioOptions: Array<{ value: RenderAspectRatio; label: string; hint: string }> = [
   { value: '9:16', label: '竖屏 9:16', hint: '适合抖音、视频号、竖版信息流' },
   { value: '16:9', label: '横屏 16:9', hint: '适合横版展示、门店大屏和通用素材' },
@@ -1518,6 +1606,13 @@ const carNativeSpeechStyle = ref('natural')
 const carSubtitleMode = ref<CarSubtitleMode>('off')
 const carSubtitleText = ref('')
 const carSubtitleLanguage = ref('zh-CN')
+const carHeadlineEnabled = ref(false)
+const carHeadlineText = ref('')
+const carHeadlineFontFamily = ref('Microsoft YaHei')
+const carHeadlinePosition = ref<CarHeadlinePosition>('top')
+const carHeadlineFontSize = ref(92)
+const carHeadlineTextColor = ref('#ffffff')
+const carHeadlineOutlineColor = ref('#111111')
 const carBgmUrl = ref('')
 const carBgmAssetId = ref<number | null>(null)
 const carBgmSourceType = ref('')
@@ -1840,6 +1935,23 @@ const carNativeSpeechStyleHint = computed(
 const carNativeVoiceStyleSummary = computed(
   () => `${carNativeVoiceLanguageLabel.value} / ${carNativeVoiceStyleLabel.value} / ${carNativeSpeechStyleLabel.value}`,
 )
+const carVoiceTextLanguageNormalizationHint = computed(() => {
+  const text = modelNativeVoiceTextPreview.value
+  if (!text) {
+    return '提交前后端会按讲述语言规范口播文案，再传给视频模型。'
+  }
+  const stats = voiceLanguageStats(text)
+  if (carNativeVoiceLanguage.value === 'zh-CN') {
+    if (stats.cjk === 0 || (stats.latin >= 12 && stats.latin > stats.cjk * 2)) {
+      return '检测到当前文案偏英文，提交后会先翻译/规范为中文，再传给视频模型。'
+    }
+    return '提交后仍会按中文讲述校验，最终只把中文口播传给视频模型。'
+  }
+  if (stats.cjk > 0) {
+    return '检测到当前文案含中文，提交后会先翻译/规范为英文，再传给视频模型。'
+  }
+  return '提交后仍会按英文讲述校验，最终只把英文口播传给视频模型。'
+})
 
 const carVoiceTextSourceLabel = computed(() => {
   if (carVoiceTextSource.value === 'benchmark' && carBenchmarkVoiceText.value.trim()) return '爆款对标文案'
@@ -2229,6 +2341,15 @@ watch(
         carAudioDurationSeconds.value = seconds
       }
     })
+  },
+)
+
+watch(
+  () => carNativeVoiceLanguage.value,
+  (language) => {
+    if (usesModelNativeVoiceover()) {
+      carSubtitleLanguage.value = language
+    }
   },
 )
 
@@ -3403,12 +3524,13 @@ function containsAnyText(value: string, keywords: string[]) {
   return keywords.some((keyword) => value.includes(keyword.toLowerCase()))
 }
 
-function storyboardShotSourceText(shot: VideoScriptShotItem) {
+function storyboardShotSourceText(shot: VideoScriptShotItem, includeVoice = false) {
   return [
     shot.page,
     shot.visualPrompt,
     shot.prompt,
     shot.highlight,
+    includeVoice ? shot.content : '',
     shot.camera,
     shot.cameraMotion,
     shot.movement,
@@ -3417,6 +3539,40 @@ function storyboardShotSourceText(shot: VideoScriptShotItem) {
     shot.composition,
     shot.transition,
   ].filter(Boolean).join(' ')
+}
+
+function storyboardShotVoiceText(shot: VideoScriptShotItem) {
+  const text = sanitizeSpeechText(shot.content)
+  if (!text || /^(无|none|null|n\/a|na|-|—)$/i.test(text)) {
+    return ''
+  }
+  return text
+}
+
+function storyboardGroupVoiceText(group: StoryboardShotGroup) {
+  const lines = group.shots
+    .map(storyboardShotVoiceText)
+    .filter(Boolean)
+  return joinSpeechLines(lines)
+}
+
+function joinSpeechLines(lines: string[]) {
+  return lines.reduce((current, line) => joinVoiceChunk(current, line), '')
+}
+
+function storyboardHasHumanDescription(text: string) {
+  return countHumanDescriptionHits(text) > 0
+}
+
+function storyboardHumanPolicyText(sourceText: string) {
+  if (!storyboardHasHumanDescription(sourceText)) {
+    return carHostAppearanceEnabled.value
+      ? '人物处理=原分镜未检测到明确人物出镜，若开启虚拟人物，只在需要讲解/邀约的镜头边侧弱出镜，避免硬塞人物。'
+      : '人物处理=无明确人物出镜，保持车辆和场景为主。'
+  }
+  return carHostAppearanceEnabled.value
+    ? '人物处理=保留原分镜的人物站位、动作和出镜节奏；人物身份、人脸和服装以当前数字人形象/设置为准。'
+    : '人物处理=忽略原分镜人物、主播、客户、路人和手部，只保留镜头运动、景别、构图和车辆/场景展示节奏。'
 }
 
 function storyboardShotPlanText(text: string, idx: number, total: number) {
@@ -3505,17 +3661,26 @@ function storyboardShotPlanText(text: string, idx: number, total: number) {
     `镜头运动=${cameraMotion}`,
     `构图=${composition}`,
     `主体动作=${subjectAction}`,
+    storyboardHumanPolicyText(text),
     `节奏=${pacing}`,
     `转场=${transition}`,
   ].join('；')
 }
 
-function storyboardVisualText(shot: VideoScriptShotItem, idx: number) {
+function shouldExposeStoryboardVoiceText() {
+  return usesModelNativeVoiceover() && carVoiceTextSource.value === 'auto' && !strictVoiceTextForRequest()
+}
+
+function storyboardVisualText(shot: VideoScriptShotItem, idx: number, includeVoiceReference = shouldExposeStoryboardVoiceText()) {
   const sourceText = storyboardShotSourceText(shot)
   const pieces = [`镜头${shot.order || idx + 1}`]
   if (shot.time) pieces.push(`时间 ${shot.time}`)
   pieces.push(`镜头意图 ${storyboardIntentText(sourceText)}`)
   pieces.push(`导演执行 ${storyboardShotPlanText(sourceText, idx, carSegmentCount.value)}`)
+  const voice = storyboardShotVoiceText(shot)
+  if (includeVoiceReference && voice) {
+    pieces.push(`原分镜台词参考 ${voice}`)
+  }
   return pieces.join('；')
 }
 
@@ -3524,20 +3689,32 @@ function storyboardGroupVisualText(group: StoryboardShotGroup, groupIndex: numbe
   const rangeText = orders.length === 1 ? `${orders[0]}` : orders.join('、')
   const lines = [
     `段落${groupIndex + 1}/${Math.max(1, totalGroups)}，合并原分镜 ${rangeText}，总时长约 ${group.duration} 秒`,
-    '请在同一条视频内连续完成这些子镜头，主体车辆、人物、场景、光线和运动方向保持一致；用自然运镜和小幅转场承接，不要像多条视频硬拼接。',
+    carHostAppearanceEnabled.value
+      ? '请在同一条视频内连续完成这些子镜头，主体车辆、数字人站位、场景、光线和运动方向保持一致；数字人只在分镜需要人物或讲解时自然出现，不要硬塞。'
+      : '请在同一条视频内连续完成这些子镜头，主体车辆、场景、光线和运动方向保持一致；忽略原分镜人物，只保留镜头节奏，不要像多条视频硬拼接。',
   ]
   group.shots.forEach((shot, idx) => {
     lines.push(`子镜头${idx + 1}：${storyboardVisualText(shot, group.startIndex + idx)}`)
   })
+  if (strictVoiceTextForRequest() && group.shots.some((shot) => storyboardShotVoiceText(shot))) {
+    lines.push('口播编排：仅参考原分镜台词的段落位置和长短来分配当前文案，不传入原分镜台词原文。')
+  }
   return lines.join('\n')
 }
 
 function summarizeStoryboardForPrompt(raw: string) {
   const shots = extractStoryboardShots(raw)
   if (!shots.length) {
-    return `镜头意图 ${storyboardIntentText(raw)}；导演执行 ${storyboardShotPlanText(raw, 0, 1)}`
+    const sourceText = strictVoiceTextForRequest() ? stripStoryboardVoiceReferenceText(raw) : raw
+    return `镜头意图 ${storyboardIntentText(sourceText)}；导演执行 ${storyboardShotPlanText(sourceText, 0, 1)}`
   }
-  return shots.map(storyboardVisualText).join('\n')
+  return shots.map((shot, idx) => storyboardVisualText(shot, idx)).join('\n')
+}
+
+function stripStoryboardVoiceReferenceText(value: string) {
+  return value
+    .replace(/[；;]?\s*(原分镜台词参考|原分镜台词|旧台词|台词参考|本段口播台词|口播台词)\s*[:：]?\s*[^\n\r]*/g, '')
+    .replace(/["']?(content|voiceText|narration|voiceover|script|subtitle)["']?\s*[:：]\s*("([^"\\]|\\.)*"|'([^'\\]|\\.)*'|[^,，。\n\r}]+)/gi, '')
 }
 
 function hasSelectedVoiceAudio() {
@@ -3570,9 +3747,33 @@ function buildAutoCarVoiceText() {
   return `${parts.join('。')}。`
 }
 
+function sanitizeSpeechText(value: string | null | undefined) {
+  if (!value) {
+    return ''
+  }
+  const normalized = value
+    .replace(/\u00a0/g, ' ')
+    .replace(/[\u200B-\u200D\uFEFF]/g, '')
+    .replace(/\r\n?/g, '\n')
+  const chars = Array.from(normalized).filter((char) => {
+    const code = char.codePointAt(0) || 0
+    if (code === 0xfffd) return false
+    if (code >= 0xd800 && code <= 0xdfff) return false
+    if (code < 32 && char !== '\n' && char !== '\t') return false
+    if (code >= 0x7f && code <= 0x9f) return false
+    return true
+  })
+  return chars
+    .join('')
+    .replace(/[ \t]+/g, ' ')
+    .replace(/[ \t]*\n[ \t]*/g, '\n')
+    .replace(/\n{3,}/g, '\n\n')
+    .trim()
+}
+
 function modelNativeVoiceTextForRequest() {
-  const benchmark = carBenchmarkVoiceText.value.trim()
-  const manual = carVoiceContext.value.trim()
+  const benchmark = sanitizeSpeechText(carBenchmarkVoiceText.value)
+  const manual = sanitizeSpeechText(carVoiceContext.value)
   if (carVoiceTextSource.value === 'benchmark' && benchmark) {
     return benchmark
   }
@@ -3586,19 +3787,36 @@ function effectiveVoiceTextForRequest() {
   if (usesModelNativeVoiceover()) {
     return modelNativeVoiceTextForRequest()
   }
-  const manual = carVoiceContext.value.trim()
+  const manual = sanitizeSpeechText(carVoiceContext.value)
   if (manual) {
     return manual
   }
-  const benchmark = carBenchmarkVoiceText.value.trim()
+  const benchmark = sanitizeSpeechText(carBenchmarkVoiceText.value)
   if (benchmark) {
     return benchmark
   }
   return ''
 }
 
+function strictVoiceTextForRequest() {
+  const benchmark = sanitizeSpeechText(carBenchmarkVoiceText.value)
+  const manual = sanitizeSpeechText(carVoiceContext.value)
+  if (usesModelNativeVoiceover()) {
+    if (carVoiceTextSource.value === 'benchmark' && benchmark) {
+      return benchmark
+    }
+    if (carVoiceTextSource.value === 'manual' && manual) {
+      return manual
+    }
+  }
+  if (hasSelectedVoiceAudio()) {
+    return manual || benchmark
+  }
+  return ''
+}
+
 function splitVoiceTextForSegments(text: string, total: number) {
-  const clean = text.trim()
+  const clean = sanitizeSpeechText(text)
   if (!clean) {
     return []
   }
@@ -3606,12 +3824,9 @@ function splitVoiceTextForSegments(text: string, total: number) {
   if (count <= 1) {
     return [clean]
   }
-  const clauses = clean
-    .split(/(?<=[。！？!?；;，,、.])|\n+/)
-    .map((item) => item.trim())
-    .filter(Boolean)
+  const clauses = splitSpeechClauses(clean)
   if (clauses.length <= 1) {
-    return splitTextByLength(clean, count)
+    return shouldKeepSpeechUnitWhole(clean) ? [clean] : fitVoiceChunksToCount(splitTextByLength(clean, count), count)
   }
   const totalLength = clauses.reduce((sum, item) => sum + item.length, 0)
   const targetLength = Math.max(1, Math.ceil(totalLength / count))
@@ -3635,19 +3850,128 @@ function splitVoiceTextForSegments(text: string, total: number) {
   if (current) {
     chunks.push(current)
   }
-  while (chunks.length < count) {
-    const longestIndex = chunks.reduce((best, item, idx) => item.length > chunks[best].length ? idx : best, 0)
-    const split = splitTextByLength(chunks[longestIndex], 2)
-    if (split.length < 2 || !split[1]) {
+  return fitVoiceChunksToCount(chunks, count)
+}
+
+function voiceChunksForStoryboardGroups(groups: StoryboardShotGroup[]) {
+  const strictText = strictVoiceTextForRequest()
+  const chunks = strictText
+    ? splitVoiceTextByStoryboardRhythm(strictText, groups)
+    : splitVoiceTextForSegments(effectiveVoiceTextPreview.value, groups.length)
+  const shouldUseStoryboardVoiceFallback =
+    usesModelNativeVoiceover() && carVoiceTextSource.value === 'auto' && !strictText
+  return groups.map((group, idx) => {
+    const current = chunks[idx]
+    if (current) {
+      return current
+    }
+    if (!shouldUseStoryboardVoiceFallback) {
+      return undefined
+    }
+    return storyboardGroupVoiceText(group) || undefined
+  })
+}
+
+function splitVoiceTextByStoryboardRhythm(text: string, groups: StoryboardShotGroup[]) {
+  const clean = sanitizeSpeechText(text)
+  const count = Math.max(1, groups.length)
+  if (!clean) {
+    return []
+  }
+  if (!groups.some((group) => storyboardGroupVoiceText(group))) {
+    return splitVoiceTextForSegments(clean, count)
+  }
+  const clauses = splitSpeechClauses(clean)
+  if (clauses.length <= 1) {
+    return splitVoiceTextForSegments(clean, count)
+  }
+  const weights = groups.map(storyboardGroupVoiceRhythmWeight)
+  const totalWeight = weights.reduce((sum, weight) => sum + weight, 0)
+  if (totalWeight <= 0) {
+    return splitVoiceTextForSegments(clean, count)
+  }
+  const totalTextWeight = clauses.reduce((sum, clause) => sum + speechRhythmWeight(clause), 0)
+  const chunks: string[] = []
+  let cursor = 0
+  let consumedTextWeight = 0
+  let consumedGroupWeight = 0
+  for (let i = 0; i < count; i += 1) {
+    if (cursor >= clauses.length) {
+      chunks.push('')
+      continue
+    }
+    if (i === count - 1) {
+      chunks.push(joinSpeechLines(clauses.slice(cursor)))
       break
     }
-    chunks.splice(longestIndex, 1, split[0], split[1])
+    consumedGroupWeight += weights[i] || 1
+    const targetTextWeight = Math.max(1, Math.round((totalTextWeight * consumedGroupWeight) / totalWeight))
+    let current = ''
+    do {
+      const clause = clauses[cursor]
+      current = joinVoiceChunk(current, clause)
+      consumedTextWeight += speechRhythmWeight(clause)
+      cursor += 1
+    } while (
+      cursor < clauses.length &&
+      consumedTextWeight < targetTextWeight &&
+      clauses.length - cursor > count - i - 1
+    )
+    chunks.push(current)
   }
-  return chunks.slice(0, count)
+  return fitVoiceChunksToCount(chunks, count)
+}
+
+function storyboardGroupVoiceRhythmWeight(group: StoryboardShotGroup) {
+  const voiceWeight = group.shots.reduce((sum, shot) => sum + speechRhythmWeight(storyboardShotVoiceText(shot)), 0)
+  if (voiceWeight > 0) {
+    return voiceWeight
+  }
+  return Math.max(1, Number(group.duration) || group.shots.length || 1)
+}
+
+function speechRhythmWeight(text: string) {
+  const clean = sanitizeSpeechText(text)
+  if (!clean) {
+    return 0
+  }
+  const latinWords = clean.match(/[A-Za-z0-9'_+-]+/g)?.length || 0
+  const compactLength = Array.from(clean.replace(/\s+/g, '')).length
+  return Math.max(1, compactLength + latinWords * 2)
+}
+
+function fitVoiceChunksToCount(chunks: string[], total: number) {
+  const count = Math.max(1, total)
+  const clean = chunks.map((item) => sanitizeSpeechText(item)).filter(Boolean)
+  if (clean.length <= count) {
+    return clean
+  }
+  const head = clean.slice(0, count - 1)
+  const tail = clean.slice(count - 1).reduce((joined, item) => joinVoiceChunk(joined, item), '')
+  return tail ? [...head, tail] : head
+}
+
+function splitSpeechClauses(text: string) {
+  return sanitizeSpeechText(text)
+    .split(/(?<=[。！？!?；;，,、.])|\n+/)
+    .map((item) => item.trim())
+    .filter(Boolean)
+}
+
+function shouldKeepSpeechUnitWhole(text: string) {
+  const clean = sanitizeSpeechText(text)
+  if (!clean) {
+    return false
+  }
+  const words = clean.match(/[A-Za-z0-9'_+-]+/g)?.length || 0
+  if (words >= 4) {
+    return words <= 24 && clean.length <= 180
+  }
+  return clean.length <= 72
 }
 
 function splitTextByLength(text: string, total: number) {
-  const clean = text.trim()
+  const clean = sanitizeSpeechText(text)
   const count = Math.max(1, total)
   if (!clean || count <= 1) {
     return clean ? [clean] : []
@@ -3658,7 +3982,7 @@ function splitTextByLength(text: string, total: number) {
     const remainingSlots = count - chunks.length
     const remainingLength = clean.length - cursor
     const preferredEnd = cursor + Math.ceil(remainingLength / remainingSlots)
-    const end = smartVoiceSplitBoundary(clean, cursor, preferredEnd)
+    const end = Math.max(cursor + 1, smartVoiceSplitBoundary(clean, cursor, preferredEnd))
     const chunk = clean.slice(cursor, end).trim()
     if (chunk) {
       chunks.push(chunk)
@@ -3682,12 +4006,12 @@ function smartVoiceSplitBoundary(text: string, start: number, preferredEnd: numb
   const leftLimit = Math.max(start + 1, clamped - window)
   const rightLimit = Math.min(text.length - 1, clamped + window)
   for (let i = clamped; i >= leftLimit; i -= 1) {
-    if (isPreferredVoiceBreak(text[i - 1])) {
+    if (isPreferredVoiceBreak(text[i - 1]) && isSafeSpeechBoundary(text, i)) {
       return skipVoiceWhitespace(text, i)
     }
   }
   for (let i = clamped; i <= rightLimit; i += 1) {
-    if (isPreferredVoiceBreak(text[i - 1])) {
+    if (isPreferredVoiceBreak(text[i - 1]) && isSafeSpeechBoundary(text, i)) {
       return skipVoiceWhitespace(text, i)
     }
   }
@@ -3715,9 +4039,7 @@ function smartVoiceSplitBoundary(text: string, start: number, preferredEnd: numb
 function joinVoiceChunk(left: string, right: string) {
   if (!left) return right
   if (!right) return left
-  const last = left[left.length - 1]
-  const first = right[0]
-  return isAsciiWordChar(last) && isAsciiWordChar(first) ? `${left} ${right}` : `${left}${right}`
+  return shouldInsertSpeechSpace(left, right) ? `${left} ${right}` : `${left}${right}`
 }
 
 function skipVoiceWhitespace(text: string, index: number) {
@@ -3732,8 +4054,54 @@ function isPreferredVoiceBreak(char: string | undefined) {
   return !!char && /[\s。！？!?；;，,、.]/.test(char)
 }
 
+function isSafeSpeechBoundary(text: string, index: number) {
+  if (index <= 0 || index >= text.length) {
+    return true
+  }
+  const prev = text[index - 1]
+  const next = text[index]
+  const beforePrev = index >= 2 ? text[index - 2] : ''
+  if (isAsciiWordChar(prev) && isAsciiWordChar(next)) {
+    return false
+  }
+  if ((prev === '.' || prev === ',') && isAsciiDigit(beforePrev) && isAsciiDigit(next)) {
+    return false
+  }
+  return true
+}
+
+function shouldInsertSpeechSpace(left: string, right: string) {
+  const last = left[left.length - 1]
+  const first = right[0]
+  const beforeLast = left.length >= 2 ? left[left.length - 2] : ''
+  if (isAsciiWordChar(last) && isAsciiWordChar(first)) {
+    return true
+  }
+  if ((last === '.' || last === ',') && isAsciiDigit(beforeLast) && isAsciiDigit(first)) {
+    return false
+  }
+  return /[。！？!?；;，,、.:：]/.test(last) && isAsciiWordChar(first)
+}
+
 function isAsciiWordChar(char: string | undefined) {
   return !!char && /[A-Za-z0-9'_+-]/.test(char)
+}
+
+function isAsciiDigit(char: string | undefined) {
+  return !!char && /[0-9]/.test(char)
+}
+
+function voiceLanguageStats(text: string) {
+  let cjk = 0
+  let latin = 0
+  for (const char of Array.from(sanitizeSpeechText(text))) {
+    if (/\p{Script=Han}/u.test(char)) {
+      cjk += 1
+    } else if (/[A-Za-z]/.test(char)) {
+      latin += 1
+    }
+  }
+  return { cjk, latin }
 }
 
 const modelNativeVoiceTextPreview = computed(() => modelNativeVoiceTextForRequest())
@@ -3764,7 +4132,9 @@ const storyboardIgnoredFields = computed(() => collectStoryboardIgnoredFields(ca
 const storyboardHasOldLines = computed(() => storyboardIgnoredFields.value.length > 0)
 const storyboardOldLineStatus = computed(() => {
   if (!carStoryboardContext.value.trim()) return '未使用分镜'
-  if (storyboardHasOldLines.value) return '已忽略'
+  if (storyboardHasOldLines.value && strictVoiceTextForRequest()) return '只作编排节奏'
+  if (storyboardHasOldLines.value && usesModelNativeVoiceover() && carVoiceTextSource.value === 'auto') return '用于语义补齐'
+  if (storyboardHasOldLines.value) return '仅作画面参考'
   return '无旧台词'
 })
 const carNoHostHumanConflict = computed(() => {
@@ -3776,6 +4146,25 @@ const carNoHostHumanConflict = computed(() => {
     { label: '补充提示词', text: prompt.value },
     { label: '口播文案', text: carVoiceContext.value },
     { label: '爆款文案', text: carBenchmarkVoiceText.value },
+  ]
+  const sources: string[] = []
+  let count = 0
+  for (const item of checks) {
+    const hits = countHumanDescriptionHits(item.text)
+    if (hits > 0) {
+      count += hits
+      sources.push(item.label)
+    }
+  }
+  return { count, sources }
+})
+
+const carHostHumanEvidence = computed(() => {
+  const checks = [
+    { label: '分镜描述', text: carStoryboardContext.value },
+    { label: '爆款文案', text: carBenchmarkVoiceText.value },
+    { label: '补充提示词', text: prompt.value },
+    { label: '手写口播文案', text: carVoiceContext.value },
   ]
   const sources: string[] = []
   let count = 0
@@ -3849,11 +4238,17 @@ const carAudioSourceLabel = computed(() => {
 
 const carBgmSourceLabel = computed(() => (carBgmUrl.value.trim() ? '已选择 BGM' : '无'))
 const carSubtitleSourceLabel = computed(() => {
-  const suffix = storyboardHasOldLines.value ? '（不使用分镜旧台词）' : ''
+  const suffix = storyboardOldLineStatus.value === '用于语义补齐' ? '（分镜台词补齐参考）' : ''
   const language = carSubtitleLanguageOptions.find((item) => item.value === carSubtitleLanguage.value)?.label || '默认语言'
   if (carSubtitleMode.value === 'off') return '关闭'
-  if (carSubtitleMode.value === 'auto') return `自动字幕 / ${language}${suffix}`
-  return carSubtitleText.value.trim() ? `自定义字幕 / ${language}${suffix}` : '自定义字幕（未填写）'
+  if (carSubtitleMode.value === 'auto') return `后期自动字幕 / ${language}${suffix}`
+  return sanitizeSpeechText(carSubtitleText.value) ? `后期自定义字幕 / ${language}${suffix}` : '后期自定义字幕（未填写）'
+})
+const carHeadlineSourceLabel = computed(() => {
+  if (!carHeadlineEnabled.value) return '关闭'
+  const text = sanitizeSpeechText(carHeadlineText.value)
+  const position = carHeadlinePositionOptions.find((item) => item.value === carHeadlinePosition.value)?.label || '顶部'
+  return text ? `${position} / ${carHeadlineFontSize.value}px` : '已开启（未填写）'
 })
 
 const carVisualSourceLabel = computed(() => {
@@ -3914,9 +4309,27 @@ const carGenerationWarnings = computed(() => {
   } else if (!hasSelectedVoiceAudio() && !usesModelNativeVoiceover()) {
     warnings.push('未选择口播音频，系统不会把 BGM 或分镜旧台词当作口播来源')
   }
+  if (usesModelNativeVoiceover() && strictVoiceTextForRequest()) {
+    const stats = voiceLanguageStats(strictVoiceTextForRequest())
+    if (carNativeVoiceLanguage.value === 'zh-CN' && (stats.cjk === 0 || (stats.latin >= 12 && stats.latin > stats.cjk * 2))) {
+      warnings.push('当前选择中文讲述，提交后会先把传入文案翻译/规范为中文，再传给视频模型')
+    }
+    if (carNativeVoiceLanguage.value === 'en-US' && stats.cjk > 0) {
+      warnings.push('当前选择英文讲述，提交后会先把传入文案翻译/规范为英文，再传给视频模型')
+    }
+  }
+  if (carHeadlineEnabled.value && !sanitizeSpeechText(carHeadlineText.value)) {
+    warnings.push('视频大字报已开启但未填写文案，本次不会叠加大字报')
+  }
   if (carNoHostHumanConflict.value.count > 0) {
     const sourceText = carNoHostHumanConflict.value.sources.join('、') || '当前内容'
     warnings.push(`当前选择数字人不出镜，但${sourceText}检测到 ${carNoHostHumanConflict.value.count} 处人物/主播/客户描述；系统会强制忽略人物并只展示车辆。若要保留讲解人物，请切换为“虚拟人物出镜”并上传数字人形象。`)
+  }
+  if (carHostAppearanceEnabled.value && !carHostImageUrl.value.trim()) {
+    warnings.push('已选择虚拟人物出镜，但还没有选择数字人形象；系统会弱化人物，只在必要讲解镜头中保留出镜节奏。')
+  }
+  if (carHostAppearanceEnabled.value && carHostHumanEvidence.value.count === 0) {
+    warnings.push('当前爆款对标/分镜/文案没有明显人物出镜信息，硬加入虚拟人物可能割裂；建议确认原视频是否有人物讲解，或关闭虚拟人物出镜。')
   }
   if (carMaterialCompleteness.value.providedCount < 4) {
     warnings.push(`车辆一致性素材偏少，建议补充：${carMaterialMissingText.value}`)
@@ -3947,6 +4360,7 @@ const carGenerationBasisRows = computed(() => [
   { label: '文案来源', value: usesModelNativeVoiceover() ? carVoiceTextSourceLabel.value : '随口播音频/手写文案' },
   { label: 'BGM 来源', value: carBgmSourceLabel.value },
   { label: '字幕来源', value: carSubtitleSourceLabel.value },
+  { label: '视频大字报', value: carHeadlineSourceLabel.value },
   { label: '分镜旧台词处理', value: storyboardOldLineStatus.value },
 ])
 
@@ -3954,7 +4368,7 @@ const carGenerationBasisSummary = computed(() => {
   if (hasSelectedVoiceAudio()) {
     const bgmSentence = carBgmUrl.value.trim() ? 'BGM 只会作为背景音乐混入，不参与口型和字幕。' : ''
     const storyboardSentence = storyboardHasOldLines.value
-      ? '分镜中的旧台词和旧主体描述会被忽略，仅保留镜头节奏。'
+      ? '分镜中的旧台词不会替代口播音频，只作为画面节奏参考。'
       : carStoryboardContext.value.trim()
         ? '分镜只作为镜头节奏参考。'
         : '未使用分镜旧台词。'
@@ -3965,8 +4379,11 @@ const carGenerationBasisSummary = computed(() => {
   }
   if (usesModelNativeVoiceover()) {
     const bgmSentence = carBgmUrl.value.trim() ? 'BGM 只会作为背景音乐混入，不参与口型和字幕。' : ''
+    const strictText = strictVoiceTextForRequest()
     const storyboardSentence = storyboardHasOldLines.value
-      ? '分镜中的旧台词和旧主体描述会被当前口播文案与参考图替换，仅保留镜头节奏。'
+      ? strictText
+        ? '分镜中的旧台词只用于判断段落位置和长短，不把原文传给模型。'
+        : '分镜中的旧台词会作为段落节奏和语义补齐参考，并由当前车型、卖点和语言设置约束。'
       : carStoryboardContext.value.trim()
         ? '分镜只作为镜头节奏参考。'
         : ''
@@ -3984,19 +4401,31 @@ const carGenerationBasisSummary = computed(() => {
 function buildCarScriptContext() {
   const parts: string[] = []
   if (carStoryboardContext.value.trim()) {
-    parts.push(`分镜节奏参考（仅保留镜头意图、景别、运镜、构图和转场，不作为车辆、人物、场景事实来源）：${summarizeStoryboardForPrompt(carStoryboardContext.value)}`)
+    const peoplePolicy = carHostAppearanceEnabled.value
+      ? '人物策略：保留分镜中的人物站位、动作和出镜节奏；人物身份、人脸和服装以当前数字人形象/设置为准。'
+      : '人物策略：忽略分镜中的人物、主播、销售顾问、客户、路人、司机和乘客，只展示车辆与场景。'
+    const strictText = strictVoiceTextForRequest()
+    const storyboardIntro = strictText
+      ? '分镜节奏参考（不传入原分镜台词原文；只用旧台词段落位置和长短辅助当前文案分配；车辆事实以当前车型素材为准）'
+      : '分镜节奏参考（保留镜头意图、景别、运镜、构图、转场和可用台词节奏；车辆事实以当前车型素材为准）'
+    parts.push(`${storyboardIntro}：${peoplePolicy}\n${summarizeStoryboardForPrompt(carStoryboardContext.value)}`)
   }
-  if (!carHostAppearanceEnabled.value) {
+  if (!carHostAppearanceEnabled.value && !carStoryboardContext.value.trim()) {
     parts.push('人物策略：数字人不出镜，生成时必须忽略所有人物、主播、销售顾问、客户、路人、司机和乘客描述，只展示车辆与场景。')
   }
   if (hasSelectedVoiceAudio()) {
-    parts.push('内容主导：已选择口播/配音音频，口型和节奏以该音频为准；字幕按当前字幕设置处理；分镜和爆款对标文案只作为画面参考。')
+    parts.push('内容主导：已选择口播/配音音频，口型和节奏以该音频为准；字幕只在成片拼接后处理，生成模型不要生成字幕文字；分镜和爆款对标文案只作为画面参考。')
     if (effectiveVoiceTextPreview.value) {
-      parts.push(`口播原文已按 ${plannedCarSceneCount.value} 个连续段落写入 scenes.voiceText；每段生成时只使用对应片段，不重复整条文案。`)
+      parts.push('口播原文只按语义边界拆分写入 scenes.voiceText；不会新增、删除或改写文案。')
     }
   } else if (usesModelNativeVoiceover()) {
     parts.push(`内容主导：视频模型按口播文案直接生成画面和原生音频，文案来源为${carVoiceTextSourceLabel.value}，风格为${carNativeVoiceStyleSummary.value}；BGM 只作为背景音乐。`)
-    parts.push(`口播原文已按 ${plannedCarSceneCount.value} 个连续段落写入 scenes.voiceText；每段生成时只使用对应片段，不重复整条文案，不对台词做改写。`)
+    parts.push('字幕只在成片拼接后统一识别/烧录，生成模型不要在画面里生成任何字幕文字。')
+    if (strictVoiceTextForRequest()) {
+      parts.push('口播严格使用已传入文案，仅按语义边界切分；分镜 content/voiceText 不参与口播。')
+    } else {
+      parts.push('未传入口播文案时，才复用分镜 content/voiceText 原文补齐；不得生成新台词。')
+    }
   } else if (carVoiceContext.value.trim()) {
     parts.push(`口播文案参考：${carVoiceContext.value.trim()}`)
   }
@@ -4109,7 +4538,37 @@ function carSceneImageUrls(title: string, visualPrompt: string, index: number) {
 function buildCarSubtitleValue() {
   if (carSubtitleMode.value === 'off') return '无'
   if (carSubtitleMode.value === 'auto') return '自动生成'
-  return carSubtitleText.value.trim()
+  return sanitizeSpeechText(carSubtitleText.value)
+}
+
+const carHeadlinePreviewText = computed(() =>
+  sanitizeSpeechText(carHeadlineText.value) || 'Direct sales from Chinese factory',
+)
+
+const carHeadlinePreviewStyle = computed(() => ({
+  color: carHeadlineTextColor.value,
+  fontFamily: carHeadlineFontFamily.value,
+  WebkitTextStroke: `2px ${carHeadlineOutlineColor.value}`,
+  textShadow: `0 2px 0 ${carHeadlineOutlineColor.value}, 0 -2px 0 ${carHeadlineOutlineColor.value}, 2px 0 0 ${carHeadlineOutlineColor.value}, -2px 0 0 ${carHeadlineOutlineColor.value}`,
+}))
+
+function buildCarHeadlineOverlayForRequest() {
+  if (!carHeadlineEnabled.value) {
+    return undefined
+  }
+  const text = sanitizeSpeechText(carHeadlineText.value)
+  if (!text) {
+    return undefined
+  }
+  return {
+    enabled: true,
+    text,
+    fontFamily: carHeadlineFontFamily.value,
+    fontSize: Math.max(48, Math.min(156, Number(carHeadlineFontSize.value) || 92)),
+    textColor: carHeadlineTextColor.value,
+    outlineColor: carHeadlineOutlineColor.value,
+    position: carHeadlinePosition.value,
+  }
 }
 
 function buildCarSalesScenes() {
@@ -4120,7 +4579,7 @@ function buildCarSalesScenes() {
       selectedSeedanceModel.value.maxDuration,
       carSegmentCount.value,
     )
-    const voiceChunks = splitVoiceTextForSegments(effectiveVoiceTextPreview.value, groups.length)
+    const voiceChunks = voiceChunksForStoryboardGroups(groups)
     const segmentDurations = normalizeCarSegmentDurations(carSegmentDurations.value, groups.length)
     return groups.map((group, idx) => {
       const orders = group.shots.map((shot, localIdx) => shot.order || group.startIndex + localIdx + 1)
@@ -4201,11 +4660,13 @@ function carAudioModeForRequest(): CarAudioMode {
 }
 
 function carFinalVoiceTextForRequest() {
-  const storyboardShots = extractStoryboardShots(carStoryboardContext.value)
-  const count = storyboardShots.length
-    ? groupStoryboardShots(storyboardShots, selectedSeedanceModel.value.maxDuration, carSegmentCount.value).length
-    : carSegmentCount.value
-  const chunks = splitVoiceTextForSegments(effectiveVoiceTextPreview.value, count)
+  const strictText = strictVoiceTextForRequest()
+  if (strictText) {
+    return strictText
+  }
+  const chunks = buildCarSalesScenes()
+    .map((scene) => sanitizeSpeechText(scene.voiceText))
+    .filter(Boolean)
   return chunks.length ? chunks.join('\n') : undefined
 }
 
@@ -4417,11 +4878,13 @@ async function handleGenerate() {
         subtitle: buildCarSubtitleValue(),
         subtitleMode: carSubtitleMode.value,
         subtitleLanguage: carSubtitleLanguage.value,
+        headlineOverlay: buildCarHeadlineOverlayForRequest(),
         audioUrl: hasSelectedVoiceAudio() ? carAudioUrl.value.trim() : undefined,
         audioMode: carAudioModeForRequest(),
         bgmUrl: carBgmUrl.value.trim() || undefined,
         voicePolicy: carVoicePolicyForRequest(),
         finalVoiceText: carFinalVoiceTextForRequest(),
+        strictVoiceText: Boolean(strictVoiceTextForRequest()),
         nativeVoiceLanguage: usesModelNativeVoiceover() ? carNativeVoiceLanguage.value : undefined,
         nativeVoiceStyle: usesModelNativeVoiceover() ? carNativeVoiceStyle.value : undefined,
         nativeSpeechStyle: usesModelNativeVoiceover() ? carNativeSpeechStyle.value : undefined,
@@ -5323,6 +5786,124 @@ onBeforeUnmount(() => {
   cursor: not-allowed;
 }
 
+.render-text-poster-panel {
+  display: grid;
+  gap: 12px;
+  border: 1px solid #dce3f2;
+  border-radius: 8px;
+  background: #fff;
+  padding: 12px;
+}
+
+.render-text-poster-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.render-text-poster-title {
+  display: grid;
+  gap: 4px;
+}
+
+.render-text-poster-title label {
+  color: #2d3446;
+  font-size: 13px;
+  font-weight: 900;
+}
+
+.render-text-poster-title small {
+  color: #667085;
+  font-size: 12px;
+  line-height: 1.45;
+}
+
+.render-text-poster-switch {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(76px, 1fr));
+  flex: 0 0 auto;
+  gap: 6px;
+}
+
+.render-text-poster-switch button {
+  min-height: 32px;
+  border: 1px solid #e1e6f0;
+  border-radius: 8px;
+  background: #fff;
+  color: #4f586c;
+  font-size: 12.5px;
+  font-weight: 850;
+  cursor: pointer;
+}
+
+.render-text-poster-switch button.active {
+  border-color: #7d69ff;
+  background: #f5f3ff;
+  color: #5b4be7;
+}
+
+.render-text-poster-switch button:disabled {
+  cursor: not-allowed;
+  opacity: 0.6;
+}
+
+.render-text-poster-controls {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(132px, 1fr));
+  gap: 10px;
+}
+
+.render-text-poster-controls input[type='color'] {
+  width: 100%;
+  min-height: 38px;
+  padding: 4px;
+}
+
+.render-text-poster-preview-wrap {
+  display: grid;
+  gap: 8px;
+}
+
+.render-text-poster-preview-wrap > label {
+  color: #344054;
+  font-size: 12.5px;
+  font-weight: 900;
+}
+
+.render-text-poster-preview {
+  display: flex;
+  min-height: 156px;
+  overflow: hidden;
+  align-items: flex-start;
+  justify-content: center;
+  border: 1px solid #e6eaf2;
+  border-radius: 8px;
+  background:
+    linear-gradient(135deg, rgba(17, 24, 39, 0.86), rgba(71, 85, 105, 0.66)),
+    linear-gradient(90deg, #111827, #64748b);
+  padding: 14px;
+}
+
+.render-text-poster-preview.pos-middle {
+  align-items: center;
+}
+
+.render-text-poster-preview.pos-bottom {
+  align-items: flex-end;
+}
+
+.render-text-poster-preview span {
+  max-width: 96%;
+  font-size: clamp(24px, 5vw, 52px);
+  font-weight: 1000;
+  line-height: 1.06;
+  overflow-wrap: normal;
+  text-align: center;
+  white-space: pre-wrap;
+  word-break: normal;
+}
+
 .render-audio-hint {
   margin: -4px 0 4px;
   font-size: 12px;
@@ -5554,6 +6135,12 @@ onBeforeUnmount(() => {
   line-height: 1.7;
   overflow-wrap: anywhere;
   white-space: pre-wrap;
+}
+
+.render-tts-language-note {
+  color: #6c768c;
+  font-size: 12px;
+  line-height: 1.5;
 }
 
 .render-tts-script-panel {

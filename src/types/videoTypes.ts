@@ -241,6 +241,16 @@ export interface CarSalesAssetRoleBinding {
   label?: string
 }
 
+export interface CarSalesTextOverlayRequest {
+  enabled?: boolean
+  text?: string
+  fontFamily?: string
+  fontSize?: number
+  textColor?: string
+  outlineColor?: string
+  position?: 'top' | 'middle' | 'bottom'
+}
+
 export interface CarSalesVideoRequest {
   projectId?: number | null
   carImageUrls: string[]
@@ -253,11 +263,13 @@ export interface CarSalesVideoRequest {
   subtitle?: string
   subtitleMode?: 'off' | 'auto' | 'custom'
   subtitleLanguage?: string
+  headlineOverlay?: CarSalesTextOverlayRequest
   audioUrl?: string
   audioMode?: 'none' | 'post_mix' | 'reference' | 'model_native'
   bgmUrl?: string
   voicePolicy?: 'user_audio' | 'model_native' | 'none'
   finalVoiceText?: string
+  strictVoiceText?: boolean
   generatedVoiceAssetId?: number
   generatedVoiceUrl?: string
   autoTtsVoiceId?: number
