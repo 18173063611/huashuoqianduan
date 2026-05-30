@@ -286,6 +286,8 @@ export interface CarSalesVideoRequest {
   subtitle?: string
   subtitleMode?: 'off' | 'auto' | 'custom'
   subtitleLanguage?: string
+  subtitleTimingMode?: 'auto' | 'audio_recognition' | 'script_timeline'
+  syncStrategy?: 'auto' | 'audio_master' | 'visual_master'
   headlineOverlay?: CarSalesTextOverlayRequest
   audioUrl?: string
   audioMode?: 'none' | 'post_mix' | 'reference' | 'model_native'

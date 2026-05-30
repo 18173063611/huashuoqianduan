@@ -847,7 +847,39 @@
                         {{ item.label }}
                       </option>
                     </select>
-                    <small>字幕优先按最终口播文案烧录；缺少文案时才识别成片音频，视频生成模型不会直接生成字幕文字。</small>
+                    <small>默认按最终音轨识别字幕时间戳；不填写则使用智能策略。</small>
+                  </div>
+                  <div class="render-form-field">
+                    <label>音画同步</label>
+                    <div class="render-audio-mode render-sync-mode">
+                      <button
+                        v-for="option in carSyncStrategyOptions"
+                        :key="option.key"
+                        type="button"
+                        :class="{ active: carSyncStrategy === option.key }"
+                        :disabled="busy"
+                        @click="carSyncStrategy = option.key"
+                      >
+                        {{ option.label }}
+                      </button>
+                    </div>
+                    <small>{{ carSyncStrategyHint }}</small>
+                  </div>
+                  <div v-if="carSubtitleMode !== 'off'" class="render-form-field">
+                    <label>字幕时间轴</label>
+                    <div class="render-audio-mode render-sync-mode">
+                      <button
+                        v-for="option in carSubtitleTimingOptions"
+                        :key="option.key"
+                        type="button"
+                        :class="{ active: carSubtitleTimingMode === option.key }"
+                        :disabled="busy"
+                        @click="carSubtitleTimingMode = option.key"
+                      >
+                        {{ option.label }}
+                      </button>
+                    </div>
+                    <small>{{ carSubtitleTimingHint }}</small>
                   </div>
                   <section class="render-text-poster-panel" aria-label="视频大字报设置">
                     <div class="render-text-poster-head">
@@ -1532,6 +1564,8 @@ type CarAudioMode = 'none' | 'post_mix' | 'reference' | 'model_native'
 type CarVoicePolicy = 'user_audio' | 'model_native' | 'none'
 type CarVoiceTextSource = 'auto' | 'benchmark' | 'manual'
 type CarSubtitleMode = 'off' | 'auto' | 'custom'
+type CarSubtitleTimingMode = 'auto' | 'audio_recognition' | 'script_timeline'
+type CarSyncStrategy = 'auto' | 'audio_master' | 'visual_master'
 type CarHeadlinePosition = 'top' | 'middle' | 'bottom'
 type NativeVoiceLanguage = 'zh-CN' | 'en-US'
 type SeedanceModelValue = 'doubao-seedance-1-5-pro-251215' | 'ep-20260512233524-85r4g'
@@ -1852,6 +1886,16 @@ const carSubtitleLanguageOptions = [
   { value: 'zh-CN', label: '中文普通话' },
   { value: 'en-US', label: '英语' },
 ]
+const carSyncStrategyOptions: Array<{ key: CarSyncStrategy; label: string; hint: string }> = [
+  { key: 'auto', label: '智能同步', hint: '有口播音频时按最终音轨校准画面时长，没有口播时保持画面节奏。' },
+  { key: 'audio_master', label: '口播优先', hint: '以口播音频为准，画面会轻微变速、补帧或裁切来贴合音轨。' },
+  { key: 'visual_master', label: '画面优先', hint: '保持画面原节奏，口播音频会按画面时长补静音或裁切。' },
+]
+const carSubtitleTimingOptions: Array<{ key: CarSubtitleTimingMode; label: string; hint: string }> = [
+  { key: 'auto', label: '智能字幕', hint: '有最终音轨时优先识别音频时间戳，失败后回退文案时间轴。' },
+  { key: 'audio_recognition', label: '跟随音频', hint: '从最终音轨识别字幕时间戳，适合口播音频已经确定的成片。' },
+  { key: 'script_timeline', label: '跟随文案', hint: '按分镜和文案权重分配字幕时长，适合无口播或需要文案精修。' },
+]
 const carHeadlineFontOptions = [
   { value: 'Microsoft YaHei', label: '微软雅黑' },
   { value: 'Arial', label: 'Arial' },
@@ -1985,6 +2029,8 @@ const carNativeSpeechStyle = ref('natural')
 const carSubtitleMode = ref<CarSubtitleMode>('off')
 const carSubtitleText = ref('')
 const carSubtitleLanguage = ref('zh-CN')
+const carSubtitleTimingMode = ref<CarSubtitleTimingMode>('auto')
+const carSyncStrategy = ref<CarSyncStrategy>('auto')
 const carHeadlineEnabled = ref(false)
 const carHeadlineText = ref('')
 const carHeadlineFontFamily = ref('Microsoft YaHei')
@@ -4868,10 +4914,17 @@ const carBgmSourceLabel = computed(() => (carBgmUrl.value.trim() ? '已选择 BG
 const carSubtitleSourceLabel = computed(() => {
   const suffix = storyboardOldLineStatus.value === '用于语义补齐' ? '（分镜台词补齐参考）' : ''
   const language = carSubtitleLanguageOptions.find((item) => item.value === carSubtitleLanguage.value)?.label || '默认语言'
+  const timing = carSubtitleTimingOptions.find((item) => item.key === carSubtitleTimingMode.value)?.label || '智能字幕'
   if (carSubtitleMode.value === 'off') return '关闭'
-  if (carSubtitleMode.value === 'auto') return `后期自动字幕 / ${language}${suffix}`
-  return sanitizeSpeechText(carSubtitleText.value) ? `后期自定义字幕 / ${language}${suffix}` : '后期自定义字幕（未填写）'
+  if (carSubtitleMode.value === 'auto') return `后期自动字幕 / ${language} / ${timing}${suffix}`
+  return sanitizeSpeechText(carSubtitleText.value) ? `后期自定义字幕 / ${language} / ${timing}${suffix}` : '后期自定义字幕（未填写）'
 })
+const carSyncStrategyHint = computed(
+  () => carSyncStrategyOptions.find((item) => item.key === carSyncStrategy.value)?.hint || '',
+)
+const carSubtitleTimingHint = computed(
+  () => carSubtitleTimingOptions.find((item) => item.key === carSubtitleTimingMode.value)?.hint || '',
+)
 const carHeadlineSourceLabel = computed(() => {
   if (!carHeadlineEnabled.value) return '关闭'
   const text = sanitizeSpeechText(carHeadlineText.value)
@@ -4945,6 +4998,9 @@ const carGenerationWarnings = computed(() => {
   if (carAudioMode.value === 'post_mix' && carAudioUrl.value.trim()) {
     warnings.push('后期口播配音不保证口型同步，如需口型同步请使用参考音频生成或数字人口播链路')
   }
+  if (carAudioMode.value === 'post_mix' && carAudioUrl.value.trim() && carSyncStrategy.value === 'visual_master') {
+    warnings.push('当前选择画面优先，口播音频可能被补静音或裁切；追求音画同步时建议使用智能同步')
+  }
   if (usesModelNativeVoiceover() && carVoiceTextSource.value === 'manual' && !carVoiceContext.value.trim()) {
     warnings.push('已选择手写文案，但口播文案参考为空，系统将回退到车型卖点、文案场景和转化引导整理口播')
   } else if (usesModelNativeVoiceover() && carVoiceTextSource.value === 'auto') {
@@ -5011,6 +5067,7 @@ const carGenerationBasisRows = computed(() => [
   { label: '口播来源', value: carAudioSourceLabel.value },
   { label: '文案来源', value: usesModelNativeVoiceover() ? carVoiceTextSourceLabel.value : '随口播音频/手写文案' },
   { label: 'BGM 来源', value: carBgmSourceLabel.value },
+  { label: '音画同步', value: carSyncStrategyOptions.find((item) => item.key === carSyncStrategy.value)?.label || '智能同步' },
   { label: '字幕来源', value: carSubtitleSourceLabel.value },
   { label: '视频大字报', value: carHeadlineSourceLabel.value },
   { label: '分镜旧台词处理', value: storyboardOldLineStatus.value },
@@ -5845,6 +5902,8 @@ async function handleGenerate() {
         subtitle: buildCarSubtitleValue(),
         subtitleMode: carSubtitleMode.value,
         subtitleLanguage: carSubtitleLanguage.value,
+        subtitleTimingMode: carSubtitleTimingMode.value,
+        syncStrategy: carSyncStrategy.value,
         headlineOverlay: buildCarHeadlineOverlayForRequest(),
         audioUrl: hasSelectedVoiceAudio() ? carAudioUrl.value.trim() : undefined,
         audioMode: carAudioModeForRequest(),
@@ -6965,6 +7024,11 @@ onBeforeUnmount(() => {
   gap: 8px;
 }
 
+.render-subtitle-mode,
+.render-sync-mode {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+
 .render-audio-mode button {
   min-height: 36px;
   border: 1px solid #e1e6f0;
@@ -6985,6 +7049,13 @@ onBeforeUnmount(() => {
 .render-audio-mode button:disabled {
   opacity: 0.55;
   cursor: not-allowed;
+}
+
+@media (max-width: 720px) {
+  .render-subtitle-mode,
+  .render-sync-mode {
+    grid-template-columns: 1fr;
+  }
 }
 
 .render-text-poster-panel {
