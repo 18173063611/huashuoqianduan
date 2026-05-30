@@ -51,7 +51,11 @@
         <div v-if="errorMessage" class="app-error">{{ errorMessage }}</div>
         <div v-else-if="!busy && filteredAssets.length === 0" class="asset-picker-empty">{{ emptyResultText }}</div>
 
-        <div v-else class="asset-picker-list" :class="{ 'asset-picker-list-rich': richJsonMode }">
+        <div
+          v-else
+          class="asset-picker-list"
+          :class="{ 'asset-picker-list-rich': richJsonMode, 'asset-picker-list-image': isImage }"
+        >
           <template v-for="asset in filteredAssets" :key="asset.assetId">
             <article
               v-if="richJsonMode"
@@ -1334,6 +1338,10 @@ function formatFileSize(size: number) {
   gap: 10px;
 }
 
+.asset-picker-list-image {
+  grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
+}
+
 .asset-picker-item {
   display: grid;
   grid-template-columns: 44px minmax(0, 1fr);
@@ -1384,6 +1392,10 @@ function formatFileSize(size: number) {
   box-shadow: inset 0 0 0 1px #d8d2ff;
 }
 
+.asset-picker-list-image .asset-picker-item {
+  grid-template-columns: 78px minmax(0, 1fr);
+}
+
 .asset-picker-item img,
 .asset-picker-icon {
   width: 44px;
@@ -1391,6 +1403,13 @@ function formatFileSize(size: number) {
   border-radius: 7px;
   background: #eef0f6;
   object-fit: cover;
+}
+
+.asset-picker-list-image .asset-picker-item img {
+  width: 78px;
+  height: 96px;
+  background: #f8fafc;
+  object-fit: contain;
 }
 
 .asset-picker-icon {

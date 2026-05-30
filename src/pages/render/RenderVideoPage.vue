@@ -91,7 +91,7 @@
             </div>
           </div>
 
-          <div class="render-digital-workspace">
+          <div class="render-digital-workspace render-manual-workflow">
             <section class="render-digital-section">
               <h3>主播图</h3>
               <AssetPicker
@@ -189,31 +189,21 @@
           <div class="render-car-workflow-strip" aria-label="视频制作主流程">
             <span><strong>1</strong>基础信息</span>
             <span><strong>2</strong>素材与车型</span>
-            <span><strong>3</strong>可选模块</span>
-            <small>只配置基础信息和素材也能提交；分镜、讲述、字幕包装和高级参数按需展开。</small>
+            <span><strong>3</strong>文案与分镜</span>
+            <span><strong>4</strong>自动编排</span>
+            <span><strong>5</strong>可选包装</span>
+            <small>从上到下按执行顺序配置；自动分段、时长和推荐会根据已填内容在下方更新。</small>
           </div>
 
           <section class="render-manual-module render-manual-module-core" aria-label="基础信息">
             <div class="render-module-title">
               <div>
                 <h3>基础信息</h3>
-                <small>先确认成片比例、段数和时长；其他能力都可以保持默认。</small>
+                <small>先确认全局输出设置；分段时长会在填写素材、文案和分镜后自动推荐。</small>
               </div>
               <span>常用</span>
             </div>
-            <div class="render-grid-three">
-              <div class="render-form-field render-form-field-inline">
-                <label>分段数量</label>
-                <select :value="carSegmentCount" :disabled="busy" @change="handleCarSegmentCountChange">
-                  <option v-for="n in carSegmentCountOptions" :key="n" :value="n">{{ n }} 段</option>
-                </select>
-                <span class="app-muted render-duration-hint">会分别生成并入库</span>
-              </div>
-              <div class="render-form-field render-form-field-inline">
-                <label>出片时长</label>
-                <strong class="render-duration-summary">{{ carSegmentDurationSummary }}</strong>
-                <span class="app-muted render-duration-hint">{{ carDurationHint }}</span>
-              </div>
+            <div class="render-grid-two">
               <div class="render-form-field render-form-field-inline">
                 <label>成片比例</label>
                 <select v-model="renderAspectRatio" :disabled="busy">
@@ -223,54 +213,14 @@
                 </select>
                 <span class="app-muted render-duration-hint">{{ renderAspectRatioHint }}</span>
               </div>
+              <div class="render-form-field render-form-field-inline">
+                <label>分段数量</label>
+                <select :value="carSegmentCount" :disabled="busy" @change="handleCarSegmentCountChange">
+                  <option v-for="n in carSegmentCountOptions" :key="n" :value="n">{{ n }} 段</option>
+                </select>
+                <span class="app-muted render-duration-hint">后续会按分镜和音频推荐，可在自动编排里调整</span>
+              </div>
             </div>
-
-            <section class="render-segment-duration-panel">
-              <div class="render-segment-duration-head">
-                <strong>每段时长</strong>
-                <span>{{ carSegmentDurationPanelHint }}</span>
-              </div>
-              <div class="render-segment-duration-grid">
-                <label
-                  v-for="(_, index) in normalizedCarSegmentDurations"
-                  :key="index"
-                  class="render-segment-duration-item"
-                >
-                  <span>
-                    第{{ index + 1 }}段
-                    <small>{{ carSegmentDurationSourceLabel(index) }}</small>
-                  </span>
-                  <select
-                    :value="carSegmentDurationAt(index)"
-                    :disabled="busy"
-                    @change="handleCarSegmentDurationChange(index, $event)"
-                  >
-                    <option v-for="n in carSegmentDurationOptions" :key="n" :value="n">
-                      {{ n }} 秒
-                    </option>
-                  </select>
-                </label>
-              </div>
-              <p v-if="carSegmentTimingNotice" class="render-segment-duration-notice">
-                {{ carSegmentTimingNotice }}
-              </p>
-            </section>
-
-            <section class="render-recommend-panel">
-              <div class="render-recommend-main">
-                <span>推荐出片设置</span>
-                <strong>{{ carRecommendationSummary }}</strong>
-                <p>{{ carRecommendationReasonText }}</p>
-              </div>
-              <button
-                type="button"
-                class="app-secondary-button render-mini-btn"
-                :disabled="busy || recommendationMatchesCurrent"
-                @click="applyCarRecommendation()"
-              >
-                {{ recommendationMatchesCurrent ? '已采用' : '应用推荐' }}
-              </button>
-            </section>
           </section>
 
           <div class="render-digital-workspace">
@@ -630,6 +580,65 @@
                 <span>{{ carBenchmarkUploading ? '上传中...' : '上传爆款对标文案' }}</span>
                 <small>{{ carBenchmarkUploadName || '支持 JSON / TXT / MD；不上传音频时可用它生成口播和音频' }}</small>
               </label>
+              <section class="render-auto-plan-panel" aria-label="自动分段与时长">
+                <div class="render-auto-plan-head">
+                  <div>
+                    <strong>自动分段与时长</strong>
+                    <small>根据已选车型包、分镜、口播音频和模型上限自动推荐；不填写也会使用默认策略。</small>
+                  </div>
+                  <span>执行前确认</span>
+                </div>
+                <section class="render-recommend-panel">
+                  <div class="render-recommend-main">
+                    <span>推荐出片设置</span>
+                    <strong>{{ carRecommendationSummary }}</strong>
+                    <p>{{ carRecommendationReasonText }}</p>
+                  </div>
+                  <button
+                    type="button"
+                    class="app-secondary-button render-mini-btn"
+                    :disabled="busy || recommendationMatchesCurrent"
+                    @click="applyCarRecommendation()"
+                  >
+                    {{ recommendationMatchesCurrent ? '已采用' : '应用推荐' }}
+                  </button>
+                </section>
+                <div class="render-auto-current-plan">
+                  <span>当前执行方案</span>
+                  <strong>{{ carSegmentCount }} 段，{{ carSegmentDurationSummary }}</strong>
+                  <small>{{ carDurationHint }}</small>
+                </div>
+                <section class="render-segment-duration-panel">
+                  <div class="render-segment-duration-head">
+                    <strong>每段时长</strong>
+                    <span>{{ carSegmentDurationPanelHint }}</span>
+                  </div>
+                  <div class="render-segment-duration-grid">
+                    <label
+                      v-for="(_, index) in normalizedCarSegmentDurations"
+                      :key="index"
+                      class="render-segment-duration-item"
+                    >
+                      <span>
+                        第{{ index + 1 }}段
+                        <small>{{ carSegmentDurationSourceLabel(index) }}</small>
+                      </span>
+                      <select
+                        :value="carSegmentDurationAt(index)"
+                        :disabled="busy"
+                        @change="handleCarSegmentDurationChange(index, $event)"
+                      >
+                        <option v-for="n in carSegmentDurationOptions" :key="n" :value="n">
+                          {{ n }} 秒
+                        </option>
+                      </select>
+                    </label>
+                  </div>
+                  <p v-if="carSegmentTimingNotice" class="render-segment-duration-notice">
+                    {{ carSegmentTimingNotice }}
+                  </p>
+                </section>
+              </section>
               <details class="render-optional-group">
                 <summary>
                   <span>讲述与声音 <em>可选</em></span>
@@ -6239,6 +6248,10 @@ onBeforeUnmount(() => {
   align-items: start;
 }
 
+.render-manual-workflow {
+  grid-template-columns: minmax(0, 1fr);
+}
+
 .render-digital-section {
   display: grid;
   gap: 12px;
@@ -6258,7 +6271,7 @@ onBeforeUnmount(() => {
 
 .render-car-workflow-strip {
   display: grid;
-  grid-template-columns: repeat(3, minmax(120px, 1fr)) minmax(220px, 1.4fr);
+  grid-template-columns: repeat(5, minmax(110px, 1fr));
   gap: 10px;
   align-items: center;
   border: 1px solid #e3e7ef;
@@ -6292,6 +6305,7 @@ onBeforeUnmount(() => {
 }
 
 .render-car-workflow-strip small {
+  grid-column: 1 / -1;
   color: #667085;
   font-size: 12.5px;
   line-height: 1.5;
@@ -6506,6 +6520,51 @@ onBeforeUnmount(() => {
   align-items: end;
 }
 
+.render-auto-plan-panel {
+  display: grid;
+  gap: 12px;
+  border: 1px solid #d8e2ff;
+  border-radius: 8px;
+  background: #f8fbff;
+  padding: 14px;
+}
+
+.render-auto-plan-head {
+  display: flex;
+  min-width: 0;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.render-auto-plan-head div {
+  display: grid;
+  min-width: 0;
+  gap: 4px;
+}
+
+.render-auto-plan-head strong {
+  color: #1d2939;
+  font-size: 14px;
+  font-weight: 900;
+}
+
+.render-auto-plan-head small {
+  color: #667085;
+  font-size: 12px;
+  line-height: 1.6;
+}
+
+.render-auto-plan-head > span {
+  flex: 0 0 auto;
+  border-radius: 999px;
+  background: #e8efff;
+  color: #3159d6;
+  padding: 4px 10px;
+  font-size: 11px;
+  font-weight: 900;
+}
+
 .render-recommend-panel {
   display: flex;
   align-items: center;
@@ -6515,6 +6574,36 @@ onBeforeUnmount(() => {
   border-radius: 8px;
   background: #f8fbff;
   padding: 14px;
+}
+
+.render-auto-plan-panel .render-recommend-panel {
+  background: #fff;
+}
+
+.render-auto-current-plan {
+  display: grid;
+  gap: 4px;
+  border: 1px solid #edf0f6;
+  border-radius: 8px;
+  background: #fff;
+  padding: 12px;
+}
+
+.render-auto-current-plan span,
+.render-auto-current-plan small {
+  color: #667085;
+  font-size: 12px;
+  line-height: 1.5;
+}
+
+.render-auto-current-plan span {
+  font-weight: 900;
+}
+
+.render-auto-current-plan strong {
+  color: #1d2939;
+  font-size: 15px;
+  font-weight: 900;
 }
 
 .render-recommend-main {
@@ -6714,6 +6803,7 @@ onBeforeUnmount(() => {
   }
 
   .render-recommend-panel,
+  .render-auto-plan-head,
   .render-module-title,
   .render-details summary {
     align-items: flex-start;

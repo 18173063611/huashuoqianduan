@@ -157,7 +157,7 @@ void props
 
 .image-input-preview {
   position: relative;
-  width: 160px;
+  width: 180px;
   border-radius: 8px;
   overflow: hidden;
   border: 1px solid #edf0f6;
@@ -167,8 +167,8 @@ void props
 .image-input-preview img {
   display: block;
   width: 100%;
-  height: 110px;
-  object-fit: cover;
+  height: 220px;
+  object-fit: contain;
 }
 
 .image-input-clear {

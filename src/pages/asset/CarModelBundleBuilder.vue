@@ -131,6 +131,7 @@ const props = defineProps<{
   publish?: boolean
   editingAsset?: AssetItem | null
   initialBundle?: CarModelBundlePayload | null
+  initialAssets?: AssetItem[]
 }>()
 
 const emit = defineEmits<{
@@ -221,6 +222,14 @@ watch(
   { immediate: true },
 )
 
+watch(
+  () => props.initialAssets,
+  (assets) => {
+    hydrateInitialAssets(assets)
+  },
+  { immediate: true },
+)
+
 function hydrateInitialBundle(bundle: CarModelBundlePayload | null | undefined) {
   if (!bundle) {
     return
@@ -240,6 +249,25 @@ function hydrateInitialBundle(bundle: CarModelBundlePayload | null | undefined) 
     nextAssets[role] = bundleImageToAsset(item, role)
   }
   selectedAssetsByRole.value = nextAssets
+}
+
+function hydrateInitialAssets(assets: AssetItem[] | null | undefined) {
+  if (!assets?.length) {
+    return
+  }
+  const nextAssets = { ...selectedAssetsByRole.value }
+  for (const asset of assets) {
+    if (!asset || !isImageAsset(asset)) {
+      continue
+    }
+    const role = preferredRoleForAsset(asset, nextAssets)
+    nextAssets[role] = asset
+  }
+  selectedAssetsByRole.value = nextAssets
+}
+
+function isImageAsset(asset: AssetItem) {
+  return asset.assetType === 'IMAGE' || asset.assetType === 'COVER' || String(asset.mimeType || '').startsWith('image/')
 }
 
 function handleRoleFile(role: string, event: Event) {
@@ -325,6 +353,44 @@ function rolePreviewUrl(role: string) {
 
 function roleLabel(role: string | null) {
   return carRoleOptions.find((item) => item.value === role)?.label || '车型'
+}
+
+function preferredRoleForAsset(asset: AssetItem, selected: Record<string, AssetItem>) {
+  const declaredRole = roleFromMetadata(asset)
+  if (declaredRole) {
+    return declaredRole
+  }
+  const inferredRole = inferRoleFromAssetName(asset.fileName)
+  if (inferredRole && !selected[inferredRole]) {
+    return inferredRole
+  }
+  return carRoleOptions.find((item) => !selected[item.value])?.value || carRoleOptions[0].value
+}
+
+function roleFromMetadata(asset: AssetItem) {
+  const metadata = parseJsonObject(asset.metadataJson)
+  const role = typeof metadata?.assetRole === 'string' ? metadata.assetRole : ''
+  return carRoleOptions.some((item) => item.value === role) ? role : ''
+}
+
+function inferRoleFromAssetName(fileName: string) {
+  const text = fileName.toLowerCase()
+  const roleMatchers: Array<[string, RegExp]> = [
+    ['car_exterior_front', /front|正面|车头|前脸/],
+    ['car_exterior_side', /side|侧面|侧身/],
+    ['car_exterior_rear', /rear|back|背面|尾部|车尾/],
+    ['car_exterior_45', /45|斜侧|前侧/],
+    ['car_interior_dashboard', /dashboard|cockpit|中控|座舱/],
+    ['car_interior_front_seat', /front[-_ ]?seat|前排/],
+    ['car_interior_back_seat', /back[-_ ]?seat|rear[-_ ]?seat|后排/],
+    ['car_interior_steering', /steering|wheel|方向盘|仪表/],
+    ['car_interior_trunk', /trunk|后备箱/],
+    ['car_detail_light', /light|lamp|车灯|大灯/],
+    ['car_detail_wheel', /tire|tyre|rim|轮毂|车轮/],
+    ['car_detail_logo', /logo|标识|车标/],
+    ['car_detail_seat_material', /seat|座椅|材质|皮质/],
+  ]
+  return roleMatchers.find(([, matcher]) => matcher.test(text))?.[0] || ''
 }
 
 async function saveBundle() {
@@ -471,6 +537,20 @@ function resolveUrl(url: string | null | undefined) {
     return ''
   }
   return url.startsWith('http') ? url : `${API_ORIGIN}${url.startsWith('/') ? url : `/${url}`}`
+}
+
+function parseJsonObject(value: string | null | undefined): Record<string, unknown> | null {
+  if (!value || !value.trim()) {
+    return null
+  }
+  try {
+    const parsed = JSON.parse(value) as unknown
+    return typeof parsed === 'object' && parsed !== null && !Array.isArray(parsed)
+      ? (parsed as Record<string, unknown>)
+      : null
+  } catch {
+    return null
+  }
 }
 </script>
 
