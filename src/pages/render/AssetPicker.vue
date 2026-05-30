@@ -33,6 +33,21 @@
           </button>
         </div>
 
+        <div class="asset-picker-scope-filter" role="tablist" aria-label="资产范围">
+          <button
+            v-for="option in scopeFilterOptions"
+            :key="option.value"
+            type="button"
+            role="tab"
+            :class="{ active: selectedScope === option.value }"
+            :aria-selected="selectedScope === option.value"
+            :disabled="busy"
+            @click="setScope(option.value)"
+          >
+            {{ option.label }}
+          </button>
+        </div>
+
         <div v-if="roleFilterOptions.length" class="asset-picker-role-filter" role="tablist" aria-label="按素材角色筛选">
           <button
             v-for="option in roleFilterOptions"
@@ -131,16 +146,16 @@
 
 <script setup lang="ts">
 import { computed, ref, watch } from 'vue'
-import { getAssets, getAssetTextContent } from '../../services/assetApi'
-import { getAvatars } from '../../services/avatarApi'
+import { getAssets, getAssetTextContent, type AssetListScope } from '../../services/assetApi'
 import { API_ORIGIN } from '../../services/request'
 import type { AssetItem, AssetType } from '../../types/assetTypes'
-import type { AvatarItem } from '../../types/avatarTypes'
 
 interface AssetRoleOption {
   value: string
   label: string
 }
+
+type PickerScope = Extract<AssetListScope, 'global' | 'private'>
 
 const props = defineProps<{
   title: string
@@ -165,9 +180,14 @@ const errorMessage = ref('')
 const selectedAssetId = ref<number | null>(null)
 const selectedAssetName = ref('')
 const selectedRoleFilter = ref('all')
+const selectedScope = ref<PickerScope>('private')
 const modalOpen = ref(false)
 const previewByAssetId = ref<Record<number, AssetPickerPreview>>({})
 
+const scopeFilterOptions: Array<{ value: PickerScope; label: string }> = [
+  { value: 'private', label: '私有素材' },
+  { value: 'global', label: '公共素材' },
+]
 const assetTypesToLoad = computed(() => {
   const values = props.assetTypes?.length ? props.assetTypes : [props.assetType]
   return Array.from(new Set(values))
@@ -178,14 +198,6 @@ const richJsonMode = computed(() =>
   (
     assetTypesToLoad.value.includes('TEXT') &&
     (props.assetRoles || []).map(normalizeAssetRole).some((role) => role === 'benchmark_json' || role === 'storyboard_json' || role === 'voice_script')
-  ),
-)
-const shouldLoadAvatarProfiles = computed(() =>
-  props.assetType === 'IMAGE' &&
-  (
-    pickerMentionsAvatar(props.title) ||
-    (props.assetRoles || []).some((role) => normalizeAssetRole(role) === 'host_image') ||
-    (props.roleOptions || []).some((option) => normalizeAssetRole(option.value) === 'host_image')
   ),
 )
 const sourceHintText = computed(() => props.sourceHint || '')
@@ -239,7 +251,9 @@ const filteredAssets = computed(() => {
   })
 })
 const emptyResultText = computed(() =>
-  selectedRoleFilter.value === 'all' ? '暂无可选资产' : '当前角色下暂无可选资产',
+  selectedRoleFilter.value === 'all'
+    ? `暂无可选${selectedScope.value === 'private' ? '私有' : '公共'}资产`
+    : `当前角色下暂无可选${selectedScope.value === 'private' ? '私有' : '公共'}资产`,
 )
 
 interface AssetPickerPreview {
@@ -365,6 +379,16 @@ function closePicker() {
   modalOpen.value = false
 }
 
+function setScope(scope: PickerScope) {
+  if (selectedScope.value === scope) {
+    return
+  }
+  selectedScope.value = scope
+  if (modalOpen.value) {
+    void loadAssets()
+  }
+}
+
 async function loadAssets() {
   busy.value = true
   errorMessage.value = ''
@@ -372,17 +396,14 @@ async function loadAssets() {
     const lists = await Promise.all(
       assetTypesToLoad.value.map((assetType) =>
         getAssets({
-          scope: 'all',
+          scope: selectedScope.value,
           assetType,
           keyword: keyword.value || undefined,
           sort: 'createdAtDesc',
         }),
       ),
     )
-    let rows = dedupeAssets(lists.flat())
-    if (shouldLoadAvatarProfiles.value) {
-      rows = mergeAvatarProfileAssets(rows, await loadAvatarProfileAssets(keyword.value))
-    }
+    const rows = dedupeAssets(lists.flat())
     assets.value = rows.filter(isAllowedSourceType)
     await loadAssetPreviews()
   } catch (error) {
@@ -401,93 +422,6 @@ function dedupeAssets(items: AssetItem[]) {
     seen.add(item.assetId)
     return true
   })
-}
-
-async function loadAvatarProfileAssets(searchText: string) {
-  try {
-    const avatars = await getAvatars()
-    return avatars
-      .map(avatarToAsset)
-      .filter((asset): asset is AssetItem => !!asset)
-      .filter((asset) => assetMatchesKeyword(asset, searchText))
-  } catch {
-    return []
-  }
-}
-
-function avatarToAsset(avatar: AvatarItem): AssetItem | null {
-  if (!avatar.assetId || !avatar.previewUrl) {
-    return null
-  }
-  return {
-    assetId: avatar.assetId,
-    ownerUserId: avatar.ownerUserId ?? null,
-    createdByUserId: avatar.createdByUserId ?? null,
-    projectId: avatar.projectId,
-    taskId: avatar.taskId,
-    assetType: 'IMAGE',
-    kind: 'AVATAR',
-    visibility: avatar.visibility ?? null,
-    status: avatar.status ?? null,
-    publishedAt: null,
-    fileName: avatar.avatarName || `数字人形象 ${avatar.avatarId}`,
-    filePath: null,
-    fileUrl: avatar.previewUrl,
-    thumbnailUrl: avatar.previewUrl,
-    mimeType: 'image/*',
-    fileSize: 0,
-    sourceType: avatar.sourceType || 'USER_UPLOAD',
-    metadataJson: mergeMetadataJson(avatar.metadataJson, {
-      from: 'avatar_profile',
-      assetRole: 'host_image',
-      avatarId: avatar.avatarId,
-      avatarName: avatar.avatarName,
-      defaultAvatar: avatar.defaultAvatar,
-      prompt: avatar.prompt,
-    }),
-    createdAt: avatar.createdAt,
-    updatedAt: avatar.updatedAt,
-  }
-}
-
-function mergeAvatarProfileAssets(assetRows: AssetItem[], avatarRows: AssetItem[]) {
-  if (!avatarRows.length) {
-    return assetRows
-  }
-  const byId = new Map<number, AssetItem>()
-  for (const asset of assetRows) {
-    byId.set(asset.assetId, asset)
-  }
-  for (const avatarAsset of avatarRows) {
-    const existing = byId.get(avatarAsset.assetId)
-    if (!existing) {
-      byId.set(avatarAsset.assetId, avatarAsset)
-      continue
-    }
-    byId.set(avatarAsset.assetId, {
-      ...existing,
-      kind: existing.kind || avatarAsset.kind,
-      fileName: avatarAsset.fileName || existing.fileName,
-      fileUrl: existing.fileUrl || avatarAsset.fileUrl,
-      thumbnailUrl: existing.thumbnailUrl || avatarAsset.thumbnailUrl,
-      metadataJson: mergeMetadataJson(existing.metadataJson, parseObject(avatarAsset.metadataJson) || {}),
-    })
-  }
-  return Array.from(byId.values())
-}
-
-function assetMatchesKeyword(asset: AssetItem, searchText: string) {
-  const q = searchText.trim().toLowerCase()
-  if (!q) {
-    return true
-  }
-  return [
-    asset.fileName,
-    asset.sourceType,
-    sourceTypeLabel(asset.sourceType),
-    assetRoleLabel(asset),
-    asset.metadataJson,
-  ].some((value) => String(value || '').toLowerCase().includes(q))
 }
 
 async function loadAssetPreviews() {
@@ -1118,20 +1052,6 @@ function firstText(...values: Array<string | null | undefined>) {
   return values.find((value) => typeof value === 'string' && value.trim().length > 0)?.trim() || ''
 }
 
-function pickerMentionsAvatar(title: string) {
-  return ['数字人', '主播', '形象'].some((token) => title.includes(token))
-}
-
-function mergeMetadataJson(base: string | null | undefined, extra: Record<string, unknown>) {
-  const merged: Record<string, unknown> = { ...(parseObject(base) || {}) }
-  for (const [key, value] of Object.entries(extra)) {
-    if (value !== undefined && value !== null && value !== '') {
-      merged[key] = value
-    }
-  }
-  return JSON.stringify(merged)
-}
-
 function ellipsis(value: string, maxLength: number) {
   const normalized = value.replace(/\s+/g, ' ').trim()
   if (normalized.length <= maxLength) {
@@ -1332,6 +1252,42 @@ function formatFileSize(size: number) {
   display: flex;
   flex-wrap: wrap;
   gap: 8px;
+}
+
+.asset-picker-scope-filter {
+  display: inline-flex;
+  width: fit-content;
+  overflow: hidden;
+  border: 1px solid #e3e7ef;
+  border-radius: 8px;
+  background: #f8fafc;
+  padding: 3px;
+}
+
+.asset-picker-scope-filter button {
+  display: inline-flex;
+  min-height: 30px;
+  align-items: center;
+  justify-content: center;
+  border: 0;
+  border-radius: 6px;
+  background: transparent;
+  color: #667085;
+  padding: 0 12px;
+  font-size: 12.5px;
+  font-weight: 850;
+  cursor: pointer;
+}
+
+.asset-picker-scope-filter button.active {
+  background: #ffffff;
+  color: #4f46e5;
+  box-shadow: 0 1px 3px rgba(15, 23, 42, 0.08);
+}
+
+.asset-picker-scope-filter button:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
 }
 
 .asset-picker-role-filter button {
