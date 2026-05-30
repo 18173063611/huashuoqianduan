@@ -138,6 +138,16 @@ export function updateCarModelBundleAsset(
   })
 }
 
+export function updateAssetContent(
+  assetId: number,
+  payload: { fileName: string; content: string; metadataJson?: string | null },
+) {
+  return request<AssetItem>(`/assets/${assetId}/content`, {
+    method: 'PATCH',
+    body: JSON.stringify(payload),
+  })
+}
+
 export function deleteAsset(assetId: number) {
   return request<void>(`/assets/${assetId}`, {
     method: 'DELETE',

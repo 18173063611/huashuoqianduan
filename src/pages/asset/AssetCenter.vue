@@ -385,6 +385,15 @@
             编辑
           </button>
           <button
+            v-if="canEditScriptAsset(asset)"
+            class="app-secondary-button"
+            type="button"
+            :disabled="contentEditorSaving"
+            @click="openContentEditor(asset)"
+          >
+            编辑
+          </button>
+          <button
             v-if="listScope === 'global' && hasToken && canUnpublish(asset)"
             class="app-secondary-button asset-danger"
             type="button"
@@ -472,6 +481,51 @@
         <div class="asset-modal-actions">
           <button class="app-secondary-button" type="button" @click="copyMetadata">复制</button>
           <a class="app-secondary-button asset-open" :href="metadataLink" target="_blank" rel="noreferrer">打开预览</a>
+        </div>
+      </div>
+    </div>
+
+    <div v-if="contentEditorOpen" class="asset-modal-backdrop" @click.self="closeContentEditor">
+      <div class="asset-modal asset-content-editor">
+        <div class="asset-modal-header">
+          <strong>{{ contentEditorTitle }}</strong>
+          <button class="app-secondary-button" type="button" :disabled="contentEditorSaving" @click="closeContentEditor">
+            关闭
+          </button>
+        </div>
+        <p v-if="contentEditingAsset" class="app-muted asset-modal-subtitle">
+          {{ contentEditingAsset.assetGroup || sourceTypeLabel(contentEditingAsset.sourceType) }} · {{ contentEditingAsset.fileName }}
+        </p>
+        <p v-if="contentEditorError" class="app-error">{{ contentEditorError }}</p>
+        <label class="asset-editor-field">
+          <span>文件名</span>
+          <input v-model.trim="contentEditorFileName" :disabled="contentEditorSaving || contentEditorLoading" maxlength="160" />
+        </label>
+        <label class="asset-editor-field">
+          <span>{{ contentEditorBodyLabel }}</span>
+          <textarea
+            v-model="contentEditorText"
+            :disabled="contentEditorSaving || contentEditorLoading"
+            spellcheck="false"
+            rows="16"
+          />
+        </label>
+        <label class="asset-editor-field">
+          <span>metadataJson</span>
+          <textarea
+            v-model="contentEditorMetadata"
+            :disabled="contentEditorSaving || contentEditorLoading"
+            spellcheck="false"
+            rows="6"
+          />
+        </label>
+        <div class="asset-modal-actions">
+          <button class="app-secondary-button" type="button" :disabled="contentEditorSaving" @click="closeContentEditor">
+            取消
+          </button>
+          <button class="app-primary-button" type="button" :disabled="contentEditorSaving || contentEditorLoading" @click="handleSaveContentEditor">
+            {{ contentEditorSaving ? '保存中...' : contentEditorLoading ? '加载中...' : '保存内容' }}
+          </button>
         </div>
       </div>
     </div>
@@ -626,6 +680,7 @@ import {
   saveAsset,
   unpublishAsset,
   updateAssetGroup,
+  updateAssetContent,
   uploadMaterialAsset,
 } from '../../services/assetApi'
 import type { AssetListScope, AssetListSort } from '../../services/assetApi'
@@ -875,6 +930,14 @@ const metadataLink = ref('#')
 const groupModalOpen = ref(false)
 const groupEditingAsset = ref<AssetItem | null>(null)
 const groupInput = ref('')
+const contentEditorOpen = ref(false)
+const contentEditorLoading = ref(false)
+const contentEditorSaving = ref(false)
+const contentEditorError = ref('')
+const contentEditingAsset = ref<AssetItem | null>(null)
+const contentEditorFileName = ref('')
+const contentEditorText = ref('')
+const contentEditorMetadata = ref('')
 const previewModalOpen = ref(false)
 const previewLoading = ref(false)
 const previewError = ref('')
@@ -940,6 +1003,16 @@ const showMaterialContextActions = computed(() =>
   activeCategory.value === 'materials' &&
   (selectedWorkflowStage.value === 'material' || selectedWorkflowStage.value === 'carBundle'),
 )
+const contentEditorTitle = computed(() => {
+  const asset = contentEditingAsset.value
+  if (!asset) return '编辑资产内容'
+  return isStoryboardAsset(asset) ? '编辑分镜脚本' : '编辑爆款对标文案'
+})
+const contentEditorBodyLabel = computed(() => {
+  const asset = contentEditingAsset.value
+  if (!asset) return '内容'
+  return isJson(asset) ? 'JSON 内容' : '文案内容'
+})
 
 const carBundleEditorPublish = computed(() => {
   const editingAsset = carBundleEditingAsset.value
@@ -1785,6 +1858,20 @@ function canEditCarBundle(asset: AssetItem) {
   return asset.ownerUserId === userId
 }
 
+function canEditScriptAsset(asset: AssetItem) {
+  if (!hasToken.value || !currentUser.value) {
+    return false
+  }
+  if (!(isBenchmarkAsset(asset) || isStoryboardAsset(asset)) || !(isText(asset) || isJson(asset))) {
+    return false
+  }
+  const visibility = String(asset.visibility || '').toUpperCase()
+  if (String(currentUser.value.role || '').toUpperCase() === 'ADMIN') {
+    return visibility === 'PUBLIC' || visibility === 'PRIVATE'
+  }
+  return visibility === 'PRIVATE' && asset.ownerUserId != null && asset.ownerUserId === currentUser.value.userId
+}
+
 function carBundleAssetTitle(asset: AssetItem) {
   const metadata = parseJsonObject(asset.metadataJson)
   const title = [stringField(metadata, 'brandModel'), stringField(metadata, 'color')].filter(Boolean).join(' · ')
@@ -2205,6 +2292,91 @@ function closeMetadata() {
   metadataPretty.value = ''
   metadataTitle.value = ''
   metadataLink.value = '#'
+}
+
+async function openContentEditor(asset: AssetItem) {
+  if (!canEditScriptAsset(asset)) {
+    errorMessage.value = '当前账号没有权限编辑该资产内容'
+    return
+  }
+  contentEditingAsset.value = asset
+  contentEditorFileName.value = asset.fileName
+  contentEditorMetadata.value = prettyJson(asset.metadataJson || '{}')
+  contentEditorText.value = ''
+  contentEditorError.value = ''
+  contentEditorOpen.value = true
+  contentEditorLoading.value = true
+  try {
+    const text = await getAssetTextContent(asset)
+    contentEditorText.value = isJson(asset) ? prettyJson(text) : text
+  } catch (e) {
+    contentEditorError.value = e instanceof Error ? e.message : '加载资产内容失败'
+  } finally {
+    contentEditorLoading.value = false
+  }
+}
+
+function closeContentEditor() {
+  if (contentEditorSaving.value) {
+    return
+  }
+  contentEditorOpen.value = false
+  contentEditorLoading.value = false
+  contentEditorError.value = ''
+  contentEditingAsset.value = null
+  contentEditorFileName.value = ''
+  contentEditorText.value = ''
+  contentEditorMetadata.value = ''
+}
+
+async function handleSaveContentEditor() {
+  const asset = contentEditingAsset.value
+  if (!asset) {
+    return
+  }
+  const content = contentEditorText.value.trim()
+  if (!content) {
+    contentEditorError.value = '内容不能为空'
+    return
+  }
+  let metadataJson = contentEditorMetadata.value.trim()
+  if (metadataJson) {
+    try {
+      metadataJson = JSON.stringify(JSON.parse(metadataJson))
+    } catch {
+      contentEditorError.value = 'metadataJson 不是合法 JSON'
+      return
+    }
+  }
+  if (isJson(asset)) {
+    try {
+      JSON.parse(content)
+    } catch {
+      contentEditorError.value = 'JSON 内容格式不正确'
+      return
+    }
+  }
+  contentEditorSaving.value = true
+  contentEditorError.value = ''
+  try {
+    const updated = await updateAssetContent(asset.assetId, {
+      fileName: contentEditorFileName.value.trim() || asset.fileName,
+      content,
+      metadataJson: metadataJson || asset.metadataJson,
+    })
+    assets.value = assets.value.map((item) => (item.assetId === updated.assetId ? updated : item))
+    inlinePreviewByAssetId.value = {
+      ...inlinePreviewByAssetId.value,
+      [updated.assetId]: buildFallbackInlinePreview(updated),
+    }
+    contentEditorSaving.value = false
+    closeContentEditor()
+    void loadInlineAssetPreviews()
+  } catch (e) {
+    contentEditorError.value = e instanceof Error ? e.message : '保存资产内容失败'
+  } finally {
+    contentEditorSaving.value = false
+  }
 }
 
 function prettyJson(input: string) {
@@ -2969,6 +3141,11 @@ async function playVoiceSample(voice: VoicePresetItem) {
   width: min(560px, 100%);
 }
 
+.asset-content-editor {
+  width: min(920px, calc(100vw - 32px));
+  max-height: calc(100vh - 64px);
+}
+
 .asset-group-field {
   display: grid;
   gap: 8px;
@@ -2992,6 +3169,43 @@ async function playVoiceSample(voice: VoicePresetItem) {
 }
 
 .asset-group-field input:focus {
+  border-color: #a79bff;
+  box-shadow: 0 0 0 3px rgba(124, 108, 255, 0.18);
+}
+
+.asset-editor-field {
+  display: grid;
+  gap: 8px;
+  margin-top: 12px;
+}
+
+.asset-editor-field span {
+  color: rgba(226, 232, 240, 0.95);
+  font-size: 13px;
+  font-weight: 850;
+}
+
+.asset-editor-field input,
+.asset-editor-field textarea {
+  width: 100%;
+  border: 1px solid rgba(148, 163, 184, 0.35);
+  border-radius: 10px;
+  background: rgba(255, 255, 255, 0.94);
+  color: #111827;
+  padding: 10px 12px;
+  outline: none;
+  font: inherit;
+  line-height: 1.55;
+}
+
+.asset-editor-field textarea {
+  min-height: 140px;
+  resize: vertical;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+}
+
+.asset-editor-field input:focus,
+.asset-editor-field textarea:focus {
   border-color: #a79bff;
   box-shadow: 0 0 0 3px rgba(124, 108, 255, 0.18);
 }
