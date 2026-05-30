@@ -260,7 +260,7 @@ const sourceMode = ref<'AI' | 'UPLOAD'>('AI')
 const loggedIn = ref(false)
 const form = reactive<AvatarGenerateRequest>({
   avatarName: '',
-  prompt: '生成一位适合汽车销售讲解的数字人形象，干净背景，正面全身，商业摄影质感',
+  prompt: '生成一位适合汽车销售讲解的真实数字人形象，干净背景，正面全身，商业摄影质感，不要文字、表格、说明卡片或水印',
   referenceAssetIds: [],
   style: 'REALISTIC',
   framing: 'FULL_BODY',
@@ -307,7 +307,7 @@ const selectedAvatarOutfitOption = computed(() =>
 const avatarOutfitPromptPreview = computed(() => {
   const custom = form.outfitDescription?.trim()
   const outfit = custom || selectedAvatarOutfitOption.value.prompt || '按用户自定义穿着生成'
-  return `全身照，单人正面站姿，从头到脚完整入镜，服装保持一致；穿着：${outfit}。`
+  return `全身照，单人正面站姿，从头到脚完整入镜，服装保持一致；穿着：${outfit}；画面不要文字、表格、说明卡片或水印。`
 })
 // 与后端 createTask 实际预扣金额完全一致；数字人形象按张数动态预估，更贴近实际结算。
 const avatarEstimate = useBillingEstimate({
@@ -622,6 +622,7 @@ function canManageAvatar(avatar: AvatarItem) {
 }
 
 function sourceLabel(avatar: AvatarItem) {
+  if (avatar.sourceType === 'AVATAR_GENERATE') return '数字人形象生成'
   if (avatar.sourceType === 'AI_GENERATED') return 'AI 生成'
   if (avatar.sourceType === 'USER_UPLOAD') return '用户上传'
   return avatar.sourceType || '形象资产'
