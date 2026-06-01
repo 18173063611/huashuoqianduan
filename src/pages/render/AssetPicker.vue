@@ -165,6 +165,16 @@ import { computed, ref, watch } from 'vue'
 import { getAssets, getAssetTextContent, type AssetListScope } from '../../services/assetApi'
 import { API_ORIGIN } from '../../services/request'
 import type { AssetItem, AssetType } from '../../types/assetTypes'
+import {
+  isBenchmarkAsset,
+  isStoryboardAsset,
+  matchesAssetWorkflowStage,
+  normalizeAssetRole as normalizeWorkflowAssetRole,
+  normalizedAssetRole as normalizedWorkflowAssetRole,
+  roleDisplayLabel as workflowRoleDisplayLabel,
+  sourceTypeLabel as workflowSourceTypeLabel,
+  type AssetWorkflowStageKey,
+} from '../../utils/assetWorkflow'
 
 interface AssetRoleOption {
   value: string
@@ -183,6 +193,7 @@ const props = defineProps<{
   sourceHint?: string
   assetRoles?: string[]
   roleOptions?: AssetRoleOption[]
+  workflowStage?: AssetWorkflowStageKey
 }>()
 
 const emit = defineEmits<{
@@ -235,6 +246,7 @@ const selectedLabel = computed(() => {
 const allowedAssetRoles = computed(() =>
   (props.assetRoles || []).map(normalizeAssetRole).filter(Boolean),
 )
+const activeWorkflowStage = computed<AssetWorkflowStageKey>(() => props.workflowStage || inferWorkflowStageFromRoles())
 const roleFilterOptions = computed(() => {
   const sourceOptions = props.roleOptions?.length
     ? props.roleOptions
@@ -255,13 +267,17 @@ const roleFilterOptions = computed(() => {
 const filteredAssets = computed(() => {
   const allowed = allowedAssetRoles.value
   const selected = selectedRoleFilter.value === 'all' ? '' : normalizeAssetRole(selectedRoleFilter.value)
+  const workflowStage = activeWorkflowStage.value
   return assets.value.filter((asset) => {
+    if (workflowStage && !matchesAssetWorkflowStage(asset, workflowStage)) {
+      return false
+    }
     const role = assetNormalizedRole(asset)
-    if (allowed.length > 0 && !allowed.includes(role)) {
+    if (!workflowStage && allowed.length > 0 && !allowed.includes(role)) {
       return false
     }
     if (selected) {
-      return role === selected
+      return assetMatchesRoleFilter(asset, selected)
     }
     return true
   })
@@ -320,56 +336,6 @@ const ASSET_ROLE_LABELS: Record<string, string> = {
   reference_video: '参考视频',
 }
 
-const ASSET_ROLE_ALIASES: Record<string, string> = {
-  front: 'car_exterior_front',
-  exterior_front: 'car_exterior_front',
-  car_front: 'car_exterior_front',
-  side: 'car_exterior_side',
-  exterior_side: 'car_exterior_side',
-  rear: 'car_exterior_rear',
-  back: 'car_exterior_rear',
-  exterior_rear: 'car_exterior_rear',
-  '45': 'car_exterior_45',
-  '45_degree': 'car_exterior_45',
-  car_exterior_45_degree: 'car_exterior_45',
-  dashboard: 'car_interior_dashboard',
-  interior: 'car_interior_dashboard',
-  interior_dashboard: 'car_interior_dashboard',
-  front_seat: 'car_interior_front_seat',
-  back_seat: 'car_interior_back_seat',
-  rear_seat: 'car_interior_back_seat',
-  steering: 'car_interior_steering',
-  steering_wheel: 'car_interior_steering',
-  instrument: 'car_interior_steering',
-  trunk: 'car_interior_trunk',
-  boot: 'car_interior_trunk',
-  light: 'car_detail_light',
-  headlight: 'car_detail_light',
-  wheel: 'car_detail_wheel',
-  seat: 'car_detail_seat_material',
-  seat_material: 'car_detail_seat_material',
-  showroom: 'scene_showroom',
-  scene: 'scene_showroom',
-  road: 'scene_road',
-  outdoor: 'scene_outdoor',
-  city: 'scene_outdoor',
-  mountain: 'scene_road',
-  highway: 'scene_road',
-  night: 'scene_night',
-  dealership: 'scene_showroom',
-  host: 'host_image',
-  avatar: 'host_image',
-  car_bundle: 'car_model_bundle',
-  model_bundle: 'car_model_bundle',
-  car_model: 'car_model_bundle',
-  voice: 'voiceover',
-  voice_over: 'voiceover',
-  tts: 'voiceover',
-  music: 'bgm',
-  storyboard: 'storyboard_json',
-  benchmark: 'benchmark_json',
-}
-
 watch(
   () => props.selectedUrl,
   (value) => {
@@ -423,7 +389,7 @@ async function loadAssets() {
       ),
     )
     const rows = dedupeAssets(lists.flat())
-    assets.value = rows.filter(isAllowedSourceType)
+    assets.value = rows.filter(isSelectableAsset)
     if (selectedAssetId.value && !assets.value.some((asset) => asset.assetId === selectedAssetId.value)) {
       selectedAssetId.value = null
     }
@@ -472,6 +438,14 @@ async function loadAssetPreviews() {
   )
 }
 
+function isSelectableAsset(asset: AssetItem) {
+  const workflowStage = activeWorkflowStage.value
+  if (workflowStage) {
+    return matchesAssetWorkflowStage(asset, workflowStage)
+  }
+  return isAllowedSourceType(asset)
+}
+
 function isAllowedSourceType(asset: AssetItem) {
   const allowed = props.sourceTypes?.map((item) => item.trim().toUpperCase()).filter(Boolean)
   if (!allowed || allowed.length === 0) {
@@ -486,6 +460,30 @@ function isAllowedSourceType(asset: AssetItem) {
     sourceType === 'AI_GENERATED' &&
     (allowed.includes('TTS_GENERATE') || allowed.includes('VOICE_SAMPLE'))
   )
+}
+
+function inferWorkflowStageFromRoles(): AssetWorkflowStageKey {
+  const roles = allowedAssetRoles.value
+  if (roles.includes('benchmark_json') || roles.includes('voice_script')) {
+    return 'benchmark'
+  }
+  if (roles.includes('storyboard_json')) {
+    return 'storyboard'
+  }
+  if (roles.includes('car_model_bundle')) {
+    return 'carBundle'
+  }
+  return ''
+}
+
+function assetMatchesRoleFilter(asset: AssetItem, role: string) {
+  if (role === 'benchmark_json' || role === 'voice_script') {
+    return isBenchmarkAsset(asset)
+  }
+  if (role === 'storyboard_json') {
+    return isStoryboardAsset(asset)
+  }
+  return assetNormalizedRole(asset) === role
 }
 
 function assetIcon(asset: AssetItem) {
@@ -735,106 +733,7 @@ function assetRoleLabel(asset: AssetItem) {
 }
 
 function assetNormalizedRole(asset: AssetItem) {
-  const meta = parseObject(asset.metadataJson)
-  const explicit = normalizeAssetRole(firstText(
-    textAt(meta, 'assetRole'),
-    textAt(meta, 'role'),
-  ))
-  if (explicit) {
-    return explicit
-  }
-  const inferred = inferAssetRole(asset, meta)
-  if (inferred) {
-    return inferred
-  }
-  return roleFromKind(asset.kind)
-}
-
-function inferAssetRole(asset: AssetItem, meta: Record<string, unknown> | null) {
-  const assetType = String(asset.assetType || '').trim().toUpperCase()
-  const sourceType = String(asset.sourceType || '').trim().toUpperCase()
-  const assetGroup = String(asset.assetGroup || '').trim()
-  const from = textAt(meta, 'from').toLowerCase()
-  const source = textAt(meta, 'source').toUpperCase()
-  const bundleType = textAt(meta, 'bundleType').toLowerCase()
-  const name = `${asset.fileName || ''} ${textAt(meta, 'originalFileName')} ${textAt(meta, 'title')} ${textAt(meta, 'sourceTitle')}`.toLowerCase()
-  if (assetGroup === '爆款对标') return 'benchmark_json'
-  if (assetGroup === '分镜脚本') return 'storyboard_json'
-  if (assetGroup === '汽车素材包') return 'car_model_bundle'
-  if (assetType === 'IMAGE') {
-    if (
-      sourceType === 'AVATAR_GENERATE' ||
-      from.includes('avatar') ||
-      source === 'DOUBAO_SEEDREAM' ||
-      name.includes('avatar') ||
-      name.includes('host') ||
-      name.includes('主播') ||
-      name.includes('数字人') ||
-      Boolean(textAt(meta, 'avatarName'))
-    ) {
-      return 'host_image'
-    }
-    if (name.includes('side') || name.includes('侧面') || name.includes('车侧')) return 'car_exterior_side'
-    if (name.includes('rear') || name.includes('back') || name.includes('尾部') || name.includes('车尾') || name.includes('背面')) return 'car_exterior_rear'
-    if (name.includes('45')) return 'car_exterior_45'
-    if (name.includes('dashboard') || name.includes('interior') || name.includes('内饰') || name.includes('中控')) return 'car_interior_dashboard'
-    if (name.includes('front_seat') || name.includes('前排')) return 'car_interior_front_seat'
-    if (name.includes('back_seat') || name.includes('rear_seat') || name.includes('后排')) return 'car_interior_back_seat'
-    if (name.includes('steering') || name.includes('方向盘') || name.includes('仪表')) return 'car_interior_steering'
-    if (name.includes('trunk') || name.includes('后备箱')) return 'car_interior_trunk'
-    if (name.includes('wheel') || name.includes('轮毂') || name.includes('轮胎')) return 'car_detail_wheel'
-    if (name.includes('logo') || name.includes('车标') || name.includes('标识')) return 'car_detail_logo'
-    if (name.includes('light') || name.includes('灯')) return 'car_detail_light'
-    if (name.includes('seat') || name.includes('座椅') || name.includes('材质')) return 'car_detail_seat_material'
-    if (name.includes('showroom') || name.includes('展厅') || name.includes('门店')) return 'scene_showroom'
-    if (name.includes('road') || name.includes('highway') || name.includes('山路') || name.includes('公路') || name.includes('道路')) return 'scene_road'
-    if (name.includes('night') || name.includes('夜景')) return 'scene_night'
-    if (name.includes('outdoor') || name.includes('city') || name.includes('户外') || name.includes('城市')) return 'scene_outdoor'
-    if (name.includes('front') || name.includes('car') || name.includes('车头') || name.includes('正面') || name.includes('外观')) return 'car_exterior_front'
-    return ''
-  }
-  if (assetType === 'JSON') {
-    if (bundleType === 'car_model') {
-      return 'car_model_bundle'
-    }
-    if (
-      ['DOUYIN_BENCHMARK', 'DOUYIN_PARSE_TRANSCRIPT', 'DOUYIN_REWRITE', 'DOUYIN_TRANSCRIPT'].includes(sourceType) ||
-      name.includes('douyin-benchmark') ||
-      name.includes('benchmark') ||
-      name.includes('爆款') ||
-      name.includes('对标')
-    ) {
-      return 'benchmark_json'
-    }
-    if (
-      ['STORYBOARD_GENERATE', 'VIDEO_SCRIPT_ANALYZE', 'VIDEO_SCRIPT_URL_ANALYZE'].includes(sourceType) ||
-      name.includes('storyboard') ||
-      name.includes('video-script') ||
-      name.includes('分镜')
-    ) {
-      return 'storyboard_json'
-    }
-  }
-  if (assetType === 'AUDIO') {
-    if (name.includes('bgm') || name.includes('music') || name.includes('背景音乐')) return 'bgm'
-    if (name.includes('ref') || name.includes('reference') || name.includes('参考音频')) return 'reference_audio'
-    if (['TTS_GENERATE', 'VOICE_SAMPLE'].includes(sourceType) || name.includes('voice') || name.includes('口播') || name.includes('配音')) {
-      return 'voiceover'
-    }
-  }
-  if (assetType === 'VIDEO' && sourceType === 'DIGITAL_HUMAN_GENERATE') {
-    return 'host_video'
-  }
-  if (assetType === 'VIDEO') {
-    if (name.includes('host') || name.includes('avatar') || name.includes('主播') || name.includes('口播') || name.includes('数字人')) return 'host_video'
-    if (name.includes('ref') || name.includes('reference') || name.includes('benchmark') || name.includes('对标')) return 'reference_video'
-    return 'material_video'
-  }
-  if (assetType === 'TEXT') {
-    if (name.includes('subtitle') || name.includes('srt') || name.includes('字幕')) return 'subtitle'
-    if (name.includes('script') || name.includes('文案') || name.includes('口播')) return 'voice_script'
-  }
-  return ''
+  return normalizedWorkflowAssetRole(asset) || roleFromKind(asset.kind)
 }
 
 function parsedVideoSourceUrl(parseResult: Record<string, unknown> | null, meta: Record<string, unknown> | null) {
@@ -967,16 +866,11 @@ function formatSourceDate(value: string) {
 }
 
 function roleDisplayLabel(role: string) {
-  const normalized = normalizeAssetRole(role)
-  if (!normalized) {
-    return ''
-  }
-  return ASSET_ROLE_LABELS[normalized] || normalized
+  return workflowRoleDisplayLabel(role) || normalizeAssetRole(role)
 }
 
 function normalizeAssetRole(role: string | null | undefined) {
-  const normalized = String(role || '').trim().toLowerCase().replace(/[\s-]+/g, '_')
-  return normalized ? ASSET_ROLE_ALIASES[normalized] || normalized : ''
+  return normalizeWorkflowAssetRole(role)
 }
 
 function roleFromKind(kind: string | null | undefined) {
@@ -1001,31 +895,7 @@ function dedupeRoleOptions(options: AssetRoleOption[]) {
 }
 
 function sourceTypeLabel(sourceType: string | null | undefined) {
-  const key = String(sourceType || '').trim().toUpperCase()
-  const labels: Record<string, string> = {
-    DOUYIN_BENCHMARK: '爆款对标',
-    DOUYIN_PARSE_TRANSCRIPT: '爆款转写',
-    DOUYIN_REWRITE: '爆款改写',
-    DOUYIN_TRANSCRIPT: '爆款口播',
-    SCRIPT_REWRITE: '文案改写',
-    VIDEO_SCRIPT_ANALYZE: '分镜生成',
-    VIDEO_SCRIPT_URL_ANALYZE: '链接分镜',
-    STORYBOARD_GENERATE: '分镜生成',
-    TTS_GENERATE: '声音生成',
-    VOICE_SAMPLE: '声音试音',
-    DIGITAL_HUMAN_GENERATE: '数字人视频',
-    AVATAR_GENERATE: '数字人形象',
-    USER_UPLOAD: '上传素材',
-    MANUAL_CREATED: '手动创建',
-    AI_GENERATED: 'AI生成',
-    DEMO: '演示素材',
-    SEEDANCE_TEXT_VIDEO: '文生视频',
-    SEEDANCE_FIRST_FRAME_VIDEO: '图生视频',
-    SEEDANCE_FIRST_LAST_FRAME_VIDEO: '图生视频',
-    SEEDANCE_REFERENCE_VIDEO: '图生视频',
-    SEEDANCE_CAR_SALES_VIDEO: '汽车销售成片',
-  }
-  return labels[key] || key || '未知来源'
+  return workflowSourceTypeLabel(sourceType)
 }
 
 function parseObject(value: unknown): Record<string, unknown> | null {

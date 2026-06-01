@@ -709,6 +709,14 @@ import { getTaskDetail, getTaskResult, newIdempotencyKey } from '../../services/
 import { rememberSessionTaskId } from '../../services/sessionTaskStore'
 import { VOICE_PRESET_SELECTION_KEY, type VoicePresetItem } from '../../types/voiceTypes'
 import { taskTypeLabel } from '../../utils/taskDisplay'
+import {
+  isBenchmarkAsset as isBenchmarkAssetShared,
+  isCarModelBundleAsset as isCarModelBundleAssetShared,
+  isStoryboardAsset as isStoryboardAssetShared,
+  matchesAssetWorkflowStage,
+  normalizedAssetRole as normalizedAssetRoleShared,
+  sourceTypeLabel as sourceTypeLabelShared,
+} from '../../utils/assetWorkflow'
 import CarModelBundleBuilder from './CarModelBundleBuilder.vue'
 
 const props = defineProps<{
@@ -1676,73 +1684,11 @@ function matchesWorkflowStage(asset: AssetItem) {
   if (listScope.value === 'global' && isPublicCarBundleComponentImage(asset)) {
     return false
   }
-  if (!selectedWorkflowStage.value) {
-    return true
-  }
-  if (selectedWorkflowStage.value === 'carBundle') {
-    return isCarModelBundleAsset(asset)
-  }
-  if (
-    selectedWorkflowStage.value === 'voice' &&
-    asset.assetType === 'AUDIO' &&
-    String(asset.sourceType || '').trim().toUpperCase() === 'AI_GENERATED'
-  ) {
-    return true
-  }
-  const stage = currentWorkflowStageOption()
-  if (!stage || stage.sourceTypes.length === 0) {
-    return true
-  }
-  const role = normalizedAssetRole(asset)
-  const assetGroup = String(asset.assetGroup || '').trim()
-  const allowedRoles = 'assetRoles' in stage ? Array.from(stage.assetRoles as readonly string[]) : []
-  const allowedGroups = 'assetGroups' in stage ? Array.from(stage.assetGroups as readonly string[]) : []
-  if (allowedRoles.includes(role) || allowedGroups.includes(assetGroup)) {
-    return true
-  }
-  if (selectedWorkflowStage.value === 'benchmark' && isBenchmarkAsset(asset)) {
-    return true
-  }
-  if (selectedWorkflowStage.value === 'storyboard' && isStoryboardAsset(asset)) {
-    return true
-  }
-  const allowed = Array.from(stage.sourceTypes as readonly string[])
-  return allowed.includes(String(asset.sourceType || '').trim().toUpperCase())
+  return matchesAssetWorkflowStage(asset, selectedWorkflowStage.value)
 }
 
 function sourceTypeLabel(sourceType: string | null | undefined) {
-  const key = String(sourceType || '').trim().toUpperCase()
-  const labels: Record<string, string> = {
-    AI_GENERATED: 'AI 生成',
-    DEMO: '演示素材',
-    MANUAL_CREATED: '手动创建',
-    SYSTEM_MOCK: '系统示例',
-    USER_UPLOAD: '上传素材',
-    SCRIPT_REWRITE: '文案改写',
-    STORYBOARD_GENERATE: '分镜生成',
-    VIDEO_PARSE: '视频理解',
-    VIDEO_SCRIPT_ANALYZE: '分镜生成',
-    VIDEO_SCRIPT_URL_ANALYZE: '链接分镜',
-    DOUYIN_BENCHMARK: '爆款对标',
-    DOUYIN_PARSE_TRANSCRIPT: '爆款对标转写',
-    DOUYIN_REWRITE: '爆款文案改写',
-    DOUYIN_TRANSCRIPT: '爆款口播转写',
-    TTS_GENERATE: '声音生成',
-    VOICE_SAMPLE: '声音试音',
-    AVATAR_GENERATE: '数字人形象',
-    DIGITAL_HUMAN_GENERATE: '数字人视频',
-    SEEDANCE_TEXT_VIDEO: '文生视频',
-    SEEDANCE_FIRST_FRAME_VIDEO: '图生视频',
-    SEEDANCE_FIRST_LAST_FRAME_VIDEO: '图生视频',
-    SEEDANCE_REFERENCE_VIDEO: '图生视频',
-    SEEDANCE_CAR_SALES_VIDEO: '汽车销售成片',
-    TEXT_TO_VIDEO_SEEDANCE_1_5: '文生视频',
-    TEXT_TO_VIDEO_SEEDANCE_2_0: '文生视频',
-    IMAGE_TO_VIDEO_SEEDANCE_1_5: '图生视频',
-    IMAGE_TO_VIDEO_SEEDANCE_2_0: '图生视频',
-    IMAGE_TO_VIDEO_SEEDANCE_2_0_FAST: '图生视频',
-  }
-  return labels[key] || key || '未知来源'
+  return sourceTypeLabelShared(sourceType)
 }
 
 function clearKeywordReloadTimer() {
@@ -1915,16 +1861,7 @@ function structuredPreviewHint(asset: AssetItem) {
 }
 
 function isCarModelBundleAsset(asset: AssetItem) {
-  if (!isJson(asset)) {
-    return false
-  }
-  const metadata = parseJsonObject(asset.metadataJson)
-  return (
-    stringField(metadata, 'bundleType') === 'car_model' ||
-    stringField(metadata, 'assetRole') === 'car_model_bundle' ||
-    stringField(metadata, 'from') === 'car_model_bundle' ||
-    asset.assetGroup === CAR_MODEL_BUNDLE_GROUP
-  )
+  return isCarModelBundleAssetShared(asset)
 }
 
 function isPublicCarBundleComponentImage(asset: AssetItem) {
@@ -2136,56 +2073,15 @@ function isAlreadyPublishedAsset(asset: AssetItem) {
 }
 
 function normalizedAssetRole(asset: AssetItem | null | undefined) {
-  if (!asset) {
-    return ''
-  }
-  const metadata = parseJsonObject(asset.metadataJson)
-  const role = firstNonEmptyText(
-    stringField(metadata, 'assetRole'),
-    stringField(metadata, 'role'),
-  ).trim().toLowerCase()
-  if (role === 'benchmark' || role === 'douyin_benchmark') {
-    return 'benchmark_json'
-  }
-  if (role === 'storyboard' || role === 'script_storyboard') {
-    return 'storyboard_json'
-  }
-  return role
+  return normalizedAssetRoleShared(asset)
 }
 
 function isBenchmarkAsset(asset: AssetItem | null | undefined) {
-  if (!asset) {
-    return false
-  }
-  const sourceType = String(asset.sourceType || '').trim().toUpperCase()
-  const group = String(asset.assetGroup || '').trim()
-  const role = normalizedAssetRole(asset)
-  const fileName = asset.fileName.toLowerCase()
-  return (
-    sourceType.includes('DOUYIN') ||
-    role === 'benchmark_json' ||
-    role === 'voice_script' ||
-    group === GROUP_BENCHMARK ||
-    (isText(asset) && (fileName.includes('口播文案') || fileName.includes('爆款对标')))
-  )
+  return isBenchmarkAssetShared(asset)
 }
 
 function isStoryboardAsset(asset: AssetItem | null | undefined) {
-  if (!asset) {
-    return false
-  }
-  const sourceType = String(asset.sourceType || '').trim().toUpperCase()
-  const group = String(asset.assetGroup || '').trim()
-  const role = normalizedAssetRole(asset)
-  const fileName = asset.fileName.toLowerCase()
-  return (
-    sourceType === 'STORYBOARD_GENERATE' ||
-    sourceType === 'VIDEO_SCRIPT_ANALYZE' ||
-    sourceType === 'VIDEO_SCRIPT_URL_ANALYZE' ||
-    role === 'storyboard_json' ||
-    group === GROUP_STORYBOARD ||
-    fileName.includes('分镜')
-  )
+  return isStoryboardAssetShared(asset)
 }
 
 function formatFileSize(size: number) {
