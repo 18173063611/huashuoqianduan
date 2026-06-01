@@ -1180,12 +1180,16 @@ function formatFileSize(size: number) {
   justify-content: center;
   background: rgba(15, 23, 42, 0.42);
   padding: 20px;
+  overflow: hidden;
 }
 
 .asset-picker-modal {
-  display: grid;
+  display: flex;
+  flex-direction: column;
   width: min(820px, 100%);
-  max-height: min(82vh, 680px);
+  height: min(82vh, 680px);
+  max-height: calc(100vh - 40px);
+  min-height: 0;
   overflow: hidden;
   border: 1px solid rgba(226, 232, 240, 0.95);
   border-radius: 14px;
@@ -1320,9 +1324,11 @@ function formatFileSize(size: number) {
   display: grid;
   grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
   gap: 8px;
-  min-height: 180px;
+  flex: 1 1 auto;
+  min-height: 0;
   overflow: auto;
-  padding-right: 2px;
+  overscroll-behavior: contain;
+  padding-right: 6px;
 }
 
 .asset-picker-list-rich {
@@ -1517,6 +1523,7 @@ function formatFileSize(size: number) {
 
 .asset-picker-empty {
   display: grid;
+  flex: 1 1 auto;
   min-height: 180px;
   place-items: center;
   border: 1px dashed #dfe3ed;

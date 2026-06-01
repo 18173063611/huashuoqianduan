@@ -311,7 +311,18 @@
               <audio :src="resolveFileUrl(asset.fileUrl)" controls preload="none" />
             </template>
             <template v-else-if="isVideo(asset)">
-              <video :src="resolveFileUrl(asset.fileUrl)" controls preload="none" />
+              <div class="asset-video-thumb">
+                <video
+                  :src="resolveFileUrl(asset.fileUrl)"
+                  :poster="videoPosterUrl(asset) || undefined"
+                  muted
+                  playsinline
+                  preload="metadata"
+                  aria-label="视频画面预览"
+                  @loadedmetadata="handleVideoMetadataLoaded(asset, $event)"
+                />
+                <span v-if="videoDurationText(asset)" class="asset-video-duration">{{ videoDurationText(asset) }}</span>
+              </div>
             </template>
             <template v-else-if="canOpenStructuredPreview(asset)">
               <div class="asset-result-card">
@@ -945,6 +956,7 @@ const previewAsset = ref<AssetItem | null>(null)
 const previewPayload = ref<unknown>(null)
 const previewShotIndex = ref(-1)
 const inlinePreviewByAssetId = ref<Record<number, AssetInlinePreview>>({})
+const videoDurationByAssetId = ref<Record<number, string>>({})
 let inlinePreviewLoadSeq = 0
 
 const voicesHeadTitle = computed(() =>
@@ -1780,6 +1792,84 @@ function resolveFileUrl(url: string) {
     return '#'
   }
   return url.startsWith('http') ? url : `${API_ORIGIN}${url}`
+}
+
+function videoPosterUrl(asset: AssetItem) {
+  const metadata = parseJsonObject(asset.metadataJson)
+  const poster = firstNonEmptyText(
+    asset.thumbnailUrl || '',
+    stringField(metadata, 'coverUrl'),
+    stringField(metadata, 'thumbnailUrl'),
+    stringField(metadata, 'posterUrl'),
+    stringField(metadata, 'poster'),
+    stringField(metadata, 'poster_url'),
+  )
+  return poster ? resolveFileUrl(poster) : ''
+}
+
+function videoDurationText(asset: AssetItem) {
+  const loaded = videoDurationByAssetId.value[asset.assetId]
+  if (loaded) {
+    return loaded
+  }
+  const seconds = metadataDurationSeconds(asset)
+  return seconds > 0 ? formatDuration(seconds) : ''
+}
+
+function handleVideoMetadataLoaded(asset: AssetItem, event: Event) {
+  const video = event.currentTarget as HTMLVideoElement | null
+  const duration = video?.duration
+  if (!Number.isFinite(duration) || !duration || duration <= 0) {
+    return
+  }
+  videoDurationByAssetId.value = {
+    ...videoDurationByAssetId.value,
+    [asset.assetId]: formatDuration(duration),
+  }
+}
+
+function metadataDurationSeconds(asset: AssetItem) {
+  const metadata = parseJsonObject(asset.metadataJson)
+  const direct = [
+    metadata?.durationSeconds,
+    metadata?.durationSec,
+    metadata?.videoDurationSeconds,
+    metadata?.videoDuration,
+    metadata?.duration,
+    metadata?.durationText,
+    metadata?.outputDuration,
+    metadata?.totalDuration,
+  ]
+  for (const raw of direct) {
+    const seconds = durationSecondsFromValue(raw)
+    if (seconds > 0) {
+      return seconds
+    }
+  }
+  const millis = durationSecondsFromValue(metadata?.durationMs || metadata?.videoDurationMs || metadata?.durationMillis)
+  return millis > 0 ? millis / 1000 : 0
+}
+
+function durationSecondsFromValue(value: unknown) {
+  if (typeof value === 'number' && Number.isFinite(value)) {
+    return value
+  }
+  if (typeof value !== 'string') {
+    return 0
+  }
+  const text = value.trim()
+  if (!text) {
+    return 0
+  }
+  if (/^\d+(\.\d+)?$/.test(text)) {
+    return Number(text)
+  }
+  const timeParts = text.match(/^(\d{1,2}:)?\d{1,2}:\d{1,2}(\.\d+)?$/)
+  if (timeParts) {
+    return text.split(':').reduce((total, part) => total * 60 + Number(part), 0)
+  }
+  const secondsMatch = text.match(/(\d+(?:\.\d+)?)\s*(秒|s|sec|secs|second|seconds)/i)
+  return secondsMatch ? Number(secondsMatch[1]) : 0
 }
 
 function isImage(asset: AssetItem) {
@@ -3029,10 +3119,41 @@ async function playVoiceSample(voice: VoicePresetItem) {
   border-radius: 10px;
 }
 
-.asset-row-preview audio,
-.asset-row-preview video {
+.asset-row-preview audio {
   width: 320px;
   max-width: 100%;
+}
+
+.asset-video-thumb {
+  position: relative;
+  width: 320px;
+  max-width: 100%;
+  overflow: hidden;
+  border: 1px solid rgba(148, 163, 184, 0.22);
+  border-radius: 10px;
+  background: #0f172a;
+  aspect-ratio: 16 / 9;
+}
+
+.asset-video-thumb video {
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  pointer-events: none;
+}
+
+.asset-video-duration {
+  position: absolute;
+  right: 8px;
+  bottom: 8px;
+  border-radius: 6px;
+  background: rgba(15, 23, 42, 0.78);
+  color: #ffffff;
+  padding: 4px 7px;
+  font-size: 12px;
+  font-weight: 850;
+  line-height: 1;
 }
 
 .asset-result-card {
