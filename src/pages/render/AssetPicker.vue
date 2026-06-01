@@ -76,6 +76,12 @@
               v-if="richJsonMode"
               class="asset-picker-item asset-picker-item-rich"
               :class="{ active: selectedAssetId === asset.assetId }"
+              role="button"
+              tabindex="0"
+              @click="highlightAsset(asset)"
+              @dblclick="selectAsset(asset)"
+              @keydown.enter.prevent="highlightAsset(asset)"
+              @keydown.space.prevent="highlightAsset(asset)"
             >
               <div class="asset-picker-rich-main">
                 <img
@@ -116,9 +122,6 @@
                 </a>
               </div>
 
-              <div class="asset-picker-actions">
-                <button class="asset-picker-button" type="button" :disabled="busy" @click="selectAsset(asset)">选择</button>
-              </div>
             </article>
             <button
               v-else
@@ -126,7 +129,8 @@
               :class="{ active: selectedAssetId === asset.assetId }"
               type="button"
               :disabled="busy"
-              @click="selectAsset(asset)"
+              @click="highlightAsset(asset)"
+              @dblclick="selectAsset(asset)"
             >
               <img v-if="isImage" :src="resolveUrl(asset.thumbnailUrl || asset.fileUrl)" alt="" />
               <span v-else class="asset-picker-icon">{{ assetIcon(asset) }}</span>
@@ -139,6 +143,18 @@
             </button>
           </template>
         </div>
+
+        <footer class="asset-picker-modal-foot">
+          <span>{{ activeAsset ? `当前选择：${activeAsset.fileName}` : '单击选中资产，双击可直接选择' }}</span>
+          <button
+            class="asset-picker-button asset-picker-primary"
+            type="button"
+            :disabled="busy || !activeAsset"
+            @click="confirmSelectedAsset"
+          >
+            选择
+          </button>
+        </footer>
       </section>
     </div>
   </Teleport>
@@ -250,6 +266,9 @@ const filteredAssets = computed(() => {
     return true
   })
 })
+const activeAsset = computed(() =>
+  filteredAssets.value.find((asset) => asset.assetId === selectedAssetId.value) || null,
+)
 const emptyResultText = computed(() =>
   selectedRoleFilter.value === 'all'
     ? `暂无可选${selectedScope.value === 'private' ? '私有' : '公共'}资产`
@@ -405,6 +424,9 @@ async function loadAssets() {
     )
     const rows = dedupeAssets(lists.flat())
     assets.value = rows.filter(isAllowedSourceType)
+    if (selectedAssetId.value && !assets.value.some((asset) => asset.assetId === selectedAssetId.value)) {
+      selectedAssetId.value = null
+    }
     await loadAssetPreviews()
   } catch (error) {
     errorMessage.value = error instanceof Error ? error.message : '加载资产失败'
@@ -1077,6 +1099,20 @@ function selectAsset(asset: AssetItem) {
   closePicker()
 }
 
+function highlightAsset(asset: AssetItem) {
+  if (busy.value) {
+    return
+  }
+  selectedAssetId.value = asset.assetId
+}
+
+function confirmSelectedAsset() {
+  if (!activeAsset.value) {
+    return
+  }
+  selectAsset(activeAsset.value)
+}
+
 function formatDateTime(value: string | null | undefined) {
   if (!value) {
     return '-'
@@ -1165,6 +1201,18 @@ function formatFileSize(size: number) {
   color: #5e50df;
 }
 
+.asset-picker-primary {
+  border-color: #4f46e5;
+  background: #4f46e5;
+  color: #ffffff;
+}
+
+.asset-picker-primary:hover:not(:disabled) {
+  border-color: #4338ca;
+  background: #4338ca;
+  color: #ffffff;
+}
+
 .asset-picker-open:disabled,
 .asset-picker-button:disabled {
   opacity: 0.6;
@@ -1217,6 +1265,25 @@ function formatFileSize(size: number) {
   margin: 0;
   color: #667085;
   font-size: 13px;
+}
+
+.asset-picker-modal-foot {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 12px;
+  border-top: 1px solid #eef0f6;
+  padding-top: 12px;
+}
+
+.asset-picker-modal-foot span {
+  min-width: 0;
+  overflow: hidden;
+  color: #667085;
+  font-size: 12.5px;
+  font-weight: 700;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .asset-picker-hint {
@@ -1373,11 +1440,6 @@ function formatFileSize(size: number) {
   display: grid;
   gap: 5px;
   min-width: 0;
-}
-
-.asset-picker-actions {
-  display: flex;
-  justify-content: flex-end;
 }
 
 .asset-picker-item.active,
