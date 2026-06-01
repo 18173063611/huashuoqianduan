@@ -1918,9 +1918,9 @@ const carSubtitleLanguageOptions = [
   { value: 'en-US', label: '英语' },
 ]
 const carSyncStrategyOptions: Array<{ key: CarSyncStrategy; label: string; hint: string }> = [
-  { key: 'auto', label: '智能同步', hint: '有口播音频时按最终音轨校准画面时长，没有口播时保持画面节奏。' },
-  { key: 'audio_master', label: '口播优先', hint: '以口播音频为准，画面会轻微变速、补帧或裁切来贴合音轨。' },
-  { key: 'visual_master', label: '画面优先', hint: '保持画面原节奏，口播音频会按画面时长补静音或裁切。' },
+  { key: 'auto', label: '智能同步', hint: '默认按分镜画面总时长成片；自动 TTS 会根据目标时长调整语速，不再默认拉长画面。' },
+  { key: 'audio_master', label: '口播优先', hint: '仅在明确需要完整保留外部口播时使用，画面会变速或补帧贴合音轨。' },
+  { key: 'visual_master', label: '画面优先', hint: '保持画面原节奏；外部口播按画面时长兜底处理，自动 TTS 会优先匹配语速。' },
 ]
 const carSubtitleTimingOptions: Array<{ key: CarSubtitleTimingMode; label: string; hint: string }> = [
   { key: 'auto', label: '智能字幕', hint: '有最终音轨时优先识别音频时间戳，失败后回退文案时间轴。' },
@@ -2694,15 +2694,15 @@ const carVoicePolicyDescription = computed(() => {
   }
   if (usesModelNativeVoiceover()) {
     if (isMultiCarCompareMode.value) {
-      return `将按多车型对比结构生成画面；多段成片会由后端强制使用单条统一口播音轨，避免前后音色漂移。风格：${carNativeVoiceStyleSummary.value}。`
+      return `将按多车型对比结构生成画面；多段成片会由后端使用单条统一口播音轨，并按分镜总时长自动调整语速。风格：${carNativeVoiceStyleSummary.value}。`
     }
     if (carVoiceTextSource.value === 'benchmark' && carBenchmarkVoiceText.value.trim()) {
-      return `将按爆款对标文案生成画面；多段成片会由后端强制使用单条统一口播音轨，避免前后音色漂移。风格：${carNativeVoiceStyleSummary.value}。`
+      return `将按爆款对标文案生成画面；多段成片会由后端使用单条统一口播音轨，并按分镜总时长自动调整语速。风格：${carNativeVoiceStyleSummary.value}。`
     }
     if (carVoiceTextSource.value === 'manual' && carVoiceContext.value.trim()) {
-      return `已检测到手写口播文案；多段成片会由后端强制使用单条统一口播音轨，避免前后音色漂移。风格：${carNativeVoiceStyleSummary.value}。`
+      return `已检测到手写口播文案；多段成片会由后端使用单条统一口播音轨，并按分镜总时长自动调整语速。风格：${carNativeVoiceStyleSummary.value}。`
     }
-    return `未上传口播音频；系统会整理口播文案，多段成片会由后端强制使用单条统一口播音轨，避免前后音色漂移。风格：${carNativeVoiceStyleSummary.value}。`
+    return `未上传口播音频；系统会整理口播文案，多段成片会由后端使用单条统一口播音轨，并按分镜总时长自动调整语速。风格：${carNativeVoiceStyleSummary.value}。`
   }
   if (carBgmUrl.value.trim()) {
     return '当前只选择了 BGM；BGM 不会作为口播、字幕或口型来源。'
