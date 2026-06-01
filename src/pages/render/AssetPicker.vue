@@ -389,7 +389,7 @@ async function loadAssets() {
       ),
     )
     const rows = dedupeAssets(lists.flat())
-    assets.value = rows.filter(isSelectableAsset)
+    assets.value = sortAssetsByCreatedAtDesc(rows.filter(isSelectableAsset))
     if (selectedAssetId.value && !assets.value.some((asset) => asset.assetId === selectedAssetId.value)) {
       selectedAssetId.value = null
     }
@@ -410,6 +410,15 @@ function dedupeAssets(items: AssetItem[]) {
     seen.add(item.assetId)
     return true
   })
+}
+
+function sortAssetsByCreatedAtDesc(items: AssetItem[]) {
+  return [...items].sort((a, b) => createdAtMillis(b) - createdAtMillis(a) || b.assetId - a.assetId)
+}
+
+function createdAtMillis(asset: AssetItem) {
+  const time = new Date(asset.createdAt || '').getTime()
+  return Number.isFinite(time) ? time : 0
 }
 
 async function loadAssetPreviews() {
@@ -514,12 +523,13 @@ function buildFallbackPreview(asset: AssetItem): AssetPickerPreview {
     textAt(meta, 'originalText'),
     textAt(meta, 'content'),
   ), 180)
-  const normalizedRole = assetNormalizedRole(asset)
-  const isBenchmarkLike = normalizedRole === 'benchmark_json' || normalizedRole === 'voice_script' || asset.assetGroup === '爆款对标'
+  const isStoryboardLike = isStoryboardAsset(asset)
+  const isBenchmarkLike = isBenchmarkAsset(asset)
   const title = firstText(
+    isStoryboardLike && parsedSource ? `分镜：${parsedSource}` : '',
+    isStoryboardLike ? `分镜：${asset.fileName}` : '',
     isBenchmarkLike && parsedSource ? `爆款对标：${parsedSource}` : '',
     isBenchmarkLike ? `爆款对标：${asset.fileName}` : '',
-    assetNormalizedRole(asset) === 'storyboard_json' && parsedSource ? `分镜：${parsedSource}` : '',
     textAt(meta, 'title'),
     textAt(meta, 'sourceTitle'),
     textAt(meta, 'sourceUrl'),
@@ -598,36 +608,9 @@ function buildJsonPreview(asset: AssetItem, text: string): AssetPickerPreview {
   const authorName = firstText(textAt(author, 'nickname'), textAt(author, 'uniqueId'))
   const coverUrl = resolveUrl(firstText(textAt(parseResult, 'coverUrl'), textAt(meta, 'coverUrl'), textAt(parsed, 'coverUrl')))
   const normalizedRole = assetNormalizedRole(asset)
+  const storyboardLike = isStoryboardAsset(asset) || normalizedRole === 'storyboard_json'
 
-  if (normalizedRole === 'benchmark_json' || benchmarkTitle || transcript || sourceTypeLabel(asset.sourceType).includes('爆款')) {
-    const previewText = ellipsis(firstText(
-      transcript,
-      textAt(meta, 'previewText'),
-      benchmarkTitle,
-      parsedSource,
-      '暂无口播转写，选择后会作为口播参考。',
-    ), 220)
-    return {
-      title: `爆款对标：${firstText(benchmarkTitle, parsedSource, asset.fileName)}`,
-      subtitle: [sourceTypeLabel(asset.sourceType), authorName ? `作者：${authorName}` : '', durationLabel(textAt(parseResult, 'durationSeconds'))]
-        .filter(Boolean)
-        .join(' · '),
-      detail: ellipsis(firstText(
-        parsedSource ? `解析视频：${parsedSource}${transcript ? ` · 口播：${transcript}` : ''}` : '',
-        transcript,
-        sourceUrl,
-        '暂无口播转写，选择后会作为口播参考。',
-      ), 110),
-      coverUrl,
-      sourceLabel: firstText(parsedSource, sourceUrl),
-      sourceUrl,
-      sourceTime,
-      previewLabel: transcript ? '口播预览' : '文案预览',
-      previewText,
-    }
-  }
-
-  if (shots.length > 0 || normalizedRole === 'storyboard_json') {
+  if (storyboardLike || shots.length > 0) {
     const firstShot = objectAt(shots[0])
     const shotText = firstText(
       storyboardPreviewText(shots),
@@ -656,6 +639,34 @@ function buildJsonPreview(asset: AssetItem, text: string): AssetPickerPreview {
       sourceUrl,
       sourceTime,
       previewLabel: shots.length > 1 ? '分镜预览' : '首镜预览',
+      previewText,
+    }
+  }
+
+  if (isBenchmarkAsset(asset) || normalizedRole === 'benchmark_json') {
+    const previewText = ellipsis(firstText(
+      transcript,
+      textAt(meta, 'previewText'),
+      benchmarkTitle,
+      parsedSource,
+      '暂无口播转写，选择后会作为口播参考。',
+    ), 220)
+    return {
+      title: `爆款对标：${firstText(benchmarkTitle, parsedSource, asset.fileName)}`,
+      subtitle: [sourceTypeLabel(asset.sourceType), authorName ? `作者：${authorName}` : '', durationLabel(textAt(parseResult, 'durationSeconds'))]
+        .filter(Boolean)
+        .join(' · '),
+      detail: ellipsis(firstText(
+        parsedSource ? `解析视频：${parsedSource}${transcript ? ` · 口播：${transcript}` : ''}` : '',
+        transcript,
+        sourceUrl,
+        '暂无口播转写，选择后会作为口播参考。',
+      ), 110),
+      coverUrl,
+      sourceLabel: firstText(parsedSource, sourceUrl),
+      sourceUrl,
+      sourceTime,
+      previewLabel: transcript ? '口播预览' : '文案预览',
       previewText,
     }
   }

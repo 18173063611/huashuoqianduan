@@ -50,8 +50,13 @@ const ROLE_LABELS: Record<string, string> = {
 const ROLE_ALIASES: Record<string, string> = {
   benchmark: 'benchmark_json',
   douyin_benchmark: 'benchmark_json',
+  benchmark_extract: 'benchmark_json',
+  benchmark_extraction: 'benchmark_json',
+  douyin_benchmark_extract: 'benchmark_json',
+  douyin_benchmark_extraction: 'benchmark_json',
   storyboard: 'storyboard_json',
   script_storyboard: 'storyboard_json',
+  storyboard_script: 'storyboard_json',
   front: 'car_exterior_front',
   exterior_front: 'car_exterior_front',
   car_front: 'car_exterior_front',
@@ -107,6 +112,7 @@ const SOURCE_TYPE_LABELS: Record<string, string> = {
   VIDEO_SCRIPT_ANALYZE: '分镜生成',
   VIDEO_SCRIPT_URL_ANALYZE: '链接分镜',
   DOUYIN_BENCHMARK: '爆款对标',
+  DOUYIN_BENCHMARK_EXTRACT: '爆款对标',
   DOUYIN_PARSE_TRANSCRIPT: '爆款对标转写',
   DOUYIN_REWRITE: '爆款文案改写',
   DOUYIN_TRANSCRIPT: '爆款口播转写',
@@ -161,6 +167,9 @@ export function isBenchmarkAsset(asset: AssetItem | null | undefined) {
   const group = String(asset.assetGroup || '').trim()
   const role = normalizedAssetRole(asset)
   const fileName = asset.fileName.toLowerCase()
+  if (role === 'storyboard_json' || group === GROUP_STORYBOARD) {
+    return false
+  }
   return (
     sourceType.includes('DOUYIN') ||
     role === 'benchmark_json' ||
@@ -178,6 +187,9 @@ export function isStoryboardAsset(asset: AssetItem | null | undefined) {
   const group = String(asset.assetGroup || '').trim()
   const role = normalizedAssetRole(asset)
   const fileName = asset.fileName.toLowerCase()
+  if (role === 'benchmark_json' || role === 'voice_script' || group === GROUP_BENCHMARK) {
+    return false
+  }
   return (
     sourceType === 'STORYBOARD_GENERATE' ||
     sourceType === 'VIDEO_SCRIPT_ANALYZE' ||
@@ -293,7 +305,7 @@ function inferAssetRole(asset: AssetItem, metadata: Record<string, unknown> | nu
 
   if (assetType === 'JSON') {
     if (bundleType === 'car_model') return 'car_model_bundle'
-    if (['DOUYIN_BENCHMARK', 'DOUYIN_PARSE_TRANSCRIPT', 'DOUYIN_REWRITE', 'DOUYIN_TRANSCRIPT'].includes(sourceType) || name.includes('benchmark') || name.includes('爆款') || name.includes('对标')) return 'benchmark_json'
+    if (['DOUYIN_BENCHMARK', 'DOUYIN_BENCHMARK_EXTRACT', 'DOUYIN_PARSE_TRANSCRIPT', 'DOUYIN_REWRITE', 'DOUYIN_TRANSCRIPT'].includes(sourceType) || name.includes('benchmark') || name.includes('爆款') || name.includes('对标')) return 'benchmark_json'
     if (['STORYBOARD_GENERATE', 'VIDEO_SCRIPT_ANALYZE', 'VIDEO_SCRIPT_URL_ANALYZE'].includes(sourceType) || name.includes('storyboard') || name.includes('video-script') || name.includes('分镜')) return 'storyboard_json'
   }
 
