@@ -125,6 +125,7 @@ export type QuickRenderAssetRole =
   | 'scene_showroom'
   | 'scene_outdoor'
   | 'scene_road'
+  | 'scene_night'
   | 'host_image'
   | 'voiceover'
   | 'bgm'

@@ -33,12 +33,21 @@
           <small>上传后自动保存到资产中心，并参与一键成片识别。</small>
         </label>
         <AssetPicker
-          title="资产中心图片"
+          title="资产中心车辆/人物图片"
           asset-type="IMAGE"
           :selected-url="quickPickedImageUrl"
           :role-options="quickImageRoleOptions"
-          placeholder="搜索图片素材..."
+          placeholder="搜索车辆、内饰、细节或人物图片..."
           @select="handleAssetCenterSelect"
+        />
+        <AssetPicker
+          title="资产中心场景图"
+          asset-type="IMAGE"
+          :selected-url="quickPickedSceneImageUrl"
+          :role-options="quickSceneImageRoleOptions"
+          source-hint="场景图会按展厅、户外、道路或夜景门店参与分镜背景匹配"
+          placeholder="搜索展厅、道路、门店、城市等场景图片..."
+          @select="handleSceneAssetCenterSelect"
         />
         <AssetPicker
           title="资产中心车型素材包"
@@ -325,6 +334,7 @@ const roleOptions: Array<{ value: QuickRenderAssetRole; label: string }> = [
   { value: 'scene_showroom', label: '展厅场景' },
   { value: 'scene_outdoor', label: '户外场景' },
   { value: 'scene_road', label: '道路场景' },
+  { value: 'scene_night', label: '夜景/门店' },
   { value: 'host_image', label: '数字人图片' },
   { value: 'voiceover', label: '口播音频' },
   { value: 'bgm', label: 'BGM' },
@@ -341,7 +351,10 @@ const roleOptions: Array<{ value: QuickRenderAssetRole; label: string }> = [
 ]
 
 const quickImageRoleOptions = roleOptions.filter((item) =>
-  item.value.startsWith('car_') || item.value.startsWith('scene_') || item.value === 'host_image',
+  item.value.startsWith('car_') || item.value === 'host_image',
+)
+const quickSceneImageRoleOptions = roleOptions.filter((item) =>
+  item.value.startsWith('scene_'),
 )
 const quickAudioRoleOptions = roleOptions.filter((item) =>
   ['voiceover', 'reference_audio', 'bgm'].includes(item.value),
@@ -361,6 +374,7 @@ const quickVideoRoleOptions = roleOptions.filter((item) =>
 
 const materials = ref<QuickMaterial[]>([])
 const quickPickedImageUrl = ref('')
+const quickPickedSceneImageUrl = ref('')
 const quickPickedCarBundleUrl = ref('')
 const quickPickedAudioUrl = ref('')
 const quickPickedJsonUrl = ref('')
@@ -559,13 +573,31 @@ async function handleAssetCenterSelect(payload: { asset: AssetItem; url: string 
   }
 }
 
-async function appendMaterial(asset: AssetItem, file: QuickFileLike) {
-  if (materials.value.some((item) => item.asset.assetId === asset.assetId)) {
+async function handleSceneAssetCenterSelect(payload: { asset: AssetItem; url: string }) {
+  errorMessage.value = ''
+  quickPickedSceneImageUrl.value = payload.url
+  const sceneRole = sceneRoleForPickedAsset(payload.asset)
+  try {
+    await appendMaterial(payload.asset, {
+      name: payload.asset.fileName || '',
+      type: payload.asset.mimeType || '',
+    }, sceneRole)
+  } catch (error) {
+    errorMessage.value = error instanceof Error ? error.message : '场景图加入失败'
+  }
+}
+
+async function appendMaterial(asset: AssetItem, file: QuickFileLike, forcedRole?: QuickRenderAssetRole) {
+  const existing = materials.value.find((item) => item.asset.assetId === asset.assetId)
+  if (existing) {
+    if (forcedRole) {
+      existing.role = forcedRole
+    }
     return
   }
   const material: QuickMaterial = {
     asset,
-    role: inferRole(file, asset),
+    role: forcedRole || inferRole(file, asset),
   }
   if (shouldReadText(asset, file)) {
     material.textContent = await readTextContent(asset).catch(() => '')
@@ -597,6 +629,11 @@ function removeMaterial(assetId: number) {
 
 function roleLabel(role: QuickRenderAssetRole | string) {
   return roleOptions.find((item) => item.value === role)?.label || '自动素材'
+}
+
+function sceneRoleForPickedAsset(asset: AssetItem): QuickRenderAssetRole {
+  const role = inferRole({ name: asset.fileName || '', type: asset.mimeType || '' }, asset)
+  return role.startsWith('scene_') ? role : 'scene_showroom'
 }
 
 async function ensureNarrationReadyForSubmit() {
@@ -1032,6 +1069,8 @@ function inferRoleFromNameAndMime(nameText: string, mimeText: string | null | un
     if (name.includes('light') || name.includes('灯')) return 'car_detail_light'
     if (name.includes('showroom') || name.includes('展厅')) return 'scene_showroom'
     if (name.includes('road') || name.includes('道路')) return 'scene_road'
+    if (name.includes('night') || name.includes('夜景') || name.includes('门店')) return 'scene_night'
+    if (name.includes('outdoor') || name.includes('city') || name.includes('户外') || name.includes('城市') || name.includes('场景')) return 'scene_outdoor'
     if (name.includes('car') || name.includes('front') || name.includes('车')) return 'car_exterior_front'
     return 'scene_outdoor'
   }

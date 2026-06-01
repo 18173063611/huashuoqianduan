@@ -2694,15 +2694,15 @@ const carVoicePolicyDescription = computed(() => {
   }
   if (usesModelNativeVoiceover()) {
     if (isMultiCarCompareMode.value) {
-      return `将按多车型对比结构生成画面和模型原生音频；风格：${carNativeVoiceStyleSummary.value}。`
+      return `将按多车型对比结构生成画面；多段成片会由后端强制使用单条统一口播音轨，避免前后音色漂移。风格：${carNativeVoiceStyleSummary.value}。`
     }
     if (carVoiceTextSource.value === 'benchmark' && carBenchmarkVoiceText.value.trim()) {
-      return `将按爆款对标文案生成画面和模型原生音频；风格：${carNativeVoiceStyleSummary.value}。`
+      return `将按爆款对标文案生成画面；多段成片会由后端强制使用单条统一口播音轨，避免前后音色漂移。风格：${carNativeVoiceStyleSummary.value}。`
     }
     if (carVoiceTextSource.value === 'manual' && carVoiceContext.value.trim()) {
-      return `已检测到手写口播文案；视频模型会直接按这版文案生成画面和原生音频。风格：${carNativeVoiceStyleSummary.value}。`
+      return `已检测到手写口播文案；多段成片会由后端强制使用单条统一口播音轨，避免前后音色漂移。风格：${carNativeVoiceStyleSummary.value}。`
     }
-    return `未上传口播音频；系统会根据车型卖点、文案场景和转化引导整理文案，再由视频模型生成画面和原生音频。风格：${carNativeVoiceStyleSummary.value}。`
+    return `未上传口播音频；系统会整理口播文案，多段成片会由后端强制使用单条统一口播音轨，避免前后音色漂移。风格：${carNativeVoiceStyleSummary.value}。`
   }
   if (carBgmUrl.value.trim()) {
     return '当前只选择了 BGM；BGM 不会作为口播、字幕或口型来源。'
