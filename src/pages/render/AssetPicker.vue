@@ -1249,6 +1249,7 @@ function formatFileSize(size: number) {
 
 .asset-picker-modal-head {
   display: flex;
+  flex: 0 0 auto;
   align-items: flex-start;
   justify-content: space-between;
   gap: 12px;
@@ -1269,6 +1270,7 @@ function formatFileSize(size: number) {
 
 .asset-picker-modal-foot {
   display: grid;
+  flex: 0 0 auto;
   grid-template-columns: minmax(0, 1fr) auto;
   align-items: center;
   gap: 12px;
@@ -1296,6 +1298,7 @@ function formatFileSize(size: number) {
 
 .asset-picker-search {
   display: grid;
+  flex: 0 0 auto;
   grid-template-columns: minmax(0, 1fr) auto;
   align-items: center;
   gap: 10px;
@@ -1321,14 +1324,17 @@ function formatFileSize(size: number) {
 
 .asset-picker-role-filter {
   display: flex;
+  flex: 0 0 auto;
   flex-wrap: wrap;
   gap: 8px;
 }
 
 .asset-picker-scope-filter {
   display: inline-flex;
+  flex: 0 0 auto;
   width: fit-content;
-  overflow: hidden;
+  min-height: 38px;
+  overflow: visible;
   border: 1px solid #e3e7ef;
   border-radius: 8px;
   background: #f8fafc;

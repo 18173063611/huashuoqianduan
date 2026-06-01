@@ -5019,6 +5019,9 @@ const carHostHumanEvidence = computed(() => {
 
 const HUMAN_DESCRIPTION_KEYWORDS = [
   '人物',
+  '数字人',
+  '虚拟人物',
+  '虚拟数字人',
   '真人',
   '人脸',
   '人像',
@@ -5046,15 +5049,39 @@ const HUMAN_DESCRIPTION_KEYWORDS = [
   '挥手',
 ]
 
+const HUMAN_DESCRIPTION_PATTERNS = [
+  /\bpresenter\b/i,
+  /\bhost\b/i,
+  /\bhost\s+image\b/i,
+  /\bdigital\s+human\b/i,
+  /\bavatar\b/i,
+  /\bspokesperson\b/i,
+  /\bsales\s+(?:consultant|advisor|presenter|host)\b/i,
+  /\bon[-\s]?camera\b/i,
+  /\bappear(?:s|ing)?\b/i,
+  /\bperson\b/i,
+  /\bpeople\b/i,
+  /\bhuman\b/i,
+  /\bface\b/i,
+  /\bhalf[-\s]?body\b/i,
+  /\bfull[-\s]?body\b/i,
+  /\bstanding\s+beside\b/i,
+  /\bstand(?:s|ing)?\s+(?:beside|next\s+to|near)\b/i,
+  /\bspeak(?:s|ing)?\s+(?:to|towards|on)\s+(?:the\s+)?camera\b/i,
+]
+
 function countHumanDescriptionHits(text: string) {
   const source = text.trim()
   if (!source) {
     return 0
   }
-  return HUMAN_DESCRIPTION_KEYWORDS.reduce((total, keyword) => {
+  const keywordHits = HUMAN_DESCRIPTION_KEYWORDS.reduce((total, keyword) => {
     const matches = source.match(new RegExp(keyword.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'g'))
     return total + (matches?.length || 0)
   }, 0)
+  const patternHits = HUMAN_DESCRIPTION_PATTERNS.reduce((total, pattern) => total + (pattern.test(source) ? 1 : 0), 0)
+  const explicitHostFlag = /"?(?:hostAppearanceEnabled|hasHostAppearance)"?\s*[:=]\s*true/i.test(source) ? 2 : 0
+  return keywordHits + patternHits + explicitHostFlag
 }
 
 function sourceTypeLabelForAudio(sourceType: string) {
