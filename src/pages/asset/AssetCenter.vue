@@ -710,6 +710,8 @@ import { rememberSessionTaskId } from '../../services/sessionTaskStore'
 import { VOICE_PRESET_SELECTION_KEY, type VoicePresetItem } from '../../types/voiceTypes'
 import { taskTypeLabel } from '../../utils/taskDisplay'
 import {
+  assetWorkflowDisplayMeta as assetWorkflowDisplayMetaShared,
+  assetWorkflowDisplayTitle as assetWorkflowDisplayTitleShared,
   isBenchmarkAsset as isBenchmarkAssetShared,
   isCarModelBundleAsset as isCarModelBundleAssetShared,
   isStoryboardAsset as isStoryboardAssetShared,
@@ -1916,12 +1918,6 @@ function canEditScriptAsset(asset: AssetItem) {
   return visibility === 'PRIVATE' && asset.ownerUserId != null && asset.ownerUserId === currentUser.value.userId
 }
 
-function carBundleAssetTitle(asset: AssetItem) {
-  const metadata = parseJsonObject(asset.metadataJson)
-  const title = [stringField(metadata, 'brandModel'), stringField(metadata, 'color')].filter(Boolean).join(' · ')
-  return title ? `车型素材包：${title}` : asset.fileName
-}
-
 function resultAssetLabel(asset: AssetItem) {
   if (isCarModelBundleAsset(asset)) {
     return '车型素材包'
@@ -1982,14 +1978,9 @@ function compactSourceLabel(value: string) {
 }
 
 function displayAssetTitle(asset: AssetItem) {
-  if (isCarModelBundleAsset(asset)) {
-    return carBundleAssetTitle(asset)
-  }
-  if (isBenchmarkAsset(asset)) {
-    return `爆款对标：${generatedAssetSourceLabel(asset) || asset.fileName}`
-  }
-  if (isStoryboardAsset(asset)) {
-    return `分镜：${generatedAssetSourceLabel(asset) || asset.fileName}`
+  const workflowTitle = assetWorkflowDisplayTitleShared(asset)
+  if (workflowTitle) {
+    return workflowTitle
   }
   if (isJson(asset) && asset.kind === 'GENERATED') {
     const sourceLabel = generatedAssetSourceLabel(asset)
@@ -2002,19 +1993,9 @@ function displayAssetTitle(asset: AssetItem) {
 }
 
 function displayAssetMeta(asset: AssetItem) {
-  if (isCarModelBundleAsset(asset)) {
-    const visibilityLabel = String(asset.visibility || '').toUpperCase() === 'PUBLIC' ? '公共素材包' : '私有素材包'
-    return `${visibilityLabel} · JSON · ${sourceTypeLabel(asset.sourceType)}`
-  }
-  if (isBenchmarkAsset(asset) || isStoryboardAsset(asset)) {
-    const sourceLabel = generatedAssetSourceLabel(asset)
-    return [
-      '生成结果',
-      isBenchmarkAsset(asset) ? '爆款对标' : '分镜生成',
-      sourceLabel ? `解析视频：${sourceLabel}` : '',
-      asset.assetType,
-      formatFileSize(asset.fileSize),
-    ].filter(Boolean).join(' · ')
+  const workflowMeta = assetWorkflowDisplayMetaShared(asset)
+  if (workflowMeta) {
+    return workflowMeta
   }
   if (isJson(asset) && asset.kind === 'GENERATED') {
     const type = assetTaskType(asset)

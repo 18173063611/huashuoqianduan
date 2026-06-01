@@ -257,6 +257,73 @@ export function matchesAssetWorkflowStage(asset: AssetItem, stage: AssetWorkflow
   return true
 }
 
+export function assetWorkflowDisplayTitle(asset: AssetItem | null | undefined) {
+  if (!asset) {
+    return ''
+  }
+  if (isCarModelBundleAsset(asset)) {
+    const metadata = parseJsonObject(asset.metadataJson)
+    const title = [stringField(metadata, 'brandModel'), stringField(metadata, 'color')].filter(Boolean).join(' · ')
+    return title ? `车型素材包：${title}` : asset.fileName
+  }
+  if (isStoryboardAsset(asset)) {
+    return `分镜：${generatedAssetSourceLabel(asset) || asset.fileName}`
+  }
+  if (isBenchmarkAsset(asset)) {
+    return `爆款对标：${generatedAssetSourceLabel(asset) || asset.fileName}`
+  }
+  return ''
+}
+
+export function assetWorkflowDisplayMeta(asset: AssetItem | null | undefined) {
+  if (!asset) {
+    return ''
+  }
+  if (isCarModelBundleAsset(asset)) {
+    const visibilityLabel = String(asset.visibility || '').toUpperCase() === 'PUBLIC' ? '公共素材包' : '私有素材包'
+    return `${visibilityLabel} · JSON · ${sourceTypeLabel(asset.sourceType)}`
+  }
+  if (isBenchmarkAsset(asset) || isStoryboardAsset(asset)) {
+    const sourceLabel = generatedAssetSourceLabel(asset)
+    return [
+      '生成结果',
+      isBenchmarkAsset(asset) ? '爆款对标' : '分镜生成',
+      sourceLabel ? `解析视频：${sourceLabel}` : '',
+      asset.assetType,
+      formatFileSize(asset.fileSize),
+    ].filter(Boolean).join(' · ')
+  }
+  return ''
+}
+
+export function assetWorkflowPreviewLabel(asset: AssetItem | null | undefined) {
+  if (!asset) {
+    return ''
+  }
+  if (isCarModelBundleAsset(asset)) return '车型素材包'
+  if (isStoryboardAsset(asset)) return '分镜摘要'
+  if (isBenchmarkAsset(asset)) return '口播文案'
+  return ''
+}
+
+export function generatedAssetSourceLabel(asset: AssetItem | null | undefined) {
+  if (!asset) {
+    return ''
+  }
+  const metadata = parseJsonObject(asset.metadataJson)
+  return compactSourceLabel(firstNonEmptyText(
+    stringField(metadata, 'sourceTitle'),
+    stringField(metadata, 'title'),
+    stringField(metadata, 'originalFileName'),
+    stringField(metadata, 'sourceUrl'),
+    stringField(metadata, 'originalUrl'),
+    stringField(metadata, 'shareUrl'),
+    stringField(metadata, 'url'),
+    stringField(metadata, 'videoId'),
+    stringField(metadata, 'playUrl'),
+  ))
+}
+
 function inferAssetRole(asset: AssetItem, metadata: Record<string, unknown> | null) {
   const assetType = String(asset.assetType || '').trim().toUpperCase()
   const sourceType = String(asset.sourceType || '').trim().toUpperCase()
@@ -305,8 +372,10 @@ function inferAssetRole(asset: AssetItem, metadata: Record<string, unknown> | nu
 
   if (assetType === 'JSON') {
     if (bundleType === 'car_model') return 'car_model_bundle'
-    if (['DOUYIN_BENCHMARK', 'DOUYIN_BENCHMARK_EXTRACT', 'DOUYIN_PARSE_TRANSCRIPT', 'DOUYIN_REWRITE', 'DOUYIN_TRANSCRIPT'].includes(sourceType) || name.includes('benchmark') || name.includes('爆款') || name.includes('对标')) return 'benchmark_json'
-    if (['STORYBOARD_GENERATE', 'VIDEO_SCRIPT_ANALYZE', 'VIDEO_SCRIPT_URL_ANALYZE'].includes(sourceType) || name.includes('storyboard') || name.includes('video-script') || name.includes('分镜')) return 'storyboard_json'
+    if (hasStoryboardTextSignal(name)) return 'storyboard_json'
+    if (hasBenchmarkTextSignal(name)) return 'benchmark_json'
+    if (['STORYBOARD_GENERATE', 'VIDEO_SCRIPT_ANALYZE', 'VIDEO_SCRIPT_URL_ANALYZE'].includes(sourceType)) return 'storyboard_json'
+    if (['DOUYIN_BENCHMARK', 'DOUYIN_BENCHMARK_EXTRACT', 'DOUYIN_PARSE_TRANSCRIPT', 'DOUYIN_REWRITE', 'DOUYIN_TRANSCRIPT'].includes(sourceType)) return 'benchmark_json'
   }
 
   if (assetType === 'TEXT') {
@@ -358,4 +427,37 @@ function stringField(record: Record<string, unknown> | null, key: string) {
 
 function firstNonEmptyText(...values: Array<string | null | undefined>) {
   return values.find((value) => typeof value === 'string' && value.trim().length > 0)?.trim() || ''
+}
+
+function hasStoryboardTextSignal(text: string) {
+  return (
+    text.includes('storyboard') ||
+    text.includes('video-script') ||
+    text.includes('video_script') ||
+    text.includes('分镜')
+  )
+}
+
+function hasBenchmarkTextSignal(text: string) {
+  return (
+    text.includes('benchmark') ||
+    text.includes('爆款') ||
+    text.includes('对标') ||
+    text.includes('口播文案') ||
+    text.includes('提取文案')
+  )
+}
+
+function compactSourceLabel(value: string) {
+  const text = value.trim()
+  if (text.length <= 56) {
+    return text
+  }
+  return `${text.slice(0, 34)}...${text.slice(-16)}`
+}
+
+function formatFileSize(size: number) {
+  if (size < 1024) return `${size} B`
+  if (size < 1024 * 1024) return `${(size / 1024).toFixed(1)} KB`
+  return `${(size / 1024 / 1024).toFixed(1)} MB`
 }

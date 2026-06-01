@@ -166,6 +166,9 @@ import { getAssets, getAssetTextContent, type AssetListScope } from '../../servi
 import { API_ORIGIN } from '../../services/request'
 import type { AssetItem, AssetType } from '../../types/assetTypes'
 import {
+  assetWorkflowDisplayMeta,
+  assetWorkflowDisplayTitle,
+  assetWorkflowPreviewLabel,
   isBenchmarkAsset,
   isStoryboardAsset,
   matchesAssetWorkflowStage,
@@ -379,10 +382,10 @@ async function loadAssets() {
   errorMessage.value = ''
   try {
     const lists = await Promise.all(
-      assetTypesToLoad.value.map((assetType) =>
+      requestAssetTypes().map((assetType) =>
         getAssets({
           scope: selectedScope.value,
-          assetType,
+          assetType: assetType || undefined,
           keyword: keyword.value || undefined,
           sort: 'createdAtDesc',
         }),
@@ -410,6 +413,17 @@ function dedupeAssets(items: AssetItem[]) {
     seen.add(item.assetId)
     return true
   })
+}
+
+function requestAssetTypes(): Array<AssetType | ''> {
+  const workflowStage = activeWorkflowStage.value
+  if (!workflowStage) {
+    return assetTypesToLoad.value
+  }
+  if (workflowStage === 'carBundle') {
+    return ['JSON']
+  }
+  return ['']
 }
 
 function sortAssetsByCreatedAtDesc(items: AssetItem[]) {
@@ -504,7 +518,19 @@ function assetIcon(asset: AssetItem) {
 }
 
 function assetPreview(asset: AssetItem) {
-  return previewByAssetId.value[asset.assetId] || buildFallbackPreview(asset)
+  return normalizePreviewWithWorkflowDisplay(asset, previewByAssetId.value[asset.assetId] || buildFallbackPreview(asset))
+}
+
+function normalizePreviewWithWorkflowDisplay(asset: AssetItem, preview: AssetPickerPreview): AssetPickerPreview {
+  const title = assetWorkflowDisplayTitle(asset)
+  const meta = assetWorkflowDisplayMeta(asset)
+  const label = assetWorkflowPreviewLabel(asset)
+  return {
+    ...preview,
+    title: title || preview.title,
+    subtitle: meta || preview.subtitle,
+    previewLabel: label || preview.previewLabel,
+  }
 }
 
 function buildFallbackPreview(asset: AssetItem): AssetPickerPreview {
@@ -523,13 +549,9 @@ function buildFallbackPreview(asset: AssetItem): AssetPickerPreview {
     textAt(meta, 'originalText'),
     textAt(meta, 'content'),
   ), 180)
-  const isStoryboardLike = isStoryboardAsset(asset)
-  const isBenchmarkLike = isBenchmarkAsset(asset)
+  const workflowTitle = assetWorkflowDisplayTitle(asset)
   const title = firstText(
-    isStoryboardLike && parsedSource ? `分镜：${parsedSource}` : '',
-    isStoryboardLike ? `分镜：${asset.fileName}` : '',
-    isBenchmarkLike && parsedSource ? `爆款对标：${parsedSource}` : '',
-    isBenchmarkLike ? `爆款对标：${asset.fileName}` : '',
+    workflowTitle,
     textAt(meta, 'title'),
     textAt(meta, 'sourceTitle'),
     textAt(meta, 'sourceUrl'),
@@ -575,7 +597,7 @@ function buildJsonPreview(asset: AssetItem, text: string): AssetPickerPreview {
     const title = firstText(textAt(parsed, 'brandModel'), asset.fileName)
     const color = textAt(parsed, 'color')
     return {
-      title: `车型素材包：${title}`,
+      title: assetWorkflowDisplayTitle(asset) || `车型素材包：${title}`,
       subtitle: ['车型素材包', color, `${images.length} 张图片`].filter(Boolean).join(' · '),
       detail: labels.length ? `包含：${labels.join('、')}` : '选择后会自动填入车型图和部位标记。',
       coverUrl: resolveUrl(textAt(objectAt(images[0]), 'url')),
@@ -627,7 +649,7 @@ function buildJsonPreview(asset: AssetItem, text: string): AssetPickerPreview {
       '暂无镜头摘要，选择后会自动填入分镜控制内容。',
     ), 150)
     return {
-      title: `分镜：${firstText(source, asset.fileName)}`,
+      title: assetWorkflowDisplayTitle(asset) || `分镜：${firstText(source, asset.fileName)}`,
       subtitle: `${sourceTypeLabel(asset.sourceType)} · ${shots.length} 个镜头 · ${asset.assetType}`,
       detail: ellipsis(firstText(
         parsedSource ? `解析视频：${parsedSource}${shotText ? ` · 首镜：${shotText}` : ''}` : '',
@@ -652,7 +674,7 @@ function buildJsonPreview(asset: AssetItem, text: string): AssetPickerPreview {
       '暂无口播转写，选择后会作为口播参考。',
     ), 220)
     return {
-      title: `爆款对标：${firstText(benchmarkTitle, parsedSource, asset.fileName)}`,
+      title: assetWorkflowDisplayTitle(asset) || `爆款对标：${firstText(benchmarkTitle, parsedSource, asset.fileName)}`,
       subtitle: [sourceTypeLabel(asset.sourceType), authorName ? `作者：${authorName}` : '', durationLabel(textAt(parseResult, 'durationSeconds'))]
         .filter(Boolean)
         .join(' · '),
