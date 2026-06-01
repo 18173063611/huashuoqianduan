@@ -579,7 +579,7 @@
                   <select :value="carSegmentCount" :disabled="busy" @change="handleCarSegmentCountChange">
                     <option v-for="n in carSegmentCountOptions" :key="n" :value="n">{{ n }} 段</option>
                   </select>
-                  <span class="app-muted render-duration-hint">会按素材、分镜和口播内容推荐，可在这里最终确认</span>
+                  <span class="app-muted render-duration-hint">{{ carSegmentCountHint }}</span>
                 </div>
                 <section class="render-recommend-panel">
                   <div class="render-recommend-main">
@@ -598,7 +598,7 @@
                 </section>
                 <div class="render-auto-current-plan">
                   <span>当前执行方案</span>
-                  <strong>{{ carSegmentCount }} 段，{{ carSegmentDurationSummary }}</strong>
+                  <strong>{{ carExecutionSegmentCount }} 组，{{ carExecutionDurationSummary }}</strong>
                   <small>{{ carDurationHint }}</small>
                 </div>
                 <section class="render-segment-duration-panel">
@@ -865,7 +865,7 @@
                         :key="option.key"
                         type="button"
                         :class="{ active: carSubtitleTimingMode === option.key }"
-                        :disabled="busy"
+                        :disabled="busy || (carSubtitleMode === 'custom' && option.key === 'audio_recognition')"
                         @click="carSubtitleTimingMode = option.key"
                       >
                         {{ option.label }}
@@ -1377,6 +1377,28 @@
               <dd>{{ row.value }}</dd>
             </div>
           </dl>
+          <section v-if="carGenerationGroupPreviewRows.length" class="render-generation-plan">
+            <div class="render-generation-plan-head">
+              <strong>分镜生成分组</strong>
+              <span>{{ carGenerationGroupSummary }}</span>
+            </div>
+            <div class="render-generation-plan-list">
+              <article
+                v-for="row in carGenerationGroupPreviewRows"
+                :key="`generation-group-${row.groupIndex}`"
+                class="render-generation-plan-item"
+              >
+                <div>
+                  <strong>生成组 {{ row.groupIndex }} · {{ formatSeconds(row.duration) }}</strong>
+                  <span>原片段 {{ row.sourceIndexes.join('、') }} · 参考图 {{ row.referenceCount }} 张</span>
+                </div>
+                <p>{{ row.titles.join(' / ') }}</p>
+                <small v-if="row.carLabel || row.compareDimension || row.shotPurpose">
+                  {{ [row.carLabel, row.compareDimension, row.shotPurpose].filter(Boolean).join(' · ') }}
+                </small>
+              </article>
+            </div>
+          </section>
           <div v-if="carGenerationBlockingMessages.length" class="render-basis-alert danger">
             <strong>提交前需要处理：</strong>
             <span v-for="item in carGenerationBlockingMessages" :key="item">{{ item }}</span>
@@ -1614,6 +1636,23 @@ interface CarSalesSceneDraft {
   carRole?: string
   compareDimension?: string
   shotPurpose?: string
+}
+
+interface CarGenerationGroupPreview {
+  groupIndex: number
+  sourceIndexes: number[]
+  titles: string[]
+  duration: number
+  referenceCount: number
+  carLabel: string
+  compareDimension: string
+  shotPurpose: string
+}
+
+interface CarScenePlanningItem {
+  scene: CarSalesSceneDraft
+  sourceIndex: number
+  duration: number
 }
 
 const MAX_REFERENCE = 9
@@ -2066,13 +2105,32 @@ const currentRenderTaskType = computed(() => {
   return 'SEEDANCE_FIRST_FRAME_VIDEO'
 })
 
+function estimateCarSalesSegmentCountForBilling() {
+  if (multiCarCompareEnabled.value && compareCarPackages.value.length >= 2) {
+    return buildMultiCarCompareScenes().length || carSegmentCount.value
+  }
+  const shots = extractStoryboardShots(carStoryboardContext.value)
+  if (shots.length > 0) {
+    return groupStoryboardShots(shots, selectedSeedanceModel.value.maxDuration).length || 1
+  }
+  return carSegmentCount.value
+}
+
 // 一份预估 + Tab 切换自动重取；与后端 createTask 实际预扣金额保持一致，不允许任何前端写死。
 const renderEstimate = useBillingEstimate({
   taskType: () => currentRenderTaskType.value,
-  watchKeys: () => [mainTab.value, imageSubTab.value, carSegmentCount.value],
+  watchKeys: () => [
+    mainTab.value,
+    imageSubTab.value,
+    carSegmentCount.value,
+    selectedModel.value,
+    carStoryboardContext.value,
+    multiCarCompareEnabled.value,
+    compareCarPackages.value.map((pkg) => `${pkg.localId}:${pkg.brandModel}:${pkg.role}:${pkg.images.length}`).join('|'),
+  ],
   buildRequest: () => (
     mainTab.value === 'carSales'
-      ? { segmentCount: carSegmentCount.value }
+      ? { segmentCount: estimateCarSalesSegmentCountForBilling() }
       : {}
   ),
 })
@@ -2518,7 +2576,6 @@ const carStoryboardNeededVehicleRoles = computed(() => {
   const groups = groupStoryboardShots(
     storyboardShotsForRecommendation.value,
     selectedSeedanceModel.value.maxDuration,
-    carSegmentCount.value,
   )
   if (groups.length > 0) {
     groups.forEach((group, idx) => {
@@ -2755,6 +2812,11 @@ const carRecommendationSignature = computed(() => [
 const carSegmentDurationSummary = computed(() =>
   `总约 ${carTotalDuration.value} 秒（${formatDurationList(normalizedCarSegmentDurations.value)}）`,
 )
+const carSegmentCountHint = computed(() =>
+  storyboardShotsForRecommendation.value.length
+    ? '有分镜时按镜头时长和模型上限决定实际生成组，短镜头不会被分段数量强拆'
+    : '会按素材、口播内容和模型上限推荐，可在这里最终确认',
+)
 const carSegmentDurationPanelHint = computed(() =>
   carSegmentTimingTouched.value
     ? '已按手动设置提交，分镜变化后会重新推荐'
@@ -2871,6 +2933,15 @@ watch(
   (language) => {
     if (usesModelNativeVoiceover()) {
       carSubtitleLanguage.value = language
+    }
+  },
+)
+
+watch(
+  () => carSubtitleMode.value,
+  (mode) => {
+    if (mode === 'custom' && carSubtitleTimingMode.value === 'audio_recognition') {
+      carSubtitleTimingMode.value = 'script_timeline'
     }
   },
 )
@@ -3464,7 +3535,7 @@ async function handleCarStoryboardAssetSelect(payload: { asset: AssetItem; url: 
     const shots = extractStoryboardShots(carStoryboardContext.value)
     if (shots.length > 0) {
       applyCarRecommendation(false)
-      const groups = groupStoryboardShots(shots, selectedSeedanceModel.value.maxDuration, carSegmentCount.value)
+      const groups = groupStoryboardShots(shots, selectedSeedanceModel.value.maxDuration)
       ElMessage.success(
         groups.length < shots.length
           ? `已载入分镜，${shots.length} 个镜头将智能合并为 ${groups.length} 个连续段落`
@@ -4004,6 +4075,108 @@ function normalizeCarSegmentDurations(values: number[], count: number) {
     }
     return clampCarSegmentDuration(carSegmentDuration.value || 8)
   })
+}
+
+function buildCarGenerationGroupPreview(scenes: CarSalesSceneDraft[]): CarGenerationGroupPreview[] {
+  const maxDuration = selectedSeedanceModel.value.maxDuration
+  const usable = scenes
+    .map((scene, idx) => ({
+      scene,
+      sourceIndex: scene.segmentIndex || idx + 1,
+      duration: carSceneDraftPlanningDuration(scene),
+    }))
+    .filter((item) => hasCarSceneDraftContent(item.scene))
+  const groups: CarScenePlanningItem[][] = []
+  let current: CarScenePlanningItem[] = []
+  let currentDuration = 0
+  for (const item of usable) {
+    if (
+      current.length > 0 &&
+      (currentDuration + item.duration > maxDuration || !canMergeCarSceneDraftGroup(current, item))
+    ) {
+      groups.push(current)
+      current = []
+      currentDuration = 0
+    }
+    current.push(item)
+    currentDuration += item.duration
+  }
+  if (current.length > 0) {
+    groups.push(current)
+  }
+  return groups.slice(0, 12).map((group, idx) => {
+    const first = group[0]?.scene
+    const sourceIndexes = group.map((item) => item.sourceIndex)
+    const duration = clampCarSegmentDuration(group.reduce((sum, item) => sum + item.duration, 0))
+    const titles = group.map((item, localIdx) => item.scene.title || `片段 ${item.sourceIndex || localIdx + 1}`)
+    const referenceCount = new Set(group.flatMap((item) => [
+      ...(item.scene.imageUrls || []),
+      item.scene.referenceImage || '',
+    ].filter(Boolean))).size
+    return {
+      groupIndex: idx + 1,
+      sourceIndexes,
+      titles,
+      duration,
+      referenceCount,
+      carLabel: carSceneDraftCarLabel(first),
+      compareDimension: first?.compareDimension || '',
+      shotPurpose: first?.shotPurpose || '',
+    }
+  })
+}
+
+function hasCarSceneDraftContent(scene: CarSalesSceneDraft) {
+  return Boolean(
+    scene &&
+      (
+        scene.visualPrompt?.trim() ||
+        scene.prompt?.trim() ||
+        scene.title?.trim() ||
+        scene.voiceText?.trim()
+      ),
+  )
+}
+
+function carSceneDraftPlanningDuration(scene: CarSalesSceneDraft) {
+  const raw = Number(scene.duration)
+  if (Number.isFinite(raw) && raw > 0) {
+    return Math.max(1, Math.min(selectedSeedanceModel.value.maxDuration, Math.round(raw)))
+  }
+  return Math.min(5, selectedSeedanceModel.value.maxDuration)
+}
+
+function canMergeCarSceneDraftGroup(current: CarScenePlanningItem[], next: CarScenePlanningItem) {
+  if (!current.length) {
+    return true
+  }
+  return carSceneDraftIsolationKey(current[0].scene) === carSceneDraftIsolationKey(next.scene)
+}
+
+function carSceneDraftIsolationKey(scene: CarSalesSceneDraft) {
+  const carPackageId = normalizePreviewKey(scene.carPackageId)
+  const carIndex = scene.carIndex == null ? '' : String(scene.carIndex)
+  const shotPurpose = normalizePreviewKey(scene.shotPurpose)
+  const compareDimension = normalizePreviewKey(scene.compareDimension)
+  if (!carPackageId && !carIndex && !shotPurpose) {
+    return 'default'
+  }
+  if (shotPurpose) {
+    return `${carPackageId}|${carIndex}|${shotPurpose}`
+  }
+  return `${carPackageId}|${carIndex}|${compareDimension}`
+}
+
+function normalizePreviewKey(value?: string) {
+  return value?.trim().toLowerCase() || ''
+}
+
+function carSceneDraftCarLabel(scene?: CarSalesSceneDraft) {
+  if (!scene || scene.carIndex == null) {
+    return ''
+  }
+  const role = scene.carRole ? ` / ${compareCarRoleLabel(scene.carRole as CompareCarRole)}` : ''
+  return `车型 ${scene.carIndex + 1}${role}`
 }
 
 function sumDurations(values: number[]) {
@@ -4939,13 +5112,31 @@ const carVisualSourceLabel = computed(() => {
   return sources.length ? sources.join('、') : '未选择'
 })
 
-const plannedCarSceneCount = computed(() => {
-  if (isMultiCarCompareMode.value) {
-    return buildMultiCarCompareScenes().length
+const carGenerationGroupPreviewRows = computed(() => buildCarGenerationGroupPreview(buildCarSalesScenes()))
+const carGenerationSourceSceneCount = computed(() => {
+  if (storyboardShotsForRecommendation.value.length > 0) {
+    return storyboardShotsForRecommendation.value.length
   }
-  const shots = extractStoryboardShots(carStoryboardContext.value)
-  if (!shots.length) return carSegmentCount.value
-  return groupStoryboardShots(shots, selectedSeedanceModel.value.maxDuration, carSegmentCount.value).length
+  return buildCarSalesScenes().length
+})
+const carGenerationGroupSummary = computed(() => {
+  const sourceCount = carGenerationSourceSceneCount.value
+  const groupCount = carGenerationGroupPreviewRows.value.length
+  const total = sumDurations(carGenerationGroupPreviewRows.value.map((row) => row.duration))
+  const sourceLabel = storyboardShotsForRecommendation.value.length > 0 ? '分镜镜头' : '脚本片段'
+  return `${sourceLabel} ${sourceCount} 个，实际生成 ${groupCount} 组，总约 ${formatSeconds(total || carSegmentDuration.value)}`
+})
+const carExecutionSegmentCount = computed(() => plannedCarSceneCount.value || carSegmentCount.value)
+const carExecutionDurationSummary = computed(() => {
+  const durations = carGenerationGroupPreviewRows.value.map((row) => row.duration)
+  if (durations.length > 0) {
+    return `总约 ${sumDurations(durations)} 秒（${formatDurationList(durations)}）`
+  }
+  return carSegmentDurationSummary.value
+})
+
+const plannedCarSceneCount = computed(() => {
+  return carGenerationGroupPreviewRows.value.length || carSegmentCount.value
 })
 
 const carSegmentModeLabel = computed(() => {
@@ -4975,6 +5166,9 @@ const carGenerationBlockingMessages = computed(() => {
   if (usesModelNativeVoiceover() && carVoiceTextSource.value === 'benchmark' && !carBenchmarkVoiceText.value.trim()) {
     messages.push('请先选择或上传爆款对标文案')
   }
+  if (carSubtitleMode.value === 'custom' && !sanitizeSpeechText(carSubtitleText.value)) {
+    messages.push('请填写自定义字幕文案')
+  }
   return messages
 })
 
@@ -4986,6 +5180,9 @@ const carGenerationWarnings = computed(() => {
   }
   if (!hasSelectedVoiceAudio() && carBgmUrl.value.trim()) {
     warnings.push('BGM 不会生成口播、字幕或口型')
+  }
+  if (carSubtitleMode.value !== 'off' && carHeadlineEnabled.value && carHeadlinePosition.value === 'bottom') {
+    warnings.push('已开启字幕，大字报提交后会避开底部字幕区域')
   }
   if (carAudioMode.value === 'post_mix' && carAudioUrl.value.trim()) {
     warnings.push('后期口播配音不保证口型同步，如需口型同步请使用参考音频生成或数字人口播链路')
@@ -5481,7 +5678,6 @@ function buildCarSalesScenes(): CarSalesSceneDraft[] {
     const groups = groupStoryboardShots(
       storyboardShots,
       selectedSeedanceModel.value.maxDuration,
-      carSegmentCount.value,
     )
     const voiceChunks = voiceChunksForStoryboardGroups(groups)
     const segmentDurations = normalizeCarSegmentDurations(carSegmentDurations.value, groups.length)
@@ -5915,7 +6111,7 @@ async function handleGenerate() {
         aspectRatio: aspectRatioForRequest(),
         assetRoleBindings: buildCarAssetRoleBindings(),
         carPackages: buildCompareCarPackagesForRequest(),
-        segmentCount: carScenes.length || carSegmentCount.value,
+        segmentCount: carGenerationGroupPreviewRows.value.length || carScenes.length || carSegmentCount.value,
         segmentDuration: averageSegmentDuration(carScenes.map((scene) => Number(scene.duration) || carSegmentDuration.value)),
         scenes: carScenes,
         model: selectedModel.value,
@@ -8068,6 +8264,76 @@ onBeforeUnmount(() => {
   font-weight: 800;
 }
 
+.render-generation-plan {
+  display: grid;
+  gap: 10px;
+  border: 1px solid #e1e6f0;
+  border-radius: 8px;
+  background: #fff;
+  padding: 12px;
+}
+
+.render-generation-plan-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.render-generation-plan-head strong {
+  color: #232838;
+  font-size: 13px;
+  font-weight: 900;
+}
+
+.render-generation-plan-head span {
+  color: #667085;
+  font-size: 12.5px;
+  font-weight: 800;
+}
+
+.render-generation-plan-list {
+  display: grid;
+  gap: 8px;
+}
+
+.render-generation-plan-item {
+  display: grid;
+  gap: 5px;
+  border: 1px solid #edf0f6;
+  border-radius: 8px;
+  background: #fbfcff;
+  padding: 10px 12px;
+}
+
+.render-generation-plan-item > div {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.render-generation-plan-item strong {
+  color: #232838;
+  font-size: 12.5px;
+  font-weight: 900;
+}
+
+.render-generation-plan-item span,
+.render-generation-plan-item small {
+  color: #667085;
+  font-size: 12px;
+  font-weight: 800;
+}
+
+.render-generation-plan-item p {
+  margin: 0;
+  color: #4f586c;
+  font-size: 12.5px;
+  line-height: 1.55;
+  overflow-wrap: anywhere;
+}
+
 .render-basis-alert {
   display: grid;
   gap: 6px;
@@ -8098,6 +8364,12 @@ onBeforeUnmount(() => {
 @media (max-width: 720px) {
   .render-basis-grid {
     grid-template-columns: 1fr;
+  }
+
+  .render-generation-plan-head,
+  .render-generation-plan-item > div {
+    align-items: flex-start;
+    flex-direction: column;
   }
 }
 

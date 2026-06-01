@@ -25,33 +25,12 @@
         </label>
       </div>
 
-      <div class="car-bundle-role-grid">
-        <article
-          v-for="role in carRoleOptions"
-          :key="role.value"
-          class="car-bundle-role"
-          :class="{ 'car-bundle-role-selected': hasRoleSelection(role.value) }"
-        >
-          <div class="car-bundle-role-head">
-            <span>{{ role.label }}</span>
-            <button type="button" :disabled="saving" @click="openAssetPicker(role.value)">从资产中心选</button>
-          </div>
-          <img v-if="rolePreviewUrl(role.value)" :src="rolePreviewUrl(role.value)" alt="" />
-          <input type="file" accept="image/*" :disabled="saving" @change="handleRoleFile(role.value, $event)" />
-          <small>{{ roleSelectedName(role.value) }}</small>
-          <button
-            v-if="hasRoleSelection(role.value)"
-            class="car-bundle-clear-role"
-            type="button"
-            :disabled="saving"
-            @click="clearRole(role.value)"
-          >
-            移除
-          </button>
-        </article>
-      </div>
-
-      <section v-if="assetPickerRole" class="car-bundle-asset-picker" aria-label="从资产中心选择图片">
+      <section
+        v-if="assetPickerRole"
+        ref="assetPickerPanelRef"
+        class="car-bundle-asset-picker"
+        aria-label="从资产中心选择图片"
+      >
         <header>
           <div>
             <strong>选择{{ roleLabel(assetPickerRole) }}图片</strong>
@@ -84,6 +63,32 @@
         </div>
       </section>
 
+      <div class="car-bundle-role-grid">
+        <article
+          v-for="role in carRoleOptions"
+          :key="role.value"
+          class="car-bundle-role"
+          :class="{ 'car-bundle-role-selected': hasRoleSelection(role.value) }"
+        >
+          <div class="car-bundle-role-head">
+            <span>{{ role.label }}</span>
+            <button type="button" :disabled="saving" @click="openAssetPicker(role.value)">从资产中心选</button>
+          </div>
+          <img v-if="rolePreviewUrl(role.value)" :src="rolePreviewUrl(role.value)" alt="" />
+          <input type="file" accept="image/*" :disabled="saving" @change="handleRoleFile(role.value, $event)" />
+          <small>{{ roleSelectedName(role.value) }}</small>
+          <button
+            v-if="hasRoleSelection(role.value)"
+            class="car-bundle-clear-role"
+            type="button"
+            :disabled="saving"
+            @click="clearRole(role.value)"
+          >
+            移除
+          </button>
+        </article>
+      </div>
+
       <label class="car-bundle-field">
         <span>备注</span>
         <textarea v-model.trim="notes" :disabled="saving" rows="3" placeholder="可选：门店、拍摄环境、卖点提示" />
@@ -102,8 +107,8 @@
 </template>
 
 <script setup lang="ts">
-import { computed, onMounted, ref, watch } from 'vue'
-import { getAssets, publishAsset, updateCarModelBundleAsset, uploadMaterialAsset } from '../../services/assetApi'
+import { computed, nextTick, onMounted, ref, watch } from 'vue'
+import { getAssets, updateCarModelBundleAsset, uploadMaterialAsset } from '../../services/assetApi'
 import { API_ORIGIN } from '../../services/request'
 import type { AssetItem } from '../../types/assetTypes'
 
@@ -167,6 +172,7 @@ const assetPickerRole = ref<string | null>(null)
 const assetKeyword = ref('')
 const assetLoading = ref(false)
 const assetError = ref('')
+const assetPickerPanelRef = ref<HTMLElement | null>(null)
 const saving = ref(false)
 const errorMessage = ref('')
 
@@ -300,12 +306,14 @@ async function loadImageAssets() {
   }
 }
 
-function openAssetPicker(role: string) {
+async function openAssetPicker(role: string) {
   assetPickerRole.value = role
   assetError.value = ''
   if (!imageAssets.value.length) {
     void loadImageAssets()
   }
+  await nextTick()
+  assetPickerPanelRef.value?.scrollIntoView({ behavior: 'smooth', block: 'start' })
 }
 
 function selectAssetForRole(asset: AssetItem) {
@@ -406,13 +414,13 @@ async function saveBundle() {
       const file = filesByRole.value[role.value]
       if (file) {
         const asset = await uploadMaterialAsset(file, {
-          publish: props.publish,
           metadataJson: JSON.stringify({
             from: 'car_model_bundle_image',
             assetRole: role.value,
             assetGroup: '汽车素材包',
             brandModel: brandModel.value,
             color: color.value,
+            hiddenInPublicAssetCenter: true,
           }),
         })
         imageItems.push({
@@ -427,19 +435,12 @@ async function saveBundle() {
       }
       const selectedAsset = selectedAssetsByRole.value[role.value]
       if (selectedAsset) {
-        const shouldPublishSelected =
-          selectedAsset.assetId > 0 &&
-          props.publish &&
-          String(selectedAsset.visibility || '').toUpperCase() !== 'PUBLIC'
-        const asset = shouldPublishSelected
-          ? await publishAsset(selectedAsset.assetId)
-          : selectedAsset
         imageItems.push({
           role: role.value,
           label: role.label,
-          assetId: asset.assetId > 0 ? asset.assetId : undefined,
-          url: asset.fileUrl,
-          fileName: asset.fileName,
+          assetId: selectedAsset.assetId > 0 ? selectedAsset.assetId : undefined,
+          url: selectedAsset.fileUrl,
+          fileName: selectedAsset.fileName,
           source: 'asset_center',
         })
       }
@@ -464,6 +465,9 @@ async function saveBundle() {
       bundleType: 'car_model',
       brandModel: brandModel.value,
       color: color.value,
+      componentAssetIds: imageItems
+        .map((item) => item.assetId)
+        .filter((assetId): assetId is number => typeof assetId === 'number' && Number.isFinite(assetId)),
     })
     if (props.editingAsset) {
       const bundleAsset = await updateCarModelBundleAsset(props.editingAsset.assetId, {

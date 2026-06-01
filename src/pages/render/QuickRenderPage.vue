@@ -800,6 +800,11 @@ function startQuickRenderTracking(taskId: number) {
       const quick = taskResult.result
       taskStatus.value = 'QUICK_RENDER_DONE'
       taskProgress.value = taskResult.progress ?? 100
+      if (quick.outputAsset?.fileUrl) {
+        result.value = outputAssetToVideoResult(quick.outputAsset)
+        busy.value = false
+        return
+      }
       if (quick.task?.taskId) {
         startTaskTracking(quick.task.taskId)
         return
@@ -822,6 +827,23 @@ function startQuickRenderTracking(taskId: number) {
       busy.value = false
     },
   })
+}
+
+function outputAssetToVideoResult(asset: AssetItem): VideoTaskVO {
+  const now = Math.floor(Date.now() / 1000)
+  return {
+    taskId: String(asset.taskId || asset.assetId),
+    model: 'material_mix',
+    status: 'succeeded',
+    createdAt: now,
+    updatedAt: now,
+    videoUrl: asset.fileUrl || '',
+    resultAssetId: asset.assetId,
+    lastFrameUrl: asset.thumbnailUrl || null,
+    completionTokens: 0,
+    errorCode: null,
+    errorMessage: null,
+  }
 }
 
 function startTaskTracking(taskId: number) {

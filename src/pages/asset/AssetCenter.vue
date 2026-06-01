@@ -1578,8 +1578,8 @@ async function handleCarBundleCreated(asset: AssetItem) {
   closeCarBundleBuilder()
   selectedType.value = 'JSON'
   selectedSourceType.value = ''
-  selectedAssetGroup.value = CAR_MODEL_BUNDLE_GROUP
-  selectedWorkflowStage.value = 'material'
+  selectedAssetGroup.value = ''
+  selectedWorkflowStage.value = 'carBundle'
   keyword.value = ''
   sortKey.value = 'createdAtDesc'
   listScope.value = uploadPublishToPublic.value ? 'global' : 'private'
@@ -1591,8 +1591,8 @@ async function handleCarBundleUpdated(asset: AssetItem) {
   closeCarBundleBuilder()
   selectedType.value = 'JSON'
   selectedSourceType.value = ''
-  selectedAssetGroup.value = CAR_MODEL_BUNDLE_GROUP
-  selectedWorkflowStage.value = 'material'
+  selectedAssetGroup.value = ''
+  selectedWorkflowStage.value = 'carBundle'
   keyword.value = ''
   sortKey.value = 'createdAtDesc'
   listScope.value = String(asset.visibility || '').toUpperCase() === 'PUBLIC' ? 'global' : 'private'
@@ -1661,6 +1661,9 @@ function currentWorkflowStageOption() {
 }
 
 function matchesWorkflowStage(asset: AssetItem) {
+  if (listScope.value === 'global' && isPublicCarBundleComponentImage(asset)) {
+    return false
+  }
   if (!selectedWorkflowStage.value) {
     return true
   }
@@ -1831,6 +1834,20 @@ function isCarModelBundleAsset(asset: AssetItem) {
     stringField(metadata, 'assetRole') === 'car_model_bundle' ||
     stringField(metadata, 'from') === 'car_model_bundle' ||
     asset.assetGroup === CAR_MODEL_BUNDLE_GROUP
+  )
+}
+
+function isPublicCarBundleComponentImage(asset: AssetItem) {
+  if (!isImage(asset) || String(asset.visibility || '').toUpperCase() !== 'PUBLIC') {
+    return false
+  }
+  const metadata = parseJsonObject(asset.metadataJson)
+  const role = normalizedAssetRole(asset)
+  return (
+    asset.assetGroup === CAR_MODEL_BUNDLE_GROUP ||
+    stringField(metadata, 'from') === 'car_model_bundle_image' ||
+    role.startsWith('car_') ||
+    Boolean(metadata?.hiddenInPublicAssetCenter)
   )
 }
 
