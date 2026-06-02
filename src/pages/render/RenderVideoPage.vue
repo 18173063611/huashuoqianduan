@@ -187,35 +187,40 @@
         </template>
 
         <template v-if="mainTab === 'carSales'">
-          <section class="render-aspect-panel" aria-label="成片比例">
-            <div class="render-form-field render-form-field-inline">
-              <label>成片比例</label>
-              <select v-model="renderAspectRatio" :disabled="busy">
-                <option v-for="item in renderAspectRatioOptions" :key="item.value" :value="item.value">
-                  {{ item.label }}
-                </option>
-              </select>
-              <span class="app-muted render-duration-hint">{{ renderAspectRatioHint }}</span>
+          <details class="render-optional-group render-aspect-panel">
+            <summary>
+              <span>成片规格 <em>默认</em></span>
+              <small>默认按当前规格出片，需要切换横屏、竖屏或跟随素材时再展开。</small>
+            </summary>
+            <div class="render-optional-body">
+              <div class="render-form-field render-form-field-inline">
+                <label>成片比例</label>
+                <select v-model="renderAspectRatio" :disabled="busy">
+                  <option v-for="item in renderAspectRatioOptions" :key="item.value" :value="item.value">
+                    {{ item.label }}
+                  </option>
+                </select>
+                <span class="app-muted render-duration-hint">{{ renderAspectRatioHint }}</span>
+              </div>
             </div>
-          </section>
+          </details>
 
           <div class="render-car-workflow-strip" aria-label="视频制作主流程">
-            <span><strong>1</strong>素材与车型</span>
-            <span><strong>2</strong>爆款对标/分镜</span>
-            <span><strong>3</strong>基础信息</span>
-            <span><strong>4</strong>自动编排</span>
-            <span><strong>5</strong>可选包装</span>
-            <small>先选素材和爆款对标结果；基础信息与分段数量会结合输入内容自动推荐，可在下方执行前确认。</small>
+            <span><strong>1</strong>车辆素材包</span>
+            <span><strong>2</strong>分镜选择</span>
+            <span><strong>3</strong>爆款对标</span>
+            <span><strong>4</strong>人物出镜</span>
+            <small>最快路径只需要先完成这四项；时长、口播、字幕、BGM 和包装会按默认策略处理，需要精修时再展开调整。</small>
           </div>
 
           <div class="render-digital-workspace">
               <section class="render-digital-section">
               <div class="render-module-title render-module-title-compact">
                 <div>
-                  <h3>素材与车型</h3>
-                  <small>车辆图片或车型素材包是最常用输入；场景图和保存素材包都是可选。</small>
+                  <h3>必选：车辆素材包</h3>
+                  <small>优先选择已整理好的车型素材包；车辆补图、多车型对比和素材完整度按需展开。</small>
                 </div>
-                <span>常用</span>
+                <span class="render-required-badge">必选</span>
               </div>
               <AssetPicker
                 title="车型素材包"
@@ -236,6 +241,12 @@
                 </span>
                 <span v-else>{{ carBundleLoadError }}</span>
               </div>
+              <details class="render-optional-group render-fast-extra">
+                <summary>
+                  <span>补充车辆素材 <em>可选</em></span>
+                  <small>多车型对比、车辆补图、场景图和保存素材包都属于补充项。</small>
+                </summary>
+                <div class="render-optional-body">
               <section class="render-multi-car-panel" aria-label="多车型对比">
                 <div class="render-multi-car-head">
                   <div>
@@ -527,15 +538,17 @@
                   </p>
                 </div>
               </section>
+                </div>
+              </details>
             </section>
 
             <section class="render-digital-section">
               <div class="render-module-title render-module-title-compact">
                 <div>
-                  <h3>文案与分镜</h3>
-                  <small>不配置时会按车型素材整理基础口播；需要精修节奏时再选择分镜或爆款文案。</small>
+                  <h3>必选：分镜、爆款对标、人物出镜</h3>
+                  <small>先选分镜和对标文案，再决定是否要人物出镜；声音、时长和包装默认自动处理。</small>
                 </div>
-                <span>可选</span>
+                <span class="render-required-badge">必选</span>
               </div>
               <AssetPicker
                 title="分镜生成结果（控制段落节奏）"
@@ -562,6 +575,56 @@
                 placeholder="搜索爆款对标文案..."
                 @select="handleCarBenchmarkAssetSelect"
               />
+              <div class="render-host-toggle render-host-toggle-core">
+                <span>人物出镜</span>
+                <div class="render-host-options">
+                  <button
+                    type="button"
+                    :class="{ active: !carHostAppearanceEnabled }"
+                    :disabled="busy"
+                    @click="carHostAppearanceEnabled = false"
+                  >
+                    不出镜
+                  </button>
+                  <button
+                    type="button"
+                    :class="{ active: carHostAppearanceEnabled }"
+                    :disabled="busy"
+                    @click="carHostAppearanceEnabled = true"
+                  >
+                    虚拟人物出镜
+                  </button>
+                </div>
+              </div>
+              <p v-if="!carHostAppearanceEnabled" class="app-muted render-audio-hint">
+                不出镜时会强制提示模型不要出现人物；若文案或分镜包含人物描述，提交前会提示你切换或调整。
+              </p>
+              <template v-if="carHostAppearanceEnabled">
+                <AssetPicker
+                  title="数字人形象"
+                  asset-type="IMAGE"
+                  :selected-url="carHostImageUrl"
+                  :source-types="['AVATAR_GENERATE', 'USER_UPLOAD', 'MANUAL_CREATED', 'AI_GENERATED']"
+                  :asset-roles="['host_image']"
+                  :role-options="CAR_HOST_IMAGE_ROLE_OPTIONS"
+                  source-hint="选择数字人形象图片，生成时会作为销售顾问/主播参考图"
+                  placeholder="搜索数字人形象或上传图片..."
+                  @select="handleCarHostImageAssetSelect"
+                />
+                <ImageInput
+                  :busy="busy"
+                  :value="carHostImageUrl"
+                  label="上传本地数字人形象"
+                  compact
+                  @update="carHostImageUrl = $event"
+                />
+              </template>
+              <details class="render-optional-group render-fast-extra">
+                <summary>
+                  <span>上传文案 / 自动编排 / 口播 <em>可选</em></span>
+                  <small>已有默认值和自动推荐，只有需要手动控制节奏、音频或台词时再展开。</small>
+                </summary>
+                <div class="render-optional-body">
               <label class="render-upload-audio render-upload-text" :class="{ disabled: busy || carBenchmarkUploading }">
                 <input
                   type="file"
@@ -808,6 +871,8 @@
                 <strong>{{ carVoicePolicyTitle }}</strong>
                 <p>{{ carVoicePolicyDescription }}</p>
               </div>
+                </div>
+              </details>
               <details class="render-optional-group render-packaging-group">
                 <summary>
                   <span>字幕与画面包装 <em>可选</em></span>
@@ -1118,8 +1183,8 @@
               </details>
               <details class="render-optional-group">
                 <summary>
-                  <span>更多可选素材 <em>可选</em></span>
-                  <small>BGM、数字人出镜和已有视频素材按需配置。</small>
+                  <span>BGM 与已有视频素材 <em>可选</em></span>
+                  <small>背景音乐和已有视频素材按需补充，不影响最快提交。</small>
                 </summary>
                 <div class="render-optional-body">
                   <AssetPicker
@@ -1143,50 +1208,6 @@
                     <span>{{ carBgmUploading ? '上传中...' : '上传本地 BGM' }}</span>
                     <small>{{ carBgmUploadName || '仅混入背景音乐，不覆盖口播音频' }}</small>
                   </label>
-                  <div class="render-host-toggle">
-                    <span>数字人出镜</span>
-                    <div class="render-host-options">
-                      <button
-                        type="button"
-                        :class="{ active: !carHostAppearanceEnabled }"
-                        :disabled="busy"
-                        @click="carHostAppearanceEnabled = false"
-                      >
-                        不出镜
-                      </button>
-                      <button
-                        type="button"
-                        :class="{ active: carHostAppearanceEnabled }"
-                        :disabled="busy"
-                        @click="carHostAppearanceEnabled = true"
-                      >
-                        虚拟人物出镜
-                      </button>
-                    </div>
-                  </div>
-                  <p v-if="!carHostAppearanceEnabled" class="app-muted render-audio-hint">
-                    不出镜时会强制提示模型不要出现人物；若文案或分镜包含人物描述，提交前会提示你切换或调整。
-                  </p>
-                  <template v-if="carHostAppearanceEnabled">
-                <AssetPicker
-                  title="数字人形象"
-                  asset-type="IMAGE"
-                  :selected-url="carHostImageUrl"
-                  :source-types="['AVATAR_GENERATE', 'USER_UPLOAD', 'MANUAL_CREATED', 'AI_GENERATED']"
-                  :asset-roles="['host_image']"
-                  :role-options="CAR_HOST_IMAGE_ROLE_OPTIONS"
-                  source-hint="选择数字人形象图片，生成时会作为销售顾问/主播参考图"
-                  placeholder="搜索数字人形象或上传图片..."
-                  @select="handleCarHostImageAssetSelect"
-                />
-                <ImageInput
-                  :busy="busy"
-                  :value="carHostImageUrl"
-                  label="上传本地数字人形象"
-                  compact
-                  @update="carHostImageUrl = $event"
-                />
-                  </template>
                   <AssetPicker
                     title="已有视频素材"
                     asset-type="VIDEO"
@@ -7137,12 +7158,12 @@ onBeforeUnmount(() => {
 }
 
 .render-aspect-panel {
-  display: flex;
-  align-items: center;
+  display: grid;
+  gap: 12px;
   border: 1px solid #d9e2ff;
   border-radius: 8px;
   background: #fff;
-  padding: 12px 14px;
+  padding: 12px;
 }
 
 .render-aspect-panel .render-form-field {
@@ -7151,7 +7172,7 @@ onBeforeUnmount(() => {
 
 .render-car-workflow-strip {
   display: grid;
-  grid-template-columns: repeat(5, minmax(110px, 1fr));
+  grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
   gap: 10px;
   align-items: center;
   border: 1px solid #e3e7ef;
@@ -7237,6 +7258,19 @@ onBeforeUnmount(() => {
   padding: 4px 10px;
   font-size: 11px;
   font-weight: 900;
+}
+
+.render-module-title > span.render-required-badge {
+  background: #ecfdf3;
+  color: #067647;
+}
+
+.render-fast-extra {
+  background: #fff;
+}
+
+.render-fast-extra > .render-optional-body {
+  background: #fbfcff;
 }
 
 .render-function-reference-panel {
@@ -8687,6 +8721,11 @@ onBeforeUnmount(() => {
   border-radius: 8px;
   background: #fff;
   padding: 12px;
+}
+
+.render-host-toggle-core {
+  border-color: #d8e2ff;
+  background: #f8fbff;
 }
 
 .render-host-options {
