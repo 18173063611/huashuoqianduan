@@ -293,6 +293,7 @@ export interface CarSalesVideoRequest {
   subtitleLanguage?: string
   subtitleTimingMode?: 'auto' | 'audio_recognition' | 'script_timeline'
   syncStrategy?: 'auto' | 'audio_master' | 'visual_master'
+  subtitleOverlay?: CarSalesTextOverlayRequest
   headlineOverlay?: CarSalesTextOverlayRequest
   audioUrl?: string
   audioMode?: 'none' | 'post_mix' | 'reference' | 'model_native'

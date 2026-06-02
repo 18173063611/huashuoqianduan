@@ -879,6 +879,106 @@
                     </div>
                     <small>{{ carSubtitleTimingHint }}</small>
                   </div>
+                  <section v-if="carSubtitleMode !== 'off'" class="render-text-poster-panel" aria-label="视频字幕样式设置">
+                    <div class="render-text-poster-head">
+                      <div class="render-text-poster-title">
+                        <label>字幕样式</label>
+                        <small>叠加在成片字幕上，可调整字体、位置、字号和颜色。</small>
+                      </div>
+                    </div>
+                    <div class="render-text-poster-controls">
+                      <div class="render-form-field">
+                        <label>字体</label>
+                        <select v-model="carSubtitleFontFamily" :disabled="busy">
+                          <option v-for="item in carHeadlineFontOptions" :key="item.value" :value="item.value">
+                            {{ item.label }}
+                          </option>
+                        </select>
+                      </div>
+                      <div class="render-form-field">
+                        <label>摆放区域</label>
+                        <select v-model="carSubtitlePosition" :disabled="busy">
+                          <option v-for="item in carHeadlinePositionOptions" :key="item.value" :value="item.value">
+                            {{ item.label }}
+                          </option>
+                        </select>
+                      </div>
+                      <div class="render-form-field">
+                        <label>字号</label>
+                        <input v-model.number="carSubtitleFontSize" type="number" min="28" max="120" step="2" :disabled="busy" />
+                      </div>
+                    </div>
+                    <div class="render-color-grid" aria-label="字幕颜色设置">
+                      <div class="render-form-field render-color-field">
+                        <label>文字颜色</label>
+                        <div class="render-color-row">
+                          <span class="render-color-current" :style="{ backgroundColor: carSubtitleTextColor }" aria-hidden="true" />
+                          <input v-model="carSubtitleTextColor" type="color" :disabled="busy" aria-label="微调字幕文字颜色" />
+                          <input
+                            v-model.trim="carSubtitleTextColor"
+                            type="text"
+                            :disabled="busy"
+                            placeholder="#FFFFFF"
+                            aria-label="字幕文字颜色 HEX"
+                            @blur="normalizeCarSubtitleTextColor"
+                          />
+                        </div>
+                        <div class="render-color-swatches" aria-label="常用字幕文字颜色">
+                          <button
+                            v-for="item in carHeadlineColorPresets"
+                            :key="`subtitle-text-${item.value}`"
+                            type="button"
+                            class="render-color-swatch"
+                            :class="{ active: isCarSubtitleTextColorPreset(item.value) }"
+                            :style="{ backgroundColor: item.value }"
+                            :disabled="busy"
+                            :title="item.label"
+                            :aria-label="`选择字幕文字颜色：${item.label}`"
+                            @click="setCarSubtitleTextColor(item.value)"
+                          >
+                            <span class="render-sr-only">{{ item.label }}</span>
+                          </button>
+                        </div>
+                      </div>
+                      <div class="render-form-field render-color-field">
+                        <label>描边颜色</label>
+                        <div class="render-color-row">
+                          <span class="render-color-current" :style="{ backgroundColor: carSubtitleOutlineColor }" aria-hidden="true" />
+                          <input v-model="carSubtitleOutlineColor" type="color" :disabled="busy" aria-label="微调字幕描边颜色" />
+                          <input
+                            v-model.trim="carSubtitleOutlineColor"
+                            type="text"
+                            :disabled="busy"
+                            placeholder="#111111"
+                            aria-label="字幕描边颜色 HEX"
+                            @blur="normalizeCarSubtitleOutlineColor"
+                          />
+                        </div>
+                        <div class="render-color-swatches" aria-label="常用字幕描边颜色">
+                          <button
+                            v-for="item in carHeadlineColorPresets"
+                            :key="`subtitle-outline-${item.value}`"
+                            type="button"
+                            class="render-color-swatch"
+                            :class="{ active: isCarSubtitleOutlineColorPreset(item.value) }"
+                            :style="{ backgroundColor: item.value }"
+                            :disabled="busy"
+                            :title="item.label"
+                            :aria-label="`选择字幕描边颜色：${item.label}`"
+                            @click="setCarSubtitleOutlineColor(item.value)"
+                          >
+                            <span class="render-sr-only">{{ item.label }}</span>
+                          </button>
+                        </div>
+                      </div>
+                    </div>
+                    <div class="render-text-poster-preview-wrap">
+                      <label>样式预览</label>
+                      <div class="render-text-poster-preview" :class="`pos-${carSubtitlePosition}`">
+                        <span :style="carSubtitlePreviewStyle">{{ carSubtitlePreviewText }}</span>
+                      </div>
+                    </div>
+                  </section>
                   <section class="render-text-poster-panel" aria-label="视频大字报设置">
                     <div class="render-text-poster-head">
                       <div class="render-text-poster-title">
@@ -1752,18 +1852,6 @@ const CAR_NATIVE_SPEECH_STYLE_OPTIONS = [
   { value: 'soft_story', label: '故事节奏', hint: '停顿更自然，适合生活化叙事' },
 ]
 
-const FALLBACK_CAR_IMAGE_ROLES = [
-  'car_exterior_front',
-  'car_exterior_side',
-  'car_exterior_rear',
-  'car_interior_dashboard',
-  'car_interior_front_seat',
-  'car_interior_back_seat',
-  'car_detail_light',
-  'car_detail_wheel',
-  'scene_showroom',
-]
-
 const CAR_ASSET_ROLE_ALIASES: Record<string, string> = {
   front: 'car_exterior_front',
   exterior_front: 'car_exterior_front',
@@ -1827,7 +1915,6 @@ const CAR_VEHICLE_REFERENCE_ROLES = CAR_MATERIAL_TARGETS
 const CAR_SCENE_REFERENCE_ROLES = CAR_MATERIAL_TARGETS
   .filter((item) => item.group === 'scene')
   .map((item) => item.role)
-const FALLBACK_CAR_SCENE_IMAGE_ROLES = ['scene_showroom', 'scene_outdoor', 'scene_road', 'scene_night']
 
 const CAR_SCENE_KEYWORD_ROLES: Array<{ keywords: string[]; roles: string[] }> = [
   { keywords: ['内饰', '座椅', '中控', '空间', '前排', '后排', '方向盘', '仪表', '后备箱'], roles: ['car_interior_dashboard', 'car_interior_front_seat', 'car_interior_back_seat', 'car_interior_steering', 'car_interior_trunk'] },
@@ -2077,6 +2164,11 @@ const carSubtitleText = ref('')
 const carSubtitleLanguage = ref('zh-CN')
 const carSubtitleTimingMode = ref<CarSubtitleTimingMode>('auto')
 const carSyncStrategy = ref<CarSyncStrategy>('auto')
+const carSubtitleFontFamily = ref('Noto Sans CJK SC')
+const carSubtitlePosition = ref<CarHeadlinePosition>('bottom')
+const carSubtitleFontSize = ref(58)
+const carSubtitleTextColor = ref('#ffffff')
+const carSubtitleOutlineColor = ref('#111111')
 const carHeadlineEnabled = ref(false)
 const carHeadlineText = ref('')
 const carHeadlineFontFamily = ref('Microsoft YaHei')
@@ -2504,17 +2596,15 @@ const hasCarSceneReference = computed(() => carSceneMaterialUrls.value.length > 
 const carTotalDuration = computed(() => normalizedCarSegmentDurations.value.reduce((sum, value) => sum + value, 0))
 function collectProvidedCarMaterialRoles() {
   const providedRoles = new Set<string>()
-  const untaggedImages: string[] = []
-  const untaggedSceneImages: string[] = []
 
   if (isMultiCarCompareMode.value) {
     orderedCompareCarPackages.value.forEach((pkg) => {
-      pkg.images.forEach((image, idx) => {
-        const role = normalizeCarAssetRole(image.role) || FALLBACK_CAR_IMAGE_ROLES[idx]
+      pkg.images.forEach((image) => {
+        const role = normalizeCarAssetRole(image.role)
         if (role) providedRoles.add(role)
       })
-      pkg.sceneImages.forEach((image, idx) => {
-        const role = normalizeCarAssetRole(image.role) || FALLBACK_CAR_SCENE_IMAGE_ROLES[idx]
+      pkg.sceneImages.forEach((image) => {
+        const role = normalizeCarAssetRole(image.role)
         if (role) providedRoles.add(role)
       })
     })
@@ -2525,8 +2615,6 @@ function collectProvidedCarMaterialRoles() {
     const role = normalizeCarAssetRole(carImageAssetRoleByUrl.value[url])
     if (role) {
       providedRoles.add(role)
-    } else {
-      untaggedImages.push(url)
     }
   }
 
@@ -2534,19 +2622,8 @@ function collectProvidedCarMaterialRoles() {
     const role = normalizeCarAssetRole(carSceneImageAssetRoleByUrl.value[url])
     if (role) {
       providedRoles.add(role)
-    } else {
-      untaggedSceneImages.push(url)
     }
   }
-
-  untaggedImages.forEach((_, idx) => {
-    const fallbackRole = FALLBACK_CAR_IMAGE_ROLES[idx]
-    if (fallbackRole) providedRoles.add(fallbackRole)
-  })
-  untaggedSceneImages.forEach((_, idx) => {
-    const fallbackRole = FALLBACK_CAR_SCENE_IMAGE_ROLES[idx]
-    if (fallbackRole) providedRoles.add(fallbackRole)
-  })
 
   if (carHostAppearanceEnabled.value && carHostImageUrl.value.trim()) {
     providedRoles.add('host_image')
@@ -5122,9 +5199,11 @@ const carSubtitleSourceLabel = computed(() => {
   const suffix = storyboardOldLineStatus.value === '用于语义补齐' ? '（分镜台词补齐参考）' : ''
   const language = carSubtitleLanguageOptions.find((item) => item.value === carSubtitleLanguage.value)?.label || '默认语言'
   const timing = carSubtitleTimingOptions.find((item) => item.key === carSubtitleTimingMode.value)?.label || '智能字幕'
+  const position = carHeadlinePositionOptions.find((item) => item.value === carSubtitlePosition.value)?.label || '底部'
+  const style = `${position} / ${carSubtitleFontSize.value}px`
   if (carSubtitleMode.value === 'off') return '关闭'
-  if (carSubtitleMode.value === 'auto') return `后期自动字幕 / ${language} / ${timing}${suffix}`
-  return sanitizeSpeechText(carSubtitleText.value) ? `后期自定义字幕 / ${language} / ${timing}${suffix}` : '后期自定义字幕（未填写）'
+  if (carSubtitleMode.value === 'auto') return `后期自动字幕 / ${language} / ${timing} / ${style}${suffix}`
+  return sanitizeSpeechText(carSubtitleText.value) ? `后期自定义字幕 / ${language} / ${timing} / ${style}${suffix}` : '后期自定义字幕（未填写）'
 })
 const carSyncStrategyHint = computed(
   () => carSyncStrategyOptions.find((item) => item.key === carSyncStrategy.value)?.hint || '',
@@ -5223,8 +5302,8 @@ const carGenerationWarnings = computed(() => {
   if (!hasSelectedVoiceAudio() && carBgmUrl.value.trim()) {
     warnings.push('BGM 不会生成口播、字幕或口型')
   }
-  if (carSubtitleMode.value !== 'off' && carHeadlineEnabled.value && carHeadlinePosition.value === 'bottom') {
-    warnings.push('已开启字幕，大字报提交后会避开底部字幕区域')
+  if (carSubtitleMode.value !== 'off' && carHeadlineEnabled.value && carHeadlinePosition.value === carSubtitlePosition.value) {
+    warnings.push('字幕和大字报选择了同一区域，提交后会自动错开')
   }
   if (carAudioMode.value === 'post_mix' && carAudioUrl.value.trim()) {
     warnings.push('后期口播配音不保证口型同步，如需口型同步请使用参考音频生成或数字人口播链路')
@@ -5379,16 +5458,16 @@ function buildCarScriptContext() {
   return parts.join('\n\n')
 }
 
-function carImageRoleForUrl(url: string, index: number) {
-  return normalizeCarAssetRole(carImageAssetRoleByUrl.value[url]) || FALLBACK_CAR_IMAGE_ROLES[index] || ''
+function carImageRoleForUrl(url: string, _index: number) {
+  return normalizeCarAssetRole(carImageAssetRoleByUrl.value[url])
 }
 
-function carSceneImageRoleForUrl(url: string, index: number) {
+function carSceneImageRoleForUrl(url: string, _index: number) {
   const role = normalizeCarAssetRole(carSceneImageAssetRoleByUrl.value[url])
   if (role && CAR_SCENE_REFERENCE_ROLES.includes(role)) {
     return role
   }
-  return FALLBACK_CAR_SCENE_IMAGE_ROLES[index] || 'scene_showroom'
+  return ''
 }
 
 function carRoleLabel(role: string) {
@@ -5488,6 +5567,22 @@ function buildCarSubtitleValue() {
   return sanitizeSpeechText(carSubtitleText.value)
 }
 
+const carSubtitlePreviewText = computed(() => {
+  const text = sanitizeSpeechText(carSubtitleText.value)
+  if (!text) {
+    return '这台车空间宽敞，配置也很到位。'
+  }
+  return text.split(/[。！？!?；;\n]/).find((part) => part.trim())?.trim().slice(0, 48) || text.slice(0, 48)
+})
+
+const carSubtitlePreviewStyle = computed(() => ({
+  color: carSubtitleTextColor.value,
+  fontFamily: carSubtitleFontFamily.value,
+  fontSize: `${Math.max(18, Math.min(44, Math.round((Number(carSubtitleFontSize.value) || 58) * 0.56)))}px`,
+  WebkitTextStroke: `1px ${carSubtitleOutlineColor.value}`,
+  textShadow: `0 1px 0 ${carSubtitleOutlineColor.value}, 0 -1px 0 ${carSubtitleOutlineColor.value}, 1px 0 0 ${carSubtitleOutlineColor.value}, -1px 0 0 ${carSubtitleOutlineColor.value}`,
+}))
+
 const carHeadlinePreviewText = computed(() =>
   sanitizeSpeechText(carHeadlineText.value) || 'Direct sales from Chinese factory',
 )
@@ -5523,6 +5618,14 @@ function colorMatches(current: string, preset: string) {
   return normalizeHexColor(current, '').toLowerCase() === normalizeHexColor(preset, '').toLowerCase()
 }
 
+function setCarSubtitleTextColor(value: string) {
+  carSubtitleTextColor.value = normalizeHexColor(value, '#ffffff')
+}
+
+function setCarSubtitleOutlineColor(value: string) {
+  carSubtitleOutlineColor.value = normalizeHexColor(value, '#111111')
+}
+
 function setCarHeadlineTextColor(value: string) {
   carHeadlineTextColor.value = normalizeHexColor(value, '#ffffff')
 }
@@ -5535,8 +5638,24 @@ function normalizeCarHeadlineTextColor() {
   carHeadlineTextColor.value = normalizeHexColor(carHeadlineTextColor.value, '#ffffff')
 }
 
+function normalizeCarSubtitleTextColor() {
+  carSubtitleTextColor.value = normalizeHexColor(carSubtitleTextColor.value, '#ffffff')
+}
+
+function normalizeCarSubtitleOutlineColor() {
+  carSubtitleOutlineColor.value = normalizeHexColor(carSubtitleOutlineColor.value, '#111111')
+}
+
 function normalizeCarHeadlineOutlineColor() {
   carHeadlineOutlineColor.value = normalizeHexColor(carHeadlineOutlineColor.value, '#111111')
+}
+
+function isCarSubtitleTextColorPreset(value: string) {
+  return colorMatches(carSubtitleTextColor.value, value)
+}
+
+function isCarSubtitleOutlineColorPreset(value: string) {
+  return colorMatches(carSubtitleOutlineColor.value, value)
 }
 
 function isCarHeadlineTextColorPreset(value: string) {
@@ -5545,6 +5664,20 @@ function isCarHeadlineTextColorPreset(value: string) {
 
 function isCarHeadlineOutlineColorPreset(value: string) {
   return colorMatches(carHeadlineOutlineColor.value, value)
+}
+
+function buildCarSubtitleOverlayForRequest() {
+  if (carSubtitleMode.value === 'off') {
+    return undefined
+  }
+  return {
+    enabled: true,
+    fontFamily: carSubtitleFontFamily.value,
+    fontSize: Math.max(28, Math.min(120, Number(carSubtitleFontSize.value) || 58)),
+    textColor: carSubtitleTextColor.value,
+    outlineColor: carSubtitleOutlineColor.value,
+    position: carSubtitlePosition.value,
+  }
 }
 
 function buildCarHeadlineOverlayForRequest() {
@@ -6259,15 +6392,15 @@ function importedBundleEntries(
   bindings: Record<string, unknown>[],
   scene: boolean,
 ) {
-  return urls.map((url, idx): CarBundleImageEntry => {
+  return urls.map((url): CarBundleImageEntry => {
     const binding = bindings.find((item) =>
       firstImportText(item, ['url']) === url &&
       (!packageId || firstImportText(item, ['carPackageId']) === packageId),
     )
     const role = normalizeCarAssetRole(binding ? firstImportText(binding, ['assetRole', 'role']) : '')
     const safeRole = scene
-      ? CAR_SCENE_REFERENCE_ROLES.includes(role) ? role : FALLBACK_CAR_SCENE_IMAGE_ROLES[idx] || 'scene_showroom'
-      : role || CAR_VEHICLE_REFERENCE_ROLES[idx] || ''
+      ? CAR_SCENE_REFERENCE_ROLES.includes(role) ? role : ''
+      : role
     return {
       url,
       role: safeRole,
@@ -6382,6 +6515,18 @@ function applyCarSalesTaskImport(input: Record<string, unknown>) {
   const syncStrategy = firstImportText(input, ['syncStrategy'])
   if (syncStrategy && isCarSyncStrategy(syncStrategy)) {
     carSyncStrategy.value = syncStrategy
+  }
+
+  const subtitleOverlay = asRecord(input.subtitleOverlay)
+  if (subtitleOverlay) {
+    carSubtitleFontFamily.value = firstImportText(subtitleOverlay, ['fontFamily']) || carSubtitleFontFamily.value
+    carSubtitleFontSize.value = importNumber(subtitleOverlay, 'fontSize') || carSubtitleFontSize.value
+    carSubtitleTextColor.value = firstImportText(subtitleOverlay, ['textColor']) || carSubtitleTextColor.value
+    carSubtitleOutlineColor.value = firstImportText(subtitleOverlay, ['outlineColor']) || carSubtitleOutlineColor.value
+    const position = firstImportText(subtitleOverlay, ['position'])
+    if (position && isCarHeadlinePosition(position)) {
+      carSubtitlePosition.value = position
+    }
   }
 
   const hostEnabled = importBoolean(input, 'hostAppearanceEnabled')
@@ -6547,6 +6692,7 @@ async function handleGenerate() {
         subtitleLanguage: carSubtitleLanguage.value,
         subtitleTimingMode: carSubtitleTimingMode.value,
         syncStrategy: carSyncStrategy.value,
+        subtitleOverlay: buildCarSubtitleOverlayForRequest(),
         headlineOverlay: buildCarHeadlineOverlayForRequest(),
         audioUrl: hasSelectedVoiceAudio() ? carAudioUrl.value.trim() : undefined,
         audioMode: carAudioModeForRequest(),
