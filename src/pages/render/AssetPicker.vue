@@ -65,84 +65,88 @@
 
         <div v-if="errorMessage" class="app-error">{{ errorMessage }}</div>
         <div v-else-if="!busy && filteredAssets.length === 0" class="asset-picker-empty">{{ emptyResultText }}</div>
+        <template v-else>
+          <div v-if="previewLoading" class="asset-picker-progress">
+            已显示列表，正在补充分镜/文案预览 {{ previewLoadedCount }} / {{ previewTotalCount }}
+          </div>
 
-        <div
-          v-else
-          class="asset-picker-list"
-          :class="{ 'asset-picker-list-rich': richJsonMode, 'asset-picker-list-image': isImage }"
-        >
-          <template v-for="asset in filteredAssets" :key="asset.assetId">
-            <article
-              v-if="richJsonMode"
-              class="asset-picker-item asset-picker-item-rich"
-              :class="{ active: selectedAssetId === asset.assetId }"
-              role="button"
-              tabindex="0"
-              @click="highlightAsset(asset)"
-              @dblclick="selectAsset(asset)"
-              @keydown.enter.prevent="highlightAsset(asset)"
-              @keydown.space.prevent="highlightAsset(asset)"
-            >
-              <div class="asset-picker-rich-main">
-                <img
-                  v-if="assetPreview(asset).coverUrl"
-                  class="asset-picker-cover"
-                  :src="assetPreview(asset).coverUrl"
-                  alt=""
-                />
-                <span v-else class="asset-picker-icon asset-picker-icon-rich">{{ assetIcon(asset) }}</span>
-                <span class="asset-picker-meta asset-picker-meta-rich">
-                  <strong>{{ assetPreview(asset).title }}</strong>
-                  <small>{{ assetPreview(asset).subtitle }}</small>
+          <div
+            class="asset-picker-list"
+            :class="{ 'asset-picker-list-rich': richJsonMode, 'asset-picker-list-image': isImage }"
+          >
+            <template v-for="asset in filteredAssets" :key="asset.assetId">
+              <article
+                v-if="richJsonMode"
+                class="asset-picker-item asset-picker-item-rich"
+                :class="{ active: selectedAssetId === asset.assetId }"
+                role="button"
+                tabindex="0"
+                @click="highlightAsset(asset)"
+                @dblclick="selectAsset(asset)"
+                @keydown.enter.prevent="highlightAsset(asset)"
+                @keydown.space.prevent="highlightAsset(asset)"
+              >
+                <div class="asset-picker-rich-main">
+                  <img
+                    v-if="assetPreview(asset).coverUrl"
+                    class="asset-picker-cover"
+                    :src="assetPreview(asset).coverUrl"
+                    alt=""
+                  />
+                  <span v-else class="asset-picker-icon asset-picker-icon-rich">{{ assetIcon(asset) }}</span>
+                  <span class="asset-picker-meta asset-picker-meta-rich">
+                    <strong>{{ assetPreview(asset).title }}</strong>
+                    <small>{{ assetPreview(asset).subtitle }}</small>
+                    <span v-if="assetRoleLabel(asset)" class="asset-picker-role-tag">{{ assetRoleLabel(asset) }}</span>
+                  </span>
+                </div>
+
+                <div class="asset-picker-rich-lines">
+                  <span v-if="assetPreview(asset).sourceLabel" class="asset-picker-source-line">
+                    <b>解析视频：</b>{{ assetPreview(asset).sourceLabel }}
+                  </span>
+                  <span v-if="assetPreview(asset).sourceTime" class="asset-picker-date">
+                    视频上传/发布时间：{{ assetPreview(asset).sourceTime }}
+                  </span>
+                  <span v-if="assetPreview(asset).previewText" class="asset-picker-preview-text">
+                    <b>{{ assetPreview(asset).previewLabel || '预览' }}：</b>{{ assetPreview(asset).previewText }}
+                  </span>
+                  <span v-else class="asset-picker-preview-text">{{ assetPreview(asset).detail }}</span>
+                  <span class="asset-picker-date">资产产出时间：{{ formatDateTime(asset.createdAt) }}</span>
+                  <a
+                    v-if="assetPreview(asset).sourceUrl"
+                    class="asset-picker-source-link"
+                    :href="assetPreview(asset).sourceUrl"
+                    target="_blank"
+                    rel="noreferrer"
+                    @click.stop
+                  >
+                    打开来源视频
+                  </a>
+                </div>
+
+              </article>
+              <button
+                v-else
+                class="asset-picker-item"
+                :class="{ active: selectedAssetId === asset.assetId }"
+                type="button"
+                :disabled="busy"
+                @click="highlightAsset(asset)"
+                @dblclick="selectAsset(asset)"
+              >
+                <img v-if="isImage" :src="resolveUrl(asset.thumbnailUrl || asset.fileUrl)" alt="" />
+                <span v-else class="asset-picker-icon">{{ assetIcon(asset) }}</span>
+                <span class="asset-picker-meta">
+                  <strong>{{ asset.fileName }}</strong>
+                  <small>{{ assetListSubtitle(asset) }}</small>
                   <span v-if="assetRoleLabel(asset)" class="asset-picker-role-tag">{{ assetRoleLabel(asset) }}</span>
+                  <span class="asset-picker-date">产出时间：{{ formatDateTime(asset.createdAt) }}</span>
                 </span>
-              </div>
-
-              <div class="asset-picker-rich-lines">
-                <span v-if="assetPreview(asset).sourceLabel" class="asset-picker-source-line">
-                  <b>解析视频：</b>{{ assetPreview(asset).sourceLabel }}
-                </span>
-                <span v-if="assetPreview(asset).sourceTime" class="asset-picker-date">
-                  视频上传/发布时间：{{ assetPreview(asset).sourceTime }}
-                </span>
-                <span v-if="assetPreview(asset).previewText" class="asset-picker-preview-text">
-                  <b>{{ assetPreview(asset).previewLabel || '预览' }}：</b>{{ assetPreview(asset).previewText }}
-                </span>
-                <span v-else class="asset-picker-preview-text">{{ assetPreview(asset).detail }}</span>
-                <span class="asset-picker-date">资产产出时间：{{ formatDateTime(asset.createdAt) }}</span>
-                <a
-                  v-if="assetPreview(asset).sourceUrl"
-                  class="asset-picker-source-link"
-                  :href="assetPreview(asset).sourceUrl"
-                  target="_blank"
-                  rel="noreferrer"
-                  @click.stop
-                >
-                  打开来源视频
-                </a>
-              </div>
-
-            </article>
-            <button
-              v-else
-              class="asset-picker-item"
-              :class="{ active: selectedAssetId === asset.assetId }"
-              type="button"
-              :disabled="busy"
-              @click="highlightAsset(asset)"
-              @dblclick="selectAsset(asset)"
-            >
-              <img v-if="isImage" :src="resolveUrl(asset.thumbnailUrl || asset.fileUrl)" alt="" />
-              <span v-else class="asset-picker-icon">{{ assetIcon(asset) }}</span>
-              <span class="asset-picker-meta">
-                <strong>{{ asset.fileName }}</strong>
-                <small>{{ assetListSubtitle(asset) }}</small>
-                <span v-if="assetRoleLabel(asset)" class="asset-picker-role-tag">{{ assetRoleLabel(asset) }}</span>
-                <span class="asset-picker-date">产出时间：{{ formatDateTime(asset.createdAt) }}</span>
-              </span>
-            </button>
-          </template>
-        </div>
+              </button>
+            </template>
+          </div>
+        </template>
 
         <footer class="asset-picker-modal-foot">
           <span>{{ activeAsset ? `当前选择：${activeAsset.fileName}` : '单击选中资产，双击可直接选择' }}</span>
@@ -213,6 +217,14 @@ const selectedRoleFilter = ref('all')
 const selectedScope = ref<PickerScope>('private')
 const modalOpen = ref(false)
 const previewByAssetId = ref<Record<number, AssetPickerPreview>>({})
+const previewLoading = ref(false)
+const previewLoadedCount = ref(0)
+const previewTotalCount = ref(0)
+const previewRunId = ref(0)
+const richPreviewLoadedAssetIds = ref<Set<number>>(new Set())
+
+const RICH_PREVIEW_BATCH_SIZE = 5
+const MAX_RICH_PREVIEW_COUNT = 80
 
 const scopeFilterOptions: Array<{ value: PickerScope; label: string }> = [
   { value: 'private', label: '私有素材' },
@@ -365,6 +377,9 @@ async function openPicker() {
 
 function closePicker() {
   modalOpen.value = false
+  previewRunId.value += 1
+  busy.value = false
+  previewLoading.value = false
 }
 
 function setScope(scope: PickerScope) {
@@ -378,7 +393,12 @@ function setScope(scope: PickerScope) {
 }
 
 async function loadAssets() {
+  const runId = previewRunId.value + 1
+  previewRunId.value = runId
   busy.value = true
+  previewLoading.value = false
+  previewLoadedCount.value = 0
+  previewTotalCount.value = 0
   errorMessage.value = ''
   try {
     const lists = await Promise.all(
@@ -391,16 +411,25 @@ async function loadAssets() {
         }),
       ),
     )
+    if (runId !== previewRunId.value) {
+      return
+    }
     const rows = dedupeAssets(lists.flat())
     assets.value = sortAssetsByCreatedAtDesc(rows.filter(isSelectableAsset))
     if (selectedAssetId.value && !assets.value.some((asset) => asset.assetId === selectedAssetId.value)) {
       selectedAssetId.value = null
     }
-    await loadAssetPreviews()
-  } catch (error) {
-    errorMessage.value = error instanceof Error ? error.message : '加载资产失败'
-  } finally {
+    initializeAssetPreviews()
     busy.value = false
+    void loadRichAssetPreviewsInBatches(runId)
+  } catch (error) {
+    if (runId === previewRunId.value) {
+      errorMessage.value = error instanceof Error ? error.message : '加载资产失败'
+    }
+  } finally {
+    if (runId === previewRunId.value) {
+      busy.value = false
+    }
   }
 }
 
@@ -426,7 +455,13 @@ function requestAssetTypes(): Array<AssetType | ''> {
   if (workflowStage === 'sceneBundle') {
     return ['']
   }
-  return ['']
+  if (workflowStage === 'storyboard') {
+    return ['JSON']
+  }
+  if (workflowStage === 'benchmark') {
+    return assetTypesToLoad.value.filter((type) => type === 'JSON' || type === 'TEXT')
+  }
+  return assetTypesToLoad.value
 }
 
 function sortAssetsByCreatedAtDesc(items: AssetItem[]) {
@@ -438,30 +473,71 @@ function createdAtMillis(asset: AssetItem) {
   return Number.isFinite(time) ? time : 0
 }
 
-async function loadAssetPreviews() {
+function initializeAssetPreviews() {
   const previews: Record<number, AssetPickerPreview> = {}
   for (const asset of assets.value) {
     previews[asset.assetId] = buildFallbackPreview(asset)
   }
   previewByAssetId.value = previews
+  richPreviewLoadedAssetIds.value = new Set()
+}
+
+async function loadRichAssetPreviewsInBatches(runId: number) {
   if (!richJsonMode.value) {
     return
   }
 
-  const previewAssets = assets.value.filter((asset) => asset.assetType === 'JSON' || asset.assetType === 'TEXT').slice(0, 30)
-  await Promise.all(
-    previewAssets.map(async (asset) => {
+  const previewAssets = filteredAssets.value
+    .filter((asset) => asset.assetType === 'JSON' || asset.assetType === 'TEXT')
+    .filter((asset) => !richPreviewLoadedAssetIds.value.has(asset.assetId))
+    .slice(0, MAX_RICH_PREVIEW_COUNT)
+  if (!previewAssets.length) {
+    return
+  }
+  previewLoading.value = true
+  previewLoadedCount.value = 0
+  previewTotalCount.value = previewAssets.length
+
+  for (let index = 0; index < previewAssets.length; index += RICH_PREVIEW_BATCH_SIZE) {
+    if (runId !== previewRunId.value || !modalOpen.value) {
+      return
+    }
+    const batch = previewAssets.slice(index, index + RICH_PREVIEW_BATCH_SIZE)
+    const entries = await Promise.all(
+      batch.map(async (asset) => {
       try {
         const text = await getAssetTextContent(asset)
-        previewByAssetId.value = {
-          ...previewByAssetId.value,
-          [asset.assetId]: buildJsonPreview(asset, text),
-        }
+        return { assetId: asset.assetId, preview: buildJsonPreview(asset, text) }
       } catch {
-        // Fallback metadata preview is already in place.
+        return { assetId: asset.assetId, preview: null }
       }
-    }),
-  )
+      }),
+    )
+    if (runId !== previewRunId.value || !modalOpen.value) {
+      return
+    }
+    const nextPreviews = { ...previewByAssetId.value }
+    const loaded = new Set(richPreviewLoadedAssetIds.value)
+    for (const entry of entries) {
+      loaded.add(entry.assetId)
+      if (entry.preview) {
+        nextPreviews[entry.assetId] = entry.preview
+      }
+    }
+    richPreviewLoadedAssetIds.value = loaded
+    previewByAssetId.value = nextPreviews
+    previewLoadedCount.value = Math.min(previewAssets.length, index + batch.length)
+    await waitForPreviewBatch()
+  }
+  if (runId === previewRunId.value) {
+    previewLoading.value = false
+  }
+}
+
+function waitForPreviewBatch() {
+  return new Promise<void>((resolve) => {
+    window.setTimeout(resolve, 30)
+  })
 }
 
 function isSelectableAsset(asset: AssetItem) {
@@ -1300,6 +1376,17 @@ function formatFileSize(size: number) {
 .asset-picker-role-filter button:disabled {
   opacity: 0.6;
   cursor: not-allowed;
+}
+
+.asset-picker-progress {
+  flex: 0 0 auto;
+  border: 1px solid #dbeafe;
+  border-radius: 8px;
+  background: #eff6ff;
+  color: #1d4ed8;
+  padding: 8px 10px;
+  font-size: 12px;
+  font-weight: 800;
 }
 
 .asset-picker-list {
