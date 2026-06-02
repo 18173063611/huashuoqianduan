@@ -241,6 +241,82 @@
                 </span>
                 <span v-else>{{ carBundleLoadError }}</span>
               </div>
+              <details class="render-optional-group render-scene-compact">
+                <summary>
+                  <span>场景图片 <em>可选</em></span>
+                  <small>{{ carSceneMaterialUrls.length ? `已选择 ${carSceneMaterialUrls.length} 张场景图` : '展厅、道路、门店、户外环境图，按需展开补充。' }}</small>
+                </summary>
+                <div class="render-optional-body render-scene-compact-body">
+                  <AssetPicker
+                    title="从资产中心选择场景图片"
+                    asset-type="IMAGE"
+                    :asset-types="['IMAGE', 'COVER']"
+                    :selected-url="carPickedSceneImageUrl"
+                    :asset-roles="CAR_SCENE_REFERENCE_ROLES"
+                    :role-options="CAR_SCENE_IMAGE_ROLE_OPTIONS"
+                    workflow-stage="sceneBundle"
+                    placeholder="搜索场景图片素材..."
+                    source-hint="只加载图片类资产；未打场景标签的普通图片也可在“全部”中选择"
+                    @select="handleCarSceneImageAssetSelect"
+                  />
+                  <div class="render-ref-list">
+                    <div
+                      v-for="(item, idx) in carSceneImages"
+                      :key="`car-scene-img-${idx}`"
+                      class="render-ref-item render-ref-item-car"
+                    >
+                      <div class="render-ref-index">场景{{ idx + 1 }}</div>
+                      <ImageInput
+                        :busy="busy"
+                        :value="item"
+                        compact
+                        @update="updateCarSceneImage(idx, $event)"
+                      />
+                      <div class="render-ref-role-picker">
+                        <button
+                          type="button"
+                          class="render-ref-role-trigger"
+                          :disabled="busy || !item.trim()"
+                          title="标记场景类型，用于替换分镜中的地点描述"
+                          @click.stop="toggleCarSceneRolePicker(idx)"
+                        >
+                          <span>{{ carSceneImageRoleLabelForUrl(item, idx) }}</span>
+                          <span>⌄</span>
+                        </button>
+                        <div v-if="carSceneRolePickerOpenIndex === idx" class="render-ref-role-menu">
+                          <button type="button" @click="selectCarSceneImageRole(item, '')">未标记</button>
+                          <button
+                            v-for="option in CAR_SCENE_IMAGE_ROLE_OPTIONS"
+                            :key="option.value"
+                            type="button"
+                            :class="{ active: carSceneImageRoleForUrl(item, idx) === option.value }"
+                            @click="selectCarSceneImageRole(item, option.value)"
+                          >
+                            {{ option.label }}
+                          </button>
+                        </div>
+                      </div>
+                      <button
+                        type="button"
+                        class="render-ref-remove"
+                        :disabled="busy || carSceneImages.length <= 1"
+                        title="移除该场景"
+                        @click="removeCarSceneImageSlot(idx)"
+                      >
+                        ×
+                      </button>
+                    </div>
+                  </div>
+                  <button
+                    type="button"
+                    class="app-secondary-button render-mini-btn"
+                    :disabled="busy || carSceneImages.length >= MAX_REFERENCE"
+                    @click="addCarSceneImageSlot"
+                  >
+                    添加场景图片
+                  </button>
+                </div>
+              </details>
               <details class="render-optional-group render-fast-extra">
                 <summary>
                   <span>补充车辆素材 <em>可选</em></span>
@@ -468,84 +544,6 @@
               </section>
                 </div>
               </details>
-            </section>
-
-            <section class="render-digital-section render-scene-section">
-              <div class="render-module-title render-module-title-compact">
-                <div>
-                  <h3>场景素材</h3>
-                  <small>展厅、道路、门店、户外等环境图单独管理；车辆和人物仍由车辆素材与人物设置控制。</small>
-                </div>
-                <span>可选</span>
-              </div>
-              <AssetPicker
-                title="从资产中心选择场景图片"
-                asset-type="IMAGE"
-                :asset-types="['IMAGE', 'COVER']"
-                :selected-url="carPickedSceneImageUrl"
-                :asset-roles="CAR_SCENE_REFERENCE_ROLES"
-                :role-options="CAR_SCENE_IMAGE_ROLE_OPTIONS"
-                workflow-stage="sceneBundle"
-                placeholder="搜索场景图片素材..."
-                source-hint="只加载图片类资产；未打场景标签的普通图片也可在“全部”中选择"
-                @select="handleCarSceneImageAssetSelect"
-              />
-              <div class="render-ref-list">
-                <div
-                  v-for="(item, idx) in carSceneImages"
-                  :key="`car-scene-img-${idx}`"
-                  class="render-ref-item render-ref-item-car"
-                >
-                  <div class="render-ref-index">场景{{ idx + 1 }}</div>
-                  <ImageInput
-                    :busy="busy"
-                    :value="item"
-                    compact
-                    @update="updateCarSceneImage(idx, $event)"
-                  />
-                  <div class="render-ref-role-picker">
-                    <button
-                      type="button"
-                      class="render-ref-role-trigger"
-                      :disabled="busy || !item.trim()"
-                      title="标记场景类型，用于替换分镜中的地点描述"
-                      @click.stop="toggleCarSceneRolePicker(idx)"
-                    >
-                      <span>{{ carSceneImageRoleLabelForUrl(item, idx) }}</span>
-                      <span>⌄</span>
-                    </button>
-                    <div v-if="carSceneRolePickerOpenIndex === idx" class="render-ref-role-menu">
-                      <button type="button" @click="selectCarSceneImageRole(item, '')">未标记</button>
-                      <button
-                        v-for="option in CAR_SCENE_IMAGE_ROLE_OPTIONS"
-                        :key="option.value"
-                        type="button"
-                        :class="{ active: carSceneImageRoleForUrl(item, idx) === option.value }"
-                        @click="selectCarSceneImageRole(item, option.value)"
-                      >
-                        {{ option.label }}
-                      </button>
-                    </div>
-                  </div>
-                  <button
-                    type="button"
-                    class="render-ref-remove"
-                    :disabled="busy || carSceneImages.length <= 1"
-                    title="移除该场景"
-                    @click="removeCarSceneImageSlot(idx)"
-                  >
-                    ×
-                  </button>
-                </div>
-              </div>
-              <button
-                type="button"
-                class="app-secondary-button render-mini-btn"
-                :disabled="busy || carSceneImages.length >= MAX_REFERENCE"
-                @click="addCarSceneImageSlot"
-              >
-                添加场景图片
-              </button>
             </section>
 
             <section class="render-digital-section">
@@ -1707,11 +1705,12 @@ import BillingEstimateBanner from '../../components/business/BillingEstimateBann
 import { useBillingEstimate } from '../../composables/useBillingEstimate'
 import { rememberSessionTaskId } from '../../services/sessionTaskStore'
 import { trackTaskResult } from '../../services/taskRealtime'
-import { getTaskResult } from '../../services/taskApi'
+import { getTaskDetail, getTaskResult } from '../../services/taskApi'
 import { uploadFile } from '../../services/uploadApi'
-import { getAssetTextContent, uploadMaterialAsset } from '../../services/assetApi'
+import { getAssetDetail, getAssetTextContent, uploadMaterialAsset } from '../../services/assetApi'
 import {
   consumePendingRenderTaskImport,
+  readRenderTaskSnapshot,
   saveRenderTaskSnapshot,
 } from '../../services/renderTaskImport'
 import {
@@ -1968,6 +1967,18 @@ const CAR_VEHICLE_REFERENCE_ROLES = CAR_MATERIAL_TARGETS
 const CAR_SCENE_REFERENCE_ROLES = CAR_MATERIAL_TARGETS
   .filter((item) => item.group === 'scene')
   .map((item) => item.role)
+const CAR_WORKFLOW_ASSET_ROLES = [
+  'car_model_bundle',
+  'voiceover',
+  'reference_audio',
+  'bgm',
+  'storyboard_json',
+  'benchmark_json',
+  'voice_script',
+  'material_video',
+  'host_video',
+  'reference_video',
+]
 
 const CAR_SCENE_KEYWORD_ROLES: Array<{ keywords: string[]; roles: string[] }> = [
   { keywords: ['内饰', '座椅', '中控', '空间', '前排', '后排', '方向盘', '仪表', '后备箱'], roles: ['car_interior_dashboard', 'car_interior_front_seat', 'car_interior_back_seat', 'car_interior_steering', 'car_interior_trunk'] },
@@ -3221,7 +3232,9 @@ function normalizeCarAssetRole(value: unknown) {
     return ''
   }
   const aliased = CAR_ASSET_ROLE_ALIASES[normalized] || normalized
-  return CAR_MATERIAL_TARGETS.some((item) => item.role === aliased) ? aliased : ''
+  return CAR_MATERIAL_TARGETS.some((item) => item.role === aliased) || CAR_WORKFLOW_ASSET_ROLES.includes(aliased)
+    ? aliased
+    : ''
 }
 
 function updateCarImageRole(url: string, role: string) {
@@ -3287,12 +3300,30 @@ function carAssetRoleFromAsset(asset: AssetItem) {
 
 function inferCarAssetRoleFromAsset(asset: AssetItem, metadata: Record<string, unknown> | null) {
   const sourceType = String(asset.sourceType || '').trim().toUpperCase()
+  const assetType = String(asset.assetType || '').trim().toUpperCase()
   const source = metadata ? firstRecordText(metadata, ['source']) : ''
   const name = [
     asset.fileName,
     metadata ? firstRecordText(metadata, ['originalFileName', 'title', 'sourceTitle']) : '',
   ].filter(Boolean).join(' ').toLowerCase()
 
+  if (assetType === 'JSON') {
+    if (name.includes('车型素材包') || name.includes('car_model_bundle') || name.includes('car model bundle')) return 'car_model_bundle'
+    if (name.includes('分镜') || name.includes('storyboard')) return 'storyboard_json'
+    if (name.includes('爆款') || name.includes('对标') || name.includes('benchmark')) return 'benchmark_json'
+  }
+  if (assetType === 'TEXT') {
+    if (name.includes('爆款') || name.includes('对标') || name.includes('benchmark') || sourceType.includes('DOUYIN')) return 'benchmark_json'
+    if (name.includes('口播') || name.includes('文案') || name.includes('script')) return 'voice_script'
+  }
+  if (assetType === 'AUDIO') {
+    if (name.includes('bgm') || name.includes('背景音乐') || name.includes('music')) return 'bgm'
+    return 'voiceover'
+  }
+  if (assetType === 'VIDEO') {
+    if (sourceType === 'DIGITAL_HUMAN_GENERATE' || name.includes('数字人') || name.includes('host') || name.includes('avatar')) return 'host_video'
+    return 'material_video'
+  }
   if (
     sourceType === 'AVATAR_GENERATE' ||
     source.toUpperCase() === 'DOUBAO_SEEDREAM' ||
@@ -6060,6 +6091,15 @@ function buildCarAssetRoleBindings(): CarSalesAssetRoleBinding[] {
         })
       })
     })
+    if (carStoryboardAssetUrl.value.trim()) {
+      bindings.push({
+        assetId: carStoryboardAssetId.value || undefined,
+        url: carStoryboardAssetUrl.value.trim(),
+        assetType: 'JSON',
+        assetRole: 'storyboard_json',
+        label: '分镜',
+      })
+    }
     if (carAudioUrl.value.trim()) {
       bindings.push({
         assetId: carAudioAssetId.value || undefined,
@@ -6087,6 +6127,15 @@ function buildCarAssetRoleBindings(): CarSalesAssetRoleBinding[] {
         label: carRoleLabel('host_image'),
       })
     }
+    if (carMaterialVideoUrl.value.trim()) {
+      bindings.push({
+        assetId: carMaterialVideoAssetId.value || undefined,
+        url: carMaterialVideoUrl.value.trim(),
+        assetType: 'VIDEO',
+        assetRole: 'material_video',
+        label: '已有视频素材',
+      })
+    }
     if (carBenchmarkAssetUrl.value.trim()) {
       bindings.push({
         assetId: carBenchmarkAssetId.value || undefined,
@@ -6098,15 +6147,34 @@ function buildCarAssetRoleBindings(): CarSalesAssetRoleBinding[] {
     }
     return bindings.filter((item) => item.url)
   }
-  const bindings: CarSalesAssetRoleBinding[] = carImageUrls.value.map((url, idx) => {
+  const bindings: CarSalesAssetRoleBinding[] = []
+  if (carBundleAssetUrl.value.trim()) {
+    bindings.push({
+      assetId: carBundleAssetId.value || undefined,
+      url: carBundleAssetUrl.value.trim(),
+      assetType: 'JSON',
+      assetRole: 'car_model_bundle',
+      label: carBundleLoadedName.value || carBrandModel.value.trim() || '车型素材包',
+    })
+  }
+  if (carStoryboardAssetUrl.value.trim()) {
+    bindings.push({
+      assetId: carStoryboardAssetId.value || undefined,
+      url: carStoryboardAssetUrl.value.trim(),
+      assetType: 'JSON',
+      assetRole: 'storyboard_json',
+      label: '分镜',
+    })
+  }
+  carImageUrls.value.forEach((url, idx) => {
     const role = carImageRoleForUrl(url, idx)
-    return {
+    bindings.push({
       assetId: carImageAssetIdsByUrl.value[url],
       url,
       assetType: 'IMAGE',
       assetRole: role || undefined,
       label: role ? carRoleLabel(role) : undefined,
-    }
+    })
   })
   for (const [idx, url] of carSceneMaterialUrls.value.entries()) {
     const role = carSceneImageRoleForUrl(url, idx)
@@ -6125,6 +6193,15 @@ function buildCarAssetRoleBindings(): CarSalesAssetRoleBinding[] {
       assetType: 'IMAGE',
       assetRole: 'host_image',
       label: carRoleLabel('host_image'),
+    })
+  }
+  if (carMaterialVideoUrl.value.trim()) {
+    bindings.push({
+      assetId: carMaterialVideoAssetId.value || undefined,
+      url: carMaterialVideoUrl.value.trim(),
+      assetType: 'VIDEO',
+      assetRole: 'material_video',
+      label: '已有视频素材',
     })
   }
   if (carAudioUrl.value.trim()) {
@@ -6371,6 +6448,88 @@ function taskImportIdFromRoute() {
   return Array.isArray(raw) ? raw[0] : raw
 }
 
+function parseImportTaskId(value: unknown) {
+  const parsed = Number(Array.isArray(value) ? value[0] : value)
+  return Number.isFinite(parsed) && parsed > 0 ? Math.trunc(parsed) : null
+}
+
+function parseJsonRecord(raw: string | null | undefined) {
+  if (!raw || !raw.trim()) {
+    return null
+  }
+  return asRecord(parseJsonSafely(raw))
+}
+
+function nestedImportInputRecord(value: unknown): Record<string, unknown> | null {
+  const record = asRecord(value)
+  if (!record) {
+    return null
+  }
+  for (const key of ['input', 'request', 'parameters', 'payload']) {
+    const direct = asRecord(record[key])
+    if (direct) {
+      return direct
+    }
+  }
+  for (const key of ['metadata', 'meta', 'result', 'data']) {
+    const nested = nestedImportInputRecord(record[key])
+    if (nested) {
+      return nested
+    }
+  }
+  return null
+}
+
+async function loadRenderTaskImportFromTask(taskId: number) {
+  const localSnapshot = readRenderTaskSnapshot(taskId)
+  const localInput = asRecord(localSnapshot?.input)
+  if (localSnapshot && localInput) {
+    return {
+      taskId: localSnapshot.taskId,
+      taskType: localSnapshot.taskType,
+      input: localInput,
+      savedAt: localSnapshot.savedAt,
+      source: localSnapshot.source,
+    }
+  }
+
+  const detail = await getTaskDetail(taskId)
+  const detailInput = parseJsonRecord(detail.inputJson) || nestedImportInputRecord(parseJsonRecord(detail.outputJson))
+  if (detailInput) {
+    return {
+      taskId: detail.taskId,
+      taskType: detail.taskType,
+      input: detailInput,
+      savedAt: Date.now(),
+      source: 'task-center' as const,
+    }
+  }
+
+  const taskResult = await getTaskResult<unknown>(taskId).catch(() => null)
+  const resultInput = nestedImportInputRecord(taskResult?.result)
+  if (resultInput) {
+    return {
+      taskId,
+      taskType: taskResult?.taskType || detail.taskType,
+      input: resultInput,
+      savedAt: Date.now(),
+      source: 'task-center' as const,
+    }
+  }
+  return null
+}
+
+async function resolveRenderTaskImport() {
+  const importTaskId = taskImportIdFromRoute()
+  const pending = consumePendingRenderTaskImport(importTaskId)
+  const pendingInput = asRecord(pending?.input)
+  if (pending && pendingInput) {
+    return { ...pending, input: pendingInput }
+  }
+  const parsedTaskId = parseImportTaskId(importTaskId)
+  return parsedTaskId ? loadRenderTaskImportFromTask(parsedTaskId) : null
+}
+
 function importedSceneUrls(scenes: Record<string, unknown>[], vehicleUrls: string[], bindings: Record<string, unknown>[]) {
   const vehicleSet = new Set(vehicleUrls)
   const sceneUrls: string[] = []
@@ -6413,6 +6572,8 @@ function applyImportedAssetBindings(
     const url = firstImportText(binding, ['url'])
     const assetId = toPositiveNumber(binding.assetId)
     const role = normalizeCarAssetRole(firstImportText(binding, ['assetRole', 'role']))
+    const assetType = firstImportText(binding, ['assetType']).toUpperCase()
+    const label = firstImportText(binding, ['label', 'name'])
     if (!url) return
     if (role === 'host_image') {
       carHostImageUrl.value = url
@@ -6432,6 +6593,22 @@ function applyImportedAssetBindings(
     if (role === 'car_model_bundle') {
       carBundleAssetUrl.value = url
       carBundleAssetId.value = assetId
+      carBundleLoadedName.value = label || carBundleLoadedName.value
+      return
+    }
+    if (role === 'storyboard_json') {
+      carStoryboardAssetUrl.value = url
+      carStoryboardAssetId.value = assetId
+      return
+    }
+    if (role === 'benchmark_json' || role === 'voice_script') {
+      carBenchmarkAssetUrl.value = url
+      carBenchmarkAssetId.value = assetId
+      return
+    }
+    if (role === 'material_video' || role === 'host_video' || assetType === 'VIDEO') {
+      carMaterialVideoUrl.value = url
+      carMaterialVideoAssetId.value = assetId
       return
     }
     if (CAR_SCENE_REFERENCE_ROLES.includes(role) || sceneUrlSet.has(url)) {
@@ -6457,6 +6634,91 @@ function applyImportedAssetBindings(
   carImageAssetRoleByUrl.value = nextCarRoles
   carSceneImageAssetIdsByUrl.value = nextSceneIds
   carSceneImageAssetRoleByUrl.value = nextSceneRoles
+}
+
+function applyImportedSourceAsset(asset: AssetItem) {
+  const url = normalizePublicUrl(asset.fileUrl || '')
+  if (!url) {
+    return
+  }
+  const role = carAssetRoleFromAsset(asset)
+  if (role === 'car_model_bundle' && !carBundleAssetUrl.value.trim()) {
+    carBundleAssetUrl.value = url
+    carBundleAssetId.value = asset.assetId
+    carBundleLoadedName.value = asset.fileName || carBundleLoadedName.value
+    return
+  }
+  if (role === 'storyboard_json' && !carStoryboardAssetUrl.value.trim()) {
+    carStoryboardAssetUrl.value = url
+    carStoryboardAssetId.value = asset.assetId
+    return
+  }
+  if ((role === 'benchmark_json' || role === 'voice_script') && !carBenchmarkAssetUrl.value.trim()) {
+    carBenchmarkAssetUrl.value = url
+    carBenchmarkAssetId.value = asset.assetId
+    carBenchmarkUploadName.value = asset.fileName || carBenchmarkUploadName.value
+    return
+  }
+  if ((role === 'voiceover' || role === 'reference_audio') && !carAudioUrl.value.trim()) {
+    carAudioUrl.value = url
+    carAudioAssetId.value = asset.assetId
+    carAudioSourceType.value = asset.sourceType || carAudioSourceType.value
+    carAudioUploadName.value = asset.fileName || carAudioUploadName.value
+    return
+  }
+  if (role === 'bgm' && !carBgmUrl.value.trim()) {
+    carBgmUrl.value = url
+    carBgmAssetId.value = asset.assetId
+    carBgmSourceType.value = asset.sourceType || carBgmSourceType.value
+    carBgmUploadName.value = asset.fileName || carBgmUploadName.value
+    return
+  }
+  if (role === 'host_image' && !carHostImageUrl.value.trim()) {
+    carHostImageUrl.value = url
+    carHostImageAssetId.value = asset.assetId
+    return
+  }
+  if ((role === 'material_video' || role === 'host_video' || role === 'reference_video') && !carMaterialVideoUrl.value.trim()) {
+    carMaterialVideoUrl.value = url
+    carMaterialVideoAssetId.value = asset.assetId
+    return
+  }
+  if (CAR_SCENE_REFERENCE_ROLES.includes(role) && !carSceneImages.value.some((item) => item.trim() === url)) {
+    const emptyIndex = carSceneImages.value.findIndex((item) => !item.trim())
+    if (emptyIndex >= 0) {
+      carSceneImages.value[emptyIndex] = url
+    } else if (carSceneImages.value.length < MAX_REFERENCE) {
+      carSceneImages.value.push(url)
+    }
+    carSceneImageAssetIdsByUrl.value = { ...carSceneImageAssetIdsByUrl.value, [url]: asset.assetId }
+    carSceneImageAssetRoleByUrl.value = { ...carSceneImageAssetRoleByUrl.value, [url]: role }
+    carPickedSceneImageUrl.value = carPickedSceneImageUrl.value || url
+    return
+  }
+  if (CAR_VEHICLE_REFERENCE_ROLES.includes(role) && !carImages.value.some((item) => item.trim() === url)) {
+    const emptyIndex = carImages.value.findIndex((item) => !item.trim())
+    if (emptyIndex >= 0) {
+      carImages.value[emptyIndex] = url
+    } else if (carImages.value.length < MAX_REFERENCE) {
+      carImages.value.push(url)
+    }
+    carImageAssetIdsByUrl.value = { ...carImageAssetIdsByUrl.value, [url]: asset.assetId }
+    carImageAssetRoleByUrl.value = { ...carImageAssetRoleByUrl.value, [url]: role }
+    carPickedImageUrl.value = carPickedImageUrl.value || url
+  }
+}
+
+async function applyImportedSourceAssetIds(input: Record<string, unknown>) {
+  const raw = input.sourceAssetIds
+  const ids = Array.isArray(raw)
+    ? raw.map(toPositiveNumber).filter((id): id is number => !!id)
+    : []
+  if (!ids.length) {
+    return
+  }
+  const uniqueIds = Array.from(new Set(ids)).slice(0, 40)
+  const assets = await Promise.all(uniqueIds.map((id) => getAssetDetail(id).catch(() => null)))
+  assets.filter((asset): asset is AssetItem => !!asset).forEach(applyImportedSourceAsset)
 }
 
 function importedScenesToStoryboardText(scenes: Record<string, unknown>[]) {
@@ -6529,7 +6791,7 @@ function applyImportedCarPackages(input: Record<string, unknown>, bindings: Reco
   })
 }
 
-function applyCarSalesTaskImport(input: Record<string, unknown>) {
+async function applyCarSalesTaskImport(input: Record<string, unknown>) {
   productionMode.value = 'manual'
   mainTab.value = 'carSales'
   applyCommonSeedanceImport(input)
@@ -6548,6 +6810,11 @@ function applyCarSalesTaskImport(input: Record<string, unknown>) {
     carSceneImages.value = sceneUrls
     carPickedSceneImageUrl.value = sceneUrls[0] || ''
   }
+  await applyImportedSourceAssetIds(input)
+  if (carBundleAssetUrl.value.trim()) {
+    carBundleLoadedName.value = carBundleLoadedName.value || firstImportText(input, ['brandModel']) || '车型素材包'
+    carBundleImageCount.value = carImageUrls.value.length + carSceneMaterialUrls.value.length
+  }
 
   const taskMode = firstImportText(input, ['taskMode'])
   multiCarCompareEnabled.value = taskMode === 'multi_car_compare'
@@ -6565,20 +6832,35 @@ function applyCarSalesTaskImport(input: Record<string, unknown>) {
     firstImportText(input, ['scriptContext']) ||
     carStoryboardContext.value
 
-  const finalVoiceText = firstImportText(input, ['finalVoiceText', 'voiceText'])
-  if (finalVoiceText) {
-    carVoiceContext.value = finalVoiceText
-    carVoiceTextSource.value = 'manual'
-  }
   const voiceTextSource = firstImportText(input, ['voiceTextSource'])
   if (voiceTextSource && isCarVoiceTextSource(voiceTextSource)) {
     carVoiceTextSource.value = voiceTextSource
+  }
+  const finalVoiceText = firstImportText(input, ['finalVoiceText', 'voiceText'])
+  if (finalVoiceText) {
+    if (carVoiceTextSource.value === 'benchmark') {
+      carBenchmarkVoiceText.value = finalVoiceText
+    } else if (voiceTextSource && isCarVoiceTextSource(voiceTextSource)) {
+      carVoiceContext.value = finalVoiceText
+    } else if (carBenchmarkAssetUrl.value.trim()) {
+      carBenchmarkVoiceText.value = finalVoiceText
+      carVoiceTextSource.value = 'benchmark'
+    } else {
+      carVoiceContext.value = finalVoiceText
+      carVoiceTextSource.value = 'manual'
+    }
   }
 
   carAudioUrl.value = firstImportText(input, ['audioUrl', 'generatedVoiceUrl']) || carAudioUrl.value
   const audioMode = firstImportText(input, ['audioMode'])
   if (audioMode && isCarAudioMode(audioMode)) {
     carAudioMode.value = audioMode
+  }
+  const voicePolicy = firstImportText(input, ['voicePolicy'])
+  if (!audioMode && voicePolicy === 'model_native') {
+    carAudioMode.value = 'model_native'
+  } else if (!audioMode && voicePolicy === 'none') {
+    carAudioMode.value = 'none'
   }
   carBgmUrl.value = firstImportText(input, ['bgmUrl']) || ''
 
@@ -6680,14 +6962,17 @@ function applyImageVideoTaskImport(taskType: string, input: Record<string, unkno
   firstFrame.value = firstImportText(input, ['imageUrl'])
 }
 
-function applyPendingRenderTaskImport() {
-  const pending = consumePendingRenderTaskImport(taskImportIdFromRoute())
+async function applyPendingRenderTaskImport() {
+  const pending = await resolveRenderTaskImport()
   const input = asRecord(pending?.input)
   if (!pending || !input) {
+    if (taskImportIdFromRoute()) {
+      ElMessage.warning('未找到可还原的任务参数')
+    }
     return
   }
   if (pending.taskType === 'SEEDANCE_CAR_SALES_VIDEO') {
-    applyCarSalesTaskImport(input)
+    await applyCarSalesTaskImport(input)
   } else if (pending.taskType === 'SEEDANCE_TEXT_VIDEO' || pending.taskType.startsWith('TEXT_TO_VIDEO')) {
     applyTextVideoTaskImport(input)
   } else {
@@ -6788,6 +7073,7 @@ async function handleGenerate() {
         audioMode: carAudioModeForRequest(),
         bgmUrl: carBgmUrl.value.trim() || undefined,
         voicePolicy: carVoicePolicyForRequest(),
+        voiceTextSource: carVoiceTextSource.value,
         finalVoiceText: carFinalVoiceTextForRequest(),
         strictVoiceText: Boolean(strictVoiceTextForRequest()),
         nativeVoiceLanguage: usesModelNativeVoiceover() ? carNativeVoiceLanguage.value : undefined,
@@ -7021,7 +7307,7 @@ onMounted(async () => {
   document.addEventListener('pointerdown', handleModelDropdownPointerDown, true)
   document.addEventListener('keydown', handleModelDropdownKeydown)
   await renderEstimate.refresh()
-  applyPendingRenderTaskImport()
+  await applyPendingRenderTaskImport()
 })
 
 onBeforeUnmount(() => {
@@ -7342,13 +7628,17 @@ onBeforeUnmount(() => {
   background: #fbfcff;
 }
 
-.render-scene-section {
+.render-scene-compact {
   border-color: #b7e4cd;
   background: #f7fef9;
 }
 
-.render-scene-section .asset-picker-compact,
-.render-scene-section .render-ref-item-car {
+.render-scene-compact > .render-optional-body {
+  background: #fff;
+}
+
+.render-scene-compact .asset-picker-compact,
+.render-scene-compact .render-ref-item-car {
   background: #fff;
 }
 

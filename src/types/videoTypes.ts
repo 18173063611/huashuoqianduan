@@ -299,6 +299,7 @@ export interface CarSalesVideoRequest {
   audioMode?: 'none' | 'post_mix' | 'reference' | 'model_native'
   bgmUrl?: string
   voicePolicy?: 'user_audio' | 'model_native' | 'none'
+  voiceTextSource?: 'auto' | 'benchmark' | 'manual'
   finalVoiceText?: string
   strictVoiceText?: boolean
   generatedVoiceAssetId?: number
