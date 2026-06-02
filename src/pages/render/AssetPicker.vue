@@ -276,7 +276,7 @@ const filteredAssets = computed(() => {
       return false
     }
     const role = assetNormalizedRole(asset)
-    if (!workflowStage && allowed.length > 0 && !allowed.includes(role)) {
+    if (allowed.length > 0 && !allowed.includes(role)) {
       return false
     }
     if (selected) {
@@ -424,7 +424,7 @@ function requestAssetTypes(): Array<AssetType | ''> {
     return ['JSON']
   }
   if (workflowStage === 'sceneBundle') {
-    return assetTypesToLoad.value.length ? assetTypesToLoad.value : ['']
+    return ['']
   }
   return ['']
 }

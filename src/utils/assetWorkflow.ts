@@ -404,7 +404,6 @@ function inferAssetRole(asset: AssetItem, metadata: Record<string, unknown> | nu
   const sourceType = String(asset.sourceType || '').trim().toUpperCase()
   const group = String(asset.assetGroup || '').trim()
   const from = stringField(metadata, 'from').toLowerCase()
-  const source = stringField(metadata, 'source').toUpperCase()
   const bundleType = stringField(metadata, 'bundleType').toLowerCase()
   const name = `${asset.fileName || ''} ${stringField(metadata, 'originalFileName')} ${stringField(metadata, 'title')} ${stringField(metadata, 'sourceTitle')}`.toLowerCase()
 
@@ -414,10 +413,16 @@ function inferAssetRole(asset: AssetItem, metadata: Record<string, unknown> | nu
   if (group === SCENE_MATERIAL_BUNDLE_GROUP && assetType === 'JSON') return 'scene_material_bundle'
 
   if (assetType === 'IMAGE') {
+    if (group === SCENE_MATERIAL_BUNDLE_GROUP || from.includes('scene_material') || bundleType === 'scene_material') {
+      if (name.includes('road') || name.includes('highway') || name.includes('山路') || name.includes('公路') || name.includes('道路')) return 'scene_road'
+      if (name.includes('night') || name.includes('夜景')) return 'scene_night'
+      if (name.includes('outdoor') || name.includes('city') || name.includes('户外') || name.includes('城市')) return 'scene_outdoor'
+      if (name.includes('showroom') || name.includes('展厅') || name.includes('门店')) return 'scene_showroom'
+      return 'scene_showroom'
+    }
     if (
       sourceType === 'AVATAR_GENERATE' ||
       from.includes('avatar') ||
-      source === 'DOUBAO_SEEDREAM' ||
       name.includes('avatar') ||
       name.includes('host') ||
       name.includes('主播') ||
