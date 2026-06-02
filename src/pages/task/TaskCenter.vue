@@ -183,7 +183,17 @@
               · 任务 ID {{ selectedResultTask.taskId }}
             </p>
           </div>
-          <button type="button" class="task-result-close" aria-label="关闭" @click="closeResultModal">×</button>
+          <div class="task-result-head-actions">
+            <button
+              v-if="canImportSelectedRenderParameters"
+              type="button"
+              class="task-result-import-button"
+              @click="importSelectedRenderParameters"
+            >
+              导入视频制作
+            </button>
+            <button type="button" class="task-result-close" aria-label="关闭" @click="closeResultModal">×</button>
+          </div>
         </header>
 
         <p v-if="resultError" class="app-error">{{ resultError }}</p>
@@ -317,6 +327,27 @@
               </button>
             </section>
           </div>
+          <section
+            v-if="selectedResultTask && isImportableRenderTaskType(selectedResultTask.taskType)"
+            class="task-parameter-panel"
+          >
+            <div class="task-parameter-head">
+              <div>
+                <h4>生成参数</h4>
+                <p>本次视频生成使用的请求参数，可导入到视频制作页检查并重新生成。</p>
+              </div>
+              <button
+                v-if="canImportSelectedRenderParameters"
+                type="button"
+                class="task-result-import-button"
+                @click="importSelectedRenderParameters"
+              >
+                导入视频制作
+              </button>
+            </div>
+            <pre v-if="selectedTaskParameterJsonText" class="task-parameter-json">{{ selectedTaskParameterJsonText }}</pre>
+            <div v-else class="task-result-empty">该任务暂无保存参数；新提交的视频任务会自动保存。</div>
+          </section>
         </div>
 
         <div v-else-if="selectedResultTask?.taskType === 'TTS_GENERATE'" class="task-result-audio">
@@ -418,7 +449,7 @@
 <script setup lang="ts">
 
 import { computed, ref, watch, watchEffect } from 'vue'
-import { RouterLink } from 'vue-router'
+import { RouterLink, useRouter } from 'vue-router'
 import { ElMessage } from 'element-plus'
 import TaskRowSmoothProgress from '../../components/TaskRowSmoothProgress.vue'
 import AssetPicker from '../render/AssetPicker.vue'
@@ -433,6 +464,10 @@ import {
   retryTask,
 } from '../../services/taskApi'
 import { adoptCarSalesSegment, composeCarSalesSegments, regenerateCarSalesSegment } from '../../services/videoApi'
+import {
+  readRenderTaskSnapshot,
+  savePendingRenderTaskImport,
+} from '../../services/renderTaskImport'
 import { getSessionTaskIds } from '../../services/sessionTaskStore'
 import type { AssetItem } from '../../types/assetTypes'
 import type { TaskItem, TaskResultItem, TaskSummaryResponse } from '../../types/taskTypes'
@@ -479,6 +514,21 @@ const props = withDefaults(
   }>(),
   { panelActive: true },
 )
+
+const IMPORTABLE_RENDER_TASK_TYPES = new Set([
+  'SEEDANCE_CAR_SALES_VIDEO',
+  'SEEDANCE_TEXT_VIDEO',
+  'TEXT_TO_VIDEO_SEEDANCE_1_5',
+  'TEXT_TO_VIDEO_SEEDANCE_2_0',
+  'SEEDANCE_FIRST_FRAME_VIDEO',
+  'SEEDANCE_FIRST_LAST_FRAME_VIDEO',
+  'SEEDANCE_REFERENCE_VIDEO',
+  'IMAGE_TO_VIDEO_SEEDANCE_1_5',
+  'IMAGE_TO_VIDEO_SEEDANCE_2_0',
+  'IMAGE_TO_VIDEO_SEEDANCE_2_0_FAST',
+])
+
+const router = useRouter()
 
 const hasToken = ref(false)
 const tasks = ref<TaskItem[]>([])
@@ -579,6 +629,28 @@ const douyinTranscriptText = computed(() => {
   return stringField(transcriptResult, 'originalText')
 })
 const resultJsonText = computed(() => JSON.stringify(selectedTaskResult.value ?? selectedOutputJson.value ?? {}, null, 2))
+const selectedTaskParameters = computed(() => {
+  const task = selectedResultTask.value
+  if (!task) {
+    return null
+  }
+  const parsed = parseJsonObject(task.inputJson)
+  if (isRecord(parsed)) {
+    return parsed
+  }
+  const localSnapshot = readRenderTaskSnapshot(task.taskId)
+  return isRecord(localSnapshot?.input) ? localSnapshot.input : null
+})
+const selectedTaskParameterJsonText = computed(() =>
+  selectedTaskParameters.value ? JSON.stringify(selectedTaskParameters.value, null, 2) : '',
+)
+const canImportSelectedRenderParameters = computed(() =>
+  Boolean(
+    selectedResultTask.value &&
+    isImportableRenderTaskType(selectedResultTask.value.taskType) &&
+    selectedTaskParameters.value,
+  ),
+)
 
 function refreshAuthState() {
   hasToken.value = !!getAuthToken()
@@ -1081,6 +1153,32 @@ function closeResultModal() {
   manualComposeSegments.value = []
   manualVideoPickerUrl.value = ''
   composeError.value = ''
+}
+
+function isImportableRenderTaskType(taskType: string | null | undefined) {
+  return taskType ? IMPORTABLE_RENDER_TASK_TYPES.has(taskType) : false
+}
+
+async function importSelectedRenderParameters() {
+  const task = selectedResultTask.value
+  const parameters = selectedTaskParameters.value
+  if (!task || !isImportableRenderTaskType(task.taskType) || !parameters) {
+    ElMessage.warning('该任务暂无可导入的视频生成参数')
+    return
+  }
+  savePendingRenderTaskImport({
+    taskId: task.taskId,
+    taskType: task.taskType,
+    input: parameters,
+    savedAt: Date.now(),
+    source: 'task-center',
+  })
+  closeResultModal()
+  await router.push({
+    name: 'render',
+    query: { importTask: String(task.taskId) },
+  })
+  ElMessage.success('已导入到视频制作，请检查参数后重新生成')
 }
 
 function parseJsonObject(value: string | null | undefined) {
@@ -1844,6 +1942,29 @@ section.app-card.app-page-stack {
   font-size: 12px;
 }
 
+.task-result-head-actions {
+  display: flex;
+  flex: 0 0 auto;
+  align-items: center;
+  gap: 10px;
+}
+
+.task-result-import-button {
+  min-height: 34px;
+  border: 0;
+  border-radius: 8px;
+  background: #6252f3;
+  color: #fff;
+  padding: 0 14px;
+  font-size: 13px;
+  font-weight: 800;
+  cursor: pointer;
+}
+
+.task-result-import-button:hover {
+  background: #4f46e5;
+}
+
 .task-result-close {
   display: grid;
   width: 34px;
@@ -1920,6 +2041,50 @@ section.app-card.app-page-stack {
   color: #1f2937;
   font-size: 14px;
   font-weight: 850;
+}
+
+.task-parameter-panel {
+  display: grid;
+  gap: 10px;
+  border: 1px solid #e2e8f0;
+  border-radius: 10px;
+  background: #fbfcff;
+  padding: 14px;
+}
+
+.task-parameter-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.task-parameter-head h4 {
+  margin: 0 0 4px;
+  color: #1f2937;
+  font-size: 14px;
+  font-weight: 850;
+}
+
+.task-parameter-head p {
+  margin: 0;
+  color: #667085;
+  font-size: 12px;
+  line-height: 1.6;
+}
+
+.task-parameter-json {
+  max-height: 260px;
+  overflow: auto;
+  border: 1px solid #edf0f6;
+  border-radius: 8px;
+  background: #fff;
+  color: #344054;
+  padding: 12px;
+  font-size: 12px;
+  line-height: 1.6;
+  white-space: pre-wrap;
+  word-break: break-word;
 }
 
 .task-result-segment-grid {

@@ -1558,6 +1558,10 @@ import { getTaskResult } from '../../services/taskApi'
 import { uploadFile } from '../../services/uploadApi'
 import { getAssetTextContent, uploadMaterialAsset } from '../../services/assetApi'
 import {
+  consumePendingRenderTaskImport,
+  saveRenderTaskSnapshot,
+} from '../../services/renderTaskImport'
+import {
   generateCarSalesVideo,
   generateDigitalHumanVideo,
   generateFirstFrameVideo,
@@ -1570,7 +1574,12 @@ import {
 import type {
   CarSalesAssetRoleBinding,
   CarSalesCarPackageRequest,
+  CarSalesVideoRequest,
   DigitalHumanTaskDetailResponse,
+  FirstFrameVideoRequest,
+  FirstLastFrameVideoRequest,
+  ReferenceVideoRequest,
+  TextToVideoRequest,
   VideoScriptShotItem,
   VideoTaskVO,
 } from '../../types/videoTypes'
@@ -6042,6 +6051,419 @@ async function handleDigitalHumanAudioUpload(event: Event) {
   }
 }
 
+function recordArrayField(record: Record<string, unknown>, key: string) {
+  const raw = record[key]
+  return Array.isArray(raw) ? raw.filter((item): item is Record<string, unknown> => Boolean(asRecord(item))) : []
+}
+
+function stringArrayField(record: Record<string, unknown>, key: string) {
+  const raw = record[key]
+  return Array.isArray(raw)
+    ? raw.map((item) => (typeof item === 'string' ? item.trim() : '')).filter(Boolean)
+    : []
+}
+
+function firstImportText(record: Record<string, unknown>, keys: string[]) {
+  return firstRecordText(record, keys)
+}
+
+function importNumber(record: Record<string, unknown>, key: string) {
+  const value = record[key]
+  const parsed = typeof value === 'number' ? value : Number(value)
+  return Number.isFinite(parsed) ? parsed : null
+}
+
+function importBoolean(record: Record<string, unknown>, key: string) {
+  const value = record[key]
+  if (typeof value === 'boolean') return value
+  if (typeof value === 'string') {
+    const normalized = value.trim().toLowerCase()
+    if (normalized === 'true') return true
+    if (normalized === 'false') return false
+  }
+  return null
+}
+
+function isSeedanceModelValue(value: string): value is SeedanceModelValue {
+  return seedanceModelOptions.some((item) => item.value === value)
+}
+
+function isRenderAspectRatioValue(value: string): value is RenderAspectRatio {
+  return renderAspectRatioOptions.some((item) => item.value === value)
+}
+
+function isCarAudioMode(value: string): value is CarAudioMode {
+  return ['none', 'post_mix', 'reference', 'model_native'].includes(value)
+}
+
+function isCarVoiceTextSource(value: string): value is CarVoiceTextSource {
+  return ['auto', 'benchmark', 'manual'].includes(value)
+}
+
+function isNativeVoiceLanguage(value: string): value is NativeVoiceLanguage {
+  return ['zh-CN', 'en-US'].includes(value)
+}
+
+function isCarSubtitleMode(value: string): value is CarSubtitleMode {
+  return ['off', 'auto', 'custom'].includes(value)
+}
+
+function isCarSubtitleTimingMode(value: string): value is CarSubtitleTimingMode {
+  return ['auto', 'audio_recognition', 'script_timeline'].includes(value)
+}
+
+function isCarSyncStrategy(value: string): value is CarSyncStrategy {
+  return ['auto', 'audio_master', 'visual_master'].includes(value)
+}
+
+function isCarHeadlinePosition(value: string): value is CarHeadlinePosition {
+  return ['top', 'middle', 'bottom'].includes(value)
+}
+
+function isCompareCarRole(value: string): value is CompareCarRole {
+  return ['main', 'compare', 'alternative'].includes(value)
+}
+
+function applyCommonSeedanceImport(input: Record<string, unknown>) {
+  const model = firstImportText(input, ['model', 'modelCode'])
+  if (model && isSeedanceModelValue(model)) {
+    selectedModel.value = model
+  }
+  const ratio = firstImportText(input, ['aspectRatio', 'ratio'])
+  if (ratio && isRenderAspectRatioValue(ratio)) {
+    renderAspectRatio.value = ratio
+  }
+  const nextDuration = importNumber(input, 'duration')
+  if (nextDuration != null) {
+    duration.value = Math.max(1, Math.round(nextDuration))
+  }
+  const nextPrompt = firstImportText(input, ['prompt'])
+  if (nextPrompt) {
+    prompt.value = nextPrompt
+  }
+}
+
+function taskImportIdFromRoute() {
+  const raw = route.query.importTask
+  return Array.isArray(raw) ? raw[0] : raw
+}
+
+function importedSceneUrls(scenes: Record<string, unknown>[], vehicleUrls: string[], bindings: Record<string, unknown>[]) {
+  const vehicleSet = new Set(vehicleUrls)
+  const sceneUrls: string[] = []
+  const push = (url: string) => {
+    const clean = url.trim()
+    if (clean && !vehicleSet.has(clean) && !sceneUrls.includes(clean)) {
+      sceneUrls.push(clean)
+    }
+  }
+  bindings.forEach((binding) => {
+    const url = firstImportText(binding, ['url'])
+    const role = normalizeCarAssetRole(firstImportText(binding, ['assetRole', 'role']))
+    if (url && CAR_SCENE_REFERENCE_ROLES.includes(role)) {
+      push(url)
+    }
+  })
+  scenes.forEach((scene) => {
+    stringArrayField(scene, 'imageUrls').forEach((url) => {
+      if (!vehicleSet.has(url)) push(url)
+    })
+    const referenceImage = firstImportText(scene, ['referenceImage'])
+    if (referenceImage && !vehicleSet.has(referenceImage)) push(referenceImage)
+  })
+  return sceneUrls
+}
+
+function applyImportedAssetBindings(
+  bindings: Record<string, unknown>[],
+  vehicleUrls: string[],
+  sceneUrls: string[],
+) {
+  const vehicleUrlSet = new Set(vehicleUrls)
+  const sceneUrlSet = new Set(sceneUrls)
+  const nextCarIds: Record<string, number> = {}
+  const nextCarRoles: Record<string, string> = {}
+  const nextSceneIds: Record<string, number> = {}
+  const nextSceneRoles: Record<string, string> = {}
+
+  bindings.forEach((binding) => {
+    const url = firstImportText(binding, ['url'])
+    const assetId = toPositiveNumber(binding.assetId)
+    const role = normalizeCarAssetRole(firstImportText(binding, ['assetRole', 'role']))
+    if (!url) return
+    if (role === 'host_image') {
+      carHostImageUrl.value = url
+      carHostImageAssetId.value = assetId
+      return
+    }
+    if (role === 'voiceover' || role === 'reference_audio') {
+      carAudioUrl.value = carAudioUrl.value || url
+      carAudioAssetId.value = carAudioAssetId.value || assetId
+      return
+    }
+    if (role === 'bgm') {
+      carBgmUrl.value = carBgmUrl.value || url
+      carBgmAssetId.value = carBgmAssetId.value || assetId
+      return
+    }
+    if (role === 'car_model_bundle') {
+      carBundleAssetUrl.value = url
+      carBundleAssetId.value = assetId
+      return
+    }
+    if (CAR_SCENE_REFERENCE_ROLES.includes(role) || sceneUrlSet.has(url)) {
+      if (!sceneUrlSet.has(url)) {
+        sceneUrls.push(url)
+        sceneUrlSet.add(url)
+      }
+      if (assetId) nextSceneIds[url] = assetId
+      nextSceneRoles[url] = CAR_SCENE_REFERENCE_ROLES.includes(role) ? role : 'scene_showroom'
+      return
+    }
+    if (vehicleUrlSet.has(url) || role) {
+      if (!vehicleUrlSet.has(url)) {
+        vehicleUrls.push(url)
+        vehicleUrlSet.add(url)
+      }
+      if (assetId) nextCarIds[url] = assetId
+      if (role) nextCarRoles[url] = role
+    }
+  })
+
+  carImageAssetIdsByUrl.value = nextCarIds
+  carImageAssetRoleByUrl.value = nextCarRoles
+  carSceneImageAssetIdsByUrl.value = nextSceneIds
+  carSceneImageAssetRoleByUrl.value = nextSceneRoles
+}
+
+function importedScenesToStoryboardText(scenes: Record<string, unknown>[]) {
+  if (!scenes.length) return ''
+  const storyboard = scenes.map((scene, idx) => {
+    const duration = importNumber(scene, 'duration')
+    return {
+      order: importNumber(scene, 'segmentIndex') || idx + 1,
+      time: duration ? `${Math.round(duration)}秒` : '',
+      page: firstImportText(scene, ['visualPrompt', 'prompt', 'title']),
+      visualPrompt: firstImportText(scene, ['visualPrompt', 'prompt']),
+      prompt: firstImportText(scene, ['prompt']),
+      content: firstImportText(scene, ['voiceText']),
+      highlight: firstImportText(scene, ['shotPurpose', 'compareDimension']),
+    }
+  })
+  return JSON.stringify(storyboard, null, 2)
+}
+
+function importedBundleEntries(
+  urls: string[],
+  packageId: string,
+  bindings: Record<string, unknown>[],
+  scene: boolean,
+) {
+  return urls.map((url, idx): CarBundleImageEntry => {
+    const binding = bindings.find((item) =>
+      firstImportText(item, ['url']) === url &&
+      (!packageId || firstImportText(item, ['carPackageId']) === packageId),
+    )
+    const role = normalizeCarAssetRole(binding ? firstImportText(binding, ['assetRole', 'role']) : '')
+    const safeRole = scene
+      ? CAR_SCENE_REFERENCE_ROLES.includes(role) ? role : FALLBACK_CAR_SCENE_IMAGE_ROLES[idx] || 'scene_showroom'
+      : role || CAR_VEHICLE_REFERENCE_ROLES[idx] || ''
+    return {
+      url,
+      role: safeRole,
+      assetId: binding ? toPositiveNumber(binding.assetId) || undefined : undefined,
+      label: safeRole ? carRoleLabel(safeRole) : undefined,
+      fileName: url.split('/').pop() || '',
+    }
+  })
+}
+
+function applyImportedCarPackages(input: Record<string, unknown>, bindings: Record<string, unknown>[]) {
+  const packages = recordArrayField(input, 'carPackages')
+  if (!packages.length) {
+    compareCarPackages.value = []
+    return
+  }
+  compareCarPackages.value = packages.map((pkg, idx) => {
+    const packageId = firstImportText(pkg, ['packageId']) || `import-car-pkg-${idx + 1}`
+    const imageUrls = stringArrayField(pkg, 'imageUrls')
+    const sceneImageUrls = stringArrayField(pkg, 'sceneImageUrls')
+    const role = firstImportText(pkg, ['role'])
+    return {
+      localId: packageId,
+      packageAssetId: toPositiveNumber(pkg.packageAssetId) || undefined,
+      packageAssetUrl: '',
+      packageName: firstImportText(pkg, ['packageName']) || `车型 ${idx + 1}`,
+      carIndex: importNumber(pkg, 'carIndex') ?? idx,
+      role: role && isCompareCarRole(role) ? role : idx === 0 ? 'main' : 'compare',
+      brandModel: firstImportText(pkg, ['brandModel', 'packageName']),
+      color: firstImportText(pkg, ['color']),
+      sellingPoints: firstImportText(pkg, ['sellingPoints']),
+      materialCompleteness: firstImportText(pkg, ['materialCompleteness']),
+      images: importedBundleEntries(imageUrls, packageId, bindings, false),
+      sceneImages: importedBundleEntries(sceneImageUrls, packageId, bindings, true),
+    }
+  })
+}
+
+function applyCarSalesTaskImport(input: Record<string, unknown>) {
+  productionMode.value = 'manual'
+  mainTab.value = 'carSales'
+  applyCommonSeedanceImport(input)
+
+  const bindings = recordArrayField(input, 'assetRoleBindings')
+  const scenes = recordArrayField(input, 'scenes')
+  const vehicleUrls = stringArrayField(input, 'carImageUrls')
+  const sceneUrls = importedSceneUrls(scenes, vehicleUrls, bindings)
+  applyImportedAssetBindings(bindings, vehicleUrls, sceneUrls)
+
+  if (vehicleUrls.length) {
+    carImages.value = vehicleUrls
+    carPickedImageUrl.value = vehicleUrls[0] || ''
+  }
+  if (sceneUrls.length) {
+    carSceneImages.value = sceneUrls
+    carPickedSceneImageUrl.value = sceneUrls[0] || ''
+  }
+
+  const taskMode = firstImportText(input, ['taskMode'])
+  multiCarCompareEnabled.value = taskMode === 'multi_car_compare'
+  applyImportedCarPackages(input, bindings)
+  if (multiCarCompareEnabled.value && compareCarPackages.value.length < 2) {
+    multiCarCompareEnabled.value = false
+  }
+
+  carBrandModel.value = firstImportText(input, ['brandModel'])
+  carSellingPoints.value = firstImportText(input, ['sellingPoints'])
+  carAudience.value = firstImportText(input, ['audience'])
+  carCallToAction.value = firstImportText(input, ['callToAction']) || carCallToAction.value
+  carStoryboardContext.value =
+    importedScenesToStoryboardText(scenes) ||
+    firstImportText(input, ['scriptContext']) ||
+    carStoryboardContext.value
+
+  const finalVoiceText = firstImportText(input, ['finalVoiceText', 'voiceText'])
+  if (finalVoiceText) {
+    carVoiceContext.value = finalVoiceText
+    carVoiceTextSource.value = 'manual'
+  }
+  const voiceTextSource = firstImportText(input, ['voiceTextSource'])
+  if (voiceTextSource && isCarVoiceTextSource(voiceTextSource)) {
+    carVoiceTextSource.value = voiceTextSource
+  }
+
+  carAudioUrl.value = firstImportText(input, ['audioUrl', 'generatedVoiceUrl']) || carAudioUrl.value
+  const audioMode = firstImportText(input, ['audioMode'])
+  if (audioMode && isCarAudioMode(audioMode)) {
+    carAudioMode.value = audioMode
+  }
+  carBgmUrl.value = firstImportText(input, ['bgmUrl']) || ''
+
+  const nativeVoiceLanguage = firstImportText(input, ['nativeVoiceLanguage'])
+  if (nativeVoiceLanguage && isNativeVoiceLanguage(nativeVoiceLanguage)) {
+    carNativeVoiceLanguage.value = nativeVoiceLanguage
+  }
+  carNativeVoiceStyle.value = firstImportText(input, ['nativeVoiceStyle']) || carNativeVoiceStyle.value
+  carNativeSpeechStyle.value = firstImportText(input, ['nativeSpeechStyle']) || carNativeSpeechStyle.value
+
+  const subtitleMode = firstImportText(input, ['subtitleMode'])
+  if (subtitleMode && isCarSubtitleMode(subtitleMode)) {
+    carSubtitleMode.value = subtitleMode
+  }
+  carSubtitleText.value = firstImportText(input, ['subtitle'])
+  const subtitleLanguage = firstImportText(input, ['subtitleLanguage'])
+  if (subtitleLanguage) {
+    carSubtitleLanguage.value = subtitleLanguage
+  }
+  const subtitleTimingMode = firstImportText(input, ['subtitleTimingMode'])
+  if (subtitleTimingMode && isCarSubtitleTimingMode(subtitleTimingMode)) {
+    carSubtitleTimingMode.value = subtitleTimingMode
+  }
+  const syncStrategy = firstImportText(input, ['syncStrategy'])
+  if (syncStrategy && isCarSyncStrategy(syncStrategy)) {
+    carSyncStrategy.value = syncStrategy
+  }
+
+  const hostEnabled = importBoolean(input, 'hostAppearanceEnabled')
+  if (hostEnabled != null) {
+    carHostAppearanceEnabled.value = hostEnabled
+  }
+  carHostImageUrl.value = firstImportText(input, ['hostImageUrl']) || carHostImageUrl.value
+  carMaterialVideoUrl.value = firstImportText(input, ['hostVideoUrl']) || carMaterialVideoUrl.value
+
+  const overlay = asRecord(input.headlineOverlay)
+  carHeadlineEnabled.value = overlay ? Boolean(importBoolean(overlay, 'enabled') ?? firstImportText(overlay, ['text'])) : false
+  if (overlay) {
+    carHeadlineText.value = firstImportText(overlay, ['text'])
+    carHeadlineFontFamily.value = firstImportText(overlay, ['fontFamily']) || carHeadlineFontFamily.value
+    carHeadlineFontSize.value = importNumber(overlay, 'fontSize') || carHeadlineFontSize.value
+    carHeadlineTextColor.value = firstImportText(overlay, ['textColor']) || carHeadlineTextColor.value
+    carHeadlineOutlineColor.value = firstImportText(overlay, ['outlineColor']) || carHeadlineOutlineColor.value
+    const position = firstImportText(overlay, ['position'])
+    if (position && isCarHeadlinePosition(position)) {
+      carHeadlinePosition.value = position
+    }
+  }
+
+  const sceneDurations = scenes
+    .map((scene) => importNumber(scene, 'duration'))
+    .filter((value): value is number => value != null && value > 0)
+  const count = importNumber(input, 'segmentCount') || sceneDurations.length || carSegmentCount.value
+  carSegmentCount.value = normalizeCarSegmentCount(count)
+  carSegmentDurations.value = normalizeCarSegmentDurations(
+    sceneDurations.length ? sceneDurations : [importNumber(input, 'segmentDuration') || carSegmentDuration.value],
+    carSegmentCount.value,
+  )
+  syncCarSegmentDurationFallback(carSegmentDurations.value)
+  carSegmentTimingTouched.value = true
+  enforceRequiredModelSelection()
+}
+
+function applyTextVideoTaskImport(input: Record<string, unknown>) {
+  productionMode.value = 'manual'
+  mainTab.value = 'text'
+  applyCommonSeedanceImport(input)
+}
+
+function applyImageVideoTaskImport(taskType: string, input: Record<string, unknown>) {
+  productionMode.value = 'manual'
+  mainTab.value = 'image'
+  applyCommonSeedanceImport(input)
+  if (taskType === 'SEEDANCE_FIRST_LAST_FRAME_VIDEO') {
+    imageSubTab.value = 'firstLast'
+    firstFrame.value = firstImportText(input, ['firstFrameUrl'])
+    lastFrame.value = firstImportText(input, ['lastFrameUrl'])
+    return
+  }
+  if (taskType === 'SEEDANCE_REFERENCE_VIDEO' || stringArrayField(input, 'imageUrls').length > 0) {
+    imageSubTab.value = 'reference'
+    const urls = stringArrayField(input, 'imageUrls')
+    referenceImages.value = urls.length ? urls : ['']
+    return
+  }
+  imageSubTab.value = 'first'
+  firstFrame.value = firstImportText(input, ['imageUrl'])
+}
+
+function applyPendingRenderTaskImport() {
+  const pending = consumePendingRenderTaskImport(taskImportIdFromRoute())
+  const input = asRecord(pending?.input)
+  if (!pending || !input) {
+    return
+  }
+  if (pending.taskType === 'SEEDANCE_CAR_SALES_VIDEO') {
+    applyCarSalesTaskImport(input)
+  } else if (pending.taskType === 'SEEDANCE_TEXT_VIDEO' || pending.taskType.startsWith('TEXT_TO_VIDEO')) {
+    applyTextVideoTaskImport(input)
+  } else {
+    applyImageVideoTaskImport(pending.taskType, input)
+  }
+  const query = { ...route.query }
+  delete query.importTask
+  void router.replace({ name: 'render', query })
+  ElMessage.success('已恢复任务参数，可检查后再次生成')
+}
+
 async function handleGenerate() {
   const isCarSalesSubmit = mainTab.value === 'carSales'
   const isSeedanceSubmit = mainTab.value !== 'digitalHuman'
@@ -6107,7 +6529,7 @@ async function handleGenerate() {
       const requestCarImageUrls = isMultiCarCompareMode.value
         ? Array.from(new Set(comparePackageImageUrls.value)).slice(0, 45)
         : carImageUrls.value
-      const submitted = await generateCarSalesVideo({
+      const carSalesRequest = {
         carImageUrls: requestCarImageUrls,
         taskMode: isMultiCarCompareMode.value ? 'multi_car_compare' : 'car_sales',
         brandModel: isMultiCarCompareMode.value
@@ -6148,48 +6570,58 @@ async function handleGenerate() {
         segmentDuration: averageSegmentDuration(carScenes.map((scene) => Number(scene.duration) || carSegmentDuration.value)),
         scenes: carScenes,
         model: selectedModel.value,
-      })
+      } satisfies CarSalesVideoRequest
+      const submitted = await generateCarSalesVideo(carSalesRequest)
+      saveRenderTaskSnapshot(submitted.taskId, 'SEEDANCE_CAR_SALES_VIDEO', carSalesRequest)
       submittedTaskId = submitted.taskId
       submittedStatus = String(submitted.status)
     } else if (mainTab.value === 'text') {
-      const submitted = await generateTextToVideo({
+      const textVideoRequest = {
         prompt: prompt.value.trim(),
         duration: duration.value,
         ratio: aspectRatioForRequest(),
         model: selectedModel.value,
-      })
+      } satisfies TextToVideoRequest
+      const submitted = await generateTextToVideo(textVideoRequest)
+      saveRenderTaskSnapshot(submitted.taskId, 'SEEDANCE_TEXT_VIDEO', textVideoRequest)
       submittedTaskId = submitted.taskId
       submittedStatus = String(submitted.status)
     } else if (imageSubTab.value === 'first') {
-      const submitted = await generateFirstFrameVideo({
+      const firstFrameRequest = {
         imageUrl: firstFrame.value.trim(),
         prompt: prompt.value.trim() || undefined,
         duration: duration.value,
         ratio: aspectRatioForRequest(),
         model: selectedModel.value,
-      })
+      } satisfies FirstFrameVideoRequest
+      const submitted = await generateFirstFrameVideo(firstFrameRequest)
+      saveRenderTaskSnapshot(submitted.taskId, 'SEEDANCE_FIRST_FRAME_VIDEO', firstFrameRequest)
       submittedTaskId = submitted.taskId
       submittedStatus = String(submitted.status)
     } else if (imageSubTab.value === 'firstLast') {
-      const submitted = await generateFirstLastFrameVideo({
+      const firstLastFrameRequest = {
         firstFrameUrl: firstFrame.value.trim(),
         lastFrameUrl: lastFrame.value.trim(),
         prompt: prompt.value.trim() || undefined,
         duration: duration.value,
         ratio: aspectRatioForRequest(),
         model: selectedModel.value,
-      })
+      } satisfies FirstLastFrameVideoRequest
+      const submitted = await generateFirstLastFrameVideo(firstLastFrameRequest)
+      saveRenderTaskSnapshot(submitted.taskId, 'SEEDANCE_FIRST_LAST_FRAME_VIDEO', firstLastFrameRequest)
       submittedTaskId = submitted.taskId
       submittedStatus = String(submitted.status)
     } else {
       const urls = referenceImages.value.map((u) => u.trim()).filter((u) => u.length > 0)
-      const submitted = await generateReferenceVideo({
+      const referenceVideoRequest = {
         imageUrls: urls,
         prompt: prompt.value.trim() || undefined,
         duration: duration.value,
         ratio: aspectRatioForRequest(),
         model: selectedModel.value,
-      })
+      } satisfies ReferenceVideoRequest
+      const submitted = await generateReferenceVideo(referenceVideoRequest)
+      saveRenderTaskSnapshot(submitted.taskId, 'SEEDANCE_REFERENCE_VIDEO', referenceVideoRequest)
       submittedTaskId = submitted.taskId
       submittedStatus = String(submitted.status)
     }
@@ -6353,6 +6785,7 @@ onMounted(async () => {
   document.addEventListener('pointerdown', handleModelDropdownPointerDown, true)
   document.addEventListener('keydown', handleModelDropdownKeydown)
   await renderEstimate.refresh()
+  applyPendingRenderTaskImport()
 })
 
 onBeforeUnmount(() => {
