@@ -102,7 +102,7 @@
         </div>
 
         <select
-          v-if="activeCategory === 'materials' && selectedWorkflowStage !== 'carBundle'"
+          v-if="activeCategory === 'materials' && selectedWorkflowStage !== 'carBundle' && selectedWorkflowStage !== 'sceneBundle'"
           v-model="selectedType"
           class="asset-type-select"
           :disabled="loading"
@@ -116,7 +116,7 @@
           <option value="JSON">JSON 数据</option>
         </select>
         <select
-          v-if="activeCategory === 'materials' && selectedWorkflowStage !== 'carBundle'"
+          v-if="activeCategory === 'materials' && selectedWorkflowStage !== 'carBundle' && selectedWorkflowStage !== 'sceneBundle'"
           v-model="selectedSourceType"
           class="asset-type-select"
           :disabled="loading"
@@ -126,7 +126,7 @@
           <option v-for="item in sourceTypeOptions" :key="item" :value="item">{{ sourceTypeLabel(item) }}</option>
         </select>
         <select
-          v-if="activeCategory === 'materials' && selectedWorkflowStage !== 'carBundle'"
+          v-if="activeCategory === 'materials' && selectedWorkflowStage !== 'carBundle' && selectedWorkflowStage !== 'sceneBundle'"
           v-model="selectedAssetGroup"
           class="asset-type-select"
           :disabled="loading"
@@ -173,6 +173,9 @@
       <template v-else-if="selectedWorkflowStage === 'carBundle'">
         车型素材包 · <strong>查看、编辑并复用车辆图片组合</strong>
       </template>
+      <template v-else-if="selectedWorkflowStage === 'sceneBundle'">
+        场景素材包 · <strong>查看并复用汽车销售场景图片组合</strong>
+      </template>
       <template v-else-if="listScope === 'global'">
         公共素材 · <strong>全员可见</strong>
       </template>
@@ -211,6 +214,12 @@
         <button v-if="hasToken" class="app-primary-button" type="button" :disabled="loading" @click="openCarBundleCreator">
           创建车型素材包
         </button>
+      </template>
+      <template v-else-if="selectedWorkflowStage === 'sceneBundle'">
+        <div>
+          <strong>场景素材包</strong>
+          <span>把展厅、户外、道路和夜景门店等场景图整理成一组，视频制作时可直接复用。</span>
+        </div>
       </template>
     </section>
 
@@ -347,7 +356,7 @@
             :disabled="previewLoading"
             @click="openAssetPreview(asset)"
           >
-            {{ previewLoading && previewAsset?.assetId === asset.assetId ? '加载中...' : isCarModelBundleAsset(asset) ? '查看' : '预览' }}
+            {{ previewLoading && previewAsset?.assetId === asset.assetId ? '加载中...' : isCarModelBundleAsset(asset) || isSceneMaterialBundleAsset(asset) ? '查看' : '预览' }}
           </button>
           <a v-else class="app-secondary-button asset-open" :href="resolveFileUrl(asset.fileUrl)" target="_blank" rel="noreferrer">预览</a>
           <button class="app-secondary-button" type="button" @click="copyLink(asset)">复制链接</button>
@@ -589,7 +598,7 @@
           <div v-if="isCarBundlePreview" class="asset-preview-car-bundle">
             <div class="asset-preview-car-head">
               <strong>{{ carBundleTitle }}</strong>
-              <span>{{ carBundleImages.length }} 张车型素材</span>
+              <span>{{ carBundleImages.length }} 张素材</span>
             </div>
             <div class="asset-preview-car-grid">
               <article v-for="item in carBundleImages" :key="`${item.role}-${item.url}`">
@@ -714,10 +723,12 @@ import {
   assetWorkflowDisplayTitle as assetWorkflowDisplayTitleShared,
   isBenchmarkAsset as isBenchmarkAssetShared,
   isCarModelBundleAsset as isCarModelBundleAssetShared,
+  isSceneMaterialBundleAsset as isSceneMaterialBundleAssetShared,
   isStoryboardAsset as isStoryboardAssetShared,
   matchesAssetWorkflowStage,
   normalizedAssetRole as normalizedAssetRoleShared,
   sourceTypeLabel as sourceTypeLabelShared,
+  SCENE_MATERIAL_BUNDLE_GROUP,
 } from '../../utils/assetWorkflow'
 import CarModelBundleBuilder from './CarModelBundleBuilder.vue'
 
@@ -889,6 +900,15 @@ const WORKFLOW_STAGE_OPTIONS = [
     sourceTypes: [],
   },
   {
+    key: 'sceneBundle',
+    label: '场景素材包',
+    sourceTypes: [],
+    assetRoles: ['scene_material_bundle', 'scene_showroom', 'scene_outdoor', 'scene_road', 'scene_night'],
+    assetGroups: [SCENE_MATERIAL_BUNDLE_GROUP],
+    defaultAssetGroup: SCENE_MATERIAL_BUNDLE_GROUP,
+    defaultAssetRole: 'scene_material_bundle',
+  },
+  {
     key: 'material',
     label: '上传素材',
     sourceTypes: ['USER_UPLOAD', 'MANUAL_CREATED', 'DEMO', 'AI_GENERATED'],
@@ -899,6 +919,7 @@ type WorkflowStageKey = (typeof WORKFLOW_STAGE_OPTIONS)[number]['key']
 
 const ASSET_GROUP_PRESETS = [
   CAR_MODEL_BUNDLE_GROUP,
+  SCENE_MATERIAL_BUNDLE_GROUP,
   GROUP_BENCHMARK,
   GROUP_STORYBOARD,
   '口播文案',
@@ -987,6 +1008,9 @@ const emptySubtitle = computed(() => {
   if (selectedWorkflowStage.value === 'carBundle') {
     return '当前没有符合条件的车型素材包，可新建后在这里查看和管理。'
   }
+  if (selectedWorkflowStage.value === 'sceneBundle') {
+    return '当前没有符合条件的场景素材包，可先生成或上传场景图后归入该分组。'
+  }
   if (listScope.value === 'private' && !hasToken.value) {
     return '请先登录，再查看与当前账号绑定的私有资产。'
   }
@@ -1023,7 +1047,7 @@ const assetGroupOptions = computed(() => {
 const workflowStageOptions = computed(() => WORKFLOW_STAGE_OPTIONS)
 const showMaterialContextActions = computed(() =>
   activeCategory.value === 'materials' &&
-  (selectedWorkflowStage.value === 'material' || selectedWorkflowStage.value === 'carBundle'),
+  (selectedWorkflowStage.value === 'material' || selectedWorkflowStage.value === 'carBundle' || selectedWorkflowStage.value === 'sceneBundle'),
 )
 const contentEditorTitle = computed(() => {
   const asset = contentEditingAsset.value
@@ -1173,10 +1197,19 @@ const isBenchmarkPreview = computed(() => {
 
 const isCarBundlePreview = computed(() =>
   stringField(previewRecord.value, 'bundleType') === 'car_model' ||
-  stringField(previewRecord.value, 'assetRole') === 'car_model_bundle',
+  stringField(previewRecord.value, 'bundleType') === 'scene_material' ||
+  stringField(previewRecord.value, 'assetRole') === 'car_model_bundle' ||
+  stringField(previewRecord.value, 'assetRole') === 'scene_material_bundle',
 )
 
 const carBundleTitle = computed(() => {
+  if (stringField(previewRecord.value, 'bundleType') === 'scene_material') {
+    return firstNonEmptyText(
+      stringField(previewRecord.value, 'sceneSetName'),
+      stringField(previewRecord.value, 'title'),
+      '场景素材包',
+    )
+  }
   const brandModel = stringField(previewRecord.value, 'brandModel')
   const color = stringField(previewRecord.value, 'color')
   return [brandModel || '车型素材包', color].filter(Boolean).join(' · ')
@@ -1343,7 +1376,9 @@ function buildFallbackInlinePreview(asset: AssetItem): AssetInlinePreview {
       ? '分镜摘要'
       : isCarModelBundleAsset(asset)
         ? '车型素材包'
-        : resultAssetBaseLabel(asset)
+        : isSceneMaterialBundleAsset(asset)
+          ? '场景素材包'
+          : resultAssetBaseLabel(asset)
   const text = compactPreviewText(firstNonEmptyText(
     stringField(metadata, 'previewText'),
     stringField(metadata, 'contentPreview'),
@@ -1431,6 +1466,9 @@ function buildInlinePreviewFromContent(asset: AssetItem, rawText: string): Asset
 function inlinePreviewMeta(asset: AssetItem, metadata: Record<string, unknown> | null) {
   if (isCarModelBundleAsset(asset)) {
     return firstNonEmptyText(stringField(metadata, 'brandModel'), stringField(metadata, 'title'))
+  }
+  if (isSceneMaterialBundleAsset(asset)) {
+    return firstNonEmptyText(stringField(metadata, 'sceneSetName'), stringField(metadata, 'title'))
   }
   if (isBenchmarkAsset(asset) || isStoryboardAsset(asset)) {
     return generatedAssetSourceLabel(asset)
@@ -1643,6 +1681,9 @@ function selectWorkflowStage(stage: WorkflowStageKey) {
   if (stage === 'carBundle') {
     selectedType.value = 'JSON'
     selectedAssetGroup.value = ''
+  } else if (stage === 'sceneBundle') {
+    selectedType.value = ''
+    selectedAssetGroup.value = ''
   } else if (stage === 'material') {
     selectedType.value = ''
     selectedAssetGroup.value = ''
@@ -1853,6 +1894,9 @@ function canOpenStructuredPreview(asset: AssetItem) {
 }
 
 function structuredPreviewHint(asset: AssetItem) {
+  if (isSceneMaterialBundleAsset(asset)) {
+    return '点击预览查看场景素材包。'
+  }
   if (isBenchmarkAsset(asset)) {
     return '点击预览查看爆款对标文案。'
   }
@@ -1864,6 +1908,10 @@ function structuredPreviewHint(asset: AssetItem) {
 
 function isCarModelBundleAsset(asset: AssetItem) {
   return isCarModelBundleAssetShared(asset)
+}
+
+function isSceneMaterialBundleAsset(asset: AssetItem) {
+  return isSceneMaterialBundleAssetShared(asset)
 }
 
 function isPublicCarBundleComponentImage(asset: AssetItem) {
@@ -1921,6 +1969,9 @@ function canEditScriptAsset(asset: AssetItem) {
 function resultAssetLabel(asset: AssetItem) {
   if (isCarModelBundleAsset(asset)) {
     return '车型素材包'
+  }
+  if (isSceneMaterialBundleAsset(asset)) {
+    return '场景素材包'
   }
   if (isBenchmarkAsset(asset)) {
     return '爆款对标结果'

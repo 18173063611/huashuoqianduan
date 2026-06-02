@@ -3,6 +3,7 @@ import type { AssetItem } from '../types/assetTypes'
 export const GROUP_BENCHMARK = '爆款对标'
 export const GROUP_STORYBOARD = '分镜脚本'
 export const CAR_MODEL_BUNDLE_GROUP = '汽车素材包'
+export const SCENE_MATERIAL_BUNDLE_GROUP = '场景素材包'
 
 export type AssetWorkflowStageKey =
   | ''
@@ -12,6 +13,7 @@ export type AssetWorkflowStageKey =
   | 'digitalHuman'
   | 'video'
   | 'carBundle'
+  | 'sceneBundle'
   | 'material'
 
 const ROLE_LABELS: Record<string, string> = {
@@ -33,6 +35,7 @@ const ROLE_LABELS: Record<string, string> = {
   scene_outdoor: '户外场景',
   scene_road: '道路场景',
   scene_night: '夜景/门店',
+  scene_material_bundle: '场景素材包',
   host_image: '数字人形象',
   car_model_bundle: '车型素材包',
   voiceover: '口播',
@@ -89,6 +92,9 @@ const ROLE_ALIASES: Record<string, string> = {
   city: 'scene_outdoor',
   night: 'scene_night',
   dealership: 'scene_showroom',
+  scene_bundle: 'scene_material_bundle',
+  scene_material: 'scene_material_bundle',
+  scene_material_bundle: 'scene_material_bundle',
   host: 'host_image',
   avatar: 'host_image',
   car_bundle: 'car_model_bundle',
@@ -217,6 +223,37 @@ export function isCarModelBundleAsset(asset: AssetItem | null | undefined) {
   )
 }
 
+export function isSceneMaterialBundleAsset(asset: AssetItem | null | undefined) {
+  if (!asset) {
+    return false
+  }
+  const assetType = String(asset.assetType || '').trim().toUpperCase()
+  if (assetType !== 'JSON' && !asset.fileName.toLowerCase().endsWith('.json')) {
+    return false
+  }
+  const metadata = parseJsonObject(asset.metadataJson)
+  return (
+    normalizedAssetRole(asset) === 'scene_material_bundle' ||
+    stringField(metadata, 'bundleType') === 'scene_material' ||
+    String(asset.assetGroup || '').trim() === SCENE_MATERIAL_BUNDLE_GROUP ||
+    asset.fileName.includes('场景素材包')
+  )
+}
+
+export function isSceneReferenceImageAsset(asset: AssetItem | null | undefined) {
+  if (!asset) {
+    return false
+  }
+  const assetType = String(asset.assetType || '').trim().toUpperCase()
+  const mimeType = String(asset.mimeType || '').trim().toLowerCase()
+  if (assetType !== 'IMAGE' && assetType !== 'COVER' && !mimeType.startsWith('image/')) {
+    return false
+  }
+  const group = String(asset.assetGroup || '').trim()
+  const role = normalizedAssetRole(asset)
+  return role.startsWith('scene_') || group === SCENE_MATERIAL_BUNDLE_GROUP
+}
+
 export function matchesAssetWorkflowStage(asset: AssetItem, stage: AssetWorkflowStageKey | null | undefined) {
   if (!stage) {
     return true
@@ -230,6 +267,9 @@ export function matchesAssetWorkflowStage(asset: AssetItem, stage: AssetWorkflow
   }
   if (stage === 'carBundle') {
     return isCarModelBundleAsset(asset)
+  }
+  if (stage === 'sceneBundle') {
+    return isSceneMaterialBundleAsset(asset) || isSceneReferenceImageAsset(asset)
   }
   if (stage === 'voice') {
     return ['TTS_GENERATE', 'VOICE_SAMPLE'].includes(sourceType) || (asset.assetType === 'AUDIO' && sourceType === 'AI_GENERATED')
@@ -266,6 +306,18 @@ export function assetWorkflowDisplayTitle(asset: AssetItem | null | undefined) {
     const title = [stringField(metadata, 'brandModel'), stringField(metadata, 'color')].filter(Boolean).join(' · ')
     return title ? `车型素材包：${title}` : asset.fileName
   }
+  if (isSceneMaterialBundleAsset(asset)) {
+    const metadata = parseJsonObject(asset.metadataJson)
+    const title = firstNonEmptyText(
+      stringField(metadata, 'sceneSetName'),
+      stringField(metadata, 'title'),
+      stringField(metadata, 'name'),
+    )
+    return title ? `场景素材包：${title}` : asset.fileName
+  }
+  if (isSceneReferenceImageAsset(asset)) {
+    return `场景图：${generatedAssetSourceLabel(asset) || asset.fileName}`
+  }
   if (isStoryboardAsset(asset)) {
     return `分镜：${generatedAssetSourceLabel(asset) || asset.fileName}`
   }
@@ -282,6 +334,27 @@ export function assetWorkflowDisplayMeta(asset: AssetItem | null | undefined) {
   if (isCarModelBundleAsset(asset)) {
     const visibilityLabel = String(asset.visibility || '').toUpperCase() === 'PUBLIC' ? '公共素材包' : '私有素材包'
     return `${visibilityLabel} · JSON · ${sourceTypeLabel(asset.sourceType)}`
+  }
+  if (isSceneMaterialBundleAsset(asset)) {
+    const metadata = parseJsonObject(asset.metadataJson)
+    const visibilityLabel = String(asset.visibility || '').toUpperCase() === 'PUBLIC' ? '公共素材包' : '私有素材包'
+    const imageCount = numberField(metadata, 'imageCount')
+    return [
+      visibilityLabel,
+      '场景素材包',
+      imageCount > 0 ? `${imageCount} 张场景图` : '',
+      asset.assetType,
+      sourceTypeLabel(asset.sourceType),
+    ].filter(Boolean).join(' · ')
+  }
+  if (isSceneReferenceImageAsset(asset)) {
+    const visibilityLabel = String(asset.visibility || '').toUpperCase() === 'PUBLIC' ? '公共素材' : '私有素材'
+    return [
+      visibilityLabel,
+      roleDisplayLabel(normalizedAssetRole(asset)) || '场景图',
+      asset.assetType,
+      sourceTypeLabel(asset.sourceType),
+    ].filter(Boolean).join(' · ')
   }
   if (isBenchmarkAsset(asset) || isStoryboardAsset(asset)) {
     const sourceLabel = generatedAssetSourceLabel(asset)
@@ -301,6 +374,8 @@ export function assetWorkflowPreviewLabel(asset: AssetItem | null | undefined) {
     return ''
   }
   if (isCarModelBundleAsset(asset)) return '车型素材包'
+  if (isSceneMaterialBundleAsset(asset)) return '场景素材包'
+  if (isSceneReferenceImageAsset(asset)) return '场景图'
   if (isStoryboardAsset(asset)) return '分镜摘要'
   if (isBenchmarkAsset(asset)) return '口播文案'
   return ''
@@ -336,6 +411,7 @@ function inferAssetRole(asset: AssetItem, metadata: Record<string, unknown> | nu
   if (group === GROUP_BENCHMARK) return 'benchmark_json'
   if (group === GROUP_STORYBOARD) return 'storyboard_json'
   if (group === CAR_MODEL_BUNDLE_GROUP) return 'car_model_bundle'
+  if (group === SCENE_MATERIAL_BUNDLE_GROUP && assetType === 'JSON') return 'scene_material_bundle'
 
   if (assetType === 'IMAGE') {
     if (
@@ -372,6 +448,7 @@ function inferAssetRole(asset: AssetItem, metadata: Record<string, unknown> | nu
 
   if (assetType === 'JSON') {
     if (bundleType === 'car_model') return 'car_model_bundle'
+    if (bundleType === 'scene_material') return 'scene_material_bundle'
     if (hasStoryboardTextSignal(name)) return 'storyboard_json'
     if (hasBenchmarkTextSignal(name)) return 'benchmark_json'
     if (['STORYBOARD_GENERATE', 'VIDEO_SCRIPT_ANALYZE', 'VIDEO_SCRIPT_URL_ANALYZE'].includes(sourceType)) return 'storyboard_json'
@@ -423,6 +500,16 @@ function stringField(record: Record<string, unknown> | null, key: string) {
   if (typeof value === 'string') return value.trim()
   if (typeof value === 'number') return String(value)
   return ''
+}
+
+function numberField(record: Record<string, unknown> | null, key: string) {
+  const value = record?.[key]
+  if (typeof value === 'number' && Number.isFinite(value)) return value
+  if (typeof value === 'string' && value.trim()) {
+    const parsed = Number(value.trim())
+    return Number.isFinite(parsed) ? parsed : 0
+  }
+  return 0
 }
 
 function firstNonEmptyText(...values: Array<string | null | undefined>) {

@@ -424,10 +424,31 @@
                   <small>用于替换分镜里的展厅、道路、门店等地点，车辆与人物仍由上方素材控制。</small>
                 </summary>
                 <AssetPicker
+                  title="场景素材包"
+                  asset-type="JSON"
+                  :selected-url="carSceneBundleAssetUrl"
+                  :source-types="['USER_UPLOAD']"
+                  :asset-roles="['scene_material_bundle']"
+                  :role-options="CAR_SCENE_BUNDLE_ROLE_OPTIONS"
+                  workflow-stage="sceneBundle"
+                  source-hint="选择一组展厅、户外、道路、夜景等汽车销售场景图，会自动填入下方场景列表"
+                  placeholder="搜索场景素材包..."
+                  @select="handleCarSceneBundleAssetSelect"
+                />
+                <div v-if="carSceneBundleAssetUrl" class="render-car-bundle-status" :class="{ error: carSceneBundleLoadError }">
+                  <strong>{{ carSceneBundleLoadError ? '场景素材包读取失败' : '已载入场景素材包' }}</strong>
+                  <span v-if="!carSceneBundleLoadError">
+                    {{ carSceneBundleLoadedName || '场景素材包' }} · {{ carSceneBundleImageCount }} 张场景图已填入下方列表
+                  </span>
+                  <span v-else>{{ carSceneBundleLoadError }}</span>
+                </div>
+                <AssetPicker
                   title="从资产中心选择场景图片"
                   asset-type="IMAGE"
                   :selected-url="carPickedSceneImageUrl"
+                  :asset-roles="CAR_SCENE_REFERENCE_ROLES"
                   :role-options="CAR_SCENE_IMAGE_ROLE_OPTIONS"
+                  workflow-stage="sceneBundle"
                   placeholder="搜索场景图片素材..."
                   @select="handleCarSceneImageAssetSelect"
                 />
@@ -1693,6 +1714,7 @@ const CAR_SCENE_IMAGE_ROLE_OPTIONS = CAR_MATERIAL_TARGETS
   .map((item) => ({ value: item.role, label: item.label }))
 const CAR_HOST_IMAGE_ROLE_OPTIONS = [{ value: 'host_image', label: '数字人形象' }]
 const CAR_MODEL_BUNDLE_ROLE_OPTIONS = [{ value: 'car_model_bundle', label: '车型素材包' }]
+const CAR_SCENE_BUNDLE_ROLE_OPTIONS = [{ value: 'scene_material_bundle', label: '场景素材包' }]
 const COMPARE_CAR_ROLE_OPTIONS: Array<{ value: CompareCarRole; label: string }> = [
   { value: 'main', label: '主推' },
   { value: 'compare', label: '对比' },
@@ -2031,6 +2053,10 @@ const carBundleLoadedName = ref('')
 const carBundleImageCount = ref(0)
 const carBundleLoadError = ref('')
 const carBundleSaving = ref(false)
+const carSceneBundleAssetUrl = ref('')
+const carSceneBundleLoadedName = ref('')
+const carSceneBundleImageCount = ref(0)
+const carSceneBundleLoadError = ref('')
 const multiCarCompareEnabled = ref(false)
 const compareBundlePickedUrl = ref('')
 const compareBundleLoadError = ref('')
@@ -3340,6 +3366,85 @@ function parseCarBundleText(text: string) {
     sellingPoints,
     vehicleImages,
     sceneImages,
+  }
+}
+
+function parseSceneBundleText(text: string) {
+  const parsed = JSON.parse(text) as unknown
+  if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) {
+    throw new Error('场景素材包格式不正确')
+  }
+  const bundle = parsed as Record<string, unknown>
+  const images = Array.isArray(bundle.images) ? bundle.images : []
+  const sceneImages: CarBundleImageEntry[] = []
+  images.forEach((raw, idx) => {
+    if (!raw || typeof raw !== 'object' || Array.isArray(raw)) return
+    const item = raw as Record<string, unknown>
+    const url = firstRecordText(item, ['url', 'fileUrl', 'previewUrl', 'imageUrl'])
+    if (!url) return
+    const roleFromItem = normalizeCarAssetRole(firstRecordText(item, ['role', 'assetRole', 'type', 'sceneType']))
+    const role = CAR_SCENE_REFERENCE_ROLES.includes(roleFromItem)
+      ? roleFromItem
+      : inferSceneRoleFromText(firstRecordText(item, ['label', 'name', 'fileName', 'title', 'prompt'])) || FALLBACK_CAR_SCENE_IMAGE_ROLES[idx]
+    const assetId = toPositiveNumber(item.assetId)
+    sceneImages.push({
+      url,
+      role,
+      assetId: assetId || undefined,
+      label: firstRecordText(item, ['label', 'name', 'roleName', 'title']) || (role ? carRoleLabel(role) : ''),
+      fileName: firstRecordText(item, ['fileName', 'name']) || url.split('/').pop() || '',
+    })
+  })
+  if (!sceneImages.length) {
+    throw new Error('场景素材包内没有可用场景图片')
+  }
+  return {
+    bundle,
+    sceneSetName: firstRecordText(bundle, ['sceneSetName', 'title', 'name']) || '场景素材包',
+    sceneImages,
+  }
+}
+
+function inferSceneRoleFromText(text: string) {
+  const value = text.toLowerCase()
+  if (/showroom|dealer|dealership|store|展厅|门店|到店/.test(value)) return 'scene_showroom'
+  if (/road|highway|street|drive|公路|道路|山路|试驾/.test(value)) return 'scene_road'
+  if (/night|evening|夜景|夜间/.test(value)) return 'scene_night'
+  if (/outdoor|city|park|sunny|户外|城市|露营|郊外/.test(value)) return 'scene_outdoor'
+  return ''
+}
+
+async function handleCarSceneBundleAssetSelect(payload: { asset: AssetItem; url: string }) {
+  carSceneBundleAssetUrl.value = payload.url
+  carSceneBundleLoadedName.value = payload.asset.fileName || ''
+  carSceneBundleImageCount.value = 0
+  carSceneBundleLoadError.value = ''
+  try {
+    const text = await getAssetTextContent(payload.asset)
+    const parsed = parseSceneBundleText(text)
+    const nextSceneImages: string[] = []
+    const nextSceneIds: Record<string, number> = {}
+    const nextSceneRoles: Record<string, string> = {}
+    for (const image of parsed.sceneImages) {
+      if (nextSceneImages.length >= MAX_REFERENCE) continue
+      nextSceneImages.push(image.url)
+      if (image.assetId) {
+        nextSceneIds[image.url] = image.assetId
+      }
+      if (image.role) {
+        nextSceneRoles[image.url] = image.role
+      }
+    }
+    carSceneImages.value = nextSceneImages
+    carSceneImageAssetIdsByUrl.value = nextSceneIds
+    carSceneImageAssetRoleByUrl.value = nextSceneRoles
+    carPickedSceneImageUrl.value = nextSceneImages[0] || ''
+    carSceneBundleLoadedName.value = parsed.sceneSetName
+    carSceneBundleImageCount.value = nextSceneImages.length
+    ElMessage.success('已载入场景素材包')
+  } catch (error) {
+    carSceneBundleLoadError.value = error instanceof Error ? error.message : '场景素材包读取失败'
+    errorMessage.value = error instanceof Error ? error.message : '场景素材包读取失败'
   }
 }
 

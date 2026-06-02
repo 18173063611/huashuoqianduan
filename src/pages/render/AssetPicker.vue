@@ -423,6 +423,9 @@ function requestAssetTypes(): Array<AssetType | ''> {
   if (workflowStage === 'carBundle') {
     return ['JSON']
   }
+  if (workflowStage === 'sceneBundle') {
+    return assetTypesToLoad.value.length ? assetTypesToLoad.value : ['']
+  }
   return ['']
 }
 
@@ -495,6 +498,9 @@ function inferWorkflowStageFromRoles(): AssetWorkflowStageKey {
   }
   if (roles.includes('car_model_bundle')) {
     return 'carBundle'
+  }
+  if (roles.includes('scene_material_bundle')) {
+    return 'sceneBundle'
   }
   return ''
 }
