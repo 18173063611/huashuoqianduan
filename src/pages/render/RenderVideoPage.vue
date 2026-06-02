@@ -244,7 +244,7 @@
               <details class="render-optional-group render-fast-extra">
                 <summary>
                   <span>补充车辆素材 <em>可选</em></span>
-                  <small>多车型对比、车辆补图、场景图和保存素材包都属于补充项。</small>
+                  <small>多车型对比、车辆补图、保存素材包和完整度检查都属于车辆补充项。</small>
                 </summary>
                 <div class="render-optional-body">
               <section class="render-multi-car-panel" aria-label="多车型对比">
@@ -429,78 +429,6 @@
               >
                 添加车辆图片
               </button>
-              <details class="render-scene-material-block render-optional-group">
-                <summary class="render-scene-material-head">
-                  <span>场景图片 <em>可选</em></span>
-                  <small>用于替换分镜里的展厅、道路、门店等地点，车辆与人物仍由上方素材控制。</small>
-                </summary>
-                <AssetPicker
-                  title="从资产中心选择场景图片"
-                  asset-type="IMAGE"
-                  :selected-url="carPickedSceneImageUrl"
-                  :asset-roles="CAR_SCENE_REFERENCE_ROLES"
-                  :role-options="CAR_SCENE_IMAGE_ROLE_OPTIONS"
-                  workflow-stage="sceneBundle"
-                  placeholder="搜索场景图片素材..."
-                  @select="handleCarSceneImageAssetSelect"
-                />
-                <div class="render-ref-list">
-                  <div
-                    v-for="(item, idx) in carSceneImages"
-                    :key="`car-scene-img-${idx}`"
-                    class="render-ref-item render-ref-item-car"
-                  >
-                    <div class="render-ref-index">场景{{ idx + 1 }}</div>
-                    <ImageInput
-                      :busy="busy"
-                      :value="item"
-                      compact
-                      @update="updateCarSceneImage(idx, $event)"
-                    />
-                    <div class="render-ref-role-picker">
-                      <button
-                        type="button"
-                        class="render-ref-role-trigger"
-                        :disabled="busy || !item.trim()"
-                        title="标记场景类型，用于替换分镜中的地点描述"
-                        @click.stop="toggleCarSceneRolePicker(idx)"
-                      >
-                        <span>{{ carSceneImageRoleLabelForUrl(item, idx) }}</span>
-                        <span>⌄</span>
-                      </button>
-                      <div v-if="carSceneRolePickerOpenIndex === idx" class="render-ref-role-menu">
-                        <button type="button" @click="selectCarSceneImageRole(item, '')">未标记</button>
-                        <button
-                          v-for="option in CAR_SCENE_IMAGE_ROLE_OPTIONS"
-                          :key="option.value"
-                          type="button"
-                          :class="{ active: carSceneImageRoleForUrl(item, idx) === option.value }"
-                          @click="selectCarSceneImageRole(item, option.value)"
-                        >
-                          {{ option.label }}
-                        </button>
-                      </div>
-                    </div>
-                    <button
-                      type="button"
-                      class="render-ref-remove"
-                      :disabled="busy || carSceneImages.length <= 1"
-                      title="移除该场景"
-                      @click="removeCarSceneImageSlot(idx)"
-                    >
-                      ×
-                    </button>
-                  </div>
-                </div>
-                <button
-                  type="button"
-                  class="app-secondary-button render-mini-btn"
-                  :disabled="busy || carSceneImages.length >= MAX_REFERENCE"
-                  @click="addCarSceneImageSlot"
-                >
-                  添加场景图片
-                </button>
-              </details>
               <div class="render-car-bundle-save">
                 <label>
                   <span>加入车型素材包</span>
@@ -540,6 +468,84 @@
               </section>
                 </div>
               </details>
+            </section>
+
+            <section class="render-digital-section render-scene-section">
+              <div class="render-module-title render-module-title-compact">
+                <div>
+                  <h3>场景素材</h3>
+                  <small>展厅、道路、门店、户外等环境图单独管理；车辆和人物仍由车辆素材与人物设置控制。</small>
+                </div>
+                <span>可选</span>
+              </div>
+              <AssetPicker
+                title="从资产中心选择场景图片"
+                asset-type="IMAGE"
+                :asset-types="['IMAGE', 'COVER']"
+                :selected-url="carPickedSceneImageUrl"
+                :asset-roles="CAR_SCENE_REFERENCE_ROLES"
+                :role-options="CAR_SCENE_IMAGE_ROLE_OPTIONS"
+                workflow-stage="sceneBundle"
+                placeholder="搜索场景图片素材..."
+                source-hint="只加载图片类资产；未打场景标签的普通图片也可在“全部”中选择"
+                @select="handleCarSceneImageAssetSelect"
+              />
+              <div class="render-ref-list">
+                <div
+                  v-for="(item, idx) in carSceneImages"
+                  :key="`car-scene-img-${idx}`"
+                  class="render-ref-item render-ref-item-car"
+                >
+                  <div class="render-ref-index">场景{{ idx + 1 }}</div>
+                  <ImageInput
+                    :busy="busy"
+                    :value="item"
+                    compact
+                    @update="updateCarSceneImage(idx, $event)"
+                  />
+                  <div class="render-ref-role-picker">
+                    <button
+                      type="button"
+                      class="render-ref-role-trigger"
+                      :disabled="busy || !item.trim()"
+                      title="标记场景类型，用于替换分镜中的地点描述"
+                      @click.stop="toggleCarSceneRolePicker(idx)"
+                    >
+                      <span>{{ carSceneImageRoleLabelForUrl(item, idx) }}</span>
+                      <span>⌄</span>
+                    </button>
+                    <div v-if="carSceneRolePickerOpenIndex === idx" class="render-ref-role-menu">
+                      <button type="button" @click="selectCarSceneImageRole(item, '')">未标记</button>
+                      <button
+                        v-for="option in CAR_SCENE_IMAGE_ROLE_OPTIONS"
+                        :key="option.value"
+                        type="button"
+                        :class="{ active: carSceneImageRoleForUrl(item, idx) === option.value }"
+                        @click="selectCarSceneImageRole(item, option.value)"
+                      >
+                        {{ option.label }}
+                      </button>
+                    </div>
+                  </div>
+                  <button
+                    type="button"
+                    class="render-ref-remove"
+                    :disabled="busy || carSceneImages.length <= 1"
+                    title="移除该场景"
+                    @click="removeCarSceneImageSlot(idx)"
+                  >
+                    ×
+                  </button>
+                </div>
+              </div>
+              <button
+                type="button"
+                class="app-secondary-button render-mini-btn"
+                :disabled="busy || carSceneImages.length >= MAX_REFERENCE"
+                @click="addCarSceneImageSlot"
+              >
+                添加场景图片
+              </button>
             </section>
 
             <section class="render-digital-section">
@@ -7334,6 +7340,16 @@ onBeforeUnmount(() => {
 
 .render-fast-extra > .render-optional-body {
   background: #fbfcff;
+}
+
+.render-scene-section {
+  border-color: #b7e4cd;
+  background: #f7fef9;
+}
+
+.render-scene-section .asset-picker-compact,
+.render-scene-section .render-ref-item-car {
+  background: #fff;
 }
 
 .render-function-reference-panel {

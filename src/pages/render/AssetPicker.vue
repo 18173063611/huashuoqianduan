@@ -262,6 +262,7 @@ const allowedAssetRoles = computed(() =>
   (props.assetRoles || []).map(normalizeAssetRole).filter(Boolean),
 )
 const activeWorkflowStage = computed<AssetWorkflowStageKey>(() => props.workflowStage || inferWorkflowStageFromRoles())
+const scenePickerMode = computed(() => activeWorkflowStage.value === 'sceneBundle')
 const roleFilterOptions = computed(() => {
   const sourceOptions = props.roleOptions?.length
     ? props.roleOptions
@@ -284,11 +285,12 @@ const filteredAssets = computed(() => {
   const selected = selectedRoleFilter.value === 'all' ? '' : normalizeAssetRole(selectedRoleFilter.value)
   const workflowStage = activeWorkflowStage.value
   return assets.value.filter((asset) => {
-    if (workflowStage && !matchesAssetWorkflowStage(asset, workflowStage)) {
+    if (workflowStage && !matchesActiveWorkflowStage(asset)) {
       return false
     }
     const role = assetNormalizedRole(asset)
-    if (allowed.length > 0 && !allowed.includes(role)) {
+    const genericSceneImage = scenePickerMode.value && assetIsImageLike(asset)
+    if (allowed.length > 0 && !allowed.includes(role) && !genericSceneImage) {
       return false
     }
     if (selected) {
@@ -453,7 +455,8 @@ function requestAssetTypes(): Array<AssetType | ''> {
     return ['JSON']
   }
   if (workflowStage === 'sceneBundle') {
-    return ['']
+    const imageTypes = assetTypesToLoad.value.filter((type) => type === 'IMAGE' || type === 'COVER')
+    return imageTypes.length ? imageTypes : ['IMAGE', 'COVER']
   }
   if (workflowStage === 'storyboard') {
     return ['JSON']
@@ -543,9 +546,16 @@ function waitForPreviewBatch() {
 function isSelectableAsset(asset: AssetItem) {
   const workflowStage = activeWorkflowStage.value
   if (workflowStage) {
-    return matchesAssetWorkflowStage(asset, workflowStage)
+    return matchesActiveWorkflowStage(asset)
   }
   return isAllowedSourceType(asset)
+}
+
+function matchesActiveWorkflowStage(asset: AssetItem) {
+  if (scenePickerMode.value && assetIsImageLike(asset)) {
+    return true
+  }
+  return matchesAssetWorkflowStage(asset, activeWorkflowStage.value)
 }
 
 function isAllowedSourceType(asset: AssetItem) {
@@ -582,6 +592,10 @@ function inferWorkflowStageFromRoles(): AssetWorkflowStageKey {
 }
 
 function assetMatchesRoleFilter(asset: AssetItem, role: string) {
+  if (scenePickerMode.value && role.startsWith('scene_')) {
+    const normalizedRole = assetNormalizedRole(asset)
+    return normalizedRole === role || assetMatchesSceneRoleKeyword(asset, role)
+  }
   if (role === 'benchmark_json' || role === 'voice_script') {
     return isBenchmarkAsset(asset)
   }
@@ -589,6 +603,38 @@ function assetMatchesRoleFilter(asset: AssetItem, role: string) {
     return isStoryboardAsset(asset)
   }
   return assetNormalizedRole(asset) === role
+}
+
+function assetIsImageLike(asset: AssetItem) {
+  const assetType = String(asset.assetType || '').trim().toUpperCase()
+  const mimeType = String(asset.mimeType || '').trim().toLowerCase()
+  return assetType === 'IMAGE' || assetType === 'COVER' || mimeType.startsWith('image/')
+}
+
+function assetMatchesSceneRoleKeyword(asset: AssetItem, role: string) {
+  const meta = parseObject(asset.metadataJson)
+  const text = [
+    asset.fileName,
+    asset.sourceType,
+    asset.assetGroup || '',
+    textAt(meta, 'originalFileName'),
+    textAt(meta, 'title'),
+    textAt(meta, 'sourceTitle'),
+    textAt(meta, 'description'),
+  ].join(' ').toLowerCase()
+  if (role === 'scene_showroom') {
+    return ['showroom', '展厅', '门店', 'dealership', 'store'].some((word) => text.includes(word))
+  }
+  if (role === 'scene_outdoor') {
+    return ['outdoor', 'city', '户外', '城市', '街景'].some((word) => text.includes(word))
+  }
+  if (role === 'scene_road') {
+    return ['road', 'highway', 'mountain', '道路', '公路', '山路', '路'].some((word) => text.includes(word))
+  }
+  if (role === 'scene_night') {
+    return ['night', '夜景', '夜晚', '晚上'].some((word) => text.includes(word))
+  }
+  return false
 }
 
 function assetIcon(asset: AssetItem) {
