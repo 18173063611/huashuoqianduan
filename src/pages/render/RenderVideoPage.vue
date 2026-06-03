@@ -226,6 +226,7 @@
                 title="车型素材包"
                 asset-type="JSON"
                 :selected-url="carBundleAssetUrl"
+                :selected-name="carBundleLoadedName"
                 :source-types="['USER_UPLOAD']"
                 :asset-roles="['car_model_bundle']"
                 :role-options="CAR_MODEL_BUNDLE_ROLE_OPTIONS"
@@ -241,7 +242,7 @@
                 </span>
                 <span v-else>{{ carBundleLoadError }}</span>
               </div>
-              <details class="render-optional-group render-scene-compact">
+              <details ref="carSceneDetailsRef" class="render-optional-group render-scene-compact">
                 <summary>
                   <span>场景图片 <em>可选</em></span>
                   <small>{{ carSceneMaterialUrls.length ? `已选择 ${carSceneMaterialUrls.length} 张场景图` : '展厅、道路、门店、户外环境图，按需展开补充。' }}</small>
@@ -317,7 +318,7 @@
                   </button>
                 </div>
               </details>
-              <details class="render-optional-group render-fast-extra">
+              <details ref="carVehicleExtraDetailsRef" class="render-optional-group render-fast-extra">
                 <summary>
                   <span>补充车辆素材 <em>可选</em></span>
                   <small>多车型对比、车辆补图、保存素材包和完整度检查都属于车辆补充项。</small>
@@ -558,6 +559,7 @@
                 title="分镜生成结果（控制段落节奏）"
                 asset-type="JSON"
                 :selected-url="carStoryboardAssetUrl"
+                :selected-name="carStoryboardUploadName"
                 :source-types="['STORYBOARD_GENERATE', 'VIDEO_SCRIPT_ANALYZE', 'VIDEO_SCRIPT_URL_ANALYZE', 'USER_UPLOAD']"
                 :asset-roles="['storyboard_json']"
                 :role-options="CAR_STORYBOARD_ROLE_OPTIONS"
@@ -571,6 +573,7 @@
                 asset-type="JSON"
                 :asset-types="['JSON', 'TEXT']"
                 :selected-url="carBenchmarkAssetUrl"
+                :selected-name="carBenchmarkUploadName"
                 :source-types="['DOUYIN_BENCHMARK', 'DOUYIN_PARSE_TRANSCRIPT', 'DOUYIN_REWRITE', 'DOUYIN_TRANSCRIPT', 'USER_UPLOAD']"
                 :asset-roles="['benchmark_json', 'voice_script']"
                 :role-options="CAR_BENCHMARK_ROLE_OPTIONS"
@@ -579,7 +582,7 @@
                 placeholder="搜索爆款对标文案..."
                 @select="handleCarBenchmarkAssetSelect"
               />
-              <details class="render-optional-group render-fast-extra">
+              <details ref="carScriptPlanDetailsRef" class="render-optional-group render-fast-extra">
                 <summary>
                   <span>文案补充与自动编排 <em>可选</em></span>
                   <small>上传文案、段数和时长已有自动推荐，需要手动控制节奏时再展开。</small>
@@ -663,7 +666,7 @@
               </section>
                 </div>
               </details>
-              <details class="render-optional-group render-audio-group">
+              <details ref="carAudioPeopleDetailsRef" class="render-optional-group render-audio-group">
                 <summary>
                   <span>音频与人物 <em>可选</em></span>
                   <small>口播、BGM、人物出镜集中在这里；默认使用文案生成音视频且人物不出镜。</small>
@@ -698,6 +701,7 @@
                   title="数字人形象"
                   asset-type="IMAGE"
                   :selected-url="carHostImageUrl"
+                  :selected-name="carHostImageUploadName"
                   :source-types="['AVATAR_GENERATE', 'USER_UPLOAD', 'MANUAL_CREATED', 'AI_GENERATED']"
                   :asset-roles="['host_image']"
                   :role-options="CAR_HOST_IMAGE_ROLE_OPTIONS"
@@ -713,7 +717,7 @@
                   @update="carHostImageUrl = $event"
                 />
               </template>
-              <details class="render-optional-group">
+              <details ref="carVoiceDetailsRef" class="render-optional-group">
                 <summary>
                   <span>讲述与声音 <em>可选</em></span>
                   <small>默认按口播文案驱动模型；已有音频时再展开配置。</small>
@@ -723,6 +727,7 @@
                     title="口播/配音音频"
                     asset-type="AUDIO"
                     :selected-url="carAudioUrl"
+                    :selected-name="carAudioUploadName"
                     :source-types="['TTS_GENERATE', 'VOICE_SAMPLE', 'USER_UPLOAD']"
                     :asset-roles="['voiceover', 'reference_audio']"
                     :role-options="CAR_VOICE_AUDIO_ROLE_OPTIONS"
@@ -883,7 +888,7 @@
                 <strong>{{ carVoicePolicyTitle }}</strong>
                 <p>{{ carVoicePolicyDescription }}</p>
               </div>
-              <details class="render-optional-group">
+              <details ref="carBgmDetailsRef" class="render-optional-group">
                 <summary>
                   <span>背景音乐 BGM <em>可选</em></span>
                   <small>只作为背景音乐混入，不参与口播、字幕或口型。</small>
@@ -893,6 +898,7 @@
                     title="背景音乐 BGM"
                     asset-type="AUDIO"
                     :selected-url="carBgmUrl"
+                    :selected-name="carBgmUploadName"
                     :source-types="['USER_UPLOAD']"
                     :asset-roles="['bgm']"
                     :role-options="CAR_BGM_AUDIO_ROLE_OPTIONS"
@@ -914,7 +920,7 @@
               </details>
                 </div>
               </details>
-              <details class="render-optional-group render-packaging-group">
+              <details ref="carPackagingDetailsRef" class="render-optional-group render-packaging-group">
                 <summary>
                   <span>字幕与大字报 <em>可选</em></span>
                   <small>字幕和画面文字集中在这里；默认后期处理，可调整样式、位置、字号和颜色。</small>
@@ -1222,7 +1228,7 @@
                   </div>
                 </div>
               </details>
-              <details class="render-optional-group">
+              <details ref="carMaterialVideoDetailsRef" class="render-optional-group">
                 <summary>
                   <span>已有视频素材 <em>可选</em></span>
                   <small>上传或选择已有视频素材，作为补充素材使用。</small>
@@ -1232,6 +1238,8 @@
                     title="已有视频素材"
                     asset-type="VIDEO"
                     :selected-url="carMaterialVideoUrl"
+                    :selected-name="carMaterialVideoUploadName"
+                    show-video-preview
                     :source-types="['USER_UPLOAD', 'SEEDANCE_TEXT_VIDEO', 'SEEDANCE_FIRST_FRAME_VIDEO', 'SEEDANCE_FIRST_LAST_FRAME_VIDEO', 'SEEDANCE_REFERENCE_VIDEO', 'SEEDANCE_CAR_SALES_VIDEO']"
                     :asset-roles="['material_video', 'host_video', 'reference_video']"
                     :role-options="CAR_VIDEO_ROLE_OPTIONS"
@@ -1244,7 +1252,7 @@
             </section>
           </div>
 
-          <details class="render-details">
+          <details ref="carSalesInfoDetailsRef" class="render-details">
             <summary>
               <span>文案与销售信息 <em>可选</em></span>
               <small>车型、客户、卖点和转化引导属于文案补充，脚本不完整时再展开</small>
@@ -1279,7 +1287,7 @@
             </div>
           </details>
 
-          <details class="render-details">
+          <details ref="carAdvancedPromptDetailsRef" class="render-details">
             <summary>
               <span>补充提示与模型 <em>可选</em></span>
               <small>模型、分镜节奏和补充镜头要求集中在这里；一般不用改</small>
@@ -1693,7 +1701,7 @@
 </template>
 
 <script setup lang="ts">
-import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
+import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { ElMessage } from 'element-plus'
 import AssetPicker from './AssetPicker.vue'
@@ -2241,6 +2249,7 @@ const carSellingPoints = ref('')
 const carStoryboardContext = ref('')
 const carStoryboardAssetUrl = ref('')
 const carStoryboardAssetId = ref<number | null>(null)
+const carStoryboardUploadName = ref('')
 const carVoiceContext = ref('')
 const carBenchmarkAssetUrl = ref('')
 const carBenchmarkAssetId = ref<number | null>(null)
@@ -2282,9 +2291,11 @@ const carBgmUploadName = ref('')
 const carAudioDurationSeconds = ref<number | null>(null)
 const carHostImageUrl = ref('')
 const carHostImageAssetId = ref<number | null>(null)
+const carHostImageUploadName = ref('')
 const carHostAppearanceEnabled = ref(false)
 const carMaterialVideoUrl = ref('')
 const carMaterialVideoAssetId = ref<number | null>(null)
+const carMaterialVideoUploadName = ref('')
 const carSegmentCount = ref(4)
 const carSegmentCountOptions = Array.from({ length: 12 }, (_, idx) => idx + 1)
 const carSegmentDuration = ref(8)
@@ -2292,6 +2303,16 @@ const carSegmentDurations = ref<number[]>([])
 const carSegmentTimingTouched = ref(false)
 const carRolePickerOpenIndex = ref<number | null>(null)
 const carSceneRolePickerOpenIndex = ref<number | null>(null)
+const carSceneDetailsRef = ref<HTMLDetailsElement | null>(null)
+const carVehicleExtraDetailsRef = ref<HTMLDetailsElement | null>(null)
+const carScriptPlanDetailsRef = ref<HTMLDetailsElement | null>(null)
+const carAudioPeopleDetailsRef = ref<HTMLDetailsElement | null>(null)
+const carVoiceDetailsRef = ref<HTMLDetailsElement | null>(null)
+const carBgmDetailsRef = ref<HTMLDetailsElement | null>(null)
+const carPackagingDetailsRef = ref<HTMLDetailsElement | null>(null)
+const carMaterialVideoDetailsRef = ref<HTMLDetailsElement | null>(null)
+const carSalesInfoDetailsRef = ref<HTMLDetailsElement | null>(null)
+const carAdvancedPromptDetailsRef = ref<HTMLDetailsElement | null>(null)
 
 const loggedIn = ref(false)
 
@@ -3739,6 +3760,7 @@ async function saveCurrentCarBundle() {
 async function handleCarStoryboardAssetSelect(payload: { asset: AssetItem; url: string }) {
   carStoryboardAssetUrl.value = payload.url
   carStoryboardAssetId.value = payload.asset.assetId
+  carStoryboardUploadName.value = payload.asset.fileName || ''
   try {
     const text = await getAssetTextContent(payload.asset)
     carStoryboardContext.value = text.length > 4000 ? text.slice(0, 4000) : text
@@ -3911,11 +3933,13 @@ async function handleCarBgmUpload(event: Event) {
 function handleCarHostImageAssetSelect(payload: { asset: AssetItem; url: string }) {
   carHostImageUrl.value = payload.url
   carHostImageAssetId.value = payload.asset.assetId
+  carHostImageUploadName.value = payload.asset.fileName || ''
 }
 
 function handleCarMaterialVideoAssetSelect(payload: { asset: AssetItem; url: string }) {
   carMaterialVideoUrl.value = payload.url
   carMaterialVideoAssetId.value = payload.asset.assetId
+  carMaterialVideoUploadName.value = payload.asset.fileName || ''
 }
 
 type StoryboardRecord = Record<string, unknown>
@@ -6564,17 +6588,52 @@ async function resolveRenderTaskImport() {
   return parsedTaskId ? loadRenderTaskImportFromTask(parsedTaskId) : null
 }
 
-function importedSceneUrls(scenes: Record<string, unknown>[], vehicleUrls: string[], bindings: Record<string, unknown>[]) {
-  const vehicleSet = new Set(vehicleUrls)
+function normalizedImportUrl(value: string) {
+  return value.trim()
+}
+
+function importedBindingRoleByUrl(bindings: Record<string, unknown>[]) {
+  const roleByUrl = new Map<string, string>()
+  bindings.forEach((binding) => {
+    const url = normalizedImportUrl(firstImportText(binding, ['url']))
+    const role = normalizeCarAssetRole(firstImportText(binding, ['assetRole', 'role']))
+    if (url && role) {
+      roleByUrl.set(url, role)
+    }
+  })
+  return roleByUrl
+}
+
+function importedSceneUrls(
+  scenes: Record<string, unknown>[],
+  vehicleUrls: string[],
+  bindings: Record<string, unknown>[],
+  blockedUrls: string[] = [],
+) {
+  const vehicleSet = new Set(vehicleUrls.map(normalizedImportUrl).filter(Boolean))
+  const blockedSet = new Set(blockedUrls.map(normalizedImportUrl).filter(Boolean))
+  const roleByUrl = importedBindingRoleByUrl(bindings)
+  roleByUrl.forEach((role, url) => {
+    if (!CAR_SCENE_REFERENCE_ROLES.includes(role)) {
+      blockedSet.add(url)
+    }
+  })
   const sceneUrls: string[] = []
   const push = (url: string) => {
-    const clean = url.trim()
-    if (clean && !vehicleSet.has(clean) && !sceneUrls.includes(clean)) {
+    const clean = normalizedImportUrl(url)
+    const role = roleByUrl.get(clean)
+    if (
+      clean &&
+      !vehicleSet.has(clean) &&
+      !blockedSet.has(clean) &&
+      (!role || CAR_SCENE_REFERENCE_ROLES.includes(role)) &&
+      !sceneUrls.includes(clean)
+    ) {
       sceneUrls.push(clean)
     }
   }
   bindings.forEach((binding) => {
-    const url = firstImportText(binding, ['url'])
+    const url = normalizedImportUrl(firstImportText(binding, ['url']))
     const role = normalizeCarAssetRole(firstImportText(binding, ['assetRole', 'role']))
     if (url && CAR_SCENE_REFERENCE_ROLES.includes(role)) {
       push(url)
@@ -6607,21 +6666,24 @@ function applyImportedAssetBindings(
     const assetId = toPositiveNumber(binding.assetId)
     const role = normalizeCarAssetRole(firstImportText(binding, ['assetRole', 'role']))
     const assetType = firstImportText(binding, ['assetType']).toUpperCase()
-    const label = firstImportText(binding, ['label', 'name'])
+    const label = firstImportText(binding, ['fileName', 'label', 'name'])
     if (!url) return
     if (role === 'host_image') {
       carHostImageUrl.value = url
       carHostImageAssetId.value = assetId
+      carHostImageUploadName.value = label || carHostImageUploadName.value
       return
     }
     if (role === 'voiceover' || role === 'reference_audio') {
       carAudioUrl.value = carAudioUrl.value || url
       carAudioAssetId.value = carAudioAssetId.value || assetId
+      carAudioUploadName.value = carAudioUploadName.value || label
       return
     }
     if (role === 'bgm') {
       carBgmUrl.value = carBgmUrl.value || url
       carBgmAssetId.value = carBgmAssetId.value || assetId
+      carBgmUploadName.value = carBgmUploadName.value || label
       return
     }
     if (role === 'car_model_bundle') {
@@ -6633,19 +6695,22 @@ function applyImportedAssetBindings(
     if (role === 'storyboard_json') {
       carStoryboardAssetUrl.value = url
       carStoryboardAssetId.value = assetId
+      carStoryboardUploadName.value = label || carStoryboardUploadName.value
       return
     }
     if (role === 'benchmark_json' || role === 'voice_script') {
       carBenchmarkAssetUrl.value = url
       carBenchmarkAssetId.value = assetId
+      carBenchmarkUploadName.value = label || carBenchmarkUploadName.value
       return
     }
     if (role === 'material_video' || role === 'host_video' || assetType === 'VIDEO') {
       carMaterialVideoUrl.value = url
       carMaterialVideoAssetId.value = assetId
+      carMaterialVideoUploadName.value = label || carMaterialVideoUploadName.value
       return
     }
-    if (CAR_SCENE_REFERENCE_ROLES.includes(role) || sceneUrlSet.has(url)) {
+    if (CAR_SCENE_REFERENCE_ROLES.includes(role) || (sceneUrlSet.has(url) && !role)) {
       if (!sceneUrlSet.has(url)) {
         sceneUrls.push(url)
         sceneUrlSet.add(url)
@@ -6676,45 +6741,62 @@ function applyImportedSourceAsset(asset: AssetItem) {
     return
   }
   const role = carAssetRoleFromAsset(asset)
-  if (role === 'car_model_bundle' && !carBundleAssetUrl.value.trim()) {
-    carBundleAssetUrl.value = url
-    carBundleAssetId.value = asset.assetId
+  if (role === 'car_model_bundle') {
+    if (!carBundleAssetUrl.value.trim()) {
+      carBundleAssetUrl.value = url
+      carBundleAssetId.value = asset.assetId
+    }
     carBundleLoadedName.value = asset.fileName || carBundleLoadedName.value
     return
   }
-  if (role === 'storyboard_json' && !carStoryboardAssetUrl.value.trim()) {
-    carStoryboardAssetUrl.value = url
-    carStoryboardAssetId.value = asset.assetId
+  if (role === 'storyboard_json') {
+    if (!carStoryboardAssetUrl.value.trim()) {
+      carStoryboardAssetUrl.value = url
+      carStoryboardAssetId.value = asset.assetId
+    }
+    carStoryboardUploadName.value = asset.fileName || carStoryboardUploadName.value
     return
   }
-  if ((role === 'benchmark_json' || role === 'voice_script') && !carBenchmarkAssetUrl.value.trim()) {
-    carBenchmarkAssetUrl.value = url
-    carBenchmarkAssetId.value = asset.assetId
+  if (role === 'benchmark_json' || role === 'voice_script') {
+    if (!carBenchmarkAssetUrl.value.trim()) {
+      carBenchmarkAssetUrl.value = url
+      carBenchmarkAssetId.value = asset.assetId
+    }
     carBenchmarkUploadName.value = asset.fileName || carBenchmarkUploadName.value
     return
   }
-  if ((role === 'voiceover' || role === 'reference_audio') && !carAudioUrl.value.trim()) {
-    carAudioUrl.value = url
-    carAudioAssetId.value = asset.assetId
-    carAudioSourceType.value = asset.sourceType || carAudioSourceType.value
+  if (role === 'voiceover' || role === 'reference_audio') {
+    if (!carAudioUrl.value.trim()) {
+      carAudioUrl.value = url
+      carAudioAssetId.value = asset.assetId
+      carAudioSourceType.value = asset.sourceType || carAudioSourceType.value
+    }
     carAudioUploadName.value = asset.fileName || carAudioUploadName.value
     return
   }
-  if (role === 'bgm' && !carBgmUrl.value.trim()) {
-    carBgmUrl.value = url
-    carBgmAssetId.value = asset.assetId
-    carBgmSourceType.value = asset.sourceType || carBgmSourceType.value
+  if (role === 'bgm') {
+    if (!carBgmUrl.value.trim()) {
+      carBgmUrl.value = url
+      carBgmAssetId.value = asset.assetId
+      carBgmSourceType.value = asset.sourceType || carBgmSourceType.value
+    }
     carBgmUploadName.value = asset.fileName || carBgmUploadName.value
     return
   }
-  if (role === 'host_image' && !carHostImageUrl.value.trim()) {
-    carHostImageUrl.value = url
-    carHostImageAssetId.value = asset.assetId
+  if (role === 'host_image') {
+    if (!carHostImageUrl.value.trim()) {
+      carHostImageUrl.value = url
+      carHostImageAssetId.value = asset.assetId
+    }
+    carHostImageUploadName.value = asset.fileName || carHostImageUploadName.value
     return
   }
-  if ((role === 'material_video' || role === 'host_video' || role === 'reference_video') && !carMaterialVideoUrl.value.trim()) {
-    carMaterialVideoUrl.value = url
-    carMaterialVideoAssetId.value = asset.assetId
+  if (role === 'material_video' || role === 'host_video' || role === 'reference_video') {
+    if (!carMaterialVideoUrl.value.trim()) {
+      carMaterialVideoUrl.value = url
+      carMaterialVideoAssetId.value = asset.assetId
+    }
+    carMaterialVideoUploadName.value = asset.fileName || carMaterialVideoUploadName.value
     return
   }
   if (CAR_SCENE_REFERENCE_ROLES.includes(role) && !carSceneImages.value.some((item) => item.trim() === url)) {
@@ -6753,6 +6835,31 @@ async function applyImportedSourceAssetIds(input: Record<string, unknown>) {
   const uniqueIds = Array.from(new Set(ids)).slice(0, 40)
   const assets = await Promise.all(uniqueIds.map((id) => getAssetDetail(id).catch(() => null)))
   assets.filter((asset): asset is AssetItem => !!asset).forEach(applyImportedSourceAsset)
+}
+
+type DetailsElementRef = { value: HTMLDetailsElement | null }
+
+function openImportedDetails(target: DetailsElementRef) {
+  if (target.value) {
+    target.value.open = true
+  }
+}
+
+function expandImportedCarSalesDetails() {
+  void nextTick(() => {
+    [
+      carSceneDetailsRef,
+      carVehicleExtraDetailsRef,
+      carScriptPlanDetailsRef,
+      carAudioPeopleDetailsRef,
+      carVoiceDetailsRef,
+      carBgmDetailsRef,
+      carPackagingDetailsRef,
+      carMaterialVideoDetailsRef,
+      carSalesInfoDetailsRef,
+      carAdvancedPromptDetailsRef,
+    ].forEach(openImportedDetails)
+  })
 }
 
 function importedScenesToStoryboardText(scenes: Record<string, unknown>[]) {
@@ -6833,7 +6940,9 @@ async function applyCarSalesTaskImport(input: Record<string, unknown>) {
   const bindings = recordArrayField(input, 'assetRoleBindings')
   const scenes = recordArrayField(input, 'scenes')
   const vehicleUrls = stringArrayField(input, 'carImageUrls')
-  const sceneUrls = importedSceneUrls(scenes, vehicleUrls, bindings)
+  const sceneUrls = importedSceneUrls(scenes, vehicleUrls, bindings, [
+    firstImportText(input, ['hostImageUrl']),
+  ])
   applyImportedAssetBindings(bindings, vehicleUrls, sceneUrls)
 
   if (vehicleUrls.length) {
@@ -6896,7 +7005,7 @@ async function applyCarSalesTaskImport(input: Record<string, unknown>) {
   } else if (!audioMode && voicePolicy === 'none') {
     carAudioMode.value = 'none'
   }
-  carBgmUrl.value = firstImportText(input, ['bgmUrl']) || ''
+  carBgmUrl.value = firstImportText(input, ['bgmUrl']) || carBgmUrl.value
 
   const nativeVoiceLanguage = firstImportText(input, ['nativeVoiceLanguage'])
   if (nativeVoiceLanguage && isNativeVoiceLanguage(nativeVoiceLanguage)) {
@@ -6968,6 +7077,7 @@ async function applyCarSalesTaskImport(input: Record<string, unknown>) {
   syncCarSegmentDurationFallback(carSegmentDurations.value)
   carSegmentTimingTouched.value = true
   enforceRequiredModelSelection()
+  expandImportedCarSalesDetails()
 }
 
 function applyTextVideoTaskImport(input: Record<string, unknown>) {

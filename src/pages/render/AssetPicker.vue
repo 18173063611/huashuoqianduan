@@ -220,6 +220,7 @@ const props = defineProps<{
   assetType: AssetType
   assetTypes?: AssetType[]
   selectedUrl?: string
+  selectedName?: string
   placeholder?: string
   sourceTypes?: string[]
   sourceHint?: string
@@ -239,6 +240,7 @@ const busy = ref(false)
 const errorMessage = ref('')
 const selectedAssetId = ref<number | null>(null)
 const selectedAssetName = ref('')
+const selectedAssetUrl = ref('')
 const selectedRoleFilter = ref('all')
 const selectedScope = ref<PickerScope>('private')
 const modalOpen = ref(false)
@@ -278,11 +280,41 @@ const emptyLabel = computed(() => {
   if (assetTypesToLoad.value.includes('TEXT')) return '从资产中心选择文案/字幕'
   return '从资产中心选择资产'
 })
-const selectedLabel = computed(() => {
-  if (selectedAssetName.value) {
-    return `已选择：${selectedAssetName.value}`
+
+function safeDecodeFileName(value: string) {
+  try {
+    return decodeURIComponent(value)
+  } catch {
+    return value
   }
-  return props.selectedUrl ? '已填写链接' : ''
+}
+
+function selectedNameFromUrl(url: string) {
+  const raw = url.trim()
+  if (!raw) {
+    return ''
+  }
+  try {
+    const parsed = new URL(raw, window.location.origin)
+    const fileName = parsed.pathname.split('/').filter(Boolean).pop() || ''
+    return safeDecodeFileName(fileName) || '已导入素材'
+  } catch {
+    const withoutQuery = raw.split(/[?#]/)[0]
+    const fileName = withoutQuery.split('/').filter(Boolean).pop() || ''
+    return fileName ? safeDecodeFileName(fileName) : '已导入素材'
+  }
+}
+
+const selectedDisplayName = computed(() =>
+  selectedAssetName.value ||
+  props.selectedName?.trim() ||
+  (props.selectedUrl ? selectedNameFromUrl(props.selectedUrl) : ''),
+)
+const selectedLabel = computed(() => {
+  if (selectedDisplayName.value) {
+    return `已选择：${selectedDisplayName.value}`
+  }
+  return ''
 })
 const allowedAssetRoles = computed(() =>
   (props.assetRoles || []).map(normalizeAssetRole).filter(Boolean),
@@ -392,6 +424,14 @@ watch(
     if (!value) {
       selectedAssetId.value = null
       selectedAssetName.value = ''
+      selectedAssetUrl.value = ''
+      return
+    }
+    const nextUrl = resolveUrl(value)
+    if (nextUrl !== selectedAssetUrl.value) {
+      selectedAssetId.value = null
+      selectedAssetName.value = ''
+      selectedAssetUrl.value = nextUrl
     }
   },
 )
@@ -1177,9 +1217,11 @@ function durationLabel(value: string) {
 }
 
 function selectAsset(asset: AssetItem) {
+  const url = resolveUrl(asset.fileUrl)
   selectedAssetId.value = asset.assetId
   selectedAssetName.value = asset.fileName
-  emit('select', { asset, url: resolveUrl(asset.fileUrl) })
+  selectedAssetUrl.value = url
+  emit('select', { asset, url })
   closePicker()
 }
 
