@@ -669,7 +669,7 @@
               <details ref="carAudioPeopleDetailsRef" class="render-optional-group render-audio-group">
                 <summary>
                   <span>音频与人物 <em>可选</em></span>
-                  <small>口播、BGM、人物出镜集中在这里；默认使用文案生成音视频且人物不出镜。</small>
+                  <small>口播、背景音乐、人物出镜集中在这里；默认使用后期旁白配音且人物不出镜。</small>
                 </summary>
                 <div class="render-optional-body">
               <div class="render-host-toggle render-host-toggle-core">
@@ -761,16 +761,16 @@
                       title="不调用音色库，直接把口播文案交给视频模型生成匹配的画面和原生音频"
                       @click="setCarAudioMode('model_native')"
                     >
-                      文案生成音视频
+                      音视频同步生成
                     </button>
                     <button
                       type="button"
                       :class="{ active: carAudioMode === 'auto_tts' }"
                       :disabled="busy"
-                      title="先生成画面，再由后端用音色库生成统一口播，按最终口播音频控制成片时长和字幕"
+                      title="先生成画面，再生成统一旁白，按最终旁白控制成片时长和字幕"
                       @click="setCarAudioMode('auto_tts')"
                     >
-                      TTS 旁白配音
+                      后期旁白配音
                     </button>
                     <button
                       type="button"
@@ -896,6 +896,25 @@
               <div class="render-voice-policy" :class="carVoicePolicyLevel">
                 <strong>{{ carVoicePolicyTitle }}</strong>
                 <p>{{ carVoicePolicyDescription }}</p>
+                <div v-if="!hasSelectedVoiceAudio()" class="render-voice-policy-actions" aria-label="口播生成方式">
+                  <button
+                    type="button"
+                    :class="{ active: carAudioMode === 'auto_tts' }"
+                    :disabled="busy"
+                    @click="setCarAudioMode('auto_tts')"
+                  >
+                    后期旁白配音
+                  </button>
+                  <button
+                    type="button"
+                    :class="{ active: carAudioMode === 'model_native' }"
+                    :disabled="busy"
+                    @click="setCarAudioMode('model_native')"
+                  >
+                    音视频同步生成
+                  </button>
+                </div>
+                <small v-else>已选择口播音频，本次会优先使用该音频；如要改用自动旁白或音视频同步生成，请先移除已选音频。</small>
               </div>
               <details ref="carBgmDetailsRef" class="render-optional-group">
                 <summary>
@@ -2135,9 +2154,9 @@ const carSubtitleLanguageOptions = [
   { value: 'en-US', label: '英语' },
 ]
 const carSyncStrategyOptions: Array<{ key: CarSyncStrategy; label: string; hint: string }> = [
-  { key: 'auto', label: '智能同步', hint: '默认按分镜画面总时长成片；自动 TTS 会根据目标时长调整语速，不再默认拉长画面。' },
+  { key: 'auto', label: '智能同步', hint: '默认按分镜画面总时长成片；自动旁白会根据目标时长调整语速，不再默认拉长画面。' },
   { key: 'audio_master', label: '口播优先', hint: '仅在明确需要完整保留外部口播时使用，画面会变速或补帧贴合音轨。' },
-  { key: 'visual_master', label: '画面优先', hint: '保持画面原节奏；外部口播按画面时长兜底处理，自动 TTS 会优先匹配语速。' },
+  { key: 'visual_master', label: '画面优先', hint: '保持画面原节奏；外部口播按画面时长兜底处理，自动旁白会优先匹配语速。' },
 ]
 const carSubtitleTimingOptions: Array<{ key: CarSubtitleTimingMode; label: string; hint: string }> = [
   { key: 'auto', label: '智能字幕', hint: '有最终音轨时优先识别音频时间戳，失败后回退文案时间轴。' },
@@ -2480,7 +2499,7 @@ const isSeedance2Selected = computed(() => selectedModel.value === SEEDANCE_2_MO
 
 const audioReferenceHint = computed(() => {
   if (usesAutoTtsVoiceover()) {
-    return '先生成画面，再由后端生成统一 TTS 旁白；字幕按最终口播音频识别/对齐，BGM 只会在后期单独混入。'
+    return '先生成画面，再生成统一旁白；字幕按最终口播音频识别和对齐，背景音乐只会在后期单独混入。'
   }
   if (usesModelNativeVoiceover()) {
     return '文案会直接交给视频模型生成匹配的画面和原生音频；适合大量口播镜头和嘴型同步，BGM 仍只允许后期单独选择混入。'
@@ -2626,6 +2645,8 @@ function setCarAudioMode(mode: CarAudioMode) {
   carAudioMode.value = mode
   if (mode === 'auto_tts') {
     carSyncStrategy.value = 'audio_master'
+  } else if ((mode === 'model_native' || mode === 'none') && !carAudioUrl.value.trim()) {
+    carSyncStrategy.value = 'auto'
   }
   if (mode === 'reference') {
     carSegmentCount.value = 1
@@ -2909,8 +2930,8 @@ const carVoicePolicyLevel = computed(() => {
 })
 const carVoicePolicyTitle = computed(() => {
   if (hasSelectedVoiceAudio()) return '口播主控：已选择口播音频'
-  if (usesAutoTtsVoiceover()) return '口播主控：TTS 旁白配音'
-  if (usesModelNativeVoiceover()) return '口播主控：文案生成音视频'
+  if (usesAutoTtsVoiceover()) return '口播主控：后期旁白配音'
+  if (usesModelNativeVoiceover()) return '口播主控：音视频同步生成'
   return '口播主控：未设置口播音频'
 })
 const carVoicePolicyDescription = computed(() => {
@@ -2921,7 +2942,7 @@ const carVoicePolicyDescription = computed(() => {
     return '本次将先生成画面，再用口播音频替换或混入最终音轨；BGM 不参与口播、字幕或口型。'
   }
   if (usesAutoTtsVoiceover()) {
-    return `本次将先生成无口播画面，再由后端生成统一 TTS 旁白并以口播音频为主控；BGM 只在用户选择后作为背景音乐混入。风格：${carNativeVoiceStyleSummary.value}。`
+    return `本次将先生成无口播画面，再生成统一旁白，并以旁白音频为主控；背景音乐只在用户选择后混入。风格：${carNativeVoiceStyleSummary.value}。`
   }
   if (usesModelNativeVoiceover()) {
     if (carAudioMode.value === 'model_native') return `模型原生口播镜头：视频模型同时生成画面和口播，适合正脸口播、销售顾问出镜和需要嘴型的镜头；音色和字幕以模型结果为准，BGM 只在用户选择后后期混入。风格：${carNativeVoiceStyleSummary.value}。`
@@ -5361,8 +5382,8 @@ function sourceTypeLabelForAudio(sourceType: string) {
 
 const carAudioSourceLabel = computed(() => {
   if (!hasSelectedVoiceAudio()) {
-    if (usesAutoTtsVoiceover()) return `TTS 旁白配音（${carNativeVoiceStyleSummary.value}）`
-    if (usesModelNativeVoiceover()) return `文案生成音视频（${carNativeVoiceStyleSummary.value}）`
+    if (usesAutoTtsVoiceover()) return `后期旁白配音（${carNativeVoiceStyleSummary.value}）`
+    if (usesModelNativeVoiceover()) return `音视频同步生成（${carNativeVoiceStyleSummary.value}）`
     if (carBgmUrl.value.trim()) return '无（BGM 不作为口播）'
     return '无'
   }
@@ -5660,8 +5681,8 @@ function buildCarScriptContext() {
       parts.push('口播原文只按语义边界拆分写入 scenes.voiceText；不会新增、删除或改写文案。')
     }
   } else if (usesAutoTtsVoiceover()) {
-    parts.push(`TTS narration mode: generate silent visuals first; the backend will synthesize one unified TTS voiceover after video generation. Voice style=${carNativeVoiceStyleSummary.value}. Do not generate speech audio, music, lip-sync mouth movement, subtitle text or visual headline text in the model output.`)
-    parts.push('Subtitles, final duration and narration timing are controlled by the post-generated TTS audio. BGM is a separate user-selected background music asset and is only mixed after the final voice track.')
+    parts.push(`Automatic narration mode: generate silent visuals first; the backend will synthesize one unified voiceover after video generation. Voice style=${carNativeVoiceStyleSummary.value}. Do not generate speech audio, music, lip-sync mouth movement, subtitle text or visual headline text in the model output.`)
+    parts.push('Subtitles, final duration and narration timing are controlled by the post-generated voiceover audio. BGM is a separate user-selected background music asset and is only mixed after the final voice track.')
   } else if (usesModelNativeVoiceover()) {
     parts.push(`内容主导：视频模型按口播文案直接生成画面和原生音频，文案来源为${carVoiceTextSourceLabel.value}，风格为${carNativeVoiceStyleSummary.value}；BGM 只作为背景音乐。`)
     parts.push('字幕只在成片拼接后处理，优先按最终口播文案烧录；缺少文案时才识别成片音频，生成模型不要在画面里生成任何字幕文字。')
@@ -8474,7 +8495,8 @@ onBeforeUnmount(() => {
 
 @media (max-width: 720px) {
   .render-subtitle-mode,
-  .render-sync-mode {
+  .render-sync-mode,
+  .render-voice-policy-actions {
     grid-template-columns: 1fr;
   }
 }
@@ -9385,6 +9407,42 @@ onBeforeUnmount(() => {
   margin: 0;
   font-size: 12.5px;
   line-height: 1.6;
+}
+
+.render-voice-policy-actions {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
+  margin-top: 6px;
+}
+
+.render-voice-policy-actions button {
+  min-height: 36px;
+  border: 1px solid #b7e4cd;
+  border-radius: 8px;
+  background: #fff;
+  color: #067647;
+  font-size: 13px;
+  font-weight: 900;
+  cursor: pointer;
+}
+
+.render-voice-policy-actions button.active {
+  border-color: #10b981;
+  background: #dcfce7;
+  color: #065f46;
+  box-shadow: inset 0 0 0 1px rgba(16, 185, 129, 0.18);
+}
+
+.render-voice-policy-actions button:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
+}
+
+.render-voice-policy small {
+  color: currentColor;
+  font-size: 12px;
+  line-height: 1.5;
 }
 
 .render-voice-policy.ok {
