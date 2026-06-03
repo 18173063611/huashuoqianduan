@@ -7396,13 +7396,27 @@ async function handleGenerate() {
   }
 }
 
+function friendlyRenderTaskError(message: string | null | undefined, fallback: string) {
+  const trimmed = (message || '').trim()
+  const normalized = trimmed.toLowerCase()
+  if (
+    normalized.includes('voiceover_quota_exceeded') ||
+    normalized.includes('quota exceeded') ||
+    normalized.includes('text_words_lifetime') ||
+    normalized.includes('quota_exceeded')
+  ) {
+    return '后期旁白配音额度已用完，系统会自动改用“音视频同步生成”；也可以上传或选择一条口播音频后再提交。'
+  }
+  return trimmed || fallback
+}
+
 function startSeedanceTaskTracking(taskId: number) {
   stopSeedanceTracking()
   stopSeedanceTaskTracking = trackTaskResult<VideoTaskVO>(taskId, {
     onStatus(message) {
       taskStatus.value = String(message.status)
       taskProgress.value = message.progress
-      digitalHumanTaskError.value = message.errorMessage || ''
+      digitalHumanTaskError.value = friendlyRenderTaskError(message.errorMessage, '')
       if (message.taskType === 'SEEDANCE_CAR_SALES_VIDEO') {
         void refreshCarSalesPartialResult(taskId)
       }
@@ -7413,17 +7427,17 @@ function startSeedanceTaskTracking(taskId: number) {
       result.value = taskResult.result
       busy.value = false
       activeSeedanceTaskId.value = null
-      digitalHumanTaskError.value = taskResult.errorMessage || ''
+      digitalHumanTaskError.value = friendlyRenderTaskError(taskResult.errorMessage, '')
     },
     onFailure(message) {
-      errorMessage.value = message.errorMessage || '视频生成任务失败'
+      errorMessage.value = friendlyRenderTaskError(message.errorMessage, '视频生成任务失败')
       digitalHumanTaskError.value = errorMessage.value
       busy.value = false
       activeSeedanceTaskId.value = null
     },
     onError(error) {
-      errorMessage.value = error.message
-      digitalHumanTaskError.value = error.message
+      errorMessage.value = friendlyRenderTaskError(error.message, '视频生成任务失败')
+      digitalHumanTaskError.value = errorMessage.value
       busy.value = false
       activeSeedanceTaskId.value = null
     },
@@ -7450,7 +7464,7 @@ async function refreshCarSalesPartialResult(taskId: number) {
         lastFrameUrl: partial.lastFrameUrl ?? null,
         completionTokens: partial.completionTokens ?? 0,
         errorCode: partial.errorCode ?? null,
-        errorMessage: partial.errorMessage ?? null,
+        errorMessage: friendlyRenderTaskError(partial.errorMessage, '') || null,
       }
     }
   } catch {
@@ -7487,14 +7501,14 @@ async function pollDigitalHumanOnce(taskId: number) {
     const detail = await getDigitalHumanVideoTask(taskId)
     taskStatus.value = detail.status
     taskProgress.value = detail.progress
-    digitalHumanTaskError.value = detail.errorMessage || ''
+    digitalHumanTaskError.value = friendlyRenderTaskError(detail.errorMessage, '')
     if (['SUCCESS', 'FAILED', 'RETRYABLE', 'CANCELED'].includes(detail.status)) {
       stopDigitalHumanPoll()
       busy.value = false
       if (detail.status === 'SUCCESS' && detail.videoUrl) {
         result.value = digitalHumanDetailToVideoResult(detail)
       } else if (detail.errorMessage) {
-        errorMessage.value = detail.errorMessage
+        errorMessage.value = friendlyRenderTaskError(detail.errorMessage, '')
       }
     }
   } catch (error) {

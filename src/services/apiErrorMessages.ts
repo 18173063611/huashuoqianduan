@@ -19,6 +19,15 @@ const MESSAGE_HINTS: Record<string, string> = {
 
 export function formatApiBusinessError(code: number, message: string): string {
   const trimmed = (message || '').trim()
+  const normalized = trimmed.toLowerCase()
+  if (
+    normalized.includes('voiceover_quota_exceeded') ||
+    normalized.includes('quota exceeded') ||
+    normalized.includes('text_words_lifetime') ||
+    normalized.includes('quota_exceeded')
+  ) {
+    return '后期旁白配音额度已用完，系统会优先改用“音视频同步生成”；也可以上传或选择一条口播音频后再提交。'
+  }
   if (trimmed && MESSAGE_HINTS[trimmed]) {
     return MESSAGE_HINTS[trimmed]
   }
