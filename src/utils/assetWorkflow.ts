@@ -25,7 +25,7 @@ const ROLE_LABELS: Record<string, string> = {
   car_interior_dashboard: '内饰中控',
   car_interior_front_seat: '内饰前排',
   car_interior_back_seat: '内饰后排',
-  car_interior_steering: '方向盘/仪表',
+  car_interior_steering: '方向盘',
   car_interior_trunk: '后备箱',
   car_detail_light: '车灯',
   car_detail_wheel: '轮毂',
@@ -434,10 +434,10 @@ function inferAssetRole(asset: AssetItem, metadata: Record<string, unknown> | nu
     if (name.includes('side') || name.includes('侧面') || name.includes('车侧')) return 'car_exterior_side'
     if (name.includes('rear') || name.includes('back') || name.includes('尾部') || name.includes('车尾') || name.includes('背面')) return 'car_exterior_rear'
     if (name.includes('45')) return 'car_exterior_45'
-    if (name.includes('dashboard') || name.includes('interior') || name.includes('内饰') || name.includes('中控')) return 'car_interior_dashboard'
+    if (name.includes('dashboard') || name.includes('interior') || name.includes('内饰') || name.includes('中控') || name.includes('仪表')) return 'car_interior_dashboard'
     if (name.includes('front_seat') || name.includes('前排')) return 'car_interior_front_seat'
     if (name.includes('back_seat') || name.includes('rear_seat') || name.includes('后排')) return 'car_interior_back_seat'
-    if (name.includes('steering') || name.includes('方向盘') || name.includes('仪表')) return 'car_interior_steering'
+    if (name.includes('steering') || name.includes('方向盘')) return 'car_interior_steering'
     if (name.includes('trunk') || name.includes('后备箱')) return 'car_interior_trunk'
     if (name.includes('wheel') || name.includes('轮毂') || name.includes('轮胎')) return 'car_detail_wheel'
     if (name.includes('logo') || name.includes('车标') || name.includes('标识')) return 'car_detail_logo'

@@ -1,5 +1,13 @@
 <template>
-  <div class="asset-picker-compact">
+  <div class="asset-picker-compact" :class="{ 'asset-picker-compact-video': selectedVideoPreviewUrl }">
+    <video
+      v-if="selectedVideoPreviewUrl"
+      class="asset-picker-selected-video"
+      :src="selectedVideoPreviewUrl"
+      controls
+      preload="metadata"
+      playsinline
+    />
     <div class="asset-picker-summary">
       <strong>{{ title }}</strong>
       <p>{{ selectedLabel || emptyLabel }}</p>
@@ -72,7 +80,7 @@
 
           <div
             class="asset-picker-list"
-            :class="{ 'asset-picker-list-rich': richJsonMode, 'asset-picker-list-image': isImage }"
+            :class="{ 'asset-picker-list-rich': richJsonMode, 'asset-picker-list-image': isImage, 'asset-picker-list-video': videoPreviewEnabled }"
           >
             <template v-for="asset in filteredAssets" :key="asset.assetId">
               <article
@@ -136,6 +144,15 @@
                 @dblclick="selectAsset(asset)"
               >
                 <img v-if="isImage" :src="resolveUrl(asset.thumbnailUrl || asset.fileUrl)" alt="" />
+                <video
+                  v-else-if="assetVideoPreviewUrl(asset)"
+                  class="asset-picker-video-thumb"
+                  :src="assetVideoPreviewUrl(asset)"
+                  :poster="assetPosterUrl(asset)"
+                  muted
+                  preload="metadata"
+                  playsinline
+                />
                 <span v-else class="asset-picker-icon">{{ assetIcon(asset) }}</span>
                 <span class="asset-picker-meta">
                   <strong>{{ asset.fileName }}</strong>
@@ -147,6 +164,14 @@
             </template>
           </div>
         </template>
+
+        <div v-if="activeVideoPreviewUrl" class="asset-picker-active-video">
+          <video :src="activeVideoPreviewUrl" controls preload="metadata" playsinline />
+          <div>
+            <strong>{{ activeAsset?.fileName }}</strong>
+            <small>{{ activeAsset ? assetListSubtitle(activeAsset) : '' }}</small>
+          </div>
+        </div>
 
         <footer class="asset-picker-modal-foot">
           <span>{{ activeAsset ? `当前选择：${activeAsset.fileName}` : '单击选中资产，双击可直接选择' }}</span>
@@ -201,6 +226,7 @@ const props = defineProps<{
   assetRoles?: string[]
   roleOptions?: AssetRoleOption[]
   workflowStage?: AssetWorkflowStageKey
+  showVideoPreview?: boolean
 }>()
 
 const emit = defineEmits<{
@@ -289,7 +315,7 @@ const filteredAssets = computed(() => {
       return false
     }
     const role = assetNormalizedRole(asset)
-    const genericSceneImage = scenePickerMode.value && assetIsImageLike(asset)
+    const genericSceneImage = scenePickerMode.value && assetIsGenericSceneImage(asset)
     if (allowed.length > 0 && !allowed.includes(role) && !genericSceneImage) {
       return false
     }
@@ -301,6 +327,13 @@ const filteredAssets = computed(() => {
 })
 const activeAsset = computed(() =>
   filteredAssets.value.find((asset) => asset.assetId === selectedAssetId.value) || null,
+)
+const videoPreviewEnabled = computed(() => Boolean(props.showVideoPreview) && assetTypesToLoad.value.includes('VIDEO'))
+const selectedVideoPreviewUrl = computed(() =>
+  videoPreviewEnabled.value && props.selectedUrl ? resolveUrl(props.selectedUrl) : '',
+)
+const activeVideoPreviewUrl = computed(() =>
+  videoPreviewEnabled.value && activeAsset.value?.assetType === 'VIDEO' ? resolveUrl(activeAsset.value.fileUrl) : '',
 )
 const emptyResultText = computed(() =>
   selectedRoleFilter.value === 'all'
@@ -329,7 +362,7 @@ const ASSET_ROLE_LABELS: Record<string, string> = {
   car_interior_dashboard: '内饰中控',
   car_interior_front_seat: '内饰前排',
   car_interior_back_seat: '内饰后排',
-  car_interior_steering: '方向盘/仪表',
+  car_interior_steering: '方向盘',
   car_interior_trunk: '后备箱',
   car_detail_light: '车灯',
   car_detail_wheel: '轮毂',
@@ -552,8 +585,8 @@ function isSelectableAsset(asset: AssetItem) {
 }
 
 function matchesActiveWorkflowStage(asset: AssetItem) {
-  if (scenePickerMode.value && assetIsImageLike(asset)) {
-    return true
+  if (scenePickerMode.value) {
+    return assetIsScenePickerImage(asset) || matchesAssetWorkflowStage(asset, activeWorkflowStage.value)
   }
   return matchesAssetWorkflowStage(asset, activeWorkflowStage.value)
 }
@@ -611,6 +644,18 @@ function assetIsImageLike(asset: AssetItem) {
   return assetType === 'IMAGE' || assetType === 'COVER' || mimeType.startsWith('image/')
 }
 
+function assetIsScenePickerImage(asset: AssetItem) {
+  if (!assetIsImageLike(asset)) {
+    return false
+  }
+  const role = assetNormalizedRole(asset)
+  return !role || role.startsWith('scene_')
+}
+
+function assetIsGenericSceneImage(asset: AssetItem) {
+  return assetIsImageLike(asset) && !assetNormalizedRole(asset)
+}
+
 function assetMatchesSceneRoleKeyword(asset: AssetItem, role: string) {
   const meta = parseObject(asset.metadataJson)
   const text = [
@@ -643,6 +688,14 @@ function assetIcon(asset: AssetItem) {
   if (asset.assetType === 'JSON') return '文'
   if (asset.assetType === 'TEXT') return '稿'
   return '资'
+}
+
+function assetVideoPreviewUrl(asset: AssetItem) {
+  return videoPreviewEnabled.value && asset.assetType === 'VIDEO' ? resolveUrl(asset.fileUrl) : ''
+}
+
+function assetPosterUrl(asset: AssetItem) {
+  return videoPreviewEnabled.value && asset.thumbnailUrl ? resolveUrl(asset.thumbnailUrl) : ''
 }
 
 function assetPreview(asset: AssetItem) {
@@ -1186,6 +1239,18 @@ function formatFileSize(size: number) {
   padding: 12px 14px;
 }
 
+.asset-picker-compact-video {
+  grid-template-columns: 148px minmax(0, 1fr) auto;
+}
+
+.asset-picker-selected-video {
+  width: 148px;
+  height: 84px;
+  border-radius: 7px;
+  background: #111827;
+  object-fit: cover;
+}
+
 .asset-picker-summary {
   min-width: 0;
 }
@@ -1455,6 +1520,10 @@ function formatFileSize(size: number) {
   grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
 }
 
+.asset-picker-list-video {
+  grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+}
+
 .asset-picker-item {
   display: grid;
   grid-template-columns: 44px minmax(0, 1fr);
@@ -1504,6 +1573,10 @@ function formatFileSize(size: number) {
   grid-template-columns: 78px minmax(0, 1fr);
 }
 
+.asset-picker-list-video .asset-picker-item {
+  grid-template-columns: 112px minmax(0, 1fr);
+}
+
 .asset-picker-item img,
 .asset-picker-icon {
   width: 44px;
@@ -1518,6 +1591,14 @@ function formatFileSize(size: number) {
   height: 96px;
   background: #f8fafc;
   object-fit: contain;
+}
+
+.asset-picker-video-thumb {
+  width: 112px;
+  height: 64px;
+  border-radius: 7px;
+  background: #111827;
+  object-fit: cover;
 }
 
 .asset-picker-icon {
@@ -1624,6 +1705,47 @@ function formatFileSize(size: number) {
   text-decoration: underline;
 }
 
+.asset-picker-active-video {
+  display: grid;
+  flex: 0 0 auto;
+  grid-template-columns: 160px minmax(0, 1fr);
+  align-items: center;
+  gap: 12px;
+  border: 1px solid #e7eaf2;
+  border-radius: 8px;
+  background: #fbfcff;
+  padding: 10px;
+}
+
+.asset-picker-active-video video {
+  width: 160px;
+  height: 90px;
+  border-radius: 7px;
+  background: #111827;
+  object-fit: cover;
+}
+
+.asset-picker-active-video strong,
+.asset-picker-active-video small {
+  display: block;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.asset-picker-active-video strong {
+  color: #232838;
+  font-size: 13px;
+  font-weight: 850;
+}
+
+.asset-picker-active-video small {
+  margin-top: 4px;
+  color: #667085;
+  font-size: 12px;
+  line-height: 1.5;
+}
+
 .asset-picker-date {
   color: #667085;
   font-weight: 750;
@@ -1643,7 +1765,21 @@ function formatFileSize(size: number) {
 
 @media (max-width: 640px) {
   .asset-picker-compact,
+  .asset-picker-compact-video,
   .asset-picker-search {
+    grid-template-columns: 1fr;
+  }
+
+  .asset-picker-selected-video,
+  .asset-picker-active-video video,
+  .asset-picker-video-thumb {
+    width: 100%;
+    height: auto;
+    aspect-ratio: 16 / 9;
+  }
+
+  .asset-picker-active-video,
+  .asset-picker-list-video .asset-picker-item {
     grid-template-columns: 1fr;
   }
 

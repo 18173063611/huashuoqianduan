@@ -1011,7 +1011,7 @@
                       </div>
                       <div class="render-form-field">
                         <label>字号</label>
-                        <input v-model.number="carSubtitleFontSize" type="number" min="28" max="120" step="2" :disabled="busy" />
+                        <input v-model.number="carSubtitleFontSize" type="number" min="20" max="120" step="2" :disabled="busy" />
                       </div>
                     </div>
                     <div class="render-color-grid" aria-label="字幕颜色设置">
@@ -1835,7 +1835,7 @@ const CAR_MATERIAL_TARGETS: Array<{ role: string; label: string; group: CarMater
   { role: 'car_interior_dashboard', label: '中控台', group: 'interior' },
   { role: 'car_interior_front_seat', label: '前排', group: 'interior' },
   { role: 'car_interior_back_seat', label: '后排', group: 'interior' },
-  { role: 'car_interior_steering', label: '方向盘/仪表', group: 'interior' },
+  { role: 'car_interior_steering', label: '方向盘', group: 'interior' },
   { role: 'car_interior_trunk', label: '后备箱', group: 'interior' },
   { role: 'car_detail_light', label: '车灯', group: 'detail' },
   { role: 'car_detail_wheel', label: '轮毂', group: 'detail' },
@@ -1880,20 +1880,47 @@ const CAR_NATIVE_VOICE_LANGUAGE_OPTIONS = [
   { value: 'zh-CN', label: '中文讲述', hint: '按中文普通话讲述，适合国内销售口播' },
   { value: 'en-US', label: '英语讲述', hint: '按自然英语讲述，中文文案会忠实转成英文表达' },
 ]
+const DEFAULT_CAR_NATIVE_VOICE_STYLE = 'female_natural_explain'
 const CAR_NATIVE_VOICE_STYLE_OPTIONS = [
-  { value: 'natural_explain', label: '自然讲解', hint: '中性销售顾问，普通话清晰可信' },
+  { value: 'female_natural_explain', label: '女声自然讲解', hint: '女性销售顾问声线，普通话清晰亲和' },
+  { value: 'male_natural_explain', label: '男声自然讲解', hint: '男性销售顾问声线，普通话清晰稳健' },
   { value: 'female_clear', label: '清亮女销售', hint: '青年女性声线，干净亲和不尖锐' },
+  { value: 'male_clear', label: '清朗男销售', hint: '青年男性声线，清爽亲和不油腻' },
+  { value: 'female_steady', label: '沉稳女顾问', hint: '成年女性中低音，稳重可信' },
   { value: 'male_steady', label: '沉稳男顾问', hint: '成年男性低中音，稳重可信' },
   { value: 'female_live', label: '女声直播带看', hint: '女性门店主播，轻快有互动感' },
-  { value: 'live_seller', label: '直播带看', hint: '门店主播口吻，适合短视频种草' },
-  { value: 'energetic_promo', label: '促销强节奏', hint: '更有能量，突出权益和到店转化' },
-  { value: 'male_review', label: '专业男评测', hint: '理性媒体评测感，卖点表达清楚' },
-  { value: 'luxury_calm', label: '高级质感', hint: '成熟沉稳，有高端车广告质感' },
-  { value: 'young_tech', label: '年轻科技感', hint: '清爽利落，适合智能配置介绍' },
-  { value: 'family_warm', label: '家庭温和', hint: '亲和生活化，适合家用场景' },
-  { value: 'soft_story', label: '温柔叙事', hint: '柔和有画面感，适合生活方式广告' },
-  { value: 'local_friendly', label: '本地亲和', hint: '真实接地气，可轻微本地口吻' },
+  { value: 'male_live', label: '男声直播带看', hint: '男性门店主播，直接有互动感' },
+  { value: 'female_energetic_promo', label: '女声促销强节奏', hint: '女性促销口吻，突出权益和转化' },
+  { value: 'male_energetic_promo', label: '男声促销强节奏', hint: '男性促销口吻，突出权益和转化' },
+  { value: 'female_review', label: '专业女评测', hint: '女性媒体评测感，理性清晰' },
+  { value: 'male_review', label: '专业男评测', hint: '男性媒体评测感，卖点表达清楚' },
+  { value: 'female_luxury_calm', label: '女声高级质感', hint: '成熟女性声线，沉稳有高端车广告质感' },
+  { value: 'male_luxury_calm', label: '男声高级质感', hint: '成熟男性声线，沉稳有高端车广告质感' },
+  { value: 'female_young_tech', label: '女声年轻科技感', hint: '年轻女性声线，清爽利落讲智能配置' },
+  { value: 'male_young_tech', label: '男声年轻科技感', hint: '年轻男性声线，清爽利落讲智能配置' },
+  { value: 'female_family_warm', label: '女声家庭温和', hint: '女性生活化口吻，适合家用场景' },
+  { value: 'male_family_warm', label: '男声家庭温和', hint: '男性生活化口吻，适合家用场景' },
+  { value: 'female_soft_story', label: '女声温柔叙事', hint: '女性柔和叙事，适合生活方式广告' },
+  { value: 'male_soft_story', label: '男声温柔叙事', hint: '男性柔和叙事，适合生活方式广告' },
+  { value: 'female_local_friendly', label: '女声本地亲和', hint: '女性本地亲和口吻，真实接地气' },
+  { value: 'male_local_friendly', label: '男声本地亲和', hint: '男性本地亲和口吻，真实接地气' },
 ]
+const LEGACY_CAR_NATIVE_VOICE_STYLE_ALIASES: Record<string, string> = {
+  natural_explain: DEFAULT_CAR_NATIVE_VOICE_STYLE,
+  live_seller: 'male_live',
+  energetic_promo: 'female_energetic_promo',
+  luxury_calm: 'male_luxury_calm',
+  young_tech: 'male_young_tech',
+  family_warm: 'female_family_warm',
+  soft_story: 'female_soft_story',
+  local_friendly: 'female_local_friendly',
+}
+function normalizeCarNativeVoiceStyle(value?: string | null) {
+  const raw = (value || '').trim()
+  if (!raw) return DEFAULT_CAR_NATIVE_VOICE_STYLE
+  if (CAR_NATIVE_VOICE_STYLE_OPTIONS.some((item) => item.value === raw)) return raw
+  return LEGACY_CAR_NATIVE_VOICE_STYLE_ALIASES[raw] || DEFAULT_CAR_NATIVE_VOICE_STYLE
+}
 const CAR_NATIVE_SPEECH_STYLE_OPTIONS = [
   { value: 'natural', label: '自然语速', hint: '按正常口播节奏生成' },
   { value: 'concise', label: '短促利落', hint: '少废话、信息密度更高' },
@@ -1924,8 +1951,8 @@ const CAR_ASSET_ROLE_ALIASES: Record<string, string> = {
   rear_seat: 'car_interior_back_seat',
   steering: 'car_interior_steering',
   steering_wheel: 'car_interior_steering',
-  instrument: 'car_interior_steering',
-  dashboard_wheel: 'car_interior_steering',
+  instrument: 'car_interior_dashboard',
+  dashboard_wheel: 'car_interior_dashboard',
   trunk: 'car_interior_trunk',
   boot: 'car_interior_trunk',
   light: 'car_detail_light',
@@ -1981,7 +2008,8 @@ const CAR_WORKFLOW_ASSET_ROLES = [
 ]
 
 const CAR_SCENE_KEYWORD_ROLES: Array<{ keywords: string[]; roles: string[] }> = [
-  { keywords: ['内饰', '座椅', '中控', '空间', '前排', '后排', '方向盘', '仪表', '后备箱'], roles: ['car_interior_dashboard', 'car_interior_front_seat', 'car_interior_back_seat', 'car_interior_steering', 'car_interior_trunk'] },
+  { keywords: ['方向盘'], roles: ['car_interior_steering'] },
+  { keywords: ['内饰', '座椅', '中控', '空间', '前排', '后排', '仪表', '后备箱'], roles: ['car_interior_dashboard', 'car_interior_front_seat', 'car_interior_back_seat', 'car_interior_trunk'] },
   { keywords: ['车灯', '灯光', '轮毂', 'logo', '标识', '细节', '材质'], roles: ['car_detail_light', 'car_detail_wheel', 'car_detail_logo', 'car_detail_seat_material'] },
   { keywords: ['展厅', '门店', '到店', '试驾', '邀约', '销售顾问'], roles: ['scene_showroom', 'car_exterior_front', 'host_image'] },
   { keywords: ['户外', '城市', '公路', '道路', '山路', '夜景', '通勤', '出行'], roles: ['scene_outdoor', 'scene_road', 'scene_night', 'car_exterior_side'] },
@@ -2009,8 +2037,14 @@ const CAR_FUNCTION_REFERENCE_HINTS: Array<{
   {
     key: 'cockpit',
     label: '智能座舱/车机屏幕',
-    keywords: ['中控', '车机', '大屏', '屏幕', '智能座舱', '仪表', 'hud', '导航', '语音交互', '方向盘'],
-    roles: ['car_interior_dashboard', 'car_interior_steering'],
+    keywords: ['中控', '车机', '大屏', '屏幕', '智能座舱', '仪表', 'hud', '导航', '语音交互'],
+    roles: ['car_interior_dashboard'],
+  },
+  {
+    key: 'steering',
+    label: '方向盘功能',
+    keywords: ['方向盘', '多功能方向盘'],
+    roles: ['car_interior_steering'],
   },
   {
     key: 'seat',
@@ -2221,7 +2255,7 @@ const carAudioUploading = ref(false)
 const carAudioUploadName = ref('')
 const carVoiceTextSource = ref<CarVoiceTextSource>('auto')
 const carNativeVoiceLanguage = ref<NativeVoiceLanguage>('zh-CN')
-const carNativeVoiceStyle = ref('natural_explain')
+const carNativeVoiceStyle = ref(DEFAULT_CAR_NATIVE_VOICE_STYLE)
 const carNativeSpeechStyle = ref('natural')
 const carSubtitleMode = ref<CarSubtitleMode>('off')
 const carSubtitleText = ref('')
@@ -2230,7 +2264,7 @@ const carSubtitleTimingMode = ref<CarSubtitleTimingMode>('auto')
 const carSyncStrategy = ref<CarSyncStrategy>('auto')
 const carSubtitleFontFamily = ref('Noto Sans CJK SC')
 const carSubtitlePosition = ref<CarHeadlinePosition>('bottom')
-const carSubtitleFontSize = ref(58)
+const carSubtitleFontSize = ref(20)
 const carSubtitleTextColor = ref('#ffffff')
 const carSubtitleOutlineColor = ref('#111111')
 const carHeadlineEnabled = ref(false)
@@ -2567,7 +2601,7 @@ function setCarAudioMode(mode: CarAudioMode) {
 }
 
 const carNativeVoiceStyleLabel = computed(
-  () => CAR_NATIVE_VOICE_STYLE_OPTIONS.find((item) => item.value === carNativeVoiceStyle.value)?.label || '自然讲解',
+  () => CAR_NATIVE_VOICE_STYLE_OPTIONS.find((item) => item.value === carNativeVoiceStyle.value)?.label || '女声自然讲解',
 )
 const carNativeVoiceLanguageLabel = computed(
   () => CAR_NATIVE_VOICE_LANGUAGE_OPTIONS.find((item) => item.value === carNativeVoiceLanguage.value)?.label || '中文讲述',
@@ -3337,10 +3371,10 @@ function inferCarAssetRoleFromAsset(asset: AssetItem, metadata: Record<string, u
   if (name.includes('side') || name.includes('侧面') || name.includes('车侧')) return 'car_exterior_side'
   if (name.includes('rear') || name.includes('back') || name.includes('尾部') || name.includes('车尾') || name.includes('背面')) return 'car_exterior_rear'
   if (name.includes('45')) return 'car_exterior_45'
-  if (name.includes('dashboard') || name.includes('interior') || name.includes('内饰') || name.includes('中控')) return 'car_interior_dashboard'
+  if (name.includes('dashboard') || name.includes('interior') || name.includes('内饰') || name.includes('中控') || name.includes('仪表')) return 'car_interior_dashboard'
   if (name.includes('front_seat') || name.includes('前排')) return 'car_interior_front_seat'
   if (name.includes('back_seat') || name.includes('rear_seat') || name.includes('后排')) return 'car_interior_back_seat'
-  if (name.includes('steering') || name.includes('方向盘') || name.includes('仪表')) return 'car_interior_steering'
+  if (name.includes('steering') || name.includes('方向盘')) return 'car_interior_steering'
   if (name.includes('trunk') || name.includes('后备箱')) return 'car_interior_trunk'
   if (name.includes('wheel') || name.includes('轮毂') || name.includes('轮胎')) return 'car_detail_wheel'
   if (name.includes('logo') || name.includes('车标') || name.includes('标识')) return 'car_detail_logo'
@@ -5699,7 +5733,7 @@ const carSubtitlePreviewText = computed(() => {
 const carSubtitlePreviewStyle = computed(() => ({
   color: carSubtitleTextColor.value,
   fontFamily: carSubtitleFontFamily.value,
-  fontSize: `${Math.max(18, Math.min(44, Math.round((Number(carSubtitleFontSize.value) || 58) * 0.56)))}px`,
+  fontSize: `${Math.max(18, Math.min(44, Math.round(Number(carSubtitleFontSize.value) || 20)))}px`,
   WebkitTextStroke: `1px ${carSubtitleOutlineColor.value}`,
   textShadow: `0 1px 0 ${carSubtitleOutlineColor.value}, 0 -1px 0 ${carSubtitleOutlineColor.value}, 1px 0 0 ${carSubtitleOutlineColor.value}, -1px 0 0 ${carSubtitleOutlineColor.value}`,
 }))
@@ -5794,7 +5828,7 @@ function buildCarSubtitleOverlayForRequest() {
   return {
     enabled: true,
     fontFamily: carSubtitleFontFamily.value,
-    fontSize: Math.max(28, Math.min(120, Number(carSubtitleFontSize.value) || 58)),
+    fontSize: Math.max(20, Math.min(120, Number(carSubtitleFontSize.value) || 20)),
     textColor: carSubtitleTextColor.value,
     outlineColor: carSubtitleOutlineColor.value,
     position: carSubtitlePosition.value,
@@ -6868,7 +6902,7 @@ async function applyCarSalesTaskImport(input: Record<string, unknown>) {
   if (nativeVoiceLanguage && isNativeVoiceLanguage(nativeVoiceLanguage)) {
     carNativeVoiceLanguage.value = nativeVoiceLanguage
   }
-  carNativeVoiceStyle.value = firstImportText(input, ['nativeVoiceStyle']) || carNativeVoiceStyle.value
+  carNativeVoiceStyle.value = normalizeCarNativeVoiceStyle(firstImportText(input, ['nativeVoiceStyle']) || carNativeVoiceStyle.value)
   carNativeSpeechStyle.value = firstImportText(input, ['nativeSpeechStyle']) || carNativeSpeechStyle.value
 
   const subtitleMode = firstImportText(input, ['subtitleMode'])
@@ -7077,7 +7111,7 @@ async function handleGenerate() {
         finalVoiceText: carFinalVoiceTextForRequest(),
         strictVoiceText: Boolean(strictVoiceTextForRequest()),
         nativeVoiceLanguage: usesModelNativeVoiceover() ? carNativeVoiceLanguage.value : undefined,
-        nativeVoiceStyle: usesModelNativeVoiceover() ? carNativeVoiceStyle.value : undefined,
+        nativeVoiceStyle: usesModelNativeVoiceover() ? normalizeCarNativeVoiceStyle(carNativeVoiceStyle.value) : undefined,
         nativeSpeechStyle: usesModelNativeVoiceover() ? carNativeSpeechStyle.value : undefined,
         ignoredStoryboardFields: storyboardIgnoredFields.value,
         hostImageUrl: carHostAppearanceEnabled.value ? carHostImageUrl.value.trim() || undefined : undefined,

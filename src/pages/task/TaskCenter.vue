@@ -312,6 +312,7 @@
                 title="选择视频加入拼接"
                 asset-type="VIDEO"
                 :selected-url="manualVideoPickerUrl"
+                show-video-preview
                 placeholder="搜索视频资产..."
                 source-hint="从资产中心选择任意视频，加入到当前拼接队列"
                 @select="handleManualComposeAssetSelect"
