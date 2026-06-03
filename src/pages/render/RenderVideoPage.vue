@@ -765,6 +765,15 @@
                     </button>
                     <button
                       type="button"
+                      :class="{ active: carAudioMode === 'auto_tts' }"
+                      :disabled="busy"
+                      title="先生成画面，再由后端用音色库生成统一口播，按最终口播音频控制成片时长和字幕"
+                      @click="setCarAudioMode('auto_tts')"
+                    >
+                      TTS 旁白配音
+                    </button>
+                    <button
+                      type="button"
                       :class="{ active: carAudioMode === 'post_mix' }"
                       :disabled="busy || !carAudioUrl"
                       title="生成画面后，用该口播音频替换最终成片音轨"
@@ -785,7 +794,7 @@
                   <p class="app-muted render-audio-hint">{{ audioReferenceHint }}</p>
                 </div>
               </details>
-              <section v-if="usesModelNativeVoiceover()" class="render-tts-style-panel" aria-label="文案驱动音视频设置">
+              <section v-if="usesGeneratedVoiceover()" class="render-tts-style-panel" aria-label="文案驱动音视频设置">
                 <div class="render-tts-source">
                   <span>口播文案来源</span>
                   <div class="render-tts-source-options">
@@ -1749,8 +1758,8 @@ import type { AssetItem } from '../../types/assetTypes'
 type MainTab = 'text' | 'image' | 'carSales' | 'digitalHuman'
 type ImageSubTab = 'first' | 'firstLast' | 'reference'
 type DigitalHumanAudioMode = 'asset' | 'upload' | 'url' | 'text'
-type CarAudioMode = 'none' | 'post_mix' | 'reference' | 'model_native'
-type CarVoicePolicy = 'user_audio' | 'model_native' | 'none'
+type CarAudioMode = 'none' | 'post_mix' | 'reference' | 'model_native' | 'auto_tts'
+type CarVoicePolicy = 'user_audio' | 'model_native' | 'auto_tts' | 'none'
 type CarVoiceTextSource = 'auto' | 'benchmark' | 'manual'
 type CarSubtitleMode = 'off' | 'auto' | 'custom'
 type CarSubtitleTimingMode = 'auto' | 'audio_recognition' | 'script_timeline'
@@ -2259,7 +2268,7 @@ const carBenchmarkUploadName = ref('')
 const carAudioUrl = ref('')
 const carAudioAssetId = ref<number | null>(null)
 const carAudioSourceType = ref('')
-const carAudioMode = ref<CarAudioMode>('model_native')
+const carAudioMode = ref<CarAudioMode>('auto_tts')
 const carAudioUploading = ref(false)
 const carAudioUploadName = ref('')
 const carVoiceTextSource = ref<CarVoiceTextSource>('auto')
@@ -2470,8 +2479,11 @@ function aspectRatioForRequest() {
 const isSeedance2Selected = computed(() => selectedModel.value === SEEDANCE_2_MODEL)
 
 const audioReferenceHint = computed(() => {
+  if (usesAutoTtsVoiceover()) {
+    return '先生成画面，再由后端生成统一 TTS 旁白；字幕按最终口播音频识别/对齐，BGM 只会在后期单独混入。'
+  }
   if (usesModelNativeVoiceover()) {
-    return '文案会直接交给视频模型生成匹配的画面和原生音频；需要指定音色时请先用声音生成产出音频。'
+    return '文案会直接交给视频模型生成匹配的画面和原生音频；适合大量口播镜头和嘴型同步，BGM 仍只允许后期单独选择混入。'
   }
   if (!carAudioUrl.value.trim()) {
     return '选择音频后可决定是否参与视频生成。'
@@ -2612,6 +2624,9 @@ function setCarAudioMode(mode: CarAudioMode) {
     return
   }
   carAudioMode.value = mode
+  if (mode === 'auto_tts') {
+    carSyncStrategy.value = 'audio_master'
+  }
   if (mode === 'reference') {
     carSegmentCount.value = 1
     carSegmentDurations.value = normalizeCarSegmentDurations(carRecommendedSegmentDurations.value, 1)
@@ -2888,11 +2903,13 @@ const carReferenceImageStrategyLabel = computed(() =>
 )
 const carVoicePolicyLevel = computed(() => {
   if (hasSelectedVoiceAudio()) return 'ok'
+  if (usesAutoTtsVoiceover()) return 'ok'
   if (usesModelNativeVoiceover()) return 'ok'
   return 'neutral'
 })
 const carVoicePolicyTitle = computed(() => {
   if (hasSelectedVoiceAudio()) return '口播主控：已选择口播音频'
+  if (usesAutoTtsVoiceover()) return '口播主控：TTS 旁白配音'
   if (usesModelNativeVoiceover()) return '口播主控：文案生成音视频'
   return '口播主控：未设置口播音频'
 })
@@ -2903,7 +2920,11 @@ const carVoicePolicyDescription = computed(() => {
     }
     return '本次将先生成画面，再用口播音频替换或混入最终音轨；BGM 不参与口播、字幕或口型。'
   }
+  if (usesAutoTtsVoiceover()) {
+    return `本次将先生成无口播画面，再由后端生成统一 TTS 旁白并以口播音频为主控；BGM 只在用户选择后作为背景音乐混入。风格：${carNativeVoiceStyleSummary.value}。`
+  }
   if (usesModelNativeVoiceover()) {
+    if (carAudioMode.value === 'model_native') return `模型原生口播镜头：视频模型同时生成画面和口播，适合正脸口播、销售顾问出镜和需要嘴型的镜头；音色和字幕以模型结果为准，BGM 只在用户选择后后期混入。风格：${carNativeVoiceStyleSummary.value}。`
     if (isMultiCarCompareMode.value) {
       return `将按多车型对比结构生成画面；多段成片会由后端使用单条统一口播音轨，并按分镜总时长自动调整语速。风格：${carNativeVoiceStyleSummary.value}。`
     }
@@ -3127,7 +3148,7 @@ watch(
     const cleanUrl = url.trim()
     if (!cleanUrl) {
       if (carAudioMode.value === 'post_mix' || carAudioMode.value === 'reference') {
-        carAudioMode.value = 'model_native'
+        carAudioMode.value = 'auto_tts'
       }
       return
     }
@@ -3142,7 +3163,7 @@ watch(
 watch(
   () => carNativeVoiceLanguage.value,
   (language) => {
-    if (usesModelNativeVoiceover()) {
+    if (usesGeneratedVoiceover()) {
       carSubtitleLanguage.value = language
     }
   },
@@ -3855,7 +3876,8 @@ function handleCarAudioAssetSelect(payload: { asset: AssetItem; url: string }) {
   carAudioAssetId.value = payload.asset.assetId
   carAudioSourceType.value = payload.asset.sourceType || ''
   carAudioUploadName.value = payload.asset.fileName
-  if (carAudioMode.value === 'none' || carAudioMode.value === 'model_native') {
+  carSyncStrategy.value = 'audio_master'
+  if (carAudioMode.value === 'none' || carAudioMode.value === 'model_native' || carAudioMode.value === 'auto_tts') {
     carAudioMode.value = 'post_mix'
   }
 }
@@ -3881,7 +3903,8 @@ async function handleCarAudioUpload(event: Event) {
     carAudioUrl.value = normalizePublicUrl(asset.fileUrl)
     carAudioAssetId.value = asset.assetId
     carAudioSourceType.value = asset.sourceType || 'USER_UPLOAD'
-    if (carAudioMode.value === 'none' || carAudioMode.value === 'model_native') {
+    carSyncStrategy.value = 'audio_master'
+    if (carAudioMode.value === 'none' || carAudioMode.value === 'model_native' || carAudioMode.value === 'auto_tts') {
       carAudioMode.value = 'post_mix'
     }
     ElMessage.success('音频已上传到资产中心')
@@ -4714,7 +4737,7 @@ function storyboardShotPlanText(text: string, idx: number, total: number) {
 }
 
 function shouldExposeStoryboardVoiceText() {
-  return usesModelNativeVoiceover() && carVoiceTextSource.value === 'auto' && !strictVoiceTextForRequest()
+  return usesGeneratedVoiceover() && carVoiceTextSource.value === 'auto' && !strictVoiceTextForRequest()
 }
 
 function storyboardVisualText(shot: VideoScriptShotItem, idx: number, includeVoiceReference = shouldExposeStoryboardVoiceText()) {
@@ -4769,6 +4792,14 @@ function hasSelectedVoiceAudio() {
 
 function usesModelNativeVoiceover() {
   return carAudioMode.value === 'model_native' && !carAudioUrl.value.trim()
+}
+
+function usesAutoTtsVoiceover() {
+  return carAudioMode.value === 'auto_tts' && !carAudioUrl.value.trim()
+}
+
+function usesGeneratedVoiceover() {
+  return usesModelNativeVoiceover() || usesAutoTtsVoiceover()
 }
 
 function buildAutoCarVoiceText() {
@@ -4852,7 +4883,10 @@ function modelNativeVoiceTextForRequest() {
 }
 
 function effectiveVoiceTextForRequest() {
-  if (usesModelNativeVoiceover()) {
+  if (hasSelectedVoiceAudio()) {
+    return ''
+  }
+  if (usesGeneratedVoiceover()) {
     return modelNativeVoiceTextForRequest()
   }
   const manual = sanitizeSpeechText(carVoiceContext.value)
@@ -4867,18 +4901,18 @@ function effectiveVoiceTextForRequest() {
 }
 
 function strictVoiceTextForRequest() {
+  if (hasSelectedVoiceAudio()) {
+    return ''
+  }
   const benchmark = sanitizeSpeechText(carBenchmarkVoiceText.value)
   const manual = sanitizeSpeechText(carVoiceContext.value)
-  if (usesModelNativeVoiceover()) {
+  if (usesGeneratedVoiceover()) {
     if (carVoiceTextSource.value === 'benchmark' && benchmark) {
       return benchmark
     }
     if (carVoiceTextSource.value === 'manual' && manual) {
       return manual
     }
-  }
-  if (hasSelectedVoiceAudio()) {
-    return manual || benchmark
   }
   return ''
 }
@@ -4927,7 +4961,7 @@ function voiceChunksForStoryboardGroups(groups: StoryboardShotGroup[]) {
     ? splitVoiceTextByStoryboardRhythm(strictText, groups)
     : splitVoiceTextForSegments(effectiveVoiceTextPreview.value, groups.length)
   const shouldUseStoryboardVoiceFallback =
-    usesModelNativeVoiceover() && carVoiceTextSource.value === 'auto' && !strictText
+    usesGeneratedVoiceover() && carVoiceTextSource.value === 'auto' && !strictText
   return groups.map((group, idx) => {
     const current = chunks[idx]
     if (current) {
@@ -5192,9 +5226,9 @@ const hasExplicitNativeVoiceText = computed(() => {
   return false
 })
 const shouldShowNativeVoiceStylePanel = computed(() =>
-  usesModelNativeVoiceover() && (hasExplicitNativeVoiceText.value || isMultiCarCompareMode.value),
+  usesGeneratedVoiceover() && (hasExplicitNativeVoiceText.value || isMultiCarCompareMode.value),
 )
-const shouldShowNativeVoiceLanguagePanel = computed(() => usesModelNativeVoiceover())
+const shouldShowNativeVoiceLanguagePanel = computed(() => usesGeneratedVoiceover())
 const shouldShowSceneVoiceStructure = computed(() =>
   shouldShowNativeVoiceStylePanel.value &&
   (Boolean(carStoryboardContext.value.trim()) || isMultiCarCompareMode.value) &&
@@ -5206,7 +5240,7 @@ const storyboardHasOldLines = computed(() => storyboardIgnoredFields.value.lengt
 const storyboardOldLineStatus = computed(() => {
   if (!carStoryboardContext.value.trim()) return '未使用分镜'
   if (storyboardHasOldLines.value && strictVoiceTextForRequest()) return '只作编排节奏'
-  if (storyboardHasOldLines.value && usesModelNativeVoiceover() && carVoiceTextSource.value === 'auto') return '用于语义补齐'
+  if (storyboardHasOldLines.value && usesGeneratedVoiceover() && carVoiceTextSource.value === 'auto') return '用于语义补齐'
   if (storyboardHasOldLines.value) return '仅作画面参考'
   return '无旧台词'
 })
@@ -5327,6 +5361,7 @@ function sourceTypeLabelForAudio(sourceType: string) {
 
 const carAudioSourceLabel = computed(() => {
   if (!hasSelectedVoiceAudio()) {
+    if (usesAutoTtsVoiceover()) return `TTS 旁白配音（${carNativeVoiceStyleSummary.value}）`
     if (usesModelNativeVoiceover()) return `文案生成音视频（${carNativeVoiceStyleSummary.value}）`
     if (carBgmUrl.value.trim()) return '无（BGM 不作为口播）'
     return '无'
@@ -5426,7 +5461,7 @@ const carGenerationBlockingMessages = computed(() => {
   if (carAudioMode.value === 'reference' && plannedCarSceneCount.value > 1) {
     messages.push('当前参考音频生成仅支持单段视频，多段请使用后期口播配音或拆段生成')
   }
-  if (usesModelNativeVoiceover() && carVoiceTextSource.value === 'benchmark' && !carBenchmarkVoiceText.value.trim()) {
+  if (usesGeneratedVoiceover() && carVoiceTextSource.value === 'benchmark' && !carBenchmarkVoiceText.value.trim()) {
     messages.push('请先选择或上传爆款对标文案')
   }
   if (carSubtitleMode.value === 'custom' && !sanitizeSpeechText(carSubtitleText.value)) {
@@ -5453,19 +5488,19 @@ const carGenerationWarnings = computed(() => {
   if (carAudioMode.value === 'post_mix' && carAudioUrl.value.trim() && carSyncStrategy.value === 'visual_master') {
     warnings.push('当前选择画面优先，口播音频可能被补静音或裁切；追求音画同步时建议使用智能同步')
   }
-  if (usesModelNativeVoiceover() && carVoiceTextSource.value === 'manual' && !carVoiceContext.value.trim()) {
+  if (usesGeneratedVoiceover() && carVoiceTextSource.value === 'manual' && !carVoiceContext.value.trim()) {
     warnings.push('已选择手写文案，但口播文案参考为空，系统将回退到车型卖点、文案场景和转化引导整理口播')
-  } else if (usesModelNativeVoiceover() && carVoiceTextSource.value === 'auto') {
+  } else if (usesGeneratedVoiceover() && carVoiceTextSource.value === 'auto') {
     warnings.push(isMultiCarCompareMode.value
       ? '未填写口播文案，系统将按“开场-逐车介绍-维度对比-总结推荐”自动整理口播'
       : '未填写口播文案，系统将根据车型卖点、文案场景和转化引导自动整理口播，并替换分镜旧台词')
-  } else if (!hasSelectedVoiceAudio() && !usesModelNativeVoiceover()) {
+  } else if (!hasSelectedVoiceAudio() && !usesGeneratedVoiceover()) {
     warnings.push('未选择口播音频，系统不会把 BGM 或分镜旧台词当作口播来源')
   }
   if (isMultiCarCompareMode.value && carStoryboardContext.value.trim()) {
     warnings.push('多车型对比会优先使用固定章节结构，已选分镜仅作为镜头节奏补充，不会覆盖车型绑定')
   }
-  if (usesModelNativeVoiceover() && strictVoiceTextForRequest()) {
+  if (usesGeneratedVoiceover() && strictVoiceTextForRequest()) {
     const stats = voiceLanguageStats(strictVoiceTextForRequest())
     if (carNativeVoiceLanguage.value === 'zh-CN' && (stats.cjk === 0 || (stats.latin >= 12 && stats.latin > stats.cjk * 2))) {
       warnings.push('当前选择中文讲述，提交后会先把传入文案翻译/规范为中文，再传给视频模型')
@@ -5554,7 +5589,7 @@ const carGenerationBasisRows = computed(() => [
   { label: '参考图策略', value: carReferenceImageStrategyLabel.value },
   { label: '数字人出镜', value: carHostAppearanceEnabled.value ? '虚拟人物出镜' : '不出镜，只介绍车辆' },
   { label: '口播来源', value: carAudioSourceLabel.value },
-  { label: '文案来源', value: usesModelNativeVoiceover() ? carVoiceTextSourceLabel.value : '随口播音频/手写文案' },
+  { label: '文案来源', value: usesGeneratedVoiceover() ? carVoiceTextSourceLabel.value : '随口播音频/手写文案' },
   { label: 'BGM 来源', value: carBgmSourceLabel.value },
   { label: '音画同步', value: carSyncStrategyOptions.find((item) => item.key === carSyncStrategy.value)?.label || '智能同步' },
   { label: '字幕来源', value: carSubtitleSourceLabel.value },
@@ -5619,10 +5654,14 @@ function buildCarScriptContext() {
     parts.push('人物策略：数字人不出镜，生成时必须忽略所有人物、主播、销售顾问、客户、路人、司机和乘客描述，只展示车辆与场景。')
   }
   if (hasSelectedVoiceAudio()) {
-    parts.push('内容主导：已选择口播/配音音频，口型和节奏以该音频为准；字幕只在成片拼接后处理，生成模型不要生成字幕文字；分镜和爆款对标文案只作为画面参考。')
+    parts.push('Post-mix voice asset rule: uploaded or selected voice audio controls final duration, narration content and subtitles after generation. The video model must not generate speech audio, music, lip-sync mouth movement, subtitle text or visual headline text from the benchmark copy.')
+    parts.push('内容主导：已选择口播/配音音频，最终时长、口播内容和字幕以该音频为准；视频模型不要生成字幕文字或可见口型；分镜和爆款对标文案只作为画面参考。')
     if (effectiveVoiceTextPreview.value) {
       parts.push('口播原文只按语义边界拆分写入 scenes.voiceText；不会新增、删除或改写文案。')
     }
+  } else if (usesAutoTtsVoiceover()) {
+    parts.push(`TTS narration mode: generate silent visuals first; the backend will synthesize one unified TTS voiceover after video generation. Voice style=${carNativeVoiceStyleSummary.value}. Do not generate speech audio, music, lip-sync mouth movement, subtitle text or visual headline text in the model output.`)
+    parts.push('Subtitles, final duration and narration timing are controlled by the post-generated TTS audio. BGM is a separate user-selected background music asset and is only mixed after the final voice track.')
   } else if (usesModelNativeVoiceover()) {
     parts.push(`内容主导：视频模型按口播文案直接生成画面和原生音频，文案来源为${carVoiceTextSourceLabel.value}，风格为${carNativeVoiceStyleSummary.value}；BGM 只作为背景音乐。`)
     parts.push('字幕只在成片拼接后处理，优先按最终口播文案烧录；缺少文案时才识别成片音频，生成模型不要在画面里生成任何字幕文字。')
@@ -6103,6 +6142,7 @@ function buildCarSalesScenes(): CarSalesSceneDraft[] {
 function carVoicePolicyForRequest(): CarVoicePolicy {
   if (hasSelectedVoiceAudio()) return 'user_audio'
   if (usesModelNativeVoiceover()) return 'model_native'
+  if (usesAutoTtsVoiceover()) return 'auto_tts'
   return 'none'
 }
 
@@ -6110,10 +6150,22 @@ function carAudioModeForRequest(): CarAudioMode {
   if (hasSelectedVoiceAudio()) {
     return carAudioMode.value === 'reference' ? 'reference' : 'post_mix'
   }
-  return usesModelNativeVoiceover() ? 'model_native' : 'none'
+  if (usesModelNativeVoiceover()) return 'model_native'
+  if (usesAutoTtsVoiceover()) return 'auto_tts'
+  return 'none'
+}
+
+function carSyncStrategyForRequest(): CarSyncStrategy {
+  if (hasSelectedVoiceAudio() || usesAutoTtsVoiceover()) {
+    return 'audio_master'
+  }
+  return carSyncStrategy.value
 }
 
 function carFinalVoiceTextForRequest() {
+  if (hasSelectedVoiceAudio()) {
+    return undefined
+  }
   const strictText = strictVoiceTextForRequest()
   if (strictText) {
     return strictText
@@ -6451,7 +6503,7 @@ function isRenderAspectRatioValue(value: string): value is RenderAspectRatio {
 }
 
 function isCarAudioMode(value: string): value is CarAudioMode {
-  return ['none', 'post_mix', 'reference', 'model_native'].includes(value)
+  return ['none', 'post_mix', 'reference', 'model_native', 'auto_tts'].includes(value)
 }
 
 function isCarVoiceTextSource(value: string): value is CarVoiceTextSource {
@@ -7002,6 +7054,8 @@ async function applyCarSalesTaskImport(input: Record<string, unknown>) {
   const voicePolicy = firstImportText(input, ['voicePolicy'])
   if (!audioMode && voicePolicy === 'model_native') {
     carAudioMode.value = 'model_native'
+  } else if (!audioMode && voicePolicy === 'auto_tts') {
+    carAudioMode.value = 'auto_tts'
   } else if (!audioMode && voicePolicy === 'none') {
     carAudioMode.value = 'none'
   }
@@ -7210,7 +7264,7 @@ async function handleGenerate() {
         subtitleMode: carSubtitleMode.value,
         subtitleLanguage: carSubtitleLanguage.value,
         subtitleTimingMode: carSubtitleTimingMode.value,
-        syncStrategy: carSyncStrategy.value,
+        syncStrategy: carSyncStrategyForRequest(),
         subtitleOverlay: buildCarSubtitleOverlayForRequest(),
         headlineOverlay: buildCarHeadlineOverlayForRequest(),
         audioUrl: hasSelectedVoiceAudio() ? carAudioUrl.value.trim() : undefined,
@@ -7220,9 +7274,9 @@ async function handleGenerate() {
         voiceTextSource: carVoiceTextSource.value,
         finalVoiceText: carFinalVoiceTextForRequest(),
         strictVoiceText: Boolean(strictVoiceTextForRequest()),
-        nativeVoiceLanguage: usesModelNativeVoiceover() ? carNativeVoiceLanguage.value : undefined,
-        nativeVoiceStyle: usesModelNativeVoiceover() ? normalizeCarNativeVoiceStyle(carNativeVoiceStyle.value) : undefined,
-        nativeSpeechStyle: usesModelNativeVoiceover() ? carNativeSpeechStyle.value : undefined,
+        nativeVoiceLanguage: usesGeneratedVoiceover() ? carNativeVoiceLanguage.value : undefined,
+        nativeVoiceStyle: usesGeneratedVoiceover() ? normalizeCarNativeVoiceStyle(carNativeVoiceStyle.value) : undefined,
+        nativeSpeechStyle: usesGeneratedVoiceover() ? carNativeSpeechStyle.value : undefined,
         ignoredStoryboardFields: storyboardIgnoredFields.value,
         hostImageUrl: carHostAppearanceEnabled.value ? carHostImageUrl.value.trim() || undefined : undefined,
         hostAppearanceEnabled: carHostAppearanceEnabled.value,

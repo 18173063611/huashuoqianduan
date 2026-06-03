@@ -296,9 +296,9 @@ export interface CarSalesVideoRequest {
   subtitleOverlay?: CarSalesTextOverlayRequest
   headlineOverlay?: CarSalesTextOverlayRequest
   audioUrl?: string
-  audioMode?: 'none' | 'post_mix' | 'reference' | 'model_native'
+  audioMode?: 'none' | 'post_mix' | 'reference' | 'model_native' | 'auto_tts'
   bgmUrl?: string
-  voicePolicy?: 'user_audio' | 'model_native' | 'none'
+  voicePolicy?: 'user_audio' | 'model_native' | 'auto_tts' | 'none'
   voiceTextSource?: 'auto' | 'benchmark' | 'manual'
   finalVoiceText?: string
   strictVoiceText?: boolean
