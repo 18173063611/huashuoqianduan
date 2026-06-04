@@ -96,7 +96,7 @@
           <p v-if="inputMode === 'upload' && localUploadMessage" class="success-text">{{ localUploadMessage }}</p>
           <p v-if="inputMode === 'upload' && localUploadError" class="error-text">{{ localUploadError }}</p>
           <p v-if="parseNotice" class="info-text">{{ parseNotice }}</p>
-          <p v-if="parseError && parseStage !== 'error'" class="error-text">{{ parseError }}</p>
+          <p v-if="parseError && parseStage !== 'error' && parseStage !== 'completed'" class="error-text">{{ parseError }}</p>
         </section>
 
         <section class="panel-block">
@@ -1047,7 +1047,15 @@ async function runParseVideo(
       return
     }
     const message = error instanceof Error ? error.message : '请求失败'
-    if (activeParseTaskId && isTransientParseConnectionError(message) && String(parseStage.value) !== 'completed') {
+    if (isTransientParseConnectionError(message) && (String(parseStage.value) === 'completed' || sourceText.value.trim())) {
+      parseStage.value = 'completed'
+      parseError.value = ''
+      if (sourceText.value.trim()) {
+        parseNotice.value = ''
+      }
+      return
+    }
+    if (activeParseTaskId && isTransientParseConnectionError(message)) {
       if (!parseStage.value || parseStage.value === 'error') {
         parseStage.value = douyinParse.value ? 'transcribing' : 'accepted'
       }
