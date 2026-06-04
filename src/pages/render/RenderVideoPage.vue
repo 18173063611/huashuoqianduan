@@ -1045,7 +1045,7 @@
                       </div>
                       <div class="render-form-field">
                         <label>字号</label>
-                        <input v-model.number="carSubtitleFontSize" type="number" min="20" max="120" step="2" :disabled="busy" />
+                        <input v-model.number="carSubtitleFontSize" type="number" min="12" max="96" step="2" :disabled="busy" />
                       </div>
                     </div>
                     <div class="render-color-grid" aria-label="字幕颜色设置">
@@ -2294,6 +2294,7 @@ const carVoiceTextSource = ref<CarVoiceTextSource>('auto')
 const carNativeVoiceLanguage = ref<NativeVoiceLanguage>('zh-CN')
 const carNativeVoiceStyle = ref(DEFAULT_CAR_NATIVE_VOICE_STYLE)
 const carNativeSpeechStyle = ref('natural')
+const DEFAULT_CAR_SUBTITLE_FONT_SIZE = 16
 const carSubtitleMode = ref<CarSubtitleMode>('off')
 const carSubtitleText = ref('')
 const carSubtitleLanguage = ref('zh-CN')
@@ -2301,7 +2302,7 @@ const carSubtitleTimingMode = ref<CarSubtitleTimingMode>('auto')
 const carSyncStrategy = ref<CarSyncStrategy>('auto')
 const carSubtitleFontFamily = ref('Microsoft YaHei')
 const carSubtitlePosition = ref<CarHeadlinePosition>('bottom')
-const carSubtitleFontSize = ref(20)
+const carSubtitleFontSize = ref(DEFAULT_CAR_SUBTITLE_FONT_SIZE)
 const carSubtitleTextColor = ref('#ffffff')
 const carSubtitleOutlineColor = ref('#111111')
 const carHeadlineEnabled = ref(false)
@@ -5817,7 +5818,7 @@ const carSubtitlePreviewText = computed(() => {
 const carSubtitlePreviewStyle = computed(() => ({
   color: carSubtitleTextColor.value,
   fontFamily: carSubtitleFontFamily.value,
-  fontSize: `${Math.max(18, Math.min(44, Math.round(Number(carSubtitleFontSize.value) || 20)))}px`,
+  fontSize: `${Math.max(12, Math.min(36, Math.round(Number(carSubtitleFontSize.value) || DEFAULT_CAR_SUBTITLE_FONT_SIZE)))}px`,
   WebkitTextStroke: `1px ${carSubtitleOutlineColor.value}`,
   textShadow: `0 1px 0 ${carSubtitleOutlineColor.value}, 0 -1px 0 ${carSubtitleOutlineColor.value}, 1px 0 0 ${carSubtitleOutlineColor.value}, -1px 0 0 ${carSubtitleOutlineColor.value}`,
 }))
@@ -5912,7 +5913,7 @@ function buildCarSubtitleOverlayForRequest() {
   return {
     enabled: true,
     fontFamily: carSubtitleFontFamily.value,
-    fontSize: Math.max(20, Math.min(120, Number(carSubtitleFontSize.value) || 20)),
+    fontSize: Math.max(12, Math.min(96, Number(carSubtitleFontSize.value) || DEFAULT_CAR_SUBTITLE_FONT_SIZE)),
     textColor: carSubtitleTextColor.value,
     outlineColor: carSubtitleOutlineColor.value,
     position: carSubtitlePosition.value,
@@ -7979,7 +7980,6 @@ onBeforeUnmount(() => {
 }
 
 .render-optional-group summary::after {
-  content: '展开';
   flex: 0 0 auto;
   border-radius: 999px;
   background: #eef0f6;
@@ -7987,10 +7987,6 @@ onBeforeUnmount(() => {
   padding: 3px 9px;
   font-size: 11px;
   font-weight: 900;
-}
-
-.render-optional-group[open] summary::after {
-  content: '收起';
 }
 
 .render-optional-group summary span {
@@ -8252,15 +8248,13 @@ onBeforeUnmount(() => {
 }
 
 .render-details summary::after {
-  content: '展开';
   flex: 0 0 auto;
-  color: #5e50df;
+  border-radius: 999px;
+  background: #eef0f6;
+  color: #667085;
+  padding: 3px 9px;
   font-size: 12px;
   font-weight: 900;
-}
-
-.render-details[open] summary::after {
-  content: '收起';
 }
 
 .render-details summary small {
@@ -9495,7 +9489,6 @@ onBeforeUnmount(() => {
 }
 
 .render-basis-summary::after {
-  content: '展开';
   flex: 0 0 auto;
   border-radius: 999px;
   background: #eef0f6;
@@ -9505,7 +9498,15 @@ onBeforeUnmount(() => {
   font-weight: 900;
 }
 
-.render-basis-panel[open] .render-basis-summary::after {
+details.render-optional-group:not([open]) > summary::after,
+details.render-details:not([open]) > summary::after,
+details.render-basis-panel:not([open]) > .render-basis-summary::after {
+  content: '展开';
+}
+
+details.render-optional-group[open] > summary::after,
+details.render-details[open] > summary::after,
+details.render-basis-panel[open] > .render-basis-summary::after {
   content: '收起';
 }
 
