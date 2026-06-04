@@ -1045,7 +1045,7 @@
                       </div>
                       <div class="render-form-field">
                         <label>字号</label>
-                        <input v-model.number="carSubtitleFontSize" type="number" min="12" max="96" step="2" :disabled="busy" />
+                        <input v-model.number="carSubtitleFontSize" type="number" min="1" max="96" step="1" :disabled="busy" />
                       </div>
                     </div>
                     <div class="render-color-grid" aria-label="字幕颜色设置">
@@ -2294,7 +2294,7 @@ const carVoiceTextSource = ref<CarVoiceTextSource>('auto')
 const carNativeVoiceLanguage = ref<NativeVoiceLanguage>('zh-CN')
 const carNativeVoiceStyle = ref(DEFAULT_CAR_NATIVE_VOICE_STYLE)
 const carNativeSpeechStyle = ref('natural')
-const DEFAULT_CAR_SUBTITLE_FONT_SIZE = 16
+const DEFAULT_CAR_SUBTITLE_FONT_SIZE = 10
 const carSubtitleMode = ref<CarSubtitleMode>('off')
 const carSubtitleText = ref('')
 const carSubtitleLanguage = ref('zh-CN')
@@ -5818,7 +5818,7 @@ const carSubtitlePreviewText = computed(() => {
 const carSubtitlePreviewStyle = computed(() => ({
   color: carSubtitleTextColor.value,
   fontFamily: carSubtitleFontFamily.value,
-  fontSize: `${Math.max(12, Math.min(36, Math.round(Number(carSubtitleFontSize.value) || DEFAULT_CAR_SUBTITLE_FONT_SIZE)))}px`,
+  fontSize: `${Math.max(1, Math.min(36, Math.round(Number(carSubtitleFontSize.value) || DEFAULT_CAR_SUBTITLE_FONT_SIZE)))}px`,
   WebkitTextStroke: `1px ${carSubtitleOutlineColor.value}`,
   textShadow: `0 1px 0 ${carSubtitleOutlineColor.value}, 0 -1px 0 ${carSubtitleOutlineColor.value}, 1px 0 0 ${carSubtitleOutlineColor.value}, -1px 0 0 ${carSubtitleOutlineColor.value}`,
 }))
@@ -5913,7 +5913,7 @@ function buildCarSubtitleOverlayForRequest() {
   return {
     enabled: true,
     fontFamily: carSubtitleFontFamily.value,
-    fontSize: Math.max(12, Math.min(96, Number(carSubtitleFontSize.value) || DEFAULT_CAR_SUBTITLE_FONT_SIZE)),
+    fontSize: Math.max(1, Math.min(96, Number(carSubtitleFontSize.value) || DEFAULT_CAR_SUBTITLE_FONT_SIZE)),
     textColor: carSubtitleTextColor.value,
     outlineColor: carSubtitleOutlineColor.value,
     position: carSubtitlePosition.value,
