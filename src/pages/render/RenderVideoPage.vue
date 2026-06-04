@@ -2159,8 +2159,8 @@ const carSyncStrategyOptions: Array<{ key: CarSyncStrategy; label: string; hint:
   { key: 'visual_master', label: '画面优先', hint: '保持画面原节奏；外部口播按画面时长兜底处理，自动旁白会优先匹配语速。' },
 ]
 const carSubtitleTimingOptions: Array<{ key: CarSubtitleTimingMode; label: string; hint: string }> = [
-  { key: 'auto', label: '智能字幕', hint: '有最终音轨时优先识别音频时间戳，失败后回退文案时间轴。' },
-  { key: 'audio_recognition', label: '跟随音频', hint: '从最终音轨识别字幕时间戳，适合口播音频已经确定的成片。' },
+  { key: 'auto', label: '智能字幕', hint: '有最终音轨时优先识别音频；模型原生口播会以实际说出的内容生成字幕。' },
+  { key: 'audio_recognition', label: '跟随音频', hint: '从最终音轨识别字幕文本和时间戳，适合口播已经确定的成片。' },
   { key: 'script_timeline', label: '跟随文案', hint: '按分镜和文案权重分配字幕时长，适合无口播或需要文案精修。' },
 ]
 const carHeadlineFontOptions = [
@@ -2945,7 +2945,7 @@ const carVoicePolicyDescription = computed(() => {
     return `本次将先生成无口播画面，再生成统一旁白，并以旁白音频为主控；背景音乐只在用户选择后混入。风格：${carNativeVoiceStyleSummary.value}。`
   }
   if (usesModelNativeVoiceover()) {
-    if (carAudioMode.value === 'model_native') return `模型原生口播镜头：视频模型同时生成画面和口播，适合正脸口播、销售顾问出镜和需要嘴型的镜头；音色和字幕以模型结果为准，BGM 只在用户选择后后期混入。风格：${carNativeVoiceStyleSummary.value}。`
+    if (carAudioMode.value === 'model_native') return `模型原生口播镜头：视频模型同时生成画面和口播，适合正脸口播、销售顾问出镜和需要嘴型的镜头；自动字幕会跟随实际音轨识别，BGM 只在用户选择后后期混入。风格：${carNativeVoiceStyleSummary.value}。`
     if (isMultiCarCompareMode.value) {
       return `将按多车型对比结构生成画面；多段成片会由后端使用单条统一口播音轨，并按分镜总时长自动调整语速。风格：${carNativeVoiceStyleSummary.value}。`
     }
@@ -6910,14 +6910,6 @@ async function applyImportedSourceAssetIds(input: Record<string, unknown>) {
   assets.filter((asset): asset is AssetItem => !!asset).forEach(applyImportedSourceAsset)
 }
 
-type DetailsElementRef = { value: HTMLDetailsElement | null }
-
-function openImportedDetails(target: DetailsElementRef) {
-  if (target.value) {
-    target.value.open = true
-  }
-}
-
 function expandImportedCarSalesDetails() {
   void nextTick(() => {
     [
@@ -6931,7 +6923,11 @@ function expandImportedCarSalesDetails() {
       carMaterialVideoDetailsRef,
       carSalesInfoDetailsRef,
       carAdvancedPromptDetailsRef,
-    ].forEach(openImportedDetails)
+    ].forEach((target) => {
+      if (target.value) {
+        target.value.open = false
+      }
+    })
   })
 }
 
