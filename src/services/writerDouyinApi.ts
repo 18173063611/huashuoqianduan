@@ -16,6 +16,8 @@ export interface StartDouyinParseWithTranscriptOptions {
   sourceType?: string
   filePath?: string
   signal?: AbortSignal
+  idempotencyKey?: string
+  onOpened?: (taskId: number) => void
   onAccepted?: (payload: ApiResponse<DouyinParseWithTranscriptEventPayload>) => void
   onParsed?: (payload: ApiResponse<DouyinParseWithTranscriptEventPayload>) => void
   onTranscribing?: (payload: ApiResponse<DouyinParseWithTranscriptEventPayload>) => void
@@ -44,6 +46,7 @@ export interface ShareVideoDownloadRetry {
 }
 
 const SHARE_VIDEO_DOWNLOAD_MAX_ATTEMPTS = 2
+const PARSE_SSE_MAX_ATTEMPTS = 2
 
 /**
  * POST SSE：`/api/v1/writer/douyin/parse-with-transcript`
@@ -56,73 +59,92 @@ export async function startDouyinParseWithTranscript(options: StartDouyinParseWi
   const url = `${API_BASE_URL}${path}`
 
   const token = getAuthToken()
-  await fetchEventSource(url, {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      Accept: 'text/event-stream',
-      ...(token ? { Authorization: `Bearer ${token}` } : {}),
-    },
-    body: JSON.stringify({
-      ...(options.projectId != null ? { projectId: options.projectId } : {}),
-      ...(platform ? { platform } : {}),
-      ...(options.title?.trim() ? { title: options.title.trim() } : {}),
-      ...(options.sourceType?.trim() ? { sourceType: options.sourceType.trim() } : {}),
-      ...(options.filePath?.trim() ? { filePath: options.filePath.trim() } : {}),
-      url: options.url,
-    }),
-    signal: options.signal,
-    openWhenHidden: true,
-    async onopen(response) {
-      const ct = response.headers.get('content-type') || ''
-      if (response.ok && ct.includes('text/event-stream')) {
-        return
+  const idempotencyKey = options.idempotencyKey?.trim() || newClientIdempotencyKey()
+  let openedTaskId: number | null = null
+
+  for (let attempt = 1; attempt <= PARSE_SSE_MAX_ATTEMPTS; attempt += 1) {
+    try {
+      await fetchEventSource(url, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Accept: 'text/event-stream',
+          'Idempotency-Key': idempotencyKey,
+          ...(token ? { Authorization: `Bearer ${token}` } : {}),
+        },
+        body: JSON.stringify({
+          ...(options.projectId != null ? { projectId: options.projectId } : {}),
+          ...(platform ? { platform } : {}),
+          ...(options.title?.trim() ? { title: options.title.trim() } : {}),
+          ...(options.sourceType?.trim() ? { sourceType: options.sourceType.trim() } : {}),
+          ...(options.filePath?.trim() ? { filePath: options.filePath.trim() } : {}),
+          url: options.url,
+        }),
+        signal: options.signal,
+        openWhenHidden: true,
+        async onopen(response) {
+          const ct = response.headers.get('content-type') || ''
+          if (response.ok && ct.includes('text/event-stream')) {
+            const taskId = parsePositiveInt(response.headers.get('x-task-id') || response.headers.get('X-Task-Id'))
+            if (taskId && taskId !== openedTaskId) {
+              openedTaskId = taskId
+              options.onOpened?.(taskId)
+            }
+            return
+          }
+          const text = await response.text().catch(() => '')
+          throw new Error(text ? `HTTP ${response.status}: ${text}` : `HTTP ${response.status}`)
+        },
+        onmessage(ev) {
+          if (!ev.data) {
+            return
+          }
+          let payload: ApiResponse<DouyinParseWithTranscriptEventPayload>
+          try {
+            payload = JSON.parse(ev.data) as ApiResponse<DouyinParseWithTranscriptEventPayload>
+          } catch {
+            return
+          }
+          if (payload.code !== 0) {
+            options.onErrorEvent?.(payload)
+            return
+          }
+          const stage = payload.data?.stage
+          if (!stage) {
+            return
+          }
+          if (stage === 'accepted') {
+            options.onAccepted?.(payload)
+            return
+          }
+          if (stage === 'parsed') {
+            options.onParsed?.(payload)
+            return
+          }
+          if (stage === 'transcribing') {
+            options.onTranscribing?.(payload)
+            return
+          }
+          if (stage === 'completed') {
+            options.onCompleted?.(payload)
+            return
+          }
+          if (stage === 'error') {
+            options.onErrorEvent?.(payload)
+          }
+        },
+        onerror(err) {
+          throw err instanceof Error ? err : new Error(String(err))
+        },
+      })
+      return
+    } catch (error) {
+      if (options.signal?.aborted || openedTaskId || attempt >= PARSE_SSE_MAX_ATTEMPTS || !isRetryableDownloadError(errorMessage(error))) {
+        throw error
       }
-      const text = await response.text().catch(() => '')
-      throw new Error(text ? `HTTP ${response.status}: ${text}` : `HTTP ${response.status}`)
-    },
-    onmessage(ev) {
-      if (!ev.data) {
-        return
-      }
-      let payload: ApiResponse<DouyinParseWithTranscriptEventPayload>
-      try {
-        payload = JSON.parse(ev.data) as ApiResponse<DouyinParseWithTranscriptEventPayload>
-      } catch {
-        return
-      }
-      if (payload.code !== 0) {
-        options.onErrorEvent?.(payload)
-        return
-      }
-      const stage = payload.data?.stage
-      if (!stage) {
-        return
-      }
-      if (stage === 'accepted') {
-        options.onAccepted?.(payload)
-        return
-      }
-      if (stage === 'parsed') {
-        options.onParsed?.(payload)
-        return
-      }
-      if (stage === 'transcribing') {
-        options.onTranscribing?.(payload)
-        return
-      }
-      if (stage === 'completed') {
-        options.onCompleted?.(payload)
-        return
-      }
-      if (stage === 'error') {
-        options.onErrorEvent?.(payload)
-      }
-    },
-    onerror(err) {
-      throw err instanceof Error ? err : new Error(String(err))
-    },
-  })
+      await sleep(800)
+    }
+  }
 }
 
 /**
@@ -235,6 +257,17 @@ function isRetryableDownloadError(message: string) {
 
 function sleep(ms: number) {
   return new Promise((resolve) => window.setTimeout(resolve, ms))
+}
+
+function newClientIdempotencyKey() {
+  if (typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function') {
+    return crypto.randomUUID()
+  }
+  return `idem-${Date.now()}-${Math.random().toString(36).slice(2, 14)}`
+}
+
+function errorMessage(error: unknown) {
+  return error instanceof Error ? error.message : String(error || '')
 }
 
 async function readDownloadBlob(

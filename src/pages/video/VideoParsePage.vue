@@ -960,6 +960,15 @@ async function runParseVideo(
       sourceType: extra?.sourceType,
       filePath: extra?.filePath,
       signal: parseAbort.value.signal,
+      onOpened(taskId) {
+        if (!isActiveParseRun(runId, taskId)) {
+          return
+        }
+        if (!parseStage.value) {
+          parseStage.value = 'accepted'
+        }
+        rememberParseTask(taskId, runId)
+      },
       onAccepted(payload) {
         if (!isActiveParseRun(runId, payload.data?.taskId)) {
           return
@@ -1037,14 +1046,25 @@ async function runParseVideo(
     if (error instanceof DOMException && error.name === 'AbortError') {
       return
     }
+    const message = error instanceof Error ? error.message : '请求失败'
+    if (activeParseTaskId && isTransientParseConnectionError(message) && String(parseStage.value) !== 'completed') {
+      if (!parseStage.value || parseStage.value === 'error') {
+        parseStage.value = douyinParse.value ? 'transcribing' : 'accepted'
+      }
+      parseError.value = ''
+      parseNotice.value = '连接中断，正在从任务中心同步解析结果…'
+      startParseTaskFallback(activeParseTaskId, runId)
+      return
+    }
     if (!parseStage.value) {
       parseStage.value = 'error'
     }
     parseNotice.value = ''
-    parseError.value = friendlyParseErrorMessage(error instanceof Error ? error.message : '请求失败')
+    parseError.value = friendlyParseErrorMessage(message)
   } finally {
     if (isActiveParseRun(runId)) {
-      parsing.value = false
+      const stage = String(parseStage.value)
+      parsing.value = !!activeParseTaskId && stage !== 'completed' && stage !== 'error'
     }
   }
 }
@@ -1187,6 +1207,10 @@ function isTransientDownloadErrorMessage(message: string) {
     text.includes('premature eof') ||
     text.includes('closed before expected')
   )
+}
+
+function isTransientParseConnectionError(message: string) {
+  return isTransientDownloadErrorMessage(message)
 }
 
 function friendlyParseErrorMessage(message?: string) {
