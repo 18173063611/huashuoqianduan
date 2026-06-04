@@ -328,6 +328,7 @@ const roleOptions: Array<{ value: QuickRenderAssetRole; label: string }> = [
   { value: 'car_interior_dashboard', label: '内饰中控' },
   { value: 'car_interior_front_seat', label: '前排座椅' },
   { value: 'car_interior_back_seat', label: '后排座椅' },
+  { value: 'car_detail_sunroof', label: '天窗细节' },
   { value: 'car_detail_light', label: '车灯细节' },
   { value: 'car_detail_wheel', label: '轮毂细节' },
   { value: 'car_detail_logo', label: '车标细节' },
@@ -1064,6 +1065,7 @@ function inferRoleFromNameAndMime(nameText: string, mimeText: string | null | un
     if (name.includes('side') || name.includes('侧')) return 'car_exterior_side'
     if (name.includes('rear') || name.includes('back') || name.includes('尾')) return 'car_exterior_rear'
     if (name.includes('interior') || name.includes('内饰') || name.includes('dashboard')) return 'car_interior_dashboard'
+    if (name.includes('sunroof') || name.includes('天窗') || name.includes('全景天幕')) return 'car_detail_sunroof'
     if (name.includes('wheel') || name.includes('轮')) return 'car_detail_wheel'
     if (name.includes('logo') || name.includes('标')) return 'car_detail_logo'
     if (name.includes('light') || name.includes('灯')) return 'car_detail_light'

@@ -158,6 +158,9 @@ export function rewriteDouyinCopywriting(body: DouyinRewriteRequest) {
   if (body.style?.trim()) {
     payload.style = body.style.trim()
   }
+  if (body.targetLanguage?.trim()) {
+    payload.targetLanguage = body.targetLanguage.trim()
+  }
   if (body.introduce?.trim()) {
     payload.introduce = body.introduce.trim()
   }

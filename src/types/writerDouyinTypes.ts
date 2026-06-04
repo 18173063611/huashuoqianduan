@@ -50,6 +50,7 @@ export interface DouyinParseTaskResult {
 export interface DouyinRewriteRequest {
   originalText: string
   style?: string
+  targetLanguage?: string
   introduce?: string
 }
 

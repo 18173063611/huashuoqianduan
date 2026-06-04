@@ -119,6 +119,7 @@ export type QuickRenderAssetRole =
   | 'car_interior_dashboard'
   | 'car_interior_front_seat'
   | 'car_interior_back_seat'
+  | 'car_detail_sunroof'
   | 'car_detail_light'
   | 'car_detail_wheel'
   | 'car_detail_logo'

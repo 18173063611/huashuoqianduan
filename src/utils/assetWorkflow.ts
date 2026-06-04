@@ -27,6 +27,7 @@ const ROLE_LABELS: Record<string, string> = {
   car_interior_back_seat: '内饰后排',
   car_interior_steering: '方向盘',
   car_interior_trunk: '后备箱',
+  car_detail_sunroof: '天窗',
   car_detail_light: '车灯',
   car_detail_wheel: '轮毂',
   car_detail_logo: 'Logo',
@@ -80,6 +81,8 @@ const ROLE_ALIASES: Record<string, string> = {
   steering_wheel: 'car_interior_steering',
   trunk: 'car_interior_trunk',
   boot: 'car_interior_trunk',
+  sunroof: 'car_detail_sunroof',
+  panoramic_roof: 'car_detail_sunroof',
   light: 'car_detail_light',
   headlight: 'car_detail_light',
   wheel: 'car_detail_wheel',
@@ -439,6 +442,7 @@ function inferAssetRole(asset: AssetItem, metadata: Record<string, unknown> | nu
     if (name.includes('back_seat') || name.includes('rear_seat') || name.includes('后排')) return 'car_interior_back_seat'
     if (name.includes('steering') || name.includes('方向盘')) return 'car_interior_steering'
     if (name.includes('trunk') || name.includes('后备箱')) return 'car_interior_trunk'
+    if (name.includes('sunroof') || name.includes('panoramic_roof') || name.includes('天窗') || name.includes('全景天幕')) return 'car_detail_sunroof'
     if (name.includes('wheel') || name.includes('轮毂') || name.includes('轮胎')) return 'car_detail_wheel'
     if (name.includes('logo') || name.includes('车标') || name.includes('标识')) return 'car_detail_logo'
     if (name.includes('light') || name.includes('灯')) return 'car_detail_light'

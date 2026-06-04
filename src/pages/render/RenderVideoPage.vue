@@ -1873,6 +1873,7 @@ const CAR_MATERIAL_TARGETS: Array<{ role: string; label: string; group: CarMater
   { role: 'car_interior_back_seat', label: '后排', group: 'interior' },
   { role: 'car_interior_steering', label: '方向盘', group: 'interior' },
   { role: 'car_interior_trunk', label: '后备箱', group: 'interior' },
+  { role: 'car_detail_sunroof', label: '天窗', group: 'detail' },
   { role: 'car_detail_light', label: '车灯', group: 'detail' },
   { role: 'car_detail_wheel', label: '轮毂', group: 'detail' },
   { role: 'car_detail_logo', label: 'Logo', group: 'detail' },
@@ -1991,6 +1992,8 @@ const CAR_ASSET_ROLE_ALIASES: Record<string, string> = {
   dashboard_wheel: 'car_interior_dashboard',
   trunk: 'car_interior_trunk',
   boot: 'car_interior_trunk',
+  sunroof: 'car_detail_sunroof',
+  panoramic_roof: 'car_detail_sunroof',
   light: 'car_detail_light',
   headlight: 'car_detail_light',
   wheel: 'car_detail_wheel',
@@ -2017,7 +2020,7 @@ const CAR_ASSET_ROLE_ALIASES: Record<string, string> = {
 const CAR_SCENE_ROLE_PRIORITY: string[][] = [
   ['car_exterior_front', 'car_exterior_side', 'car_exterior_45', 'car_exterior_rear'],
   ['car_interior_dashboard', 'car_interior_front_seat', 'car_interior_back_seat', 'car_interior_steering'],
-  ['car_detail_light', 'car_detail_wheel', 'car_detail_logo', 'car_detail_seat_material'],
+  ['car_detail_light', 'car_detail_wheel', 'car_detail_sunroof', 'car_detail_logo', 'car_detail_seat_material'],
   ['scene_showroom', 'car_exterior_front', 'host_image', 'car_exterior_side'],
   ['scene_outdoor', 'scene_road', 'scene_night', 'car_exterior_side', 'car_exterior_45'],
   ['car_detail_logo', 'car_detail_light', 'car_exterior_rear', 'scene_showroom'],
@@ -2046,7 +2049,8 @@ const CAR_WORKFLOW_ASSET_ROLES = [
 const CAR_SCENE_KEYWORD_ROLES: Array<{ keywords: string[]; roles: string[] }> = [
   { keywords: ['方向盘'], roles: ['car_interior_steering'] },
   { keywords: ['内饰', '座椅', '中控', '空间', '前排', '后排', '仪表', '后备箱'], roles: ['car_interior_dashboard', 'car_interior_front_seat', 'car_interior_back_seat', 'car_interior_trunk'] },
-  { keywords: ['车灯', '灯光', '轮毂', 'logo', '标识', '细节', '材质'], roles: ['car_detail_light', 'car_detail_wheel', 'car_detail_logo', 'car_detail_seat_material'] },
+  { keywords: ['天窗', '全景天幕'], roles: ['car_detail_sunroof'] },
+  { keywords: ['车灯', '灯光', '轮毂', 'logo', '标识', '细节', '材质'], roles: ['car_detail_light', 'car_detail_wheel', 'car_detail_sunroof', 'car_detail_logo', 'car_detail_seat_material'] },
   { keywords: ['展厅', '门店', '到店', '试驾', '邀约', '销售顾问'], roles: ['scene_showroom', 'car_exterior_front', 'host_image'] },
   { keywords: ['户外', '城市', '公路', '道路', '山路', '夜景', '通勤', '出行'], roles: ['scene_outdoor', 'scene_road', 'scene_night', 'car_exterior_side'] },
   { keywords: ['外观', '车头', '车身', '正面', '侧面', '背面'], roles: ['car_exterior_front', 'car_exterior_side', 'car_exterior_45', 'car_exterior_rear'] },
@@ -2069,6 +2073,12 @@ const CAR_FUNCTION_REFERENCE_HINTS: Array<{
     label: '轮毂/轮胎/底盘展示',
     keywords: ['轮毂', '轮胎', '刹车', '卡钳', '底盘', '悬架', '悬挂'],
     roles: ['car_detail_wheel'],
+  },
+  {
+    key: 'sunroof',
+    label: '天窗/采光展示',
+    keywords: ['天窗', '全景天窗', '全景天幕', '采光', '遮阳帘', 'sunroof', 'panoramic roof'],
+    roles: ['car_detail_sunroof'],
   },
   {
     key: 'cockpit',
@@ -2294,7 +2304,7 @@ const carVoiceTextSource = ref<CarVoiceTextSource>('auto')
 const carNativeVoiceLanguage = ref<NativeVoiceLanguage>('zh-CN')
 const carNativeVoiceStyle = ref(DEFAULT_CAR_NATIVE_VOICE_STYLE)
 const carNativeSpeechStyle = ref('natural')
-const DEFAULT_CAR_SUBTITLE_FONT_SIZE = 10
+const DEFAULT_CAR_SUBTITLE_FONT_SIZE = 20
 const carSubtitleMode = ref<CarSubtitleMode>('off')
 const carSubtitleText = ref('')
 const carSubtitleLanguage = ref('zh-CN')
@@ -3440,6 +3450,7 @@ function inferCarAssetRoleFromAsset(asset: AssetItem, metadata: Record<string, u
   if (name.includes('back_seat') || name.includes('rear_seat') || name.includes('后排')) return 'car_interior_back_seat'
   if (name.includes('steering') || name.includes('方向盘')) return 'car_interior_steering'
   if (name.includes('trunk') || name.includes('后备箱')) return 'car_interior_trunk'
+  if (name.includes('sunroof') || name.includes('panoramic_roof') || name.includes('天窗') || name.includes('全景天幕')) return 'car_detail_sunroof'
   if (name.includes('wheel') || name.includes('轮毂') || name.includes('轮胎')) return 'car_detail_wheel'
   if (name.includes('logo') || name.includes('车标') || name.includes('标识')) return 'car_detail_logo'
   if (name.includes('light') || name.includes('灯')) return 'car_detail_light'
@@ -4590,10 +4601,10 @@ function storyboardIntentText(text: string) {
   const add = (label: string) => {
     if (!intents.includes(label)) intents.push(label)
   }
-  if (['内饰', '座椅', '中控', '空间', '前排', '后排', '方向盘', '仪表', '后备箱', 'interior', 'seat', 'dashboard', 'trunk'].some((keyword) => value.includes(keyword))) {
+  if (['内饰', '座椅', '中控', '空间', '前排', '后排', '方向盘', '仪表', '后备箱', '天窗', 'interior', 'seat', 'dashboard', 'trunk', 'sunroof'].some((keyword) => value.includes(keyword))) {
     add('展示车辆内饰空间与舒适配置')
   }
-  if (['车灯', '灯光', '轮毂', 'logo', '标识', '细节', '材质', 'light', 'wheel', 'detail'].some((keyword) => value.includes(keyword))) {
+  if (['车灯', '灯光', '轮毂', '天窗', 'logo', '标识', '细节', '材质', 'light', 'wheel', 'sunroof', 'detail'].some((keyword) => value.includes(keyword))) {
     add('展示车辆细节特写')
   }
   if (['外观', '车头', '车身', '整车', '正面', '侧面', '背面', '环绕', 'exterior', 'front', 'side', 'rear'].some((keyword) => value.includes(keyword))) {
@@ -4670,8 +4681,8 @@ function storyboardShotPlanText(text: string, idx: number, total: number) {
   const value = text.toLowerCase()
   const safeTotal = Math.max(1, total || 1)
   const safeIndex = Math.max(1, Math.min(idx + 1, safeTotal))
-  const interior = containsAnyText(value, ['内饰', '座椅', '中控', '空间', '前排', '后排', '方向盘', '仪表', '后备箱', 'interior', 'seat', 'dashboard', 'trunk'])
-  const detail = containsAnyText(value, ['车灯', '灯光', '轮毂', 'logo', '标识', '细节', '材质', '特写', 'light', 'wheel', 'detail', 'close', 'macro'])
+  const interior = containsAnyText(value, ['内饰', '座椅', '中控', '空间', '前排', '后排', '方向盘', '仪表', '后备箱', '天窗', 'interior', 'seat', 'dashboard', 'trunk', 'sunroof'])
+  const detail = containsAnyText(value, ['车灯', '灯光', '轮毂', '天窗', 'logo', '标识', '细节', '材质', '特写', 'light', 'wheel', 'sunroof', 'detail', 'close', 'macro'])
   const exterior = containsAnyText(value, ['外观', '车头', '车身', '整车', '正面', '侧面', '背面', '环绕', 'exterior', 'front', 'side', 'rear'])
   const conversion = containsAnyText(value, ['展厅', '门店', '到店', '试驾', '邀约', '联系', '咨询', '转化', '优惠', 'showroom', 'store', 'dealer', 'cta'])
   const lifestyle = containsAnyText(value, ['户外', '城市', '公路', '道路', '山路', '夜景', '通勤', '出行', '家庭', 'road', 'city', 'outdoor', 'night', 'drive'])
@@ -4719,7 +4730,7 @@ function storyboardShotPlanText(text: string, idx: number, total: number) {
           : '车辆主体居中偏三分线，保留车身比例'
 
   const subjectAction = detail
-    ? '锁定灯组、轮毂、Logo、材质或车漆反光之一'
+    ? '锁定灯组、轮毂、天窗、Logo、材质或车漆反光之一'
     : interior
       ? '从中控、座椅或后排空间掠过'
       : lifestyle
@@ -6136,7 +6147,7 @@ function buildCarSalesScenes(): CarSalesSceneDraft[] {
     '展示座椅、后排腿部空间、储物和乘坐舒适性，镜头从座椅延伸到空间纵深。',
     '突出动力、智能、安全、油耗/续航或核心配置卖点，画面干净有销售说服力。',
     '展示城市通勤、家庭出行或周末短途场景，让车辆与真实生活需求结合。',
-    '用车灯、轮毂、Logo、座椅材质或车漆反光做特写，镜头稳定停留在一个细节重点。',
+    '用车灯、轮毂、天窗、Logo、座椅材质或车漆反光做特写，镜头稳定停留在一个细节重点。',
     '展示试驾邀约、到店权益、咨询引导和成交氛围，车辆仍是画面主角。',
     '展示辅助驾驶、屏幕交互、安全配置或舒适配置的视觉化表达。',
     '展示车尾、尾灯、后备箱或车身侧后方，作为视觉收束并承接下一段。',

@@ -70,7 +70,7 @@
             </div>
           </template>
 
-          <div v-else class="upload-parse-panel">
+          <div v-else class="upload-parse-panel" :class="{ 'has-cancel': uploadingLocalVideo }">
             <label class="video-upload-picker" :class="{ disabled: uploadingLocalVideo || parsing }">
               <input
                 type="file"
@@ -89,6 +89,15 @@
               @click="handleParseUploadedVideo"
             >
               {{ parsing ? '解析中' : '解析上传视频' }}
+            </button>
+            <button
+              v-if="uploadingLocalVideo"
+              class="secondary-button upload-cancel-button"
+              type="button"
+              :disabled="parsing"
+              @click="handleCancelLocalUpload"
+            >
+              取消
             </button>
           </div>
           <p v-if="inputMode === 'link' && downloadMessage" class="success-text">{{ downloadMessage }}</p>
@@ -188,8 +197,7 @@
                     :class="{ active: rewriteTab === 'ai' }"
                     @click="rewriteTab = 'ai'"
                   >
-                    <span aria-hidden="true">⌁</span>
-                    AI 智能改写
+                    AI分类改写
                   </button>
                   <button
                     type="button"
@@ -210,7 +218,7 @@
               <div v-show="rewriteTab === 'ai'" class="tab-panel ai-rewrite-shell">
                 <div class="style-tools style-tools-row">
                   <label>
-                    改写风格 <span class="tag-muted">（可选）</span>
+                    改写分类 <span class="tag-muted">（可选）</span>
                     <select
                       v-model="rewriteStyle"
                       class="rewrite-style-select"
@@ -219,6 +227,25 @@
                       <option value="">不指定</option>
                       <option value="口语化风格">口语化风格</option>
                       <option value="专业讲解风格">专业讲解风格</option>
+                      <option value="强促销转化">强促销转化</option>
+                      <option value="情绪递进">情绪递进</option>
+                      <option value="爆款短视频口播">爆款短视频口播</option>
+                      <option value="卖点提炼">卖点提炼</option>
+                      <option value="外贸客户沟通">外贸客户沟通</option>
+                      <option value="汽车销售顾问">汽车销售顾问</option>
+                      <option value="高端质感">高端质感</option>
+                      <option value="简洁自然">简洁自然</option>
+                    </select>
+                  </label>
+                  <label>
+                    输出语言
+                    <select
+                      v-model="rewriteTargetLanguage"
+                      class="rewrite-style-select"
+                      :disabled="transcriptAreaReadonly"
+                    >
+                      <option value="中文">中文</option>
+                      <option value="英文">英文</option>
                     </select>
                   </label>
                 </div>
@@ -325,18 +352,30 @@
 import { computed, onBeforeUnmount, ref, watch } from 'vue'
 import { downloadShareVideo, rewriteDouyinCopywriting, startDouyinParseWithTranscript } from '../../services/writerDouyinApi'
 import { API_BASE_URL, API_ORIGIN } from '../../services/request'
-import { uploadFile } from '../../services/uploadApi'
 import type {
   DouyinParseStage,
   DouyinParseTaskResult,
   DouyinVideoParseResponse,
   DouyinRewriteWriterVO,
 } from '../../types/writerDouyinTypes'
+import {
+  cancelVideoParseLocalUpload,
+  clearVideoParseLocalUploadNotice,
+  localUploadError,
+  localUploadMessage,
+  localVideoFileName,
+  localVideoFilePath,
+  localVideoPreviewUrl,
+  resetVideoParseLocalUpload,
+  startVideoParseLocalUpload,
+  uploadingLocalVideo,
+} from '../../stores/videoParseLocalUploadState'
 import { rememberSessionTaskId } from '../../services/sessionTaskStore'
 import { trackTaskResult } from '../../services/taskRealtime'
 import BillingEstimateBanner from '../../components/business/BillingEstimateBanner.vue'
 import { useBillingEstimate } from '../../composables/useBillingEstimate'
 import { useSmoothTaskProgress } from '../../composables/useSmoothTaskProgress'
+import { normalizePublicMediaUrl } from '../../utils/mediaUrl'
 
 // 抖音解析 / 爆款对标：核心计费动作是 VIDEO_PARSE（视频理解）。
 const parseEstimate = useBillingEstimate({ taskType: 'VIDEO_PARSE' })
@@ -433,13 +472,8 @@ const downloadReceivedBytes = ref(0)
 const downloadTotalBytes = ref<number | null>(null)
 const downloadProgressPercent = ref<number | null>(null)
 const platformAutoHint = ref('')
-const uploadingLocalVideo = ref(false)
-const localVideoFileName = ref('')
-const localVideoPreviewUrl = ref('')
-const localVideoFilePath = ref('')
-const localUploadError = ref('')
-const localUploadMessage = ref('')
 const rewriteStyle = ref('')
+const rewriteTargetLanguage = ref('中文')
 const rewriteTab = ref<'ai' | 'custom'>('ai')
 const rewriteIntroduce = ref('')
 const extraNotesExpanded = ref(false)
@@ -456,7 +490,6 @@ let parseRunSeq = 0
 let activeParseTaskId: number | null = null
 let trackedParseTaskId: number | null = null
 let stopRewriteTracking: (() => void) | null = null
-let localUploadRequestSeq = 0
 
 const LOCAL_VIDEO_MAX_BYTES = 100 * 1024 * 1024
 
@@ -690,13 +723,6 @@ function isCoverLikeUrl(url: string) {
   )
 }
 
-function normalizePublicMediaUrl(url: string) {
-  const trimmed = url.trim()
-  if (!trimmed) return ''
-  if (isHttpUrl(trimmed)) return trimmed
-  return trimmed.startsWith('/') ? `${API_ORIGIN}${trimmed}` : `${API_ORIGIN}/${trimmed}`
-}
-
 function formatFileSize(size: number) {
   if (size < 1024) {
     return `${size} B`
@@ -747,7 +773,7 @@ function switchInputMode(mode: 'link' | 'upload') {
   downloadMessage.value = ''
   platformAutoHint.value = ''
   resetDownloadProgress()
-  localUploadError.value = ''
+  clearVideoParseLocalUploadNotice()
 }
 
 function resetParseWorkflowState() {
@@ -770,19 +796,14 @@ function resetParseWorkflowState() {
   activeParseTaskId = null
 }
 
-async function handleLocalVideoChange(event: Event) {
+function handleLocalVideoChange(event: Event) {
   const input = event.target as HTMLInputElement
   const file = input.files?.[0] ?? null
-  const requestId = ++localUploadRequestSeq
 
   parseAbort.value?.abort()
   stopParseTask()
   resetParseWorkflowState()
-  localVideoFileName.value = ''
-  localVideoPreviewUrl.value = ''
-  localVideoFilePath.value = ''
-  localUploadError.value = ''
-  localUploadMessage.value = ''
+  resetVideoParseLocalUpload({ abort: true })
   downloadError.value = ''
   downloadMessage.value = ''
   resetDownloadProgress()
@@ -801,31 +822,12 @@ async function handleLocalVideoChange(event: Event) {
     return
   }
 
-  localVideoFileName.value = `${file.name}（${formatFileSize(file.size)}）`
-  uploadingLocalVideo.value = true
+  startVideoParseLocalUpload(file, `${file.name}（${formatFileSize(file.size)}）`)
+  input.value = ''
+}
 
-  try {
-    const uploaded = await uploadFile(file)
-    if (requestId !== localUploadRequestSeq) {
-      return
-    }
-    localVideoPreviewUrl.value = normalizePublicMediaUrl(uploaded.previewUrl)
-    localVideoFilePath.value = uploaded.filePath || ''
-    localUploadMessage.value = `${uploaded.originalFileName || file.name} 已上传，可开始解析`
-  } catch (error) {
-    if (requestId !== localUploadRequestSeq) {
-      return
-    }
-    localUploadError.value = error instanceof Error ? error.message : '上传失败'
-    localVideoFileName.value = ''
-    localVideoPreviewUrl.value = ''
-    localVideoFilePath.value = ''
-    input.value = ''
-  } finally {
-    if (requestId === localUploadRequestSeq) {
-      uploadingLocalVideo.value = false
-    }
-  }
+function handleCancelLocalUpload() {
+  cancelVideoParseLocalUpload()
 }
 
 async function handleParseUploadedVideo() {
@@ -1279,6 +1281,7 @@ async function handleDouyinRewrite() {
     const task = await rewriteDouyinCopywriting({
       originalText,
       style: rewriteStyle.value.trim() || undefined,
+      targetLanguage: rewriteTargetLanguage.value,
       introduce: rewriteIntroduce.value.trim() || undefined,
     })
     rememberSessionTaskId(task.taskId)
@@ -1567,6 +1570,10 @@ function applyScript() {
   align-items: stretch;
 }
 
+.upload-parse-panel.has-cancel {
+  grid-template-columns: minmax(0, 1fr) 128px 72px;
+}
+
 .video-upload-picker {
   display: flex;
   min-width: 0;
@@ -1609,6 +1616,11 @@ function applyScript() {
 
 .upload-parse-button {
   min-height: 52px;
+}
+
+.upload-cancel-button {
+  min-height: 52px;
+  padding: 0 12px;
 }
 
 .parse-row input,
@@ -2296,7 +2308,8 @@ function applyScript() {
     grid-template-columns: 1fr;
   }
 
-  .upload-parse-panel {
+  .upload-parse-panel,
+  .upload-parse-panel.has-cancel {
     grid-template-columns: 1fr;
   }
 

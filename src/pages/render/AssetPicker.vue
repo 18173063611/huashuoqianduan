@@ -396,6 +396,7 @@ const ASSET_ROLE_LABELS: Record<string, string> = {
   car_interior_back_seat: '内饰后排',
   car_interior_steering: '方向盘',
   car_interior_trunk: '后备箱',
+  car_detail_sunroof: '天窗',
   car_detail_light: '车灯',
   car_detail_wheel: '轮毂',
   car_detail_logo: 'Logo',
