@@ -102,6 +102,24 @@
           </div>
           <p v-if="inputMode === 'link' && downloadMessage" class="success-text">{{ downloadMessage }}</p>
           <p v-if="inputMode === 'link' && downloadError" class="error-text">{{ downloadError }}</p>
+          <div
+            v-if="inputMode === 'upload' && (uploadingLocalVideo || localUploadProgressText)"
+            class="local-upload-progress"
+          >
+            <div
+              class="local-upload-progress-track"
+              role="progressbar"
+              :aria-valuemin="0"
+              :aria-valuemax="100"
+              :aria-valuenow="localUploadProgressPercent ?? 0"
+            >
+              <div
+                class="local-upload-progress-fill"
+                :style="{ width: `${localUploadProgressPercent ?? 8}%` }"
+              />
+            </div>
+            <span>{{ localUploadProgressText || '正在上传视频' }}</span>
+          </div>
           <p v-if="inputMode === 'upload' && localUploadMessage" class="success-text">{{ localUploadMessage }}</p>
           <p v-if="inputMode === 'upload' && localUploadError" class="error-text">{{ localUploadError }}</p>
           <p v-if="parseNotice" class="info-text">{{ parseNotice }}</p>
@@ -363,6 +381,8 @@ import {
   clearVideoParseLocalUploadNotice,
   localUploadError,
   localUploadMessage,
+  localUploadProgressPercent,
+  localUploadProgressText,
   localVideoFileName,
   localVideoFilePath,
   localVideoPreviewUrl,
@@ -1621,6 +1641,29 @@ function applyScript() {
 .upload-cancel-button {
   min-height: 52px;
   padding: 0 12px;
+}
+
+.local-upload-progress {
+  display: grid;
+  gap: 7px;
+  margin-top: 10px;
+  color: #4d5f7c;
+  font-size: 12px;
+  font-weight: 800;
+}
+
+.local-upload-progress-track {
+  height: 7px;
+  overflow: hidden;
+  border-radius: 999px;
+  background: #edf1f8;
+}
+
+.local-upload-progress-fill {
+  height: 100%;
+  border-radius: inherit;
+  background: linear-gradient(90deg, #6f5cff, #21b08a);
+  transition: width 180ms ease;
 }
 
 .parse-row input,

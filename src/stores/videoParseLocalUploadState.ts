@@ -8,6 +8,8 @@ export const localVideoPreviewUrl = ref('')
 export const localVideoFilePath = ref('')
 export const localUploadError = ref('')
 export const localUploadMessage = ref('')
+export const localUploadProgressPercent = ref<number | null>(null)
+export const localUploadProgressText = ref('')
 
 let uploadSeq = 0
 let uploadAbort: AbortController | null = null
@@ -23,6 +25,8 @@ export function resetVideoParseLocalUpload(options: { abort?: boolean } = {}) {
   localVideoFilePath.value = ''
   localUploadError.value = ''
   localUploadMessage.value = ''
+  localUploadProgressPercent.value = null
+  localUploadProgressText.value = ''
 }
 
 export function clearVideoParseLocalUploadNotice() {
@@ -41,6 +45,8 @@ export function cancelVideoParseLocalUpload() {
   localVideoFilePath.value = ''
   localUploadMessage.value = ''
   localUploadError.value = localVideoFileName.value ? '已取消上传' : ''
+  localUploadProgressPercent.value = null
+  localUploadProgressText.value = ''
 }
 
 export function startVideoParseLocalUpload(file: File, displayName: string) {
@@ -56,9 +62,26 @@ export function startVideoParseLocalUpload(file: File, displayName: string) {
   localVideoFilePath.value = ''
   localUploadError.value = ''
   localUploadMessage.value = ''
+  localUploadProgressPercent.value = 0
+  localUploadProgressText.value = '准备上传'
   uploadingLocalVideo.value = true
 
-  void uploadFile(file, { signal: controller.signal })
+  void uploadFile(file, {
+    signal: controller.signal,
+    storage: 'local',
+    onProgress(progress) {
+      if (requestId !== uploadSeq) {
+        return
+      }
+      localUploadProgressPercent.value = progress.percent
+      localUploadProgressText.value =
+        progress.phase === 'processing'
+          ? '上传完成，正在保存视频'
+          : progress.percent == null
+            ? '正在上传视频'
+            : `正在上传视频 ${progress.percent}%`
+    },
+  })
     .then((uploaded) => {
       if (requestId !== uploadSeq) {
         return
@@ -66,6 +89,8 @@ export function startVideoParseLocalUpload(file: File, displayName: string) {
       localVideoPreviewUrl.value = normalizePublicMediaUrl(uploaded.previewUrl)
       localVideoFilePath.value = uploaded.filePath || ''
       localUploadMessage.value = `${uploaded.originalFileName || file.name} 已上传，可开始解析`
+      localUploadProgressPercent.value = 100
+      localUploadProgressText.value = ''
     })
     .catch((error) => {
       if (requestId !== uploadSeq) {
@@ -79,6 +104,8 @@ export function startVideoParseLocalUpload(file: File, displayName: string) {
       localVideoPreviewUrl.value = ''
       localVideoFilePath.value = ''
       localUploadMessage.value = ''
+      localUploadProgressPercent.value = null
+      localUploadProgressText.value = ''
     })
     .finally(() => {
       if (requestId !== uploadSeq) {
