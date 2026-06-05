@@ -93,6 +93,20 @@
             </span>
           </label>
 
+          <div
+            v-if="uploadProgressPercent !== null || uploadProgressText"
+            class="storyboard-upload-progress"
+            aria-live="polite"
+          >
+            <div class="storyboard-upload-progress-track">
+              <span
+                class="storyboard-upload-progress-fill"
+                :style="{ width: `${uploadProgressPercent ?? 12}%` }"
+              />
+            </div>
+            <span>{{ uploadProgressText || '上传完成' }}</span>
+          </div>
+
           <div class="storyboard-actions">
             <button
               class="app-primary-button"
@@ -218,9 +232,9 @@
 import { computed, onBeforeUnmount, ref, watch } from 'vue'
 import { uploadFile } from '../../services/uploadApi'
 import { analyzeVideoScript, analyzeVideoScriptByUrl } from '../../services/videoApi'
-import { API_ORIGIN } from '../../services/request'
 import { rememberSessionTaskId } from '../../services/sessionTaskStore'
 import { trackTaskResult } from '../../services/taskRealtime'
+import { normalizePublicMediaUrl } from '../../utils/mediaUrl'
 import type { VideoScriptAnalyzeResult, VideoScriptShotItem } from '../../types/videoTypes'
 import type { TaskItem } from '../../types/taskTypes'
 import BillingEstimateBanner from '../../components/business/BillingEstimateBanner.vue'
@@ -307,16 +321,20 @@ const errorMessage = ref('')
 const stage = ref('')
 const busy = ref(false)
 const uploadingFile = ref(false)
+const uploadProgressPercent = ref<number | null>(null)
+const uploadProgressText = ref('')
 let stopAnalyzeTracking: (() => void) | null = null
 let uploadRequestId = 0
+let uploadAbort: AbortController | null = null
 
 onBeforeUnmount(() => {
   stopAnalyzeTask()
+  uploadAbort?.abort()
 })
 
 const busyLabel = computed(() => {
   if (uploadingFile.value) {
-    return '上传中…'
+    return uploadProgressText.value || '上传中…'
   }
   if (!busy.value) {
     return '开始解析'
@@ -404,6 +422,19 @@ watch(videoUrl, (value) => {
   }
 })
 
+watch(sourceMode, (mode) => {
+  if (mode !== 'url' || !uploadingFile.value) {
+    return
+  }
+  uploadRequestId += 1
+  uploadAbort?.abort()
+  uploadAbort = null
+  uploadingFile.value = false
+  uploadProgressPercent.value = null
+  uploadProgressText.value = ''
+  stage.value = ''
+})
+
 function detectPlatformFromText(value: string) {
   const text = value.toLowerCase()
   if (!text.trim()) return ''
@@ -422,37 +453,69 @@ async function handleFileChange(event: Event) {
   const input = event.target as HTMLInputElement
   const file = input.files?.[0] ?? null
   const currentRequestId = ++uploadRequestId
+  uploadAbort?.abort()
   selectedFile.value = file
   uploadedPreviewUrl.value = ''
   errorMessage.value = ''
+  uploadProgressPercent.value = null
+  uploadProgressText.value = ''
 
   if (!file) {
     stage.value = ''
     return
   }
 
+  const controller = new AbortController()
+  uploadAbort = controller
   uploadingFile.value = true
-  stage.value = '上传视频中…'
+  uploadProgressPercent.value = 0
+  uploadProgressText.value = '准备上传'
+  stage.value = '准备上传视频…'
 
   try {
-    const uploaded = await uploadFile(file)
+    const uploaded = await uploadFile(file, {
+      signal: controller.signal,
+      storage: 'local',
+      onProgress(progress) {
+        if (currentRequestId !== uploadRequestId) {
+          return
+        }
+        uploadProgressPercent.value = progress.percent
+        uploadProgressText.value =
+          progress.phase === 'processing'
+            ? '上传完成，正在保存视频'
+            : progress.percent == null
+              ? '正在上传视频'
+              : `正在上传视频 ${progress.percent}%`
+        stage.value = uploadProgressText.value
+      },
+    })
     if (currentRequestId !== uploadRequestId) {
       return
     }
-    uploadedPreviewUrl.value = uploaded.previewUrl.startsWith('http')
-      ? uploaded.previewUrl
-      : `${uploaded.previewUrl}`
+    uploadedPreviewUrl.value = normalizePublicMediaUrl(uploaded.previewUrl)
+    uploadProgressPercent.value = 100
+    uploadProgressText.value = ''
     stage.value = ''
   } catch (error) {
     if (currentRequestId !== uploadRequestId) {
       return
     }
-    errorMessage.value = error instanceof Error ? error.message : '上传失败'
+    if (error instanceof DOMException && error.name === 'AbortError') {
+      errorMessage.value = ''
+    } else {
+      errorMessage.value = error instanceof Error ? error.message : '上传失败'
+    }
     input.value = ''
+    uploadProgressPercent.value = null
+    uploadProgressText.value = ''
     stage.value = ''
   } finally {
     if (currentRequestId === uploadRequestId) {
       uploadingFile.value = false
+      if (uploadAbort === controller) {
+        uploadAbort = null
+      }
     }
   }
 }
@@ -537,16 +600,7 @@ function statusStage(status: string, progress: number | null) {
 }
 
 function publicVideoUrl(url: string) {
-  if (!url) {
-    return ''
-  }
-  if (url.startsWith('http')) {
-    return url
-  }
-  if (url.startsWith('/')) {
-    return `${API_ORIGIN}${url}`
-  }
-  return `${API_ORIGIN}/${url}`
+  return normalizePublicMediaUrl(url)
 }
 
 async function handleAnalyzeUrl() {
@@ -769,6 +823,35 @@ async function handleAnalyzeFile() {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+
+.storyboard-upload-progress {
+  display: grid;
+  gap: 7px;
+  padding: 9px 10px;
+  border: 1px solid #e3dcff;
+  border-radius: 8px;
+  background: #fbfaff;
+  color: #5e50df;
+  font-size: 12.5px;
+  font-weight: 800;
+}
+
+.storyboard-upload-progress-track {
+  position: relative;
+  height: 7px;
+  overflow: hidden;
+  border-radius: 999px;
+  background: #eceff7;
+}
+
+.storyboard-upload-progress-fill {
+  position: absolute;
+  inset: 0 auto 0 0;
+  min-width: 8px;
+  border-radius: inherit;
+  background: #715cff;
+  transition: width 160ms ease;
 }
 
 .storyboard-hint {
