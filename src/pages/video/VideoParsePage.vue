@@ -11,8 +11,22 @@
             :steps="parseEstimate.steps.value"
           />
           <div class="source-tabs" role="tablist" aria-label="解析来源">
-            <button type="button" :class="{ active: inputMode === 'link' }" @click="switchInputMode('link')">链接解析</button>
-            <button type="button" :class="{ active: inputMode === 'upload' }" @click="switchInputMode('upload')">本地上传</button>
+            <button
+              type="button"
+              :class="{ active: inputMode === 'link' }"
+              :disabled="parsing || parseCanceling || uploadingLocalVideo"
+              @click="switchInputMode('link')"
+            >
+              链接解析
+            </button>
+            <button
+              type="button"
+              :class="{ active: inputMode === 'upload' }"
+              :disabled="parsing || parseCanceling || uploadingLocalVideo"
+              @click="switchInputMode('upload')"
+            >
+              本地上传
+            </button>
           </div>
 
           <template v-if="inputMode === 'link'">
@@ -22,6 +36,7 @@
                 :key="option.value"
                 type="button"
                 :class="{ active: selectedPlatform === option.value }"
+                :disabled="parsing || parseCanceling"
                 @click="selectPlatform(option.value)"
               >
                 {{ option.label }}
@@ -30,7 +45,7 @@
             <p class="platform-note">{{ selectedPlatformNote }}</p>
             <p v-if="selectedPlatformLimitReason" class="platform-limit-note">{{ selectedPlatformLimitReason }}</p>
             <p v-if="platformAutoHint" class="platform-auto-hint">{{ platformAutoHint }}</p>
-            <div class="parse-row">
+            <div class="parse-row" :class="{ 'has-cancel': parsing || parseCanceling }">
               <input v-model.trim="videoUrl" :placeholder="videoPlaceholder" />
               <button
                 class="primary-button"
@@ -49,6 +64,15 @@
                 @click="handleDownloadVideo"
               >
                 {{ downloading ? '下载中' : '下载视频' }}
+              </button>
+              <button
+                v-if="parsing || parseCanceling"
+                class="secondary-button parse-cancel-button"
+                type="button"
+                :disabled="parseCanceling"
+                @click="handleCancelParse"
+              >
+                {{ parseCanceling ? '取消中' : '取消' }}
               </button>
             </div>
             <div v-if="downloading || downloadProgressText" class="download-progress-panel" role="status">
@@ -70,7 +94,7 @@
             </div>
           </template>
 
-          <div v-else class="upload-parse-panel" :class="{ 'has-cancel': uploadingLocalVideo }">
+          <div v-else class="upload-parse-panel" :class="{ 'has-cancel': uploadingLocalVideo || parsing || parseCanceling }">
             <label class="video-upload-picker" :class="{ disabled: uploadingLocalVideo || parsing }">
               <input
                 type="file"
@@ -98,6 +122,15 @@
               @click="handleCancelLocalUpload"
             >
               取消
+            </button>
+            <button
+              v-if="parsing || parseCanceling"
+              class="secondary-button upload-cancel-button"
+              type="button"
+              :disabled="parseCanceling"
+              @click="handleCancelParse"
+            >
+              {{ parseCanceling ? '取消中' : '取消解析' }}
             </button>
           </div>
           <p v-if="inputMode === 'link' && downloadMessage" class="success-text">{{ downloadMessage }}</p>
@@ -391,6 +424,7 @@ import {
   uploadingLocalVideo,
 } from '../../stores/videoParseLocalUploadState'
 import { rememberSessionTaskId } from '../../services/sessionTaskStore'
+import { cancelTask } from '../../services/taskApi'
 import { trackTaskResult } from '../../services/taskRealtime'
 import BillingEstimateBanner from '../../components/business/BillingEstimateBanner.vue'
 import { useBillingEstimate } from '../../composables/useBillingEstimate'
@@ -505,6 +539,7 @@ const sourceText = ref('')
 const rewrittenText = ref('')
 const applyMessage = ref('')
 const parseAbort = ref<AbortController | null>(null)
+const parseCanceling = ref(false)
 let stopParseTracking: (() => void) | null = null
 let parseRunSeq = 0
 let activeParseTaskId: number | null = null
@@ -812,6 +847,7 @@ function resetParseWorkflowState() {
   coverImageFailed.value = false
   parseStage.value = ''
   parsing.value = false
+  parseCanceling.value = false
   applyMessage.value = ''
   activeParseTaskId = null
 }
@@ -973,6 +1009,7 @@ async function runParseVideo(
   parseStage.value = ''
   applyMessage.value = ''
   parsing.value = true
+  parseCanceling.value = false
 
   try {
     await startDouyinParseWithTranscript({
@@ -1096,6 +1133,33 @@ async function runParseVideo(
       const stage = String(parseStage.value)
       parsing.value = !!activeParseTaskId && stage !== 'completed' && stage !== 'error'
     }
+  }
+}
+
+async function handleCancelParse() {
+  const taskId = activeParseTaskId || trackedParseTaskId
+  parseRunSeq += 1
+  parseAbort.value?.abort()
+  parseAbort.value = null
+  stopParseTask()
+  activeParseTaskId = null
+  parsing.value = false
+  parseStage.value = ''
+  parseNotice.value = ''
+
+  if (!taskId) {
+    parseCanceling.value = false
+    return
+  }
+
+  parseCanceling.value = true
+  try {
+    await cancelTask(taskId)
+    void parseEstimate.refresh()
+  } catch (error) {
+    parseError.value = error instanceof Error ? error.message : '取消解析失败'
+  } finally {
+    parseCanceling.value = false
   }
 }
 
@@ -1523,6 +1587,15 @@ function applyScript() {
   gap: 10px;
 }
 
+.parse-row.has-cancel {
+  grid-template-columns: minmax(0, 1fr) 62px 92px 72px;
+}
+
+.parse-cancel-button {
+  min-height: 42px;
+  padding: 0 12px;
+}
+
 .source-tabs,
 .platform-tabs {
   display: flex;
@@ -1549,6 +1622,12 @@ function applyScript() {
   border-color: #7d67ff;
   background: #f2efff;
   color: #513ee8;
+}
+
+.source-tabs button:disabled,
+.platform-tabs button:disabled {
+  cursor: not-allowed;
+  opacity: 0.58;
 }
 
 .source-tabs {

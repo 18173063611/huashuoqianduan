@@ -19,6 +19,10 @@ import type {
 } from '../types/videoTypes'
 import type { TaskItem } from '../types/taskTypes'
 
+interface VideoRequestOptions {
+  signal?: AbortSignal
+}
+
 function idempotencyHeaders(explicitKey?: string | null): Record<string, string> {
   const key =
     explicitKey != null && String(explicitKey).trim().length > 0
@@ -50,16 +54,17 @@ export function getVideoParseResult(taskId: number) {
 }
 
 /** 视频分镜解析：将公网可访问的视频 URL 交给火山引擎视觉模型，返回逐镜头脚本数组。 */
-export function analyzeVideoScript(videoUrl: string) {
+export function analyzeVideoScript(videoUrl: string, options: VideoRequestOptions = {}) {
   // 链接里可能含有 ? 与中文，必须先 encodeURIComponent，否则后端接到的 url 会被截断
   const qs = `url=${encodeURIComponent(videoUrl)}`
   return request<TaskItem>(`/video/script/analy?${qs}`, {
     method: 'POST',
+    signal: options.signal,
   })
 }
 
 /** 视频链接分镜解析：后端复用爆款对标的分享链接解析，再对真实播放地址做分镜分析。 */
-export function analyzeVideoScriptByUrl(videoUrl: string, platform?: string) {
+export function analyzeVideoScriptByUrl(videoUrl: string, platform?: string, options: VideoRequestOptions = {}) {
   const params = new URLSearchParams({ url: videoUrl })
   if (platform && platform !== 'auto') {
     params.set('platform', platform)
@@ -67,6 +72,7 @@ export function analyzeVideoScriptByUrl(videoUrl: string, platform?: string) {
   const qs = params.toString()
   return request<TaskItem>(`/video/script/url?${qs}`, {
     method: 'POST',
+    signal: options.signal,
   })
 }
 

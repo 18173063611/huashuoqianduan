@@ -24,6 +24,7 @@
             role="tab"
             :class="{ active: sourceMode === 'url' }"
             :aria-selected="sourceMode === 'url'"
+            :disabled="busy || uploadingFile"
             @click="sourceMode = 'url'"
           >
             视频链接
@@ -33,6 +34,7 @@
             role="tab"
             :class="{ active: sourceMode === 'file' }"
             :aria-selected="sourceMode === 'file'"
+            :disabled="busy || uploadingFile"
             @click="sourceMode = 'file'"
           >
             上传本地文件
@@ -73,6 +75,15 @@
               {{ busyLabel }}
             </button>
             <button
+              v-if="busy || cancelingAnalyze"
+              class="app-secondary-button storyboard-cancel-button"
+              type="button"
+              :disabled="cancelingAnalyze"
+              @click="cancelAnalyzeTask"
+            >
+              {{ cancelingAnalyze ? '取消中...' : '取消解析' }}
+            </button>
+            <button
               v-if="shots.length || errorMessage"
               class="app-secondary-button"
               type="button"
@@ -86,7 +97,7 @@
 
         <div v-else class="storyboard-source storyboard-source-file">
           <label class="storyboard-file-picker" :class="{ 'is-disabled': busy || uploadingFile }">
-            <input type="file" accept="video/*" :disabled="busy || uploadingFile" @change="handleFileChange" />
+            <input ref="fileInputRef" type="file" accept="video/*" :disabled="busy || uploadingFile" @change="handleFileChange" />
             <span class="storyboard-file-cta">选择视频文件</span>
             <span class="storyboard-file-meta" :title="selectedFile ? selectedFile.name : ''">
               {{ selectedFile ? `${selectedFile.name}（${formatFileSize(selectedFile.size)}）` : '尚未选择文件' }}
@@ -116,6 +127,23 @@
               @click="handleAnalyzeFile"
             >
               {{ busyLabel }}
+            </button>
+            <button
+              v-if="uploadingFile"
+              class="app-secondary-button storyboard-cancel-button"
+              type="button"
+              @click="cancelUpload"
+            >
+              取消上传
+            </button>
+            <button
+              v-if="busy || cancelingAnalyze"
+              class="app-secondary-button storyboard-cancel-button"
+              type="button"
+              :disabled="cancelingAnalyze"
+              @click="cancelAnalyzeTask"
+            >
+              {{ cancelingAnalyze ? '取消中...' : '取消解析' }}
             </button>
             <button
               v-if="shots.length || errorMessage"
@@ -233,6 +261,7 @@ import { computed, onBeforeUnmount, ref, watch } from 'vue'
 import { uploadFile } from '../../services/uploadApi'
 import { analyzeVideoScript, analyzeVideoScriptByUrl } from '../../services/videoApi'
 import { rememberSessionTaskId } from '../../services/sessionTaskStore'
+import { cancelTask } from '../../services/taskApi'
 import { trackTaskResult } from '../../services/taskRealtime'
 import { normalizePublicMediaUrl } from '../../utils/mediaUrl'
 import type { VideoScriptAnalyzeResult, VideoScriptShotItem } from '../../types/videoTypes'
@@ -315,19 +344,25 @@ const videoUrl = ref('')
 const selectedFile = ref<File | null>(null)
 const uploadedPreviewUrl = ref('')
 const analyzedVideoUrl = ref('')
+const fileInputRef = ref<HTMLInputElement | null>(null)
 
 const shots = ref<VideoScriptShotItem[]>([])
 const errorMessage = ref('')
 const stage = ref('')
 const busy = ref(false)
+const cancelingAnalyze = ref(false)
 const uploadingFile = ref(false)
 const uploadProgressPercent = ref<number | null>(null)
 const uploadProgressText = ref('')
 let stopAnalyzeTracking: (() => void) | null = null
 let uploadRequestId = 0
 let uploadAbort: AbortController | null = null
+let analyzeAbort: AbortController | null = null
+let analyzeRunSeq = 0
+let currentAnalyzeTaskId: number | null = null
 
 onBeforeUnmount(() => {
+  analyzeAbort?.abort()
   stopAnalyzeTask()
   uploadAbort?.abort()
 })
@@ -426,13 +461,7 @@ watch(sourceMode, (mode) => {
   if (mode !== 'url' || !uploadingFile.value) {
     return
   }
-  uploadRequestId += 1
-  uploadAbort?.abort()
-  uploadAbort = null
-  uploadingFile.value = false
-  uploadProgressPercent.value = null
-  uploadProgressText.value = ''
-  stage.value = ''
+  cancelUpload()
 })
 
 function detectPlatformFromText(value: string) {
@@ -520,6 +549,21 @@ async function handleFileChange(event: Event) {
   }
 }
 
+function cancelUpload() {
+  uploadRequestId += 1
+  uploadAbort?.abort()
+  uploadAbort = null
+  uploadingFile.value = false
+  uploadProgressPercent.value = null
+  uploadProgressText.value = ''
+  uploadedPreviewUrl.value = ''
+  selectedFile.value = null
+  stage.value = ''
+  if (fileInputRef.value) {
+    fileInputRef.value.value = ''
+  }
+}
+
 function resetResult() {
   stopAnalyzeTask()
   shots.value = []
@@ -528,16 +572,25 @@ function resetResult() {
   analyzedVideoUrl.value = ''
 }
 
-async function runAnalyze(submit: () => Promise<TaskItem>, targetUrl: string) {
+async function runAnalyze(submit: (signal: AbortSignal) => Promise<TaskItem>, targetUrl: string) {
+  const runId = ++analyzeRunSeq
   stopAnalyzeTask()
+  analyzeAbort?.abort()
+  analyzeAbort = new AbortController()
+  currentAnalyzeTaskId = null
   busy.value = true
+  cancelingAnalyze.value = false
   errorMessage.value = ''
   shots.value = []
   analyzedVideoUrl.value = ''
 
   try {
     stage.value = '提交解析任务中…'
-    const task = await submit()
+    const task = await submit(analyzeAbort.signal)
+    if (runId !== analyzeRunSeq) {
+      return
+    }
+    currentAnalyzeTaskId = task.taskId
     rememberSessionTaskId(task.taskId)
     void storyboardEstimate.refresh()
     notifyAuthRefresh()
@@ -545,29 +598,44 @@ async function runAnalyze(submit: () => Promise<TaskItem>, targetUrl: string) {
     await new Promise<void>((resolve) => {
       stopAnalyzeTracking = trackTaskResult<VideoScriptAnalyzeResult>(task.taskId, {
         onStatus(message) {
+          if (runId !== analyzeRunSeq) {
+            return
+          }
           stage.value = statusStage(message.status, message.progress)
         },
         onResult(taskResult) {
+          if (runId !== analyzeRunSeq) {
+            return
+          }
           const list = taskResult.result?.scripts || []
           shots.value = [...list].sort((a, b) => a.order - b.order)
           analyzedVideoUrl.value = targetUrl
           busy.value = false
+          currentAnalyzeTaskId = null
           stage.value = ''
           void storyboardEstimate.refresh()
           notifyAuthRefresh()
           resolve()
         },
         onFailure(message) {
+          if (runId !== analyzeRunSeq) {
+            return
+          }
           errorMessage.value = message.errorMessage || '分镜解析任务失败'
           busy.value = false
+          currentAnalyzeTaskId = null
           stage.value = ''
           void storyboardEstimate.refresh()
           notifyAuthRefresh()
           resolve()
         },
         onError(error) {
+          if (runId !== analyzeRunSeq) {
+            return
+          }
           errorMessage.value = error.message
           busy.value = false
+          currentAnalyzeTaskId = null
           stage.value = ''
           void storyboardEstimate.refresh()
           notifyAuthRefresh()
@@ -576,9 +644,41 @@ async function runAnalyze(submit: () => Promise<TaskItem>, targetUrl: string) {
       })
     })
   } catch (error) {
+    if (runId !== analyzeRunSeq) {
+      return
+    }
+    if (error instanceof DOMException && error.name === 'AbortError') {
+      return
+    }
     errorMessage.value = error instanceof Error ? error.message : '解析失败'
     busy.value = false
+    currentAnalyzeTaskId = null
     stage.value = ''
+  }
+}
+
+async function cancelAnalyzeTask() {
+  const taskId = currentAnalyzeTaskId
+  analyzeRunSeq += 1
+  analyzeAbort?.abort()
+  analyzeAbort = null
+  stopAnalyzeTask()
+  currentAnalyzeTaskId = null
+  busy.value = false
+  stage.value = ''
+  if (!taskId) {
+    cancelingAnalyze.value = false
+    return
+  }
+  cancelingAnalyze.value = true
+  try {
+    await cancelTask(taskId)
+    void storyboardEstimate.refresh()
+    notifyAuthRefresh()
+  } catch (error) {
+    errorMessage.value = error instanceof Error ? error.message : '取消解析失败'
+  } finally {
+    cancelingAnalyze.value = false
   }
 }
 
@@ -613,7 +713,7 @@ async function handleAnalyzeUrl() {
   }
 
   const targetUrl = videoUrl.value
-  await runAnalyze(() => analyzeVideoScriptByUrl(targetUrl, selectedPlatform.value), targetUrl)
+  await runAnalyze((signal) => analyzeVideoScriptByUrl(targetUrl, selectedPlatform.value, { signal }), targetUrl)
 }
 
 async function handleAnalyzeFile() {
@@ -627,7 +727,7 @@ async function handleAnalyzeFile() {
       throw new Error('请先选择并上传本地视频文件')
     }
 
-    await runAnalyze(() => analyzeVideoScript(targetUrl), targetUrl)
+    await runAnalyze((signal) => analyzeVideoScript(targetUrl, { signal }), targetUrl)
   } catch (error) {
     errorMessage.value = error instanceof Error ? error.message : '解析失败'
     busy.value = false
@@ -704,6 +804,16 @@ async function handleAnalyzeFile() {
   background: #faf9ff;
   box-shadow: inset 0 0 0 1px #d8d2ff;
   color: #5e50df;
+}
+
+.storyboard-tabs button:disabled {
+  cursor: not-allowed;
+  opacity: 0.58;
+}
+
+.storyboard-cancel-button {
+  min-height: 40px;
+  padding: 0 14px;
 }
 
 .storyboard-source {
