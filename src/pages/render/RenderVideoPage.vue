@@ -501,7 +501,7 @@
               <button
                 type="button"
                 class="app-secondary-button render-mini-btn"
-                :disabled="busy || carImages.length >= MAX_REFERENCE"
+                :disabled="busy || carImages.length >= MAX_CAR_SALES_IMAGES"
                 @click="addCarImageSlot"
               >
                 添加车辆图片
@@ -1859,6 +1859,7 @@ interface CarScenePlanningItem {
 }
 
 const MAX_REFERENCE = 9
+const MAX_CAR_SALES_IMAGES = 45
 const SEEDANCE2_MAX_REFERENCE_IMAGES = 9
 const SEEDANCE_LEGACY_MAX_REFERENCE_IMAGES = 1
 const SEEDANCE_2_MODEL: SeedanceModelValue = 'ep-20260512233524-85r4g'
@@ -3253,7 +3254,7 @@ function updateReferenceImage(idx: number, value: string) {
 }
 
 function addCarImageSlot() {
-  if (carImages.value.length >= MAX_REFERENCE) {
+  if (carImages.value.length >= MAX_CAR_SALES_IMAGES) {
     return
   }
   carImages.value.push('')
@@ -3548,7 +3549,7 @@ function handleCarImageAssetSelect(payload: { asset: AssetItem; url: string }) {
   const emptyIndex = carImages.value.findIndex((url) => !url.trim())
   if (emptyIndex >= 0) {
     carImages.value[emptyIndex] = payload.url
-  } else if (!carImages.value.includes(payload.url) && carImages.value.length < MAX_REFERENCE) {
+  } else if (!carImages.value.includes(payload.url) && carImages.value.length < MAX_CAR_SALES_IMAGES) {
     carImages.value.push(payload.url)
   }
   rememberCarImageAsset(payload.asset, payload.url)
@@ -3640,7 +3641,7 @@ async function handleCarBundleAssetSelect(payload: { asset: AssetItem; url: stri
     const nextSceneRoles: Record<string, string> = {}
     const parsed = parseCarBundleText(text)
     for (const image of parsed.vehicleImages) {
-      if (nextImages.length >= MAX_REFERENCE) continue
+      if (nextImages.length >= MAX_CAR_SALES_IMAGES) continue
       nextImages.push(image.url)
       if (image.assetId) {
         nextIds[image.url] = image.assetId
@@ -6804,7 +6805,7 @@ function applyImportedAssetBindings(
       nextSceneRoles[url] = CAR_SCENE_REFERENCE_ROLES.includes(role) ? role : 'scene_showroom'
       return
     }
-    if (vehicleUrlSet.has(url) || role) {
+    if (vehicleUrlSet.has(url) || (role && vehicleUrls.length < MAX_CAR_SALES_IMAGES)) {
       if (!vehicleUrlSet.has(url)) {
         vehicleUrls.push(url)
         vehicleUrlSet.add(url)
@@ -6900,7 +6901,7 @@ function applyImportedSourceAsset(asset: AssetItem) {
     const emptyIndex = carImages.value.findIndex((item) => !item.trim())
     if (emptyIndex >= 0) {
       carImages.value[emptyIndex] = url
-    } else if (carImages.value.length < MAX_REFERENCE) {
+    } else if (carImages.value.length < MAX_CAR_SALES_IMAGES) {
       carImages.value.push(url)
     }
     carImageAssetIdsByUrl.value = { ...carImageAssetIdsByUrl.value, [url]: asset.assetId }
@@ -7020,8 +7021,9 @@ async function applyCarSalesTaskImport(input: Record<string, unknown>) {
 
   const bindings = recordArrayField(input, 'assetRoleBindings')
   const scenes = recordArrayField(input, 'scenes')
-  const vehicleUrls = stringArrayField(input, 'carImageUrls')
-  const sceneUrls = importedSceneUrls(scenes, vehicleUrls, bindings, [
+  const importedVehicleUrls = stringArrayField(input, 'carImageUrls')
+  const vehicleUrls = importedVehicleUrls.slice(0, MAX_CAR_SALES_IMAGES)
+  const sceneUrls = importedSceneUrls(scenes, importedVehicleUrls, bindings, [
     firstImportText(input, ['hostImageUrl']),
   ])
   applyImportedAssetBindings(bindings, vehicleUrls, sceneUrls)
