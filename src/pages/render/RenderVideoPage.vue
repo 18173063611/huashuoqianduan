@@ -2298,7 +2298,7 @@ const carBenchmarkUploadName = ref('')
 const carAudioUrl = ref('')
 const carAudioAssetId = ref<number | null>(null)
 const carAudioSourceType = ref('')
-const carAudioMode = ref<CarAudioMode>('auto_tts')
+const carAudioMode = ref<CarAudioMode>('none')
 const carAudioUploading = ref(false)
 const carAudioUploadName = ref('')
 const carVoiceTextSource = ref<CarVoiceTextSource>('auto')
@@ -5623,7 +5623,7 @@ const carGenerationBasisRows = computed(() => [
   { label: '参考图策略', value: carReferenceImageStrategyLabel.value },
   { label: '数字人出镜', value: carHostAppearanceEnabled.value ? '虚拟人物出镜' : '不出镜，只介绍车辆' },
   { label: '口播来源', value: carAudioSourceLabel.value },
-  { label: '文案来源', value: usesGeneratedVoiceover() ? carVoiceTextSourceLabel.value : '随口播音频/手写文案' },
+  { label: '文案来源', value: usesGeneratedVoiceover() ? carVoiceTextSourceLabel.value : hasSelectedVoiceAudio() ? '随口播音频' : '不生成口播' },
   { label: 'BGM 来源', value: carBgmSourceLabel.value },
   { label: '音画同步', value: carSyncStrategyOptions.find((item) => item.key === carSyncStrategy.value)?.label || '智能同步' },
   { label: '字幕来源', value: carSubtitleSourceLabel.value },
@@ -5704,8 +5704,6 @@ function buildCarScriptContext() {
     } else {
       parts.push('未传入口播文案时，才复用分镜 content/voiceText 原文补齐；不得生成新台词。')
     }
-  } else if (carVoiceContext.value.trim()) {
-    parts.push(`口播文案参考：${carVoiceContext.value.trim()}`)
   }
   return parts.join('\n\n')
 }
@@ -6106,7 +6104,7 @@ function buildCarSalesScenes(): CarSalesSceneDraft[] {
       storyboardShots,
       selectedSeedanceModel.value.maxDuration,
     )
-    const voiceChunks = voiceChunksForStoryboardGroups(groups)
+    const voiceChunks = usesGeneratedVoiceover() ? voiceChunksForStoryboardGroups(groups) : []
     const segmentDurations = normalizeCarSegmentDurations(carSegmentDurations.value, groups.length)
     return groups.map((group, idx) => {
       const orders = group.shots.map((shot, localIdx) => shot.order || group.startIndex + localIdx + 1)
@@ -6125,7 +6123,9 @@ function buildCarSalesScenes(): CarSalesSceneDraft[] {
       }
     })
   }
-  const voiceChunks = splitVoiceTextForSegments(effectiveVoiceTextPreview.value, carSegmentCount.value)
+  const voiceChunks = usesGeneratedVoiceover()
+    ? splitVoiceTextForSegments(effectiveVoiceTextPreview.value, carSegmentCount.value)
+    : []
   const segmentDurations = normalizedCarSegmentDurations.value
   const titles = [
     '外观开场',
@@ -6198,6 +6198,9 @@ function carSyncStrategyForRequest(): CarSyncStrategy {
 
 function carFinalVoiceTextForRequest() {
   if (hasSelectedVoiceAudio()) {
+    return undefined
+  }
+  if (!usesGeneratedVoiceover()) {
     return undefined
   }
   const strictText = strictVoiceTextForRequest()
@@ -7304,7 +7307,7 @@ async function handleGenerate() {
         voicePolicy: carVoicePolicyForRequest(),
         voiceTextSource: carVoiceTextSource.value,
         finalVoiceText: carFinalVoiceTextForRequest(),
-        strictVoiceText: Boolean(strictVoiceTextForRequest()),
+        strictVoiceText: usesGeneratedVoiceover() ? Boolean(strictVoiceTextForRequest()) : undefined,
         nativeVoiceLanguage: usesGeneratedVoiceover() ? carNativeVoiceLanguage.value : undefined,
         nativeVoiceStyle: usesGeneratedVoiceover() ? normalizeCarNativeVoiceStyle(carNativeVoiceStyle.value) : undefined,
         nativeSpeechStyle: usesGeneratedVoiceover() ? carNativeSpeechStyle.value : undefined,
