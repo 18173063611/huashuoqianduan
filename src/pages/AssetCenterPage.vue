@@ -6,8 +6,8 @@
         <p class="asset-page-lead">账号、积分与素材/音色入口；下方 Tab 切换不同模块。</p>
       </div>
       <div class="asset-page-hero-actions">
-        <button class="app-ghost-button" type="button" :disabled="loading" @click="refreshAll">
-          {{ loading ? '刷新中…' : '刷新' }}
+        <button class="app-ghost-button" type="button" :disabled="pageRefreshing" @click="refreshAll">
+          {{ pageRefreshing ? '刷新中…' : '刷新' }}
         </button>
         <RouterLink v-if="user?.role === 'ADMIN'" class="app-ghost-button admin-link" to="/admin/dashboard">
           管理后台
@@ -137,7 +137,7 @@ const router = useRouter()
 const tabOrder = ASSET_HUB_TAB_ORDER
 
 const highlightFromRoute = computed(() => {
-  const h = route.query.highlight
+  const h = route.query.highlight ?? route.query.highlightAssetId ?? route.query.assetId
   const raw = Array.isArray(h) ? h[0] : h
   const n = typeof raw === 'string' ? Number(raw) : NaN
   return Number.isFinite(n) && n > 0 ? n : null
@@ -175,6 +175,7 @@ const creditLogsError = ref('')
 
 const detailOpen = ref(false)
 const detailTaskId = ref<number | null>(null)
+const pageRefreshing = computed(() => loading.value || tasksLoading.value || creditLogsLoading.value)
 
 function roleLabel(role?: UserRole | string) {
   if (role === 'ADMIN') return '管理员'
@@ -201,19 +202,21 @@ function setAssetTab(tab: AssetHubTabKey) {
 }
 
 function onHighlightConsumed() {
-  if (route.query.highlight == null) return
+  if (route.query.highlight == null && route.query.highlightAssetId == null && route.query.assetId == null) return
   const next = { ...route.query }
   delete next.highlight
+  delete next.highlightAssetId
+  delete next.assetId
   void router.replace({ path: route.path, query: next })
 }
 
 async function refreshAll() {
+  await Promise.all([refreshUserInfo(), refreshRecentTasks(), refreshCreditLogs()])
+}
+
+async function refreshUserInfo() {
   loading.value = true
-  tasksLoading.value = true
-  creditLogsLoading.value = true
   error.value = ''
-  tasksError.value = ''
-  creditLogsError.value = ''
   try {
     const u = await me()
     setAuthUser(u)
@@ -224,6 +227,11 @@ async function refreshAll() {
   } finally {
     loading.value = false
   }
+}
+
+async function refreshRecentTasks() {
+  tasksLoading.value = true
+  tasksError.value = ''
   try {
     recentTasks.value = await listTasks({ pageNo: 1, pageSize: 8 })
   } catch (e) {
@@ -232,6 +240,11 @@ async function refreshAll() {
   } finally {
     tasksLoading.value = false
   }
+}
+
+async function refreshCreditLogs() {
+  creditLogsLoading.value = true
+  creditLogsError.value = ''
   try {
     creditLogs.value = await getCreditLogRecent(20)
   } catch (e) {

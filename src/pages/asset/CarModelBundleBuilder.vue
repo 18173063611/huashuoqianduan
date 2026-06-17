@@ -460,6 +460,7 @@ async function saveBundle() {
     const safeName = (brandModel.value || '车型素材包').replace(/[\\/:*?"<>|]+/g, '_')
     const fileName = `${safeName}-车型素材包.json`
     const contentJson = JSON.stringify(payload, null, 2)
+    const coverUrl = imageItems.find((item) => item.url)?.url || ''
     const metadataJson = JSON.stringify({
       from: 'car_model_bundle',
       assetRole: 'car_model_bundle',
@@ -467,6 +468,10 @@ async function saveBundle() {
       bundleType: 'car_model',
       brandModel: brandModel.value,
       color: color.value,
+      coverUrl: coverUrl || undefined,
+      thumbnailUrl: coverUrl || undefined,
+      imageCount: imageItems.length,
+      componentCount: imageItems.length,
       componentAssetIds: imageItems
         .map((item) => item.assetId)
         .filter((assetId): assetId is number => typeof assetId === 'number' && Number.isFinite(assetId)),

@@ -146,10 +146,14 @@ export interface QuickRenderRequest {
   assetIds: number[]
   assetRoles: Record<string, QuickRenderAssetRole>
   assetTextContents?: Record<string, string>
+  coverAssetId?: number | null
+  coverUrl?: string
   aspectRatio: '9:16' | '16:9' | 'auto'
   subtitleMode: 'off' | 'auto' | 'upload'
   subtitleLanguage?: string
   nativeVoiceLanguage?: string
+  nativeVoiceStyle?: string
+  nativeSpeechStyle?: string
   burnInSubtitle: boolean
   customSubtitle?: string
   finalVoiceText?: string
@@ -159,7 +163,24 @@ export interface QuickRenderRequest {
   segmentCount?: number
   segmentDuration?: number
   goalText?: string
+  testBatch?: string
+  sampleId?: string
+  outputPurpose?: string
+  reviewer?: string
   projectId?: number | null
+  hostAppearanceEnabled?: boolean
+  subtitleOverlay?: QuickRenderTextOverlayRequest
+  headlineOverlay?: QuickRenderTextOverlayRequest
+}
+
+export interface QuickRenderTextOverlayRequest {
+  enabled?: boolean
+  text?: string
+  fontFamily?: string
+  fontSize?: number
+  textColor?: string
+  outlineColor?: string
+  position?: 'top' | 'middle' | 'bottom'
 }
 
 export interface QuickRenderRecognizedAsset {

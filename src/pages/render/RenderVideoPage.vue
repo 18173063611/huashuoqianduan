@@ -1,13 +1,24 @@
 <template>
-  <div class="render-video-page app-page-stack">
-    <header class="render-head">
+  <div
+    class="render-video-page app-page-stack"
+    :class="{
+      'render-video-page--quick': productionMode === 'quick',
+      'render-video-page--embedded': props.embedded,
+    }"
+  >
+    <header v-if="!props.embedded" class="render-head">
       <div>
-        <h1>视频制作</h1>
+        <h1 v-if="productionMode === 'quick'">用 <span>AI</span> 轻松生成汽车销售视频</h1>
+        <h1 v-else>手动制作汽车销售视频</h1>
         <p>
-          手动制作按基础信息和可选模块展开；素材、分镜、讲述、字幕包装和高级参数都可以按需配置。
+          {{
+            productionMode === 'quick'
+              ? '上传车辆图片，选择卖点或输入需求，AI 帮你生成高质量销售视频。'
+              : '手动制作按基础信息和可选模块展开；素材、分镜、讲述、字幕包装和高级参数都可以按需配置。'
+          }}
         </p>
       </div>
-      <div class="render-mode-switch" aria-label="视频制作模式">
+      <div v-show="productionMode === 'manual'" class="render-mode-switch" aria-label="视频制作模式">
         <button
           v-if="ENABLE_QUICK_RENDER_MODE"
           type="button"
@@ -15,7 +26,7 @@
           :disabled="busy || seedanceSubmitInFlight"
           @click="setProductionMode('quick')"
         >
-          一键成片
+          一键汽车销售视频
         </button>
         <button
           type="button"
@@ -1773,6 +1784,9 @@ import type {
 } from '../../types/videoTypes'
 import type { AssetItem } from '../../types/assetTypes'
 
+const props = withDefaults(defineProps<{ embedded?: boolean }>(), {
+  embedded: false,
+})
 
 type MainTab = 'text' | 'image' | 'carSales' | 'digitalHuman'
 type ImageSubTab = 'first' | 'firstLast' | 'reference'
@@ -2204,11 +2218,11 @@ const renderAspectRatioOptions: Array<{ value: RenderAspectRatio; label: string;
 const route = useRoute()
 const router = useRouter()
 
-/** 临时开关：设为 true 可恢复「一键成片」入口与 quick 模式直达。 */
-const ENABLE_QUICK_RENDER_MODE = false
+/** 一键成片入口：用于素材包快速识别并走既有成片链路。 */
+const ENABLE_QUICK_RENDER_MODE = true
 
 const productionMode = ref<RenderProductionMode>(
-  ENABLE_QUICK_RENDER_MODE && route.query.mode === 'quick' ? 'quick' : 'manual',
+  props.embedded || !ENABLE_QUICK_RENDER_MODE || route.query.mode === 'manual' ? 'manual' : 'quick',
 )
 
 const mainTab = ref<MainTab>('carSales')
@@ -2227,16 +2241,20 @@ watch(
 watch(
   () => route.query.mode,
   (mode) => {
-    productionMode.value = ENABLE_QUICK_RENDER_MODE && mode === 'quick' ? 'quick' : 'manual'
+    productionMode.value = props.embedded || !ENABLE_QUICK_RENDER_MODE || mode === 'manual' ? 'manual' : 'quick'
   },
 )
 
 function setProductionMode(mode: RenderProductionMode) {
+  if (props.embedded) {
+    productionMode.value = 'manual'
+    return
+  }
   const nextMode = ENABLE_QUICK_RENDER_MODE ? mode : 'manual'
   productionMode.value = nextMode
   const query = { ...route.query }
-  if (nextMode === 'quick') {
-    query.mode = 'quick'
+  if (nextMode === 'manual') {
+    query.mode = 'manual'
   } else {
     delete query.mode
   }
@@ -7570,6 +7588,12 @@ onBeforeUnmount(() => {
   gap: 16px;
 }
 
+.render-video-page--embedded.app-page-stack {
+  width: 100%;
+  margin: 0;
+  padding-top: 0;
+}
+
 .render-head {
   display: flex;
   align-items: flex-start;
@@ -10265,5 +10289,176 @@ details.render-basis-panel[open] > .render-basis-summary::after {
   font-size: 13px;
   font-weight: 800;
   text-decoration: none;
+}
+
+.render-head h1 {
+  color: var(--hs-text);
+  font-weight: 700;
+  letter-spacing: 0;
+}
+
+.render-head p {
+  color: var(--hs-text-muted);
+}
+
+.render-mode-switch {
+  border-color: var(--hs-border);
+  box-shadow: none;
+}
+
+.render-mode-switch button {
+  border-radius: 6px;
+  color: var(--hs-text-muted);
+  font-weight: 650;
+}
+
+.render-mode-switch button.active,
+.render-tabs button.active,
+.render-tabs-sub button.active {
+  border-color: #bfdbfe;
+  background: var(--hs-primary-soft);
+  box-shadow: none;
+  color: var(--hs-primary);
+}
+
+.render-tabs button,
+.render-digital-section,
+.render-optional-group,
+.render-details,
+.render-auto-plan-panel,
+.render-segment-duration-panel,
+.render-basis-panel,
+.render-result,
+.render-input {
+  border-color: var(--hs-border);
+  border-radius: 8px;
+  box-shadow: none;
+}
+
+.render-car-workflow-strip,
+.render-manual-module,
+.render-segment-count-field,
+.render-auto-current-plan,
+.render-video-meta,
+.render-segment-item {
+  border-color: var(--hs-border);
+  border-radius: 8px;
+  background: var(--hs-surface-muted);
+}
+
+.render-car-workflow-strip strong,
+.digital-human-guide-item.done span,
+.render-progress-fill {
+  background: var(--hs-primary);
+}
+
+.render-car-workflow-strip span,
+.render-form-field label,
+.render-module-title h3,
+.render-digital-section h3 {
+  color: var(--hs-text);
+}
+
+.render-form-field input:focus,
+.render-form-field select:focus,
+.render-form-field textarea:focus {
+  border-color: var(--hs-primary);
+  box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.1);
+}
+
+.render-digital-progress,
+.render-status {
+  border-color: #bfdbfe;
+  background: var(--hs-primary-soft);
+  color: var(--hs-primary);
+}
+
+.render-status-dot {
+  background: var(--hs-primary);
+}
+.render-video-page--quick {
+  gap: 22px;
+}
+
+.render-video-page--quick.app-page-stack {
+  width: min(1480px, calc(100% - 96px));
+  max-width: none;
+  margin-top: 22px;
+}
+
+.render-video-page--quick .render-head {
+  position: relative;
+  display: flex;
+  justify-content: center;
+  width: calc(100% + 216px);
+  gap: 10px;
+  margin-left: -216px;
+  padding: 0 0 4px;
+  text-align: center;
+}
+
+.render-video-page--quick .render-head > div {
+  display: grid;
+  width: auto;
+  justify-items: center;
+}
+
+.render-video-page--quick .render-head h1 {
+  margin: 0 0 8px;
+  color: #101828;
+  font-size: 28px;
+  font-weight: 900;
+  line-height: 1.2;
+}
+
+.render-video-page--quick .render-head h1 span {
+  background: linear-gradient(90deg, #2563eb 0%, #8b5cf6 100%);
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+}
+
+.render-video-page--quick .render-head h1::after {
+  content: " ✦";
+  color: #72a5ff;
+  font-size: 22px;
+}
+
+.render-video-page--quick .render-head p {
+  color: #667085;
+  font-size: 14px;
+  line-height: 1.6;
+}
+
+.render-video-page--quick .render-mode-switch {
+  position: absolute;
+  top: 0;
+  right: 0;
+  border-color: #e6ecf7;
+  border-radius: 8px;
+  box-shadow: 0 10px 24px rgba(16, 24, 40, 0.06);
+}
+
+.render-video-page--quick .render-mode-switch button.active {
+  background: #eef4ff;
+  color: #155eef;
+}
+
+@media (max-width: 900px) {
+  .render-video-page--quick.app-page-stack {
+    width: calc(100% - 32px);
+  }
+
+  .render-video-page--quick .render-head {
+    justify-items: start;
+    width: 100%;
+    margin-left: 0;
+    padding: 0;
+    text-align: left;
+  }
+
+  .render-video-page--quick .render-mode-switch {
+    position: static;
+  }
 }
 </style>

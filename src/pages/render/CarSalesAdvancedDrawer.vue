@@ -1,0 +1,503 @@
+<template>
+  <Teleport to="body">
+    <div v-if="modelValue" class="car-advanced-backdrop" @click.self="$emit('update:modelValue', false)">
+      <aside class="car-advanced-drawer" aria-label="高级参数">
+        <header class="car-advanced-head">
+          <div>
+            <h2>高级参数</h2>
+            <p>数字人、字幕、大字报、BGM 和生成模型会随本次任务提交。</p>
+          </div>
+          <button type="button" class="car-advanced-close" aria-label="关闭高级参数" @click="$emit('update:modelValue', false)">×</button>
+        </header>
+
+        <div class="car-advanced-body">
+          <section class="car-advanced-section">
+            <h3>数字人出镜</h3>
+            <div class="car-segmented">
+              <button type="button" :class="{ active: !settings.hostAppearanceEnabled }" @click="patch({ hostAppearanceEnabled: false })">
+                不使用
+              </button>
+              <button type="button" :class="{ active: settings.hostAppearanceEnabled }" @click="patch({ hostAppearanceEnabled: true })">
+                使用数字人
+              </button>
+            </div>
+            <div v-if="settings.hostAppearanceEnabled" class="car-avatar-picker">
+              <div v-if="selectedAvatarPreviewUrl" class="car-avatar-preview">
+                <img :src="selectedAvatarPreviewUrl" :alt="selectedAvatarName || '数字人形象'" />
+              </div>
+              <div class="car-avatar-meta">
+                <strong>{{ selectedAvatarName || hostMaterialLabel }}</strong>
+                <small>{{ selectedAvatarHint }}</small>
+              </div>
+              <div class="car-avatar-actions">
+                <button type="button" @click="$emit('select-avatar')">选择数字人</button>
+                <button type="button" @click="$emit('select-host-asset')">资产选择</button>
+                <button v-if="selectedAvatarName || hasHostMaterial" type="button" @click="$emit('clear-avatar')">清除</button>
+              </div>
+            </div>
+            <p class="car-advanced-note">启用后会使用已选“数字人图片/口播视频”素材；没有相关素材时会提示补充。</p>
+          </section>
+
+          <section class="car-advanced-section">
+            <h3>字幕</h3>
+            <label class="car-field">
+              <span>字幕策略</span>
+              <select :value="settings.subtitleMode" @change="patch({ subtitleMode: ($event.target as HTMLSelectElement).value as CarSalesAdvancedSettings['subtitleMode'] })">
+                <option value="auto">自动字幕</option>
+                <option value="off">关闭字幕</option>
+                <option value="upload">自定义字幕</option>
+              </select>
+            </label>
+            <textarea
+              v-if="settings.subtitleMode === 'upload'"
+              :value="settings.customSubtitle"
+              rows="4"
+              maxlength="1000"
+              placeholder="输入要烧录到视频里的字幕文案"
+              @input="patch({ customSubtitle: ($event.target as HTMLTextAreaElement).value })"
+            />
+            <label class="car-check">
+              <input
+                type="checkbox"
+                :checked="settings.burnInSubtitle"
+                :disabled="settings.subtitleMode === 'off'"
+                @change="patch({ burnInSubtitle: ($event.target as HTMLInputElement).checked })"
+              />
+              <span>后期烧录字幕</span>
+            </label>
+            <div class="car-grid-two">
+              <label class="car-field">
+                <span>字幕位置</span>
+                <select :value="settings.subtitleOverlay.position" @change="patchOverlay('subtitleOverlay', { position: ($event.target as HTMLSelectElement).value as OverlayPosition })">
+                  <option value="bottom">底部</option>
+                  <option value="middle">中部</option>
+                  <option value="top">顶部</option>
+                </select>
+              </label>
+              <label class="car-field">
+                <span>字号</span>
+                <input
+                  type="number"
+                  min="18"
+                  max="72"
+                  step="2"
+                  :value="settings.subtitleOverlay.fontSize"
+                  @input="patchOverlay('subtitleOverlay', { fontSize: numberFromEvent($event, 36) })"
+                />
+              </label>
+            </div>
+          </section>
+
+          <section class="car-advanced-section">
+            <h3>大字报</h3>
+            <label class="car-check">
+              <input
+                type="checkbox"
+                :checked="settings.headlineOverlay.enabled"
+                @change="patchOverlay('headlineOverlay', { enabled: ($event.target as HTMLInputElement).checked })"
+              />
+              <span>使用大字报</span>
+            </label>
+            <textarea
+              :value="settings.headlineOverlay.text"
+              rows="3"
+              maxlength="80"
+              placeholder="例如：限时到店礼遇，预约试驾享专属权益"
+              @input="patchOverlay('headlineOverlay', { text: ($event.target as HTMLTextAreaElement).value })"
+            />
+            <div class="car-grid-two">
+              <label class="car-field">
+                <span>位置</span>
+                <select :value="settings.headlineOverlay.position" @change="patchOverlay('headlineOverlay', { position: ($event.target as HTMLSelectElement).value as OverlayPosition })">
+                  <option value="top">顶部</option>
+                  <option value="middle">中部</option>
+                  <option value="bottom">底部</option>
+                </select>
+              </label>
+              <label class="car-field">
+                <span>字号</span>
+                <input
+                  type="number"
+                  min="36"
+                  max="132"
+                  step="4"
+                  :value="settings.headlineOverlay.fontSize"
+                  @input="patchOverlay('headlineOverlay', { fontSize: numberFromEvent($event, 72) })"
+                />
+              </label>
+            </div>
+          </section>
+
+          <section class="car-advanced-section">
+            <h3>音频与风格</h3>
+            <label class="car-field">
+              <span>背景音乐</span>
+              <select :value="settings.audioPolicy" @change="patch({ audioPolicy: ($event.target as HTMLSelectElement).value as CarSalesAdvancedSettings['audioPolicy'] })">
+                <option value="auto">智能匹配/使用已选音频</option>
+                <option value="none">关闭音频</option>
+                <option value="bgm">仅背景音乐</option>
+                <option value="voiceover">优先口播音频</option>
+              </select>
+            </label>
+            <div class="car-grid-two">
+              <label class="car-field">
+                <span>视频风格</span>
+                <select :value="settings.videoStyle" @change="patch({ videoStyle: ($event.target as HTMLSelectElement).value as CarSalesAdvancedSettings['videoStyle'] })">
+                  <option value="realistic">真实销售</option>
+                  <option value="premium">高级质感</option>
+                  <option value="energetic">高能短视频</option>
+                  <option value="family">家庭温暖</option>
+                  <option value="tech">科技智能</option>
+                </select>
+              </label>
+              <label class="car-field">
+                <span>口播风格</span>
+                <select :value="settings.nativeVoiceStyle" @change="patch({ nativeVoiceStyle: ($event.target as HTMLSelectElement).value })">
+                  <option value="natural_sales">自然销售</option>
+                  <option value="warm_female">温暖女声</option>
+                  <option value="steady_male">稳重男声</option>
+                  <option value="energetic">热情促销</option>
+                </select>
+              </label>
+            </div>
+            <div class="car-grid-two">
+              <label class="car-field">
+                <span>讲述节奏</span>
+                <select :value="settings.nativeSpeechStyle" @change="patch({ nativeSpeechStyle: ($event.target as HTMLSelectElement).value })">
+                  <option value="balanced">均衡</option>
+                  <option value="fast">偏快</option>
+                  <option value="calm">舒缓</option>
+                </select>
+              </label>
+              <label class="car-field">
+                <span>生成模型</span>
+                <select :value="settings.model" @change="patch({ model: ($event.target as HTMLSelectElement).value })">
+                  <option value="auto">自动</option>
+                  <option value="doubao-seedance-1-5-pro-251215">Seedance 1.5 Pro</option>
+                  <option value="doubao-seedance-2-0-pro-250528">Seedance 2.0 Pro</option>
+                </select>
+              </label>
+            </div>
+          </section>
+        </div>
+
+        <footer class="car-advanced-footer">
+          <button type="button" class="app-secondary-button" @click="$emit('reset')">恢复默认</button>
+          <button type="button" class="app-primary-button" @click="$emit('update:modelValue', false)">完成</button>
+        </footer>
+      </aside>
+    </div>
+  </Teleport>
+</template>
+
+<script setup lang="ts">
+import { computed } from 'vue'
+
+export type OverlayPosition = 'top' | 'middle' | 'bottom'
+
+export interface CarSalesTextOverlaySettings {
+  enabled: boolean
+  text: string
+  fontFamily: string
+  fontSize: number
+  textColor: string
+  outlineColor: string
+  position: OverlayPosition
+}
+
+export interface CarSalesAdvancedSettings {
+  hostAppearanceEnabled: boolean
+  subtitleMode: 'auto' | 'off' | 'upload'
+  customSubtitle: string
+  burnInSubtitle: boolean
+  subtitleOverlay: CarSalesTextOverlaySettings
+  headlineOverlay: CarSalesTextOverlaySettings
+  audioPolicy: 'auto' | 'none' | 'voiceover' | 'bgm'
+  videoStyle: 'realistic' | 'premium' | 'energetic' | 'family' | 'tech'
+  nativeVoiceStyle: string
+  nativeSpeechStyle: string
+  model: string
+}
+
+const props = defineProps<{
+  modelValue: boolean
+  settings: CarSalesAdvancedSettings
+  selectedAvatarName?: string
+  selectedAvatarPreviewUrl?: string
+  hasHostMaterial?: boolean
+}>()
+
+const emit = defineEmits<{
+  'update:modelValue': [value: boolean]
+  'update:settings': [value: CarSalesAdvancedSettings]
+  reset: []
+  'select-avatar': []
+  'select-host-asset': []
+  'clear-avatar': []
+}>()
+
+const hostMaterialLabel = computed(() => props.hasHostMaterial ? '已选择数字人素材' : '尚未选择数字人')
+const selectedAvatarHint = computed(() => {
+  if (props.selectedAvatarName) return '已回填数字人形象，并加入素材列表'
+  if (props.hasHostMaterial) return '已从资产中心选择数字人图片或口播视频'
+  return '请选择数字人形象或从资产中心加入 host_image/host_video'
+})
+
+function patch(partial: Partial<CarSalesAdvancedSettings>) {
+  emit('update:settings', {
+    ...props.settings,
+    ...partial,
+  })
+}
+
+function patchOverlay(
+  key: 'subtitleOverlay' | 'headlineOverlay',
+  partial: Partial<CarSalesTextOverlaySettings>,
+) {
+  emit('update:settings', {
+    ...props.settings,
+    [key]: {
+      ...props.settings[key],
+      ...partial,
+    },
+  })
+}
+
+function numberFromEvent(event: Event, fallback: number) {
+  const value = Number((event.target as HTMLInputElement).value)
+  return Number.isFinite(value) ? value : fallback
+}
+</script>
+
+<style scoped>
+.car-advanced-backdrop {
+  position: fixed;
+  z-index: 2000;
+  inset: 0;
+  display: flex;
+  justify-content: flex-end;
+  background: rgba(15, 23, 42, 0.28);
+}
+
+.car-advanced-drawer {
+  display: flex;
+  width: min(520px, 100vw);
+  height: 100vh;
+  flex-direction: column;
+  background: #fff;
+  box-shadow: -12px 0 32px rgba(15, 23, 42, 0.16);
+}
+
+.car-advanced-head,
+.car-advanced-footer {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  border-bottom: 1px solid var(--hs-border);
+  padding: 18px 20px;
+}
+
+.car-advanced-footer {
+  border-top: 1px solid var(--hs-border);
+  border-bottom: 0;
+}
+
+.car-advanced-head h2 {
+  margin: 0;
+  color: var(--hs-text);
+  font-size: 18px;
+  font-weight: 800;
+}
+
+.car-advanced-head p {
+  margin: 4px 0 0;
+  color: var(--hs-text-muted);
+  font-size: 12px;
+  line-height: 1.5;
+}
+
+.car-advanced-close {
+  display: grid;
+  width: 34px;
+  height: 34px;
+  place-items: center;
+  border: 1px solid var(--hs-border);
+  border-radius: 6px;
+  background: #fff;
+  color: var(--hs-text-muted);
+  font-size: 20px;
+}
+
+.car-advanced-body {
+  display: grid;
+  flex: 1;
+  gap: 12px;
+  overflow-y: auto;
+  padding: 16px 20px;
+}
+
+.car-advanced-section {
+  display: grid;
+  gap: 12px;
+  border: 1px solid var(--hs-border);
+  border-radius: 8px;
+  background: var(--hs-surface-muted);
+  padding: 14px;
+}
+
+.car-advanced-section h3 {
+  margin: 0;
+  color: var(--hs-text);
+  font-size: 14px;
+  font-weight: 800;
+}
+
+.car-segmented {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 6px;
+}
+
+.car-segmented button {
+  min-height: 36px;
+  border: 1px solid var(--hs-border);
+  border-radius: 6px;
+  background: #fff;
+  color: var(--hs-text-muted);
+  font-weight: 700;
+}
+
+.car-segmented button.active {
+  border-color: #bfdbfe;
+  background: var(--hs-primary-soft);
+  color: var(--hs-primary);
+}
+
+.car-avatar-picker {
+  display: grid;
+  grid-template-columns: 58px minmax(0, 1fr);
+  gap: 10px;
+  align-items: center;
+  border: 1px solid #dbeafe;
+  border-radius: 8px;
+  background: #fff;
+  padding: 10px;
+}
+
+.car-avatar-preview {
+  overflow: hidden;
+  width: 58px;
+  height: 58px;
+  border-radius: 8px;
+  background: #eef2ff;
+}
+
+.car-avatar-preview img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.car-avatar-meta {
+  display: grid;
+  min-width: 0;
+  gap: 4px;
+}
+
+.car-avatar-meta strong {
+  overflow: hidden;
+  color: var(--hs-text);
+  font-size: 13px;
+  font-weight: 850;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.car-avatar-meta small {
+  color: var(--hs-text-muted);
+  font-size: 12px;
+  line-height: 1.5;
+}
+
+.car-avatar-actions {
+  display: flex;
+  grid-column: 1 / -1;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.car-avatar-actions button {
+  min-height: 32px;
+  border: 1px solid var(--hs-border);
+  border-radius: 6px;
+  background: #fff;
+  color: var(--hs-text);
+  padding: 0 10px;
+  font-size: 12px;
+  font-weight: 800;
+}
+
+.car-avatar-actions button:hover {
+  border-color: #bfdbfe;
+  background: var(--hs-primary-soft);
+  color: var(--hs-primary);
+}
+
+.car-field {
+  display: grid;
+  gap: 7px;
+  color: var(--hs-text);
+  font-size: 13px;
+  font-weight: 700;
+}
+
+.car-field select,
+.car-field input,
+.car-advanced-section textarea {
+  width: 100%;
+  min-height: 36px;
+  border: 1px solid var(--hs-border);
+  border-radius: 6px;
+  background: #fff;
+  color: var(--hs-text);
+  padding: 0 10px;
+  outline: none;
+}
+
+.car-advanced-section textarea {
+  min-height: 82px;
+  padding: 10px;
+  line-height: 1.6;
+  resize: vertical;
+}
+
+.car-check {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  color: var(--hs-text);
+  font-size: 13px;
+  font-weight: 700;
+}
+
+.car-grid-two {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 10px;
+}
+
+.car-advanced-note {
+  margin: 0;
+  color: var(--hs-text-muted);
+  font-size: 12px;
+  line-height: 1.6;
+}
+
+@media (max-width: 560px) {
+  .car-grid-two,
+  .car-segmented {
+    grid-template-columns: 1fr;
+  }
+}
+</style>

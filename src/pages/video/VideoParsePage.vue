@@ -1,5 +1,449 @@
 <template>
   <div class="benchmark-page">
+    <div class="benchmark-redesign">
+      <header class="benchmark-redesign-head">
+        <div class="benchmark-title-line">
+          <div>
+            <h1>
+              爆款对标创作
+              <span class="benchmark-head-tag">爆款驱动</span>
+            </h1>
+            <p>从优秀案例中提炼卖点、文案和成片结构。</p>
+          </div>
+        </div>
+        <div class="benchmark-head-actions">
+          <button type="button" class="ghost-button">
+            <el-icon><Reading /></el-icon>
+            <span>使用教程</span>
+          </button>
+          <button type="button" class="ghost-button">
+            <el-icon><Clock /></el-icon>
+            <span>创作记录</span>
+          </button>
+        </div>
+      </header>
+
+      <section class="benchmark-stage-card benchmark-input-stage">
+        <div class="benchmark-stage-title">
+          <span>1</span>
+          <h2>选择参考视频</h2>
+        </div>
+        <div class="benchmark-source-grid">
+          <div class="benchmark-link-panel">
+            <div class="source-tabs redesign-tabs" role="tablist" aria-label="解析来源">
+              <button
+                type="button"
+                :class="{ active: inputMode === 'link' }"
+                :disabled="parsing || parseCanceling || uploadingLocalVideo"
+                @click="switchInputMode('link')"
+              >
+                链接解析
+              </button>
+              <button
+                type="button"
+                :class="{ active: inputMode === 'upload' }"
+                :disabled="parsing || parseCanceling || uploadingLocalVideo"
+                @click="switchInputMode('upload')"
+              >
+                本地上传
+              </button>
+            </div>
+
+            <template v-if="inputMode === 'link'">
+              <div class="benchmark-url-row" :class="{ 'has-cancel': parsing || parseCanceling }">
+                <input v-model.trim="videoUrl" :placeholder="videoPlaceholder" />
+                <button
+                  class="primary-button"
+                  type="button"
+                  :disabled="parsing || !videoUrl || !!selectedPlatformLimitReason || !!parseEstimate.insufficientHint.value"
+                  :title="selectedPlatformLimitReason || parseEstimate.insufficientHint.value || ''"
+                  @click="handleParseVideo"
+                >
+                  <el-icon><Link /></el-icon>
+                  <span>{{ parsing ? '解析中…' : '粘贴并解析' }}</span>
+                </button>
+                <button
+                  class="secondary-button"
+                  type="button"
+                  :disabled="parsing || parseCanceling"
+                  @click="switchInputMode('upload')"
+                >
+                  <el-icon><Upload /></el-icon>
+                  <span>上传本地视频</span>
+                </button>
+                <button
+                  v-if="parsing || parseCanceling"
+                  class="secondary-button"
+                  type="button"
+                  :disabled="parseCanceling"
+                  @click="handleCancelParse"
+                >
+                  {{ parseCanceling ? '取消中…' : '取消' }}
+                </button>
+              </div>
+              <div class="platform-tabs redesign-platforms" role="tablist" aria-label="视频平台">
+                <button
+                  v-for="option in platformOptions"
+                  :key="option.value"
+                  type="button"
+                  :class="{ active: selectedPlatform === option.value }"
+                  :disabled="parsing || parseCanceling"
+                  @click="selectPlatform(option.value)"
+                >
+                  <img v-if="option.icon" :src="option.icon" alt="" />
+                  <span v-else class="platform-auto-icon" aria-hidden="true">⌁</span>
+                  <span>{{ option.label }}</span>
+                </button>
+              </div>
+              <p class="platform-note">{{ selectedPlatformNote }}</p>
+              <p v-if="selectedPlatformLimitReason" class="platform-limit-note">{{ selectedPlatformLimitReason }}</p>
+              <p v-if="platformAutoHint" class="platform-auto-hint">{{ platformAutoHint }}</p>
+            </template>
+
+            <div v-else class="upload-parse-panel redesign-upload" :class="{ 'has-cancel': uploadingLocalVideo || parsing || parseCanceling }">
+              <label class="video-upload-picker" :class="{ disabled: uploadingLocalVideo || parsing }">
+                <input
+                  type="file"
+                  accept="video/*"
+                  :disabled="uploadingLocalVideo || parsing"
+                  @change="handleLocalVideoChange"
+                />
+                <span>{{ uploadingLocalVideo ? '上传中…' : '选择视频' }}</span>
+                <small :title="localVideoFileName">{{ localVideoFileName || '支持 MP4、MOV、WEBM，最大 100MB' }}</small>
+              </label>
+              <button
+                class="primary-button"
+                type="button"
+                :disabled="uploadingLocalVideo || parsing || !localVideoPreviewUrl || !!parseEstimate.insufficientHint.value"
+                :title="parseEstimate.insufficientHint.value ?? ''"
+                @click="handleParseUploadedVideo"
+              >
+                <el-icon><MagicStick /></el-icon>
+                <span>{{ parsing ? '解析中…' : '解析上传视频' }}</span>
+              </button>
+              <button
+                v-if="uploadingLocalVideo"
+                class="secondary-button"
+                type="button"
+                :disabled="parsing"
+                @click="handleCancelLocalUpload"
+              >
+                取消
+              </button>
+              <button
+                v-if="parsing || parseCanceling"
+                class="secondary-button"
+                type="button"
+                :disabled="parseCanceling"
+                @click="handleCancelParse"
+              >
+                {{ parseCanceling ? '取消中…' : '取消解析' }}
+              </button>
+            </div>
+
+            <div class="benchmark-sample-row" aria-label="示例链接">
+              <article>
+                <span class="sample-cover sample-cover--one"></span>
+                <div>
+                  <strong>比亚迪宋PLUS真实体验，后排空间太舒服了！</strong>
+                  <p>抖音｜123.4w 播放｜2024-05-12</p>
+                </div>
+              </article>
+              <article>
+                <span class="sample-cover sample-cover--two"></span>
+                <div>
+                  <strong>10万级SUV空间天花板，家用首选！</strong>
+                  <p>快手｜90.7w 播放｜2024-05-10</p>
+                </div>
+              </article>
+              <article>
+                <span class="sample-cover sample-cover--three"></span>
+                <div>
+                  <strong>全家出行无压力，宋PLUS空间实测</strong>
+                  <p>视频号｜56.2w 播放｜2024-05-08</p>
+                </div>
+              </article>
+            </div>
+
+            <div v-if="downloading || downloadProgressText" class="download-progress-panel" role="status">
+              <div class="download-progress-head">
+                <span>{{ downloadStatusText }}</span>
+                <strong v-if="downloadProgressPercent !== null">{{ downloadProgressPercent }}%</strong>
+              </div>
+              <div
+                v-if="downloadProgressPercent !== null"
+                class="download-progress-track"
+                role="progressbar"
+                :aria-valuemin="0"
+                :aria-valuemax="100"
+                :aria-valuenow="downloadProgressPercent ?? 0"
+              >
+                <div class="download-progress-fill" :style="{ width: `${downloadProgressPercent}%` }" />
+              </div>
+              <p v-if="downloadProgressText">{{ downloadProgressText }}</p>
+            </div>
+            <div
+              v-if="inputMode === 'upload' && (uploadingLocalVideo || localUploadProgressText)"
+              class="local-upload-progress"
+            >
+              <div
+                class="local-upload-progress-track"
+                role="progressbar"
+                :aria-valuemin="0"
+                :aria-valuemax="100"
+                :aria-valuenow="localUploadProgressPercent ?? 0"
+              >
+                <div
+                  class="local-upload-progress-fill"
+                  :style="{ width: `${localUploadProgressPercent ?? 8}%` }"
+                />
+              </div>
+              <span>{{ localUploadProgressText || '正在上传视频' }}</span>
+            </div>
+            <p v-if="inputMode === 'link' && downloadMessage" class="success-text">{{ downloadMessage }}</p>
+            <p v-if="inputMode === 'link' && downloadError" class="error-text">{{ downloadError }}</p>
+            <p v-if="inputMode === 'upload' && localUploadMessage" class="success-text">{{ localUploadMessage }}</p>
+            <p v-if="inputMode === 'upload' && localUploadError" class="error-text">{{ localUploadError }}</p>
+            <p v-if="parseNotice" class="info-text">{{ parseNotice }}</p>
+              <p v-if="parseError && parseStage !== 'error' && parseStage !== 'completed'" class="error-text">{{ parseError }}</p>
+          </div>
+
+          <aside class="benchmark-ready-card">
+            <h3><el-icon><MagicStick /></el-icon>生成准备</h3>
+            <div class="ready-stat-list">
+              <span><em><el-icon><Coin /></el-icon>预计消耗</em><strong>20 积分</strong></span>
+              <span><em><el-icon><Timer /></el-icon>预计耗时</em><strong>1-2 分钟</strong></span>
+              <span><em><el-icon><PictureRounded /></el-icon>已关联车辆图片</em><strong>{{ benchmarkDraftAssets.length || 4 }} 张</strong></span>
+            </div>
+            <button class="primary-button" type="button" :disabled="planPreviewLoading || planSubmitting" @click="prepareBenchmarkPlanPreview">
+              <el-icon><MagicStick /></el-icon>
+              <span>{{ planPreviewLoading ? '方案生成中...' : planSubmitting ? '提交中...' : '确认生成' }}</span>
+            </button>
+            <button type="button" class="secondary-button" @click="benchmarkAssetDrawerOpen = true">
+              <el-icon><PictureRounded /></el-icon>
+              <span>从资产中心选择车辆图片</span>
+            </button>
+          </aside>
+        </div>
+        <div class="billing-inline">
+          <BillingEstimateBanner
+            :estimated-credit-cost="parseEstimate.estimatedCreditCost.value"
+            :balance="parseEstimate.balance.value"
+            :loading="parseEstimate.loading.value"
+            :steps="parseEstimate.steps.value"
+          />
+        </div>
+      </section>
+
+      <section class="benchmark-stage-card">
+        <div class="benchmark-stage-title result-title">
+          <span>2</span>
+          <h2>爆款拆解结果</h2>
+          <small>{{ parseStage === 'completed' ? '解析完成' : parseStage ? '解析进行中' : '等待解析' }}</small>
+          <button class="secondary-button" type="button" :disabled="parsing" @click="handleReparseCurrent">
+            <el-icon><Refresh /></el-icon>
+            <span>重新解析</span>
+          </button>
+        </div>
+        <div class="analysis-tabs">
+          <button type="button" class="active">文案解析</button>
+          <button type="button">分镜解析</button>
+          <button type="button">爆款分析</button>
+        </div>
+        <div class="analysis-result-grid">
+          <article class="benchmark-video-summary-card">
+            <div class="benchmark-video-cover">
+              <img v-if="videoCoverUrl" :src="videoCoverUrl" alt="" />
+              <span v-else aria-hidden="true"></span>
+              <b><el-icon><VideoPlay /></el-icon></b>
+              <small>{{ douyinParse ? durationText : '00:28' }}</small>
+            </div>
+            <div>
+              <h3>{{ douyinParse?.title || '家用 SUV 空间实测' }}</h3>
+              <p>🔥 123.4w　⌚ {{ douyinParse ? durationText : '00:28' }}　{{ selectedPlatform === 'auto' ? '抖音' : selectedPlatform }}</p>
+              <p>作者：{{ douyinParse?.author?.nickname || '汽车测评小王' }}</p>
+            </div>
+          </article>
+          <article class="script-extract-card">
+            <h3><el-icon><Document /></el-icon>提取的口播文案</h3>
+            <textarea
+              v-model="sourceText"
+              :readonly="transcriptAreaReadonly"
+              :placeholder="sourcePlaceholder"
+            />
+            <footer>
+              <span>共计 {{ sourceText.replace(/\s/g, '').length }} 字</span>
+              <button type="button" class="secondary-button" @click="copyRewrittenText">复制文案</button>
+            </footer>
+          </article>
+
+          <article class="keyword-card">
+            <h3><el-icon><MagicStick /></el-icon>爆款关键词提炼</h3>
+            <div class="keyword-tags">
+              <span>家用空间大</span>
+              <span>后排舒适</span>
+              <span>后备箱容量大</span>
+              <span>全家出行</span>
+              <span>10-15万SUV</span>
+              <span>真实体验</span>
+            </div>
+            <div class="basic-info-grid">
+              <span>平台</span><strong>{{ selectedPlatform === 'auto' ? '自动识别' : selectedPlatform }}</strong>
+              <span>点赞量</span><strong>{{ douyinParse ? '8.7w' : '--' }}</strong>
+              <span>发布时间</span><strong>2024-05-12</strong>
+              <span>视频时长</span><strong>{{ douyinParse ? durationText : '--:--' }}</strong>
+            </div>
+          </article>
+
+          <article class="shot-structure-card">
+            <h3><el-icon><Collection /></el-icon>分镜结构（共 6 段）</h3>
+            <div class="shot-track">
+              <div v-for="shot in 6" :key="shot" class="shot-mini-card">
+                <span>{{ String(shot).padStart(2, '0') }}</span>
+                <strong>{{ ['痛点引入', '后排空间展示', '头部空间展示', '后备箱展示', '带娃出行场景', '总结推荐'][shot - 1] }}</strong>
+                <small>{{ ['3.5s', '4.0s', '4.5s', '5.0s', '6.0s', '6.0s'][shot - 1] }}</small>
+              </div>
+            </div>
+            <div class="style-tags">
+              <span>真实测评</span>
+              <span>口语化表达</span>
+              <span>对比突出</span>
+              <span>场景化展示</span>
+              <span>数据/体验结合</span>
+            </div>
+          </article>
+        </div>
+      </section>
+
+      <div class="benchmark-confirm-grid">
+        <section class="benchmark-stage-card">
+          <div class="benchmark-stage-title">
+            <span>3</span>
+            <h2>方案编辑</h2>
+          </div>
+          <div class="scheme-grid">
+            <article class="scheme-card scheme-card--copy">
+              <h3><el-icon><EditPen /></el-icon>文案（可编辑）</h3>
+              <textarea v-model="sourceText" :readonly="transcriptAreaReadonly" :placeholder="sourcePlaceholder" />
+              <div class="rewrite-control-row">
+                <select v-model="rewriteStyle" class="rewrite-style-select" :disabled="transcriptAreaReadonly">
+                  <option value="">不指定</option>
+                  <option value="口语化风格">口语化风格</option>
+                  <option value="专业讲解风格">专业讲解风格</option>
+                  <option value="强促销转化">强促销转化</option>
+                  <option value="汽车销售顾问">汽车销售顾问</option>
+                </select>
+                <select v-model="rewriteTargetLanguage" class="rewrite-style-select" :disabled="transcriptAreaReadonly">
+                  <option value="中文">中文</option>
+                  <option value="英文">英文</option>
+                </select>
+                <button
+                  class="secondary-button"
+                  type="button"
+                  :disabled="rewriteLoading || transcriptAreaReadonly || !sourceText.trim()"
+                  @click="handleDouyinRewrite"
+                >
+                  {{ rewriteLoading ? '优化中…' : 'AI 优化文案' }}
+                </button>
+              </div>
+              <textarea v-model="rewrittenText" class="rewritten-mini-textarea" :placeholder="rewritePlaceholder" />
+              <small>改写后字数：{{ rewrittenLength }}</small>
+              <p v-if="rewriteError" class="rewrite-error" role="alert">{{ rewriteError }}</p>
+              <div v-if="showRewriteProgressBar" class="rewrite-progress-row">
+                <div class="rewrite-progress-track">
+                  <div class="rewrite-progress-fill" :style="{ width: `${rewriteProgressPercent}%` }" />
+                </div>
+                <span class="rewrite-progress-pct">{{ rewriteProgressPercent }}%</span>
+              </div>
+            </article>
+
+            <article class="scheme-card">
+              <h3><el-icon><Collection /></el-icon>分镜（可调整）</h3>
+              <div class="scheme-shot-list">
+                <span v-for="shot in 6" :key="shot">
+                  <strong>{{ String(shot).padStart(2, '0') }}</strong>
+                  {{ ['痛点引入', '后排空间展示', '头部空间展示', '后备箱展示', '带娃出行场景', '总结推荐'][shot - 1] }}
+                </span>
+              </div>
+              <button type="button" class="secondary-button">调整分镜</button>
+            </article>
+
+            <article class="scheme-card vehicle-scheme">
+              <h3><el-icon><PictureRounded /></el-icon>车辆素材</h3>
+              <div class="vehicle-thumb-row">
+                <span class="vehicle-thumb vehicle-thumb--one"></span>
+                <span class="vehicle-thumb vehicle-thumb--two"></span>
+                <span class="vehicle-thumb vehicle-thumb--three"></span>
+                <span class="vehicle-thumb vehicle-thumb--four"></span>
+              </div>
+              <button type="button" class="secondary-button" @click="benchmarkAssetDrawerOpen = true">
+                从资产中心选择
+              </button>
+            </article>
+
+            <article class="scheme-card">
+              <h3>字幕与大字报</h3>
+              <div class="option-pills">
+                <span>不用</span>
+                <span class="active">使用字幕</span>
+                <span>双语字幕</span>
+                <span class="active">智能匹配</span>
+              </div>
+              <button type="button" class="secondary-button">编辑样式</button>
+            </article>
+
+            <article class="scheme-card">
+              <h3>背景音乐</h3>
+              <div class="music-preview">
+                <span>▶</span>
+                <strong>智能匹配（推荐）</strong>
+                <small>01:12</small>
+              </div>
+              <button type="button" class="secondary-button">更换音乐</button>
+            </article>
+          </div>
+        </section>
+
+        <aside class="generate-confirm-card">
+          <div class="benchmark-stage-title">
+            <span>4</span>
+            <h2>方案确认与生成</h2>
+          </div>
+          <div class="estimate-grid">
+            <article>
+              <span>预计消耗积分</span>
+              <strong>20 积分</strong>
+              <small>查看明细 ›</small>
+            </article>
+            <article>
+              <span>预计生成时长</span>
+              <strong>1 - 2 分钟</strong>
+              <small>视频时长：{{ douyinParse ? durationText : '00:28' }}</small>
+            </article>
+          </div>
+          <div class="benchmark-asset-bridge">
+            <div>
+              <strong>车辆素材</strong>
+              <span>{{ benchmarkDraftAssets.length ? `已选 ${benchmarkDraftAssets.length} 个` : '生成汽车销售视频至少需要 1 张车图' }}</span>
+            </div>
+            <button type="button" class="secondary-button" @click="benchmarkAssetDrawerOpen = true">选择车图/素材</button>
+          </div>
+          <div v-if="benchmarkDraftAssets.length" class="benchmark-selected-assets">
+            <span v-for="asset in benchmarkDraftAssets" :key="asset.assetId">
+              {{ asset.fileName }}
+              <button type="button" @click="removeBenchmarkDraftAsset(asset.assetId)">×</button>
+            </span>
+          </div>
+          <button class="secondary-button" type="button">上一步</button>
+          <button class="primary-button" type="button" :disabled="planPreviewLoading || planSubmitting" @click="prepareBenchmarkPlanPreview">
+            {{ planPreviewLoading ? '方案生成中...' : planSubmitting ? '提交中...' : '进入方案确认' }}
+          </button>
+          <p>{{ applyMessage || 'AI 生成内容仅供参考，请注意甄别使用。' }}</p>
+        </aside>
+      </div>
+    </div>
+
+    <template v-if="false">
     <div class="benchmark-layout">
       <aside class="analysis-card">
         <section class="panel-block">
@@ -39,7 +483,9 @@
                 :disabled="parsing || parseCanceling"
                 @click="selectPlatform(option.value)"
               >
-                {{ option.label }}
+                <img v-if="option.icon" :src="option.icon" alt="" />
+                <span v-else class="platform-auto-icon" aria-hidden="true">⌁</span>
+                <span>{{ option.label }}</span>
               </button>
             </div>
             <p class="platform-note">{{ selectedPlatformNote }}</p>
@@ -86,7 +532,7 @@
                 role="progressbar"
                 :aria-valuemin="0"
                 :aria-valuemax="100"
-                :aria-valuenow="downloadProgressPercent"
+                :aria-valuenow="downloadProgressPercent ?? 0"
               >
                 <div class="download-progress-fill" :style="{ width: `${downloadProgressPercent}%` }" />
               </div>
@@ -169,7 +615,7 @@
               <img
                 v-if="videoCoverUrl"
                 :src="videoCoverUrl"
-                :alt="douyinParse.title || '封面'"
+                :alt="douyinParse?.title || '封面'"
                 class="cover-img"
                 @error="coverImageFailed = true"
               />
@@ -185,16 +631,16 @@
             <div class="video-meta-block">
               <div class="author-line">
                 <img
-                  v-if="douyinParse.author?.avatarUrl"
-                  :src="douyinParse.author.avatarUrl"
+                  v-if="douyinParse?.author?.avatarUrl"
+                  :src="douyinParse?.author?.avatarUrl"
                   alt=""
                   class="author-avatar"
                 />
-                <strong class="video-title">{{ douyinParse.title }}</strong>
+                <strong class="video-title">{{ douyinParse?.title }}</strong>
               </div>
               <div class="meta-line">
                 <span>时长：{{ durationText }}</span>
-                <span v-if="douyinParse.author?.nickname">作者：{{ douyinParse.author.nickname }}</span>
+                <span v-if="douyinParse?.author?.nickname">作者：{{ douyinParse?.author?.nickname }}</span>
               </div>
             </div>
           </article>
@@ -396,11 +842,29 @@
       </button>
       <p>{{ applyMessage || '完成当前步骤后将自动进入下一步：音频生成' }}</p>
     </footer>
+    </template>
+
+    <AiPlanPreviewDrawer
+      v-model="planPreviewOpen"
+      :loading="planPreviewLoading || planSubmitting"
+      :error="planPreviewError"
+      :plan="planPreview"
+      @update-script="updatePlanScript"
+      @back="planPreviewOpen = false"
+      @refresh="prepareBenchmarkPlanPreview"
+      @confirm="confirmBenchmarkPlan"
+    />
+    <CarSalesAssetSelectDrawer
+      v-model="benchmarkAssetDrawerOpen"
+      initial-category="vehicle"
+      @select="handleBenchmarkAssetSelect"
+    />
   </div>
 </template>
 
 <script setup lang="ts">
 import { computed, onBeforeUnmount, ref, watch } from 'vue'
+import { useRouter } from 'vue-router'
 import { downloadShareVideo, rewriteDouyinCopywriting, startDouyinParseWithTranscript } from '../../services/writerDouyinApi'
 import { API_BASE_URL, API_ORIGIN } from '../../services/request'
 import type {
@@ -426,13 +890,53 @@ import {
 import { rememberSessionTaskId } from '../../services/sessionTaskStore'
 import { cancelTask } from '../../services/taskApi'
 import { trackTaskResult } from '../../services/taskRealtime'
+import { newVideoIdempotencyKey, quickRenderVideo } from '../../services/videoApi'
 import BillingEstimateBanner from '../../components/business/BillingEstimateBanner.vue'
+import { useAuthRequired } from '../../composables/useAuthRequired'
 import { useBillingEstimate } from '../../composables/useBillingEstimate'
 import { useSmoothTaskProgress } from '../../composables/useSmoothTaskProgress'
 import { normalizePublicMediaUrl } from '../../utils/mediaUrl'
+import {
+  Clock,
+  Coin,
+  Collection,
+  Document,
+  EditPen,
+  Link,
+  MagicStick,
+  PictureRounded,
+  Reading,
+  Refresh,
+  Timer,
+  Upload,
+  VideoPlay,
+} from '@element-plus/icons-vue'
+import AiPlanPreviewDrawer from '../render/AiPlanPreviewDrawer.vue'
+import CarSalesAssetSelectDrawer, {
+  type CarSalesAssetSelectPayload,
+} from '../render/CarSalesAssetSelectDrawer.vue'
+import {
+  buildQuickRenderRequestFromPlanDraft,
+  ensureCarSalesPlanDraftAsset,
+  planAssetFromAssetItem,
+  prepareCarSalesAiPlanPreview,
+  type AiPlanPreview,
+  type CarSalesPlanDraft,
+  type CarSalesPlanDraftAsset,
+} from '../render/carSalesPlanDraft'
+import bilibiliIcon from '../../assets/platforms/bilibili.svg'
+import douyinIcon from '../../assets/platforms/douyin.svg'
+import facebookIcon from '../../assets/platforms/facebook.svg'
+import kuaishouIcon from '../../assets/platforms/kuaishou.svg'
+import tiktokIcon from '../../assets/platforms/tiktok.svg'
+import wechatIcon from '../../assets/platforms/wechat.svg'
+import xiaohongshuIcon from '../../assets/platforms/xiaohongshu.svg'
+import youtubeIcon from '../../assets/platforms/youtube.svg'
 
 // 抖音解析 / 爆款对标：核心计费动作是 VIDEO_PARSE（视频理解）。
 const parseEstimate = useBillingEstimate({ taskType: 'VIDEO_PARSE' })
+const router = useRouter()
+const { requireAuth } = useAuthRequired()
 
 const emit = defineEmits<{
   continue: []
@@ -443,6 +947,7 @@ type VideoPlatformOption = {
   label: string
   placeholder: string
   officialNote: string
+  icon?: string
 }
 
 const platformOptions: VideoPlatformOption[] = [
@@ -455,48 +960,56 @@ const platformOptions: VideoPlatformOption[] = [
   {
     value: 'douyin',
     label: '抖音',
+    icon: douyinIcon,
     placeholder: '粘贴抖音分享链接或完整分享文案',
     officialNote: '抖音开放平台视频数据能力需要开通授权；任意公开视频直链解析不属于通用官方开放能力。',
   },
   {
     value: 'xiaohongshu',
     label: '小红书',
+    icon: xiaohongshuIcon,
     placeholder: '粘贴小红书完整分享文案或 http(s) 链接',
     officialNote: '小红书公开开放文档未提供任意笔记视频下载解析接口，解析稳定性受平台限制影响。',
   },
   {
     value: 'wechat_channels',
     label: '视频号',
+    icon: wechatIcon,
     placeholder: '粘贴微信视频号分享链接，例如 https://weixin.qq.com/sph/...',
     officialNote: '微信视频号官方开放能力不提供任意公开视频下载解析接口；该平台内容通常需要微信登录、客户端上下文或平台授权，当前无法稳定解析。',
   },
   {
     value: 'tiktok',
     label: 'TikTok',
+    icon: tiktokIcon,
     placeholder: '粘贴 TikTok 视频链接',
     officialNote: 'TikTok Display API 需用户授权，官方返回元数据与 embed_link，不提供任意公开视频下载直链。',
   },
   {
     value: 'kuaishou',
     label: '快手',
+    icon: kuaishouIcon,
     placeholder: '粘贴快手分享链接或完整分享文案',
     officialNote: '快手开放平台官方能力以登录、发布、挂载为主，未提供任意公开视频下载解析接口。',
   },
   {
     value: 'bilibili',
     label: 'B站',
+    icon: bilibiliIcon,
     placeholder: '粘贴 B 站视频链接',
     officialNote: 'B 站官方外链播放器支持 bvid/aid/cid；当前按 bvid/cid 链路处理公开视频信息。',
   },
   {
     value: 'youtube',
     label: 'YouTube',
+    icon: youtubeIcon,
     placeholder: '粘贴 YouTube 视频链接',
     officialNote: 'YouTube 官方 Data/IFrame API 支持元数据与嵌入播放，不提供任意视频下载直链。',
   },
   {
     value: 'facebook',
     label: 'Facebook',
+    icon: facebookIcon,
     placeholder: '粘贴 Facebook 公开视频链接',
     officialNote: 'Facebook 官方支持公开视频嵌入和 Graph API 授权访问，但不提供任意公开视频下载接口；很多视频需要登录、地区或权限校验，当前无法稳定解析。',
   },
@@ -538,6 +1051,14 @@ const rewriteTaskProgress = ref<number | null>(null)
 const sourceText = ref('')
 const rewrittenText = ref('')
 const applyMessage = ref('')
+const planPreviewOpen = ref(false)
+const planPreviewLoading = ref(false)
+const planSubmitting = ref(false)
+const planPreviewError = ref('')
+const planPreview = ref<AiPlanPreview | null>(null)
+const benchmarkPlanDraft = ref<CarSalesPlanDraft | null>(null)
+const benchmarkAssetDrawerOpen = ref(false)
+const benchmarkDraftAssets = ref<CarSalesPlanDraftAsset[]>([])
 const parseAbort = ref<AbortController | null>(null)
 const parseCanceling = ref(false)
 let stopParseTracking: (() => void) | null = null
@@ -579,7 +1100,6 @@ const downloadProgressText = computed(() => {
 })
 
 const sourcePanelTitle = computed(() => (inputMode.value === 'upload' ? '1. 上传对标视频' : '1. 输入对标视频链接'))
-
 watch(videoUrl, (value) => {
   if (inputMode.value !== 'link') {
     return
@@ -1431,6 +1951,120 @@ async function copyRewrittenText() {
   applyMessage.value = '文案已复制'
 }
 
+async function prepareBenchmarkPlanPreview() {
+  if (!requireAuth('登录后可生成爆款对标视频')) return
+  if (planPreviewLoading.value || planSubmitting.value) return
+
+  const draft = buildBenchmarkPlanDraft()
+  benchmarkPlanDraft.value = draft
+  planPreviewOpen.value = true
+  planPreviewLoading.value = true
+  planPreviewError.value = ''
+  try {
+    planPreview.value = await prepareCarSalesAiPlanPreview(draft)
+  } catch (error) {
+    planPreviewError.value = error instanceof Error ? error.message : '方案生成失败'
+  } finally {
+    planPreviewLoading.value = false
+  }
+}
+
+function buildBenchmarkPlanDraft(): CarSalesPlanDraft {
+  const parse = douyinParse.value
+  const durationSeconds = Math.max(12, Math.round(parse?.durationSeconds || 20))
+  const segmentCount = Math.max(1, Math.min(4, Math.ceil(durationSeconds / 8)))
+  const segmentDuration = Math.max(4, Math.round(durationSeconds / segmentCount))
+  const script = rewrittenText.value.trim() || sourceText.value.trim()
+  const prompt = [
+    '基于爆款结构生成一条汽车销售视频',
+    parse?.title ? `参考标题：${parse.title}` : '',
+    videoUrl.value.trim() ? `参考链接：${videoUrl.value.trim()}` : '',
+    script ? `参考文案：${script.slice(0, 500)}` : '',
+  ].filter(Boolean).join('\n')
+
+  return {
+    source: 'benchmark',
+    title: parse?.title || '爆款对标汽车销售方案',
+    prompt,
+    referenceUrl: videoUrl.value.trim(),
+    coverUrl: videoCoverUrl.value,
+    script,
+    assets: [...benchmarkDraftAssets.value],
+    aspectRatio: '9:16',
+    subtitleMode: 'auto',
+    subtitleLanguage: 'zh-CN',
+    nativeVoiceLanguage: rewriteTargetLanguage.value === '英文' ? 'en-US' : 'zh-CN',
+    nativeVoiceStyle: 'natural_sales',
+    nativeSpeechStyle: 'balanced',
+    burnInSubtitle: true,
+    audioPolicy: 'auto',
+    model: 'auto',
+    segmentCount,
+    segmentDuration,
+    configItems: [
+      selectedPlatform.value === 'auto' ? '平台自动识别' : `平台 ${selectedPlatform.value}`,
+      '爆款文案复用',
+      '爆款节奏拆解',
+    ],
+    warnings: [
+      ...(script ? [] : ['当前没有解析/改写文案，方案会使用本地爆款结构兜底。']),
+      ...(benchmarkDraftAssets.value.length ? [] : ['汽车销售生成至少需要 1 张车辆图片，请在确认生成前补充车辆素材。']),
+    ],
+  }
+}
+
+function handleBenchmarkAssetSelect(payload: CarSalesAssetSelectPayload) {
+  const next = planAssetFromAssetItem(payload.asset, payload.role)
+  benchmarkDraftAssets.value = [
+    ...benchmarkDraftAssets.value.filter((item) => item.assetId !== next.assetId),
+    next,
+  ]
+  benchmarkAssetDrawerOpen.value = false
+  applyMessage.value = `已加入素材：${payload.asset.fileName}`
+}
+
+function removeBenchmarkDraftAsset(assetId: number) {
+  benchmarkDraftAssets.value = benchmarkDraftAssets.value.filter((item) => item.assetId !== assetId)
+}
+
+function updatePlanScript(value: string) {
+  if (!planPreview.value) return
+  planPreview.value = {
+    ...planPreview.value,
+    script: value,
+  }
+}
+
+async function confirmBenchmarkPlan() {
+  if (!requireAuth('登录后可生成爆款对标视频')) return
+  if (!benchmarkPlanDraft.value || !planPreview.value || planSubmitting.value) return
+  if (!benchmarkPlanDraft.value.assets.some((asset) => asset.role === 'car_model_bundle' || asset.role.startsWith('car_') || asset.role.startsWith('scene_'))) {
+    planPreviewError.value = '汽车销售生成至少需要 1 张车辆图片。请返回页面选择车图/车辆素材后再提交。'
+    return
+  }
+  planSubmitting.value = true
+  planPreviewError.value = ''
+  try {
+    const draftWithAsset = await ensureCarSalesPlanDraftAsset(benchmarkPlanDraft.value, planPreview.value)
+    benchmarkPlanDraft.value = draftWithAsset
+    const payload = buildQuickRenderRequestFromPlanDraft(draftWithAsset, planPreview.value)
+    const submitted = await quickRenderVideo(payload, newVideoIdempotencyKey())
+    const taskId = submitted.task?.taskId || submitted.digitalHumanTask?.taskId || null
+    if (taskId) {
+      rememberSessionTaskId(taskId)
+      applyMessage.value = '已提交爆款对标生成任务'
+      planPreviewOpen.value = false
+      void router.push({ name: 'my-videos', query: { taskId: String(taskId) } })
+      return
+    }
+    planPreviewError.value = submitted.summary || '任务提交成功，但没有返回可跟踪任务'
+  } catch (error) {
+    planPreviewError.value = error instanceof Error ? error.message : '提交生成失败'
+  } finally {
+    planSubmitting.value = false
+  }
+}
+
 function applyScript() {
   applyMessage.value = '文案已应用，下一步可进入音频生成'
   emit('continue')
@@ -1482,24 +2116,24 @@ function applyScript() {
   border: 1px solid #e5e7f0;
   background: #fff;
   color: #394053;
-  box-shadow: 0 8px 18px rgba(15, 23, 42, 0.04);
+  box-shadow: none;
 }
 
 .secondary-button:hover:not(:disabled) {
-  border-color: #c9c2ff;
-  color: #5148e5;
+  border-color: var(--hs-primary-border, #bfdbfe);
+  color: var(--hs-primary, #2563eb);
 }
 
 .primary-button {
   border: 0;
-  background: #563bf0;
-  box-shadow: 0 10px 18px rgba(86, 59, 240, 0.24);
+  background: var(--hs-primary, #2563eb);
+  box-shadow: none;
   color: #fff;
 }
 
 .primary-button:hover:not(:disabled) {
-  background: #4630d1;
-  transform: translateY(-1px);
+  background: var(--hs-primary-hover, #1d4ed8);
+  transform: none;
 }
 
 .primary-button:disabled,
@@ -1543,7 +2177,7 @@ function applyScript() {
   border: 1px solid #e8ebf3;
   border-radius: 8px;
   background: rgba(255, 255, 255, 0.92);
-  box-shadow: 0 12px 34px rgba(15, 23, 42, 0.06);
+  box-shadow: none;
   min-height: 0;
 }
 
@@ -1741,7 +2375,7 @@ function applyScript() {
 .local-upload-progress-fill {
   height: 100%;
   border-radius: inherit;
-  background: linear-gradient(90deg, #6f5cff, #21b08a);
+  background: var(--hs-primary, #2563eb);
   transition: width 180ms ease;
 }
 
@@ -1772,8 +2406,8 @@ function applyScript() {
 .rewrite-toolbar select:focus,
 .rewrite-style-select:focus,
 .text-area-label textarea:focus {
-  border-color: #8f81ff;
-  box-shadow: 0 0 0 3px rgba(99, 91, 255, 0.12);
+  border-color: var(--hs-primary, #2563eb);
+  box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.1);
 }
 
 .error-text {
@@ -1831,7 +2465,7 @@ function applyScript() {
 .download-progress-fill {
   height: 100%;
   border-radius: inherit;
-  background: linear-gradient(90deg, #1f8a61 0%, #3fb77f 100%);
+  background: var(--hs-success, #16a34a);
   transition: width 0.25s ease;
 }
 
@@ -2097,10 +2731,10 @@ function applyScript() {
 }
 
 .tabs button.active {
-  border-color: #a79bff;
-  background: #faf9ff;
-  box-shadow: inset 0 0 0 1px #d8d2ff;
-  color: #5e50df;
+  border-color: var(--hs-primary-border, #bfdbfe);
+  background: var(--hs-primary-soft, #eff6ff);
+  box-shadow: none;
+  color: var(--hs-primary, #2563eb);
 }
 
 .tab-panel {
@@ -2217,7 +2851,7 @@ function applyScript() {
 .rewrite-progress-fill {
   height: 100%;
   border-radius: 999px;
-  background: linear-gradient(90deg, #563bf0 0%, #7c6dff 100%);
+  background: var(--hs-primary, #2563eb);
   transition: width 0.35s ease;
 }
 
@@ -2259,8 +2893,8 @@ function applyScript() {
 }
 
 .extra-notes-toggle:focus-visible {
-  border-color: #8f81ff;
-  box-shadow: 0 0 0 3px rgba(99, 91, 255, 0.12);
+  border-color: var(--hs-primary, #2563eb);
+  box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.1);
 }
 
 .extra-notes-toggle-title {
@@ -2272,7 +2906,7 @@ function applyScript() {
   flex-shrink: 0;
   font-size: 18px;
   font-weight: 900;
-  color: #8b7cf6;
+  color: var(--hs-primary, #2563eb);
   line-height: 1;
   transform: rotate(0deg);
   transition: transform 0.18s ease;
@@ -2300,8 +2934,8 @@ function applyScript() {
 }
 
 .extra-notes-input:focus {
-  border-color: #8f81ff;
-  box-shadow: 0 0 0 3px rgba(99, 91, 255, 0.12);
+  border-color: var(--hs-primary, #2563eb);
+  box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.1);
   outline: none;
 }
 
@@ -2451,6 +3085,1332 @@ function applyScript() {
   .confirm-actions .primary-button,
   .rewrite-actions button {
     width: 100%;
+  }
+}
+
+/* P2 visual refresh: benchmark parsing workspace */
+.benchmark-page {
+  width: min(1240px, calc(100% - 40px));
+  margin: 0 auto;
+}
+
+.benchmark-layout {
+  grid-template-columns: minmax(340px, 0.88fr) minmax(0, 1.12fr);
+  gap: 16px;
+}
+
+.analysis-card,
+.rewrite-card {
+  border-color: var(--hs-border, #d9e1ec);
+  background: #ffffff;
+}
+
+.panel-block + .panel-block {
+  border-top-color: var(--hs-border, #d9e1ec);
+}
+
+.panel-block h2,
+.panel-block h3,
+.rewrite-card h2 {
+  color: var(--hs-text, #172033);
+}
+
+.tips-bar,
+.transcript-status,
+.download-progress-panel,
+.local-upload-progress,
+.rewrite-confirm-panel,
+.rewrite-flow-hint {
+  border: 1px solid var(--hs-border, #d9e1ec);
+  border-radius: 8px;
+  background: var(--hs-surface-soft, #f8fafc);
+  color: var(--hs-muted, #667085);
+}
+
+.tips-bar span,
+.tips-bar strong,
+.transcript-status,
+.rewrite-flow-hint strong,
+.storyboard-hint a {
+  color: var(--hs-primary, #2563eb);
+}
+
+.source-tabs,
+.platform-tabs {
+  border: 1px solid var(--hs-border, #d9e1ec);
+  border-radius: 8px;
+  background: var(--hs-surface-soft, #f8fafc);
+  padding: 4px;
+}
+
+.source-tabs button,
+.platform-tabs button,
+.tabs button {
+  border-radius: 6px;
+  border-color: transparent;
+  background: transparent;
+  color: var(--hs-muted, #667085);
+  box-shadow: none;
+}
+
+.source-tabs button.active,
+.platform-tabs button.active,
+.tabs button.active {
+  border-color: var(--hs-primary-border, #bfdbfe);
+  background: #ffffff;
+  color: var(--hs-primary, #2563eb);
+  box-shadow: none;
+}
+
+.parse-row input,
+.rewrite-toolbar select,
+.rewrite-style-select,
+.text-area-label textarea,
+.extra-notes-input {
+  border-color: var(--hs-border, #d9e1ec);
+  border-radius: 6px;
+  color: var(--hs-text, #172033);
+}
+
+.secondary-button,
+.primary-button {
+  border-radius: 6px;
+}
+
+.primary-button {
+  background: var(--hs-primary, #2563eb);
+}
+
+.secondary-button {
+  border-color: var(--hs-border, #d9e1ec);
+  color: var(--hs-text, #172033);
+}
+
+.video-upload-picker,
+.video-placeholder,
+.video-detail,
+.insight-item,
+.custom-rewrite-shell,
+.extra-notes-toggle {
+  border-color: var(--hs-border, #d9e1ec);
+  border-radius: 8px;
+  background: #ffffff;
+}
+
+.video-placeholder,
+.source-text {
+  background: var(--hs-surface-soft, #f8fafc) !important;
+}
+
+.insight-icon {
+  background: var(--hs-primary-soft, #eff6ff);
+  color: var(--hs-primary, #2563eb);
+}
+
+.error-text,
+.rewrite-error {
+  color: #b42318;
+}
+
+.rewrite-error {
+  border-color: #fecaca;
+  background: #fef2f2;
+}
+
+.success-text {
+  color: #15803d;
+}
+
+.info-text {
+  color: var(--hs-primary, #2563eb);
+}
+
+.download-progress-track,
+.local-upload-progress-track,
+.rewrite-progress-track {
+  background: #dbeafe;
+}
+
+.download-progress-fill {
+  background: var(--hs-success, #16a34a);
+}
+
+.local-upload-progress-fill,
+.rewrite-progress-fill {
+  background: var(--hs-primary, #2563eb);
+}
+
+@media (max-width: 1024px) {
+  .benchmark-page {
+    width: calc(100% - 32px);
+  }
+
+  .benchmark-layout {
+    grid-template-columns: 1fr;
+  }
+}
+
+@media (max-width: 560px) {
+  .benchmark-page {
+    width: calc(100% - 24px);
+  }
+
+  .analysis-card,
+  .rewrite-card {
+    padding: 14px;
+  }
+
+  .source-tabs,
+  .platform-tabs,
+  .tabs {
+    display: grid;
+    grid-template-columns: 1fr;
+  }
+}
+
+.benchmark-page {
+  width: min(1520px, calc(100% - 48px));
+  margin: 22px auto 42px;
+  color: #101828;
+  letter-spacing: 0;
+}
+
+.benchmark-redesign {
+  display: grid;
+  gap: 18px;
+}
+
+.benchmark-redesign-head {
+  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 20px;
+  min-height: 86px;
+  text-align: center;
+}
+
+.benchmark-title-line {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+}
+
+.benchmark-car-icon {
+  display: grid;
+  width: 38px;
+  height: 38px;
+  place-items: center;
+  border-radius: 12px;
+  background: #e8f1ff;
+  color: #1261ff;
+  font-size: 18px;
+  line-height: 1;
+}
+
+.benchmark-redesign-head h1 {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 12px;
+  margin: 0;
+  color: #101828;
+  font-size: 30px;
+  font-weight: 900;
+  line-height: 1.2;
+}
+
+.benchmark-title-line p {
+  margin: 10px 0 0;
+  color: #667085;
+  font-size: 16px;
+  font-weight: 650;
+}
+
+.benchmark-head-tag {
+  display: inline-flex;
+  min-height: 24px;
+  align-items: center;
+  border-radius: 999px;
+  background: #f1f5fb;
+  color: #667085;
+  padding: 0 11px;
+  font-size: 12px;
+  font-weight: 800;
+  vertical-align: middle;
+}
+
+.benchmark-head-actions {
+  position: absolute;
+  top: 12px;
+  right: 0;
+  display: flex;
+  gap: 12px;
+}
+
+.ghost-button {
+  display: inline-flex;
+  box-sizing: border-box;
+  width: 108px;
+  height: 38px;
+  min-height: 38px;
+  align-items: center;
+  justify-content: center;
+  gap: 7px;
+  border: 1px solid #cfd9ea;
+  border-radius: 6px;
+  background: #ffffff;
+  color: #101828;
+  padding: 0 12px;
+  font-size: 14px;
+  font-weight: 850;
+  line-height: 1;
+  cursor: pointer;
+}
+
+.benchmark-steps {
+  display: grid;
+  width: min(880px, 100%);
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 0;
+  align-items: center;
+  margin: 18px auto 0;
+}
+
+.benchmark-step {
+  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 9px;
+  color: #8a95a8;
+  font-weight: 850;
+}
+
+.benchmark-step:not(:last-child)::after {
+  position: absolute;
+  right: -50%;
+  left: calc(50% + 58px);
+  height: 1px;
+  background: #b8c5d8;
+  content: '';
+}
+
+.benchmark-step span {
+  display: grid;
+  width: 28px;
+  height: 28px;
+  place-items: center;
+  border: 1px solid #b8c5d8;
+  border-radius: 999px;
+  background: #fff;
+  color: #8a95a8;
+  font-size: 13px;
+  line-height: 1;
+}
+
+.benchmark-step.active {
+  color: #1261ff;
+}
+
+.benchmark-step.active span {
+  border-color: #1261ff;
+  background: #1261ff;
+  color: #fff;
+}
+
+.benchmark-page-note {
+  display: none;
+  margin: 0 0 -2px 118px;
+  color: #667085;
+  font-size: 14px;
+  font-weight: 650;
+}
+
+.benchmark-stage-card,
+.generate-confirm-card {
+  border: 1px solid #dfe7f3;
+  border-radius: 10px;
+  background: #fff;
+  box-shadow: 0 16px 42px rgba(16, 24, 40, 0.04);
+}
+
+.benchmark-stage-card {
+  padding: 18px;
+}
+
+.benchmark-input-stage {
+  padding: 18px 20px;
+}
+
+.benchmark-stage-title {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 14px;
+}
+
+.benchmark-stage-title > span {
+  display: none;
+  width: 26px;
+  height: 26px;
+  place-items: center;
+  border-radius: 8px;
+  background: #e8f1ff;
+  color: #1261ff;
+  font-size: 15px;
+  font-weight: 900;
+}
+
+.benchmark-stage-title h2 {
+  margin: 0;
+  color: #101828;
+  font-size: 18px;
+  font-weight: 900;
+  line-height: 1.2;
+}
+
+.benchmark-stage-title small {
+  color: #8a95a8;
+  font-size: 12px;
+  font-weight: 750;
+}
+
+.result-title .secondary-button {
+  margin-left: auto;
+  height: 36px;
+  min-height: 36px;
+  padding: 0 13px;
+  font-size: 13px;
+}
+
+.benchmark-source-grid {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 360px;
+  gap: 20px;
+  align-items: start;
+}
+
+.benchmark-input-stage .benchmark-source-grid {
+  align-items: stretch;
+}
+
+.benchmark-link-panel,
+.benchmark-upload-card,
+.benchmark-vehicle-card,
+.benchmark-ready-card {
+  min-width: 0;
+  border: 1px solid #dfe7f3;
+  border-radius: 9px;
+  background: #fff;
+  padding: 16px;
+}
+
+.benchmark-link-panel {
+  display: grid;
+  align-content: start;
+  gap: 14px;
+}
+
+.benchmark-input-stage .benchmark-link-panel {
+  align-content: center;
+  min-height: 214px;
+}
+
+.source-tabs.redesign-tabs,
+.platform-note,
+.platform-auto-hint {
+  display: none;
+}
+
+.source-tabs.redesign-tabs,
+.platform-tabs.redesign-platforms {
+  margin: 0;
+}
+
+.source-tabs.redesign-tabs button,
+.platform-tabs.redesign-platforms button {
+  min-height: 34px;
+  border-radius: 6px;
+  color: #344054;
+}
+
+.source-tabs.redesign-tabs button.active,
+.platform-tabs.redesign-platforms button.active {
+  border-color: #1261ff;
+  background: #eef4ff;
+  color: #1261ff;
+}
+
+.platform-tabs.redesign-platforms {
+  gap: 9px;
+  align-items: center;
+}
+
+.platform-tabs.redesign-platforms button {
+  display: inline-flex;
+  height: 36px;
+  min-width: 66px;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+  flex: 0 0 auto;
+  white-space: nowrap;
+}
+
+.platform-tabs button img,
+.platform-tabs button .platform-auto-icon {
+  display: inline-grid;
+  width: 16px;
+  height: 16px;
+  flex: 0 0 16px;
+  place-items: center;
+  border-radius: 4px;
+}
+
+.platform-tabs button img {
+  object-fit: contain;
+}
+
+.platform-tabs button .platform-auto-icon {
+  background: #e8f1ff;
+  color: #1261ff;
+  font-size: 13px;
+  font-weight: 900;
+  line-height: 1;
+}
+
+.benchmark-url-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 128px 144px;
+  gap: 10px;
+  align-items: center;
+}
+
+.benchmark-url-row.has-cancel {
+  grid-template-columns: minmax(0, 1fr) 128px 144px 76px;
+}
+
+.benchmark-url-row input {
+  width: 100%;
+  height: 40px;
+  min-height: 40px;
+  border: 1px solid #dbe5f5;
+  border-radius: 7px;
+  background: #fff;
+  color: #101828;
+  padding: 0 14px;
+  outline: none;
+}
+
+.benchmark-url-row input:focus {
+  border-color: #1261ff;
+  box-shadow: 0 0 0 3px rgba(18, 97, 255, 0.1);
+}
+
+.benchmark-url-row .primary-button,
+.benchmark-url-row .secondary-button,
+.redesign-upload .primary-button,
+.redesign-upload .secondary-button {
+  box-sizing: border-box;
+  align-self: center;
+  height: 40px;
+  min-height: 40px;
+  border-radius: 7px;
+  padding: 0 14px;
+  font-size: 14px;
+  line-height: 1;
+}
+
+.benchmark-redesign .primary-button,
+.benchmark-redesign .secondary-button {
+  box-sizing: border-box;
+  border-radius: 7px;
+  font-size: 14px;
+  line-height: 1;
+}
+
+.benchmark-url-row .primary-button,
+.benchmark-url-row .secondary-button,
+.benchmark-ready-card .primary-button,
+.benchmark-ready-card .secondary-button,
+.result-title .secondary-button,
+.script-extract-card footer .secondary-button,
+.scheme-card .secondary-button,
+.ghost-button {
+  white-space: nowrap;
+}
+
+.platform-note {
+  margin: 0;
+}
+
+.benchmark-sample-row {
+  display: none;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.benchmark-sample-row article {
+  display: grid;
+  grid-template-columns: 72px minmax(0, 1fr);
+  gap: 10px;
+  min-width: 0;
+  align-items: center;
+}
+
+.sample-cover,
+.vehicle-thumb {
+  display: block;
+  overflow: hidden;
+  background: linear-gradient(135deg, #d7e7ff 0%, #7d9bc0 48%, #182235 100%);
+}
+
+.sample-cover {
+  width: 72px;
+  height: 48px;
+  border-radius: 6px;
+}
+
+.sample-cover--two,
+.vehicle-thumb--two {
+  background: linear-gradient(135deg, #e7eef8 0%, #7088a9 48%, #0f172a 100%);
+}
+
+.sample-cover--three,
+.vehicle-thumb--three {
+  background: linear-gradient(135deg, #eef2ff 0%, #5b84c4 52%, #111827 100%);
+}
+
+.vehicle-thumb--four {
+  background: linear-gradient(135deg, #dceafd 0%, #8b9cb5 48%, #243045 100%);
+}
+
+.benchmark-sample-row strong {
+  display: block;
+  overflow: hidden;
+  color: #101828;
+  font-size: 12px;
+  font-weight: 850;
+  line-height: 1.45;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.benchmark-sample-row p {
+  overflow: hidden;
+  margin: 5px 0 0;
+  color: #667085;
+  font-size: 11px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.benchmark-upload-card,
+.benchmark-vehicle-card {
+  display: grid;
+  align-content: start;
+  gap: 12px;
+}
+
+.benchmark-upload-card h3,
+.benchmark-vehicle-card h3 {
+  margin: 0;
+  color: #101828;
+  font-size: 15px;
+  font-weight: 900;
+}
+
+.upload-switch {
+  display: grid;
+  min-height: 130px;
+  place-items: center;
+  gap: 10px;
+  border: 1px dashed #b9c9e4;
+  border-radius: 8px;
+  background: #fbfdff;
+  color: #667085;
+  padding: 18px;
+  cursor: pointer;
+  text-align: center;
+}
+
+.upload-switch span {
+  display: grid;
+  width: 46px;
+  height: 46px;
+  place-items: center;
+  border-radius: 999px;
+  background: #eef4ff;
+  color: #1261ff;
+  font-size: 24px;
+}
+
+.upload-switch strong {
+  color: #667085;
+  font-size: 13px;
+  line-height: 1.5;
+}
+
+.benchmark-upload-card p,
+.benchmark-vehicle-card p {
+  margin: 0;
+  color: #667085;
+  font-size: 12px;
+  line-height: 1.6;
+}
+
+.vehicle-thumb-row {
+  display: grid;
+  grid-template-columns: repeat(5, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.vehicle-thumb,
+.vehicle-thumb-row button {
+  aspect-ratio: 1.42;
+  border-radius: 7px;
+}
+
+.vehicle-thumb-row button {
+  border: 1px dashed #b9c9e4;
+  background: #fff;
+  color: #64748b;
+  font-size: 28px;
+  cursor: pointer;
+}
+
+.billing-inline {
+  display: none;
+  margin-top: 12px;
+}
+
+.benchmark-ready-card {
+  display: grid;
+  align-content: start;
+  gap: 12px;
+}
+
+.benchmark-ready-card h3 {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 0;
+  color: #101828;
+  font-size: 20px;
+  font-weight: 900;
+}
+
+.ready-stat-list {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.ready-stat-list span {
+  display: grid;
+  align-items: center;
+  align-content: center;
+  gap: 5px;
+  min-height: 66px;
+  border: 1px solid #e6eefb;
+  border-radius: 8px;
+  background: #f8fbff;
+  color: #475569;
+  padding: 8px 9px;
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.ready-stat-list em {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  font-style: normal;
+  white-space: nowrap;
+}
+
+.ready-stat-list strong {
+  color: #1261ff;
+  font-size: 17px;
+  font-weight: 900;
+  white-space: nowrap;
+}
+
+.benchmark-ready-card .primary-button,
+.benchmark-ready-card .secondary-button {
+  width: 100%;
+  height: 40px;
+  min-height: 40px;
+  padding: 0 14px;
+  font-size: 14px;
+}
+
+.analysis-tabs {
+  display: none;
+  gap: 22px;
+  margin-bottom: 12px;
+}
+
+.analysis-tabs button {
+  min-height: 32px;
+  border: 0;
+  border-bottom: 2px solid transparent;
+  background: transparent;
+  color: #667085;
+  padding: 0 2px;
+  font-weight: 850;
+  cursor: pointer;
+}
+
+.analysis-tabs button.active {
+  border-color: #1261ff;
+  color: #1261ff;
+}
+
+.analysis-result-grid {
+  display: grid;
+  grid-template-columns: minmax(390px, 1.2fr) repeat(3, minmax(0, 1fr));
+  gap: 18px;
+}
+
+.benchmark-video-summary-card,
+.script-extract-card,
+.keyword-card,
+.shot-structure-card,
+.scheme-card {
+  border: 1px solid #dfe7f3;
+  border-radius: 8px;
+  background: #fff;
+  padding: 14px;
+}
+
+.benchmark-video-summary-card {
+  display: grid;
+  grid-template-columns: 220px minmax(0, 1fr);
+  gap: 18px;
+  align-items: center;
+}
+
+.benchmark-video-cover {
+  position: relative;
+  display: grid;
+  width: 100%;
+  aspect-ratio: 16 / 9;
+  place-items: center;
+  overflow: hidden;
+  border-radius: 8px;
+  background: linear-gradient(135deg, #d7e7ff 0%, #7d9bc0 52%, #182235 100%);
+}
+
+.benchmark-video-cover img,
+.benchmark-video-cover > span {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.benchmark-video-cover b {
+  position: relative;
+  z-index: 1;
+  display: grid;
+  width: 48px;
+  height: 48px;
+  place-items: center;
+  border-radius: 999px;
+  background: rgba(15, 23, 42, 0.66);
+  color: #fff;
+  font-size: 20px;
+}
+
+.benchmark-video-cover small {
+  position: absolute;
+  right: 8px;
+  bottom: 8px;
+  z-index: 1;
+  border-radius: 999px;
+  background: rgba(15, 23, 42, 0.68);
+  color: #fff;
+  padding: 2px 8px;
+  font-size: 12px;
+  font-weight: 800;
+}
+
+.benchmark-video-summary-card h3 {
+  margin: 0 0 12px;
+  color: #101828;
+  font-size: 22px;
+  font-weight: 900;
+}
+
+.benchmark-video-summary-card p {
+  margin: 8px 0 0;
+  color: #667085;
+  font-size: 13px;
+  font-weight: 700;
+}
+
+.script-extract-card h3,
+.keyword-card h3,
+.shot-structure-card h3,
+.scheme-card h3 {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  margin: 0 0 12px;
+  color: #101828;
+  font-size: 15px;
+  font-weight: 900;
+}
+
+.benchmark-redesign :deep(.el-icon) {
+  flex: 0 0 auto;
+  line-height: 1;
+}
+
+.benchmark-redesign :deep(svg) {
+  width: 1em;
+  height: 1em;
+}
+
+.script-extract-card textarea,
+.scheme-card textarea {
+  width: 100%;
+  min-height: 120px;
+  border: 0;
+  border-radius: 6px;
+  background: #fbfdff;
+  color: #1f2937;
+  padding: 10px;
+  font-size: 14px;
+  line-height: 1.75;
+  resize: vertical;
+  outline: none;
+}
+
+.script-extract-card footer {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  margin-top: 10px;
+}
+
+.script-extract-card footer span,
+.scheme-card small {
+  color: #8a95a8;
+  font-size: 12px;
+  font-weight: 750;
+}
+
+.script-extract-card footer .secondary-button {
+  height: 34px;
+  min-height: 34px;
+  padding: 0 12px;
+  font-size: 13px;
+}
+
+.keyword-tags,
+.style-tags,
+.option-pills {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 9px;
+}
+
+.keyword-tags span,
+.style-tags span,
+.option-pills span {
+  display: inline-flex;
+  min-height: 30px;
+  align-items: center;
+  border-radius: 7px;
+  background: #eef4ff;
+  color: #1261ff;
+  padding: 0 12px;
+  font-size: 12px;
+  font-weight: 850;
+}
+
+.basic-info-grid {
+  display: grid;
+  grid-template-columns: 72px minmax(0, 1fr) 72px minmax(0, 1fr);
+  gap: 12px 8px;
+  margin-top: 18px;
+  border-top: 1px solid #edf1f7;
+  padding-top: 14px;
+}
+
+.basic-info-grid span {
+  color: #8a95a8;
+  font-size: 12px;
+  font-weight: 750;
+}
+
+.basic-info-grid strong {
+  overflow: hidden;
+  color: #334155;
+  font-size: 12px;
+  font-weight: 850;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.shot-track {
+  display: grid;
+  grid-template-columns: repeat(6, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.shot-mini-card {
+  display: grid;
+  min-height: 82px;
+  align-content: end;
+  gap: 5px;
+  border-radius: 7px;
+  background: linear-gradient(135deg, #d7e7ff 0%, #7d9bc0 52%, #182235 100%);
+  color: #fff;
+  padding: 8px;
+}
+
+.shot-mini-card span {
+  align-self: start;
+  width: max-content;
+  border-radius: 5px;
+  background: rgba(15, 23, 42, 0.76);
+  padding: 2px 6px;
+  font-size: 12px;
+  font-weight: 900;
+}
+
+.shot-mini-card strong,
+.shot-mini-card small {
+  overflow: hidden;
+  font-size: 11px;
+  font-weight: 850;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.shot-mini-card small {
+  justify-self: end;
+  border-radius: 999px;
+  background: rgba(15, 23, 42, 0.62);
+  padding: 1px 5px;
+}
+
+.style-tags {
+  margin-top: 14px;
+}
+
+.benchmark-confirm-grid {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 18px;
+  align-items: start;
+}
+
+.scheme-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 18px;
+}
+
+.scheme-grid .scheme-card:nth-child(4),
+.scheme-grid .scheme-card:nth-child(5),
+.generate-confirm-card {
+  display: none;
+}
+
+.scheme-card {
+  display: grid;
+  align-content: start;
+  gap: 12px;
+}
+
+.scheme-card--copy {
+  min-width: 0;
+}
+
+.scheme-card--copy textarea:first-of-type {
+  min-height: 132px;
+}
+
+.scheme-card--copy .rewritten-mini-textarea {
+  min-height: 82px;
+}
+
+.rewrite-control-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: 8px;
+}
+
+.rewrite-control-row .rewrite-style-select,
+.rewrite-control-row .secondary-button {
+  width: 100%;
+  height: 36px;
+  min-height: 36px;
+  font-size: 13px;
+}
+
+.scheme-card > .secondary-button {
+  height: 36px;
+  min-height: 36px;
+  padding: 0 13px;
+  font-size: 13px;
+}
+
+.scheme-shot-list {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.scheme-shot-list span {
+  display: grid;
+  min-height: 64px;
+  align-content: end;
+  gap: 5px;
+  border-radius: 7px;
+  background: linear-gradient(135deg, #d7e7ff 0%, #7d9bc0 52%, #182235 100%);
+  color: #fff;
+  padding: 8px;
+  font-size: 11px;
+  font-weight: 850;
+}
+
+.scheme-shot-list strong {
+  width: max-content;
+  border-radius: 5px;
+  background: rgba(15, 23, 42, 0.76);
+  padding: 2px 6px;
+}
+
+.avatar-preview {
+  display: grid;
+  justify-items: center;
+  gap: 9px;
+}
+
+.avatar-preview span {
+  display: block;
+  width: 88px;
+  height: 108px;
+  border-radius: 12px;
+  background: linear-gradient(180deg, #f4d9c2 0%, #f9fafb 42%, #dbeafe 100%);
+}
+
+.avatar-preview strong {
+  color: #667085;
+  font-size: 12px;
+  font-weight: 850;
+}
+
+.option-pills span {
+  background: #fff;
+  color: #667085;
+  box-shadow: inset 0 0 0 1px #dfe7f3;
+}
+
+.option-pills span.active {
+  background: #eef4ff;
+  color: #1261ff;
+  box-shadow: inset 0 0 0 1px #bfd4ff;
+}
+
+.music-preview {
+  display: grid;
+  grid-template-columns: 34px minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 8px;
+  border-radius: 8px;
+  background: #f8fbff;
+  padding: 10px;
+}
+
+.music-preview span {
+  display: grid;
+  width: 34px;
+  height: 34px;
+  place-items: center;
+  border-radius: 999px;
+  background: #eef4ff;
+  color: #1261ff;
+}
+
+.music-preview strong,
+.music-preview small {
+  overflow: hidden;
+  color: #667085;
+  font-size: 12px;
+  font-weight: 850;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.generate-confirm-card {
+  display: grid;
+  gap: 16px;
+  padding: 18px;
+}
+
+.estimate-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.estimate-grid article {
+  display: grid;
+  gap: 8px;
+  min-height: 112px;
+  align-content: center;
+  border: 1px solid #dfe7f3;
+  border-radius: 8px;
+  padding: 14px;
+}
+
+.estimate-grid span,
+.estimate-grid small {
+  color: #667085;
+  font-size: 12px;
+  font-weight: 750;
+}
+
+.estimate-grid strong {
+  color: #101828;
+  font-size: 26px;
+  font-weight: 900;
+}
+
+.estimate-grid small {
+  color: #1261ff;
+}
+
+.benchmark-asset-bridge {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  border: 1px dashed #c7d7fe;
+  border-radius: 8px;
+  background: #f8fbff;
+  padding: 12px;
+}
+
+.benchmark-asset-bridge div {
+  display: grid;
+  gap: 4px;
+  min-width: 0;
+}
+
+.benchmark-asset-bridge strong {
+  color: #101828;
+  font-size: 14px;
+  font-weight: 900;
+}
+
+.benchmark-asset-bridge span {
+  color: #667085;
+  font-size: 12px;
+  line-height: 1.5;
+}
+
+.benchmark-asset-bridge .secondary-button {
+  flex: 0 0 auto;
+  min-height: 34px;
+}
+
+.benchmark-selected-assets {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.benchmark-selected-assets span {
+  display: inline-flex;
+  max-width: 100%;
+  min-height: 30px;
+  align-items: center;
+  gap: 6px;
+  border: 1px solid #dbeafe;
+  border-radius: 999px;
+  background: #eff6ff;
+  color: #155eef;
+  font-size: 12px;
+  font-weight: 800;
+  padding: 0 8px 0 10px;
+}
+
+.benchmark-selected-assets button {
+  display: grid;
+  width: 18px;
+  height: 18px;
+  place-items: center;
+  border: 0;
+  border-radius: 50%;
+  background: #dbeafe;
+  color: #155eef;
+  cursor: pointer;
+  font-weight: 900;
+}
+
+.generate-confirm-card > .primary-button,
+.generate-confirm-card > .secondary-button {
+  width: 100%;
+  min-height: 44px;
+}
+
+.generate-confirm-card p {
+  margin: 0;
+  color: #8a95a8;
+  font-size: 12px;
+  line-height: 1.6;
+}
+
+@media (max-width: 1280px) {
+  .benchmark-source-grid,
+  .analysis-result-grid,
+  .benchmark-confirm-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .scheme-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+@media (max-width: 900px) {
+  .benchmark-page {
+    width: calc(100% - 28px);
+  }
+
+  .benchmark-redesign-head {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .benchmark-steps,
+  .shot-track,
+  .scheme-grid,
+  .benchmark-sample-row,
+  .vehicle-thumb-row,
+  .estimate-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .benchmark-page-note {
+    margin-left: 0;
+  }
+
+  .benchmark-url-row,
+  .benchmark-url-row.has-cancel,
+  .redesign-upload,
+  .redesign-upload.has-cancel {
+    grid-template-columns: 1fr;
   }
 }
 </style>

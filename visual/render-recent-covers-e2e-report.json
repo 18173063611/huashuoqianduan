@@ -1,0 +1,51 @@
+{
+  "generatedAt": "2026-06-16T08:21:09.893Z",
+  "url": "http://localhost:5173/render",
+  "status": "ok",
+  "realCoverCount": 6,
+  "rows": [
+    {
+      "title": "汽车销售成片",
+      "meta": "汽车销售成片 · 创建 1小时前 · 积分 440",
+      "imageUrl": "https://ceshichucun.tos-cn-guangzhou.volces.com/upload/2026/06/02/e3361979-bde4-48b6-a25d-23c799df0eab.png",
+      "hasVideoLink": true,
+      "status": "已完成"
+    },
+    {
+      "title": "汽车销售成片",
+      "meta": "汽车销售成片 · 创建 06-12 09:16 · 积分 220",
+      "imageUrl": "https://ceshichucun.tos-cn-guangzhou.volces.com/upload/2026/05/26/5a0302eb-335f-4a73-9a88-1fec09b1afb2.jpg",
+      "hasVideoLink": true,
+      "status": "已完成"
+    },
+    {
+      "title": "汽车销售成片",
+      "meta": "汽车销售成片 · 创建 1小时前 · 积分 440",
+      "imageUrl": "https://ceshichucun.tos-cn-guangzhou.volces.com/upload/2026/06/02/e3361979-bde4-48b6-a25d-23c799df0eab.png",
+      "hasVideoLink": true,
+      "status": "已完成"
+    },
+    {
+      "title": "汽车销售成片",
+      "meta": "汽车销售成片 · 创建 1小时前 · 积分 440",
+      "imageUrl": "https://ceshichucun.tos-cn-guangzhou.volces.com/upload/2026/06/02/e3361979-bde4-48b6-a25d-23c799df0eab.png",
+      "hasVideoLink": true,
+      "status": "已完成"
+    },
+    {
+      "title": "汽车销售成片",
+      "meta": "汽车销售成片 · 创建 06-12 09:15 · 积分 220",
+      "imageUrl": "https://ceshichucun.tos-cn-guangzhou.volces.com/upload/2026/06/01/b95f3100-acfb-4b5f-bc66-c2a2d9fdbdfe.jpg",
+      "hasVideoLink": true,
+      "status": "已完成"
+    },
+    {
+      "title": "汽车销售成片",
+      "meta": "汽车销售成片 · 创建 06-12 09:13 · 积分 440",
+      "imageUrl": "https://ceshichucun.tos-cn-guangzhou.volces.com/upload/2026/06/08/61faedeb-3511-45b3-b6fd-1656f3cb7d63.png",
+      "hasVideoLink": true,
+      "status": "已完成"
+    }
+  ],
+  "screenshotPath": "D:\\javacode\\huashuo\\huashuoqianduan\\visual\\render-recent-covers-e2e.png"
+}

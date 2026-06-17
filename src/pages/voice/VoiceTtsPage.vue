@@ -561,8 +561,8 @@ function stopTracking() {
 .voice-add-form select:focus,
 .voice-filter-row input:focus,
 .voice-filter-row select:focus {
-  border-color: var(--app-primary);
-  box-shadow: 0 0 0 3px rgba(99, 91, 255, 0.12);
+  border-color: var(--hs-primary, #2563eb);
+  box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.1);
 }
 
 .voice-preset-list {
@@ -681,7 +681,7 @@ function stopTracking() {
 .voice-progress-fill {
   height: 100%;
   border-radius: 999px;
-  background: linear-gradient(90deg, #16a34a 0%, #22c55e 100%);
+  background: var(--hs-primary, #2563eb);
   transition: width 0.35s ease;
 }
 
@@ -760,6 +760,186 @@ function stopTracking() {
 
   .voice-add-form-wide {
     grid-column: auto;
+  }
+}
+
+/* P2 visual refresh: TTS workspace */
+.voice-page {
+  width: min(1240px, calc(100% - 40px));
+  margin: 0 auto;
+}
+
+.voice-content {
+  width: 100%;
+}
+
+.voice-layout {
+  grid-template-columns: minmax(320px, 0.85fr) minmax(0, 1.15fr);
+  gap: 16px;
+}
+
+.voice-panel {
+  border: 1px solid var(--hs-border, #d9e1ec);
+  border-radius: 8px;
+  background: #ffffff;
+  box-shadow: none;
+  padding: 16px;
+}
+
+.voice-panel-title {
+  color: var(--hs-text, #172033);
+  font-size: 16px;
+  font-weight: 750;
+}
+
+.voice-script-block {
+  gap: 12px;
+}
+
+.voice-script-block h4 {
+  color: var(--hs-text, #172033);
+  font-size: 14px;
+}
+
+.voice-script-hint,
+.voice-library-subtitle,
+.voice-script-load-msg {
+  color: var(--hs-muted, #667085);
+  font-size: 12px;
+}
+
+.voice-textarea,
+.voice-add-form input,
+.voice-add-form select,
+.voice-filter-row input,
+.voice-filter-row select {
+  border-color: var(--hs-border, #d9e1ec);
+  border-radius: 6px;
+  background: #ffffff;
+  color: var(--hs-text, #172033);
+}
+
+.voice-textarea:focus,
+.voice-add-form input:focus,
+.voice-add-form select:focus,
+.voice-filter-row input:focus,
+.voice-filter-row select:focus {
+  border-color: var(--hs-primary, #2563eb);
+  box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.1);
+}
+
+.voice-add-form {
+  border-color: var(--hs-border, #d9e1ec);
+  border-radius: 8px;
+  background: var(--hs-surface-soft, #f8fafc);
+}
+
+.voice-filter-row {
+  margin-bottom: 12px;
+}
+
+.voice-preset-list {
+  gap: 10px;
+}
+
+.voice-preset-row {
+  border-color: var(--hs-border, #d9e1ec);
+  border-radius: 8px;
+  background: #ffffff;
+  box-shadow: none;
+  transition: border-color 0.16s ease, background-color 0.16s ease;
+}
+
+.voice-preset-row:hover {
+  border-color: var(--hs-primary-border, #bfdbfe);
+  background: var(--hs-surface-soft, #f8fafc);
+}
+
+.voice-preset-row.selected {
+  border-color: var(--hs-primary-border, #bfdbfe);
+  background: var(--hs-primary-soft, #eff6ff);
+}
+
+.voice-play {
+  background: #eef2f7;
+  color: var(--hs-muted, #667085);
+}
+
+.voice-preset-row.selected .voice-play {
+  background: var(--hs-primary, #2563eb);
+  color: #ffffff;
+}
+
+.voice-preset-meta strong {
+  color: var(--hs-text, #172033);
+  font-size: 14px;
+}
+
+.voice-preset-meta span {
+  color: var(--hs-muted, #667085);
+}
+
+.voice-remove-btn {
+  border-color: #fecaca;
+  background: #ffffff;
+  color: #b42318;
+}
+
+.voice-task-card {
+  border-color: var(--hs-primary-border, #bfdbfe);
+  border-radius: 8px;
+  background: var(--hs-primary-soft, #eff6ff);
+}
+
+.voice-task-title,
+.voice-task-status,
+.voice-progress-pct {
+  color: var(--hs-primary, #2563eb);
+}
+
+.voice-progress-track {
+  background: #dbeafe;
+}
+
+.voice-progress-fill {
+  background: var(--hs-primary, #2563eb);
+}
+
+.voice-saved-badge {
+  border-color: #bbf7d0;
+  border-radius: 6px;
+  background: #f0fdf4;
+  color: #15803d;
+}
+
+@media (max-width: 1024px) {
+  .voice-page {
+    width: calc(100% - 32px);
+  }
+
+  .voice-layout {
+    grid-template-columns: 1fr;
+  }
+}
+
+@media (max-width: 560px) {
+  .voice-page {
+    width: calc(100% - 24px);
+  }
+
+  .voice-panel {
+    padding: 14px;
+  }
+
+  .voice-script-actions,
+  .voice-preset-row,
+  .voice-preset-actions {
+    display: grid;
+    grid-template-columns: 1fr;
+  }
+
+  .voice-preset-row {
+    align-items: start;
   }
 }
 </style>

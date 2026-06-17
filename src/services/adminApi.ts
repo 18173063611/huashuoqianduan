@@ -22,7 +22,13 @@ import type {
   AdminOperationLogPage,
   AdminOperationLogQuery,
   AdminPasswordResetRequest,
+  AdminProviderOpsTicketPage,
+  AdminProviderOpsTicketQuery,
+  AdminTaskItem,
+  AdminTaskManualRetryApplyRequest,
+  AdminTaskManualRetryRequest,
   AdminTaskPage,
+  AdminTaskProviderOpsUpdateRequest,
   AdminTaskQuery,
   AdminUsageSummaryQuery,
   AdminUsageSummaryResponse,
@@ -31,6 +37,12 @@ import type {
   AdminUserQuery,
   AdminUserSaveRequest,
 } from '../types/adminTypes'
+import type {
+  CustomerFeedbackAdminQuery,
+  CustomerFeedbackAdminUpdateRequest,
+  CustomerFeedbackItem,
+  CustomerFeedbackPage,
+} from '../types/feedbackTypes'
 
 function toQuery(params: Record<string, string | number | undefined>) {
   const search = new URLSearchParams()
@@ -161,9 +173,76 @@ export function listAdminTasks(params: AdminTaskQuery) {
       taskType: params.taskType?.trim(),
       status: params.status?.trim(),
       modelCode: params.modelCode?.trim(),
+      providerOpsOnly: params.providerOpsOnly ? 'true' : undefined,
+      providerOpsStatus: params.providerOpsStatus?.trim(),
       pageNo: params.pageNo,
       pageSize: params.pageSize,
     })}`,
+  )
+}
+
+export function updateAdminTaskProviderOps(taskId: number, payload: AdminTaskProviderOpsUpdateRequest) {
+  return request<AdminTaskItem>(`/admin/tasks/${taskId}/provider-ops`, {
+    method: 'PATCH',
+    body: JSON.stringify(payload),
+  })
+}
+
+export function requestAdminTaskManualRetry(taskId: number, payload: AdminTaskManualRetryApplyRequest) {
+  return request<AdminTaskItem>(`/admin/tasks/${taskId}/provider-ops/manual-retry`, {
+    method: 'POST',
+    body: JSON.stringify(payload),
+  })
+}
+
+export function reviewAdminTaskManualRetry(taskId: number, payload: AdminTaskManualRetryRequest) {
+  return request<AdminTaskItem>(`/admin/tasks/${taskId}/provider-ops/manual-retry/review`, {
+    method: 'POST',
+    body: JSON.stringify(payload),
+  })
+}
+
+export function listAdminProviderOpsTickets(params: AdminProviderOpsTicketQuery) {
+  return request<AdminProviderOpsTicketPage>(
+    `/admin/provider-ops/tickets${toQuery({
+      status: params.status?.trim(),
+      priority: params.priority?.trim(),
+      assigneeAdminId: params.assigneeAdminId,
+      overdueOnly: params.overdueOnly ? 'true' : undefined,
+      supplierTicketId: params.supplierTicketId?.trim(),
+      providerTaskId: params.providerTaskId?.trim(),
+      taskType: params.taskType?.trim(),
+      retryApprovalStatus: params.retryApprovalStatus?.trim(),
+      pageNo: params.pageNo,
+      pageSize: params.pageSize,
+    })}`,
+  )
+}
+
+export function updateAdminProviderOpsTicket(ticketId: number, payload: AdminTaskProviderOpsUpdateRequest) {
+  return request<AdminProviderOpsTicketPage['records'][number]>(`/admin/provider-ops/tickets/${ticketId}`, {
+    method: 'PATCH',
+    body: JSON.stringify(payload),
+  })
+}
+
+export function requestAdminProviderOpsTicketRetry(ticketId: number, payload: AdminTaskManualRetryApplyRequest) {
+  return request<AdminProviderOpsTicketPage['records'][number]>(
+    `/admin/provider-ops/tickets/${ticketId}/manual-retry`,
+    {
+      method: 'POST',
+      body: JSON.stringify(payload),
+    },
+  )
+}
+
+export function reviewAdminProviderOpsTicketRetry(ticketId: number, payload: AdminTaskManualRetryRequest) {
+  return request<AdminProviderOpsTicketPage['records'][number]>(
+    `/admin/provider-ops/tickets/${ticketId}/manual-retry/review`,
+    {
+      method: 'POST',
+      body: JSON.stringify(payload),
+    },
   )
 }
 
@@ -350,4 +429,29 @@ export function listAdminOperationLogs(params: AdminOperationLogQuery) {
       pageSize: params.pageSize,
     })}`,
   )
+}
+
+export function listAdminFeedback(params: CustomerFeedbackAdminQuery) {
+  return request<CustomerFeedbackPage>(
+    `/admin/feedback${toQuery({
+      ownerUserId: params.ownerUserId,
+      category: params.category || undefined,
+      status: params.status || undefined,
+      priority: params.priority || undefined,
+      keyword: params.keyword?.trim(),
+      pageNo: params.pageNo,
+      pageSize: params.pageSize,
+    })}`,
+  )
+}
+
+export function getAdminFeedback(feedbackId: number) {
+  return request<CustomerFeedbackItem>(`/admin/feedback/${feedbackId}`)
+}
+
+export function updateAdminFeedback(feedbackId: number, payload: CustomerFeedbackAdminUpdateRequest) {
+  return request<CustomerFeedbackItem>(`/admin/feedback/${feedbackId}`, {
+    method: 'PUT',
+    body: JSON.stringify(payload),
+  })
 }

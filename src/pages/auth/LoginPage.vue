@@ -1,5 +1,5 @@
 <template>
-  <main class="auth-page">
+  <main class="auth-page" :class="{ 'auth-page--embedded': props.embedded }">
     <section class="auth-shell" aria-label="登录与注册">
       <div class="auth-visual">
         <img class="auth-visual-image"  alt="登录欢迎插画" />
@@ -135,6 +135,7 @@ import passwordIcon from '../../assets/image.png'
 import { ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { applyLogin, login, register } from '../../services/authApi'
+import { notifyAuthRefresh } from '../../services/authRefreshHub'
 import type { UserMe } from '../../types/userTypes'
 
 type AuthMode = 'login' | 'register'
@@ -142,9 +143,15 @@ type AuthMode = 'login' | 'register'
 const props = withDefaults(
   defineProps<{
     initialMode?: AuthMode
+    embedded?: boolean
+    redirectOnSuccess?: boolean
+    syncRouteOnModeChange?: boolean
   }>(),
   {
     initialMode: 'login',
+    embedded: false,
+    redirectOnSuccess: true,
+    syncRouteOnModeChange: true,
   },
 )
 
@@ -174,7 +181,10 @@ watch(
 function switchMode(mode: AuthMode) {
   authMode.value = mode
   message.value = ''
-  if ((mode === 'login' && route.name !== 'login') || (mode === 'register' && route.name !== 'register')) {
+  if (
+    props.syncRouteOnModeChange &&
+    ((mode === 'login' && route.name !== 'login') || (mode === 'register' && route.name !== 'register'))
+  ) {
     void router.push({
       name: mode,
       query: route.query.redirect ? { redirect: route.query.redirect } : undefined,
@@ -228,7 +238,14 @@ async function handleSubmit() {
             key: key || undefined,
           }, 'USER_WEB')
     applyLogin(res, 'USER_WEB')
+    notifyAuthRefresh()
     emit('success', { userId: res.userId, username: res.username, displayName: res.displayName })
+    if (props.redirectOnSuccess) {
+      const redirect = Array.isArray(route.query.redirect)
+        ? route.query.redirect[0]
+        : route.query.redirect
+      void router.replace(typeof redirect === 'string' && redirect ? redirect : '/render')
+    }
   } catch (e) {
     console.log(e)
     if (authMode.value === 'login') {
@@ -614,4 +631,207 @@ function extractErrorMessage(e: unknown): string {
   object-fit: contain;
 }
 
+/* P1 visual refresh: calm workspace entrance */
+.auth-page {
+  min-height: 100vh;
+  background: var(--hs-bg, #f3f6fb);
+  padding: 32px 16px;
+}
+
+.auth-shell {
+  width: min(430px, 100%);
+  grid-template-columns: minmax(0, 1fr);
+}
+
+.auth-panel {
+  min-height: 0;
+  margin: 0;
+  border: 1px solid var(--hs-border, #d9e1ec);
+  border-radius: 8px;
+  background: #ffffff;
+  box-shadow: none;
+  backdrop-filter: none;
+}
+
+.auth-tabs {
+  border-bottom-color: var(--hs-border, #d9e1ec);
+}
+
+.auth-tab {
+  height: 58px;
+  color: var(--hs-muted, #667085);
+  font-size: 15px;
+  cursor: pointer;
+}
+
+.auth-tab--active {
+  color: var(--hs-primary, #2563eb);
+}
+
+.auth-tab--active::after {
+  right: 24px;
+  left: 24px;
+  height: 2px;
+  background: var(--hs-primary, #2563eb);
+}
+
+.auth-form {
+  gap: 16px;
+  padding: 28px 30px 30px;
+}
+
+.auth-field {
+  gap: 8px;
+  color: var(--hs-text, #172033);
+  font-size: 13px;
+}
+
+.auth-input-wrap input {
+  height: 42px;
+  border-color: var(--hs-border, #d9e1ec);
+  border-radius: 6px;
+  padding-left: 42px;
+  color: var(--hs-text, #172033);
+  font-size: 14px;
+  font-weight: 500;
+}
+
+.auth-input-wrap input:focus {
+  border-color: var(--hs-primary, #2563eb);
+  box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.1);
+}
+
+.auth-input-icon {
+  left: 14px;
+  color: var(--hs-muted, #667085);
+  font-size: 15px;
+}
+
+.auth-eye-button {
+  right: 6px;
+  width: 30px;
+  height: 30px;
+  border-radius: 6px;
+}
+
+.auth-eye-button:hover {
+  background: var(--hs-primary-soft, #eff6ff);
+  color: var(--hs-primary, #2563eb);
+}
+
+.auth-row,
+.auth-footer {
+  color: var(--hs-muted, #667085);
+  font-size: 13px;
+}
+
+.auth-check input {
+  accent-color: var(--hs-primary, #2563eb);
+}
+
+.auth-link {
+  color: var(--hs-primary, #2563eb);
+}
+
+.auth-submit,
+.auth-outline {
+  min-height: 42px;
+  border-radius: 6px;
+  font-size: 14px;
+  font-weight: 750;
+}
+
+.auth-submit {
+  border: 1px solid var(--hs-primary, #2563eb);
+  background: var(--hs-primary, #2563eb);
+  box-shadow: none;
+}
+
+.auth-submit:hover:not(:disabled) {
+  background: var(--hs-primary-hover, #1d4ed8);
+  box-shadow: none;
+  transform: none;
+}
+
+.auth-outline {
+  border-color: var(--hs-border, #d9e1ec);
+  background: #ffffff;
+  color: var(--hs-text, #172033);
+}
+
+.auth-outline:hover {
+  border-color: var(--hs-primary-border, #bfdbfe);
+  background: var(--hs-primary-soft, #eff6ff);
+  color: var(--hs-primary, #2563eb);
+}
+
+.auth-divider {
+  color: var(--hs-muted, #667085);
+  font-size: 12px;
+}
+
+.auth-divider::before,
+.auth-divider::after {
+  background: var(--hs-border, #d9e1ec);
+}
+
+.auth-message,
+.auth-message--error {
+  border: 1px solid transparent;
+  border-radius: 6px;
+  font-size: 13px;
+}
+
+.auth-message {
+  border-color: #bbf7d0;
+  background: #f0fdf4;
+  color: #15803d;
+}
+
+.auth-message--error {
+  border-color: #fecaca;
+  background: #fef2f2;
+  color: #b42318;
+}
+
+@media (max-width: 540px) {
+  .auth-page {
+    align-items: start;
+    padding: 14px;
+  }
+
+  .auth-form {
+    padding: 22px 18px;
+  }
+}
+
+.auth-page--embedded {
+  display: block;
+  min-height: 0;
+  overflow: visible;
+  background: transparent;
+  padding: 0;
+}
+
+.auth-page--embedded .auth-shell {
+  width: 100%;
+  grid-template-columns: minmax(0, 1fr);
+}
+
+.auth-page--embedded .auth-panel {
+  width: 100%;
+  border: 0;
+  border-radius: 0;
+  box-shadow: none;
+}
+
+.auth-page--embedded .auth-form {
+  padding: 24px 30px 28px;
+}
+
+@media (max-width: 540px) {
+  .auth-page--embedded .auth-form {
+    padding: 20px 18px 22px;
+  }
+}
 </style>

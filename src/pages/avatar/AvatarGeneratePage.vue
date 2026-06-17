@@ -30,6 +30,58 @@
                 <strong>固定生成全身照</strong>
                 <small>用于后续视频分镜保持同一个数字人的身形、站姿和服装风格，减少前后段拼接换人的问题。</small>
               </div>
+              <div class="avatar-body-panel" aria-label="数字人身材参数">
+                <div class="avatar-body-head">
+                  <strong>身材参数</strong>
+                  <span>{{ avatarBodySummary }}</span>
+                </div>
+                <div class="avatar-body-grid">
+                  <label class="avatar-body-control">
+                    身高
+                    <div class="avatar-unit-input">
+                      <input
+                        v-model.number="form.heightCm"
+                        type="number"
+                        :min="AVATAR_HEIGHT_MIN_CM"
+                        :max="AVATAR_HEIGHT_MAX_CM"
+                        step="1"
+                        @blur="normalizeAvatarBodyForm"
+                      />
+                      <span>cm</span>
+                    </div>
+                    <input
+                      v-model.number="form.heightCm"
+                      class="avatar-range"
+                      type="range"
+                      :min="AVATAR_HEIGHT_MIN_CM"
+                      :max="AVATAR_HEIGHT_MAX_CM"
+                      step="1"
+                    />
+                  </label>
+                  <label class="avatar-body-control">
+                    体重
+                    <div class="avatar-unit-input">
+                      <input
+                        v-model.number="form.weightKg"
+                        type="number"
+                        :min="AVATAR_WEIGHT_MIN_KG"
+                        :max="AVATAR_WEIGHT_MAX_KG"
+                        step="1"
+                        @blur="normalizeAvatarBodyForm"
+                      />
+                      <span>kg</span>
+                    </div>
+                    <input
+                      v-model.number="form.weightKg"
+                      class="avatar-range"
+                      type="range"
+                      :min="AVATAR_WEIGHT_MIN_KG"
+                      :max="AVATAR_WEIGHT_MAX_KG"
+                      step="1"
+                    />
+                  </label>
+                </div>
+              </div>
               <div class="avatar-outfit-options" role="radiogroup" aria-label="常见穿着">
                 <button
                   v-for="option in avatarOutfitOptions"
@@ -197,6 +249,7 @@
               <img :src="assetUrl(avatar.previewUrl)" :alt="avatar.avatarName" />
               <div>
                 <strong>{{ avatar.avatarName }}</strong>
+                <small v-if="avatarBodyMetaText(avatar)" class="avatar-body-chip">{{ avatarBodyMetaText(avatar) }}</small>
                 <span class="avatar-saved-badge">已自动保存到资产中心</span>
               </div>
             </article>
@@ -218,6 +271,7 @@
             <div>
               <strong>{{ avatar.avatarName }}</strong>
               <p class="app-muted">{{ sourceLabel(avatar) }} · {{ visibilityLabel(avatar) }}</p>
+              <small v-if="avatarBodyMetaText(avatar)" class="avatar-body-chip">{{ avatarBodyMetaText(avatar) }}</small>
             </div>
             <button
               v-if="canManageAvatar(avatar)"
@@ -258,6 +312,12 @@ import type { AvatarGenerateRequest, AvatarGenerateTaskResult, AvatarItem } from
 
 const sourceMode = ref<'AI' | 'UPLOAD'>('AI')
 const loggedIn = ref(false)
+const AVATAR_HEIGHT_MIN_CM = 140
+const AVATAR_HEIGHT_MAX_CM = 210
+const AVATAR_WEIGHT_MIN_KG = 35
+const AVATAR_WEIGHT_MAX_KG = 150
+const AVATAR_DEFAULT_HEIGHT_CM = 170
+const AVATAR_DEFAULT_WEIGHT_KG = 62
 const form = reactive<AvatarGenerateRequest>({
   avatarName: '',
   prompt: '生成一位适合汽车销售讲解的真实数字人形象，干净背景，正面全身，商业摄影质感，不要文字、表格、说明卡片或水印',
@@ -266,6 +326,8 @@ const form = reactive<AvatarGenerateRequest>({
   framing: 'FULL_BODY',
   outfitPreset: 'car_sales_suit',
   outfitDescription: '',
+  heightCm: AVATAR_DEFAULT_HEIGHT_CM,
+  weightKg: AVATAR_DEFAULT_WEIGHT_KG,
   imageCount: 4,
   size: '2K',
 })
@@ -307,8 +369,21 @@ const selectedAvatarOutfitOption = computed(() =>
 const avatarOutfitPromptPreview = computed(() => {
   const custom = form.outfitDescription?.trim()
   const outfit = custom || selectedAvatarOutfitOption.value.prompt || '按用户自定义穿着生成'
-  return `全身照，单人正面站姿，从头到脚完整入镜，服装保持一致；穿着：${outfit}；画面不要文字、表格、说明卡片或水印。`
+  return `${avatarBodyPrompt.value}；全身照，单人正面站姿，从头到脚完整入镜，服装保持一致；穿着：${outfit}；画面不要文字、表格、说明卡片或水印。`
 })
+const normalizedAvatarHeight = computed(() =>
+  normalizeNumber(form.heightCm, AVATAR_HEIGHT_MIN_CM, AVATAR_HEIGHT_MAX_CM, AVATAR_DEFAULT_HEIGHT_CM),
+)
+const normalizedAvatarWeight = computed(() =>
+  normalizeNumber(form.weightKg, AVATAR_WEIGHT_MIN_KG, AVATAR_WEIGHT_MAX_KG, AVATAR_DEFAULT_WEIGHT_KG),
+)
+const avatarBodyShape = computed(() => bodyShapeLabel(normalizedAvatarHeight.value, normalizedAvatarWeight.value))
+const avatarBodySummary = computed(() =>
+  `${normalizedAvatarHeight.value}cm / ${normalizedAvatarWeight.value}kg · ${avatarBodyShape.value}`,
+)
+const avatarBodyPrompt = computed(() =>
+  `身材锁定：身高 ${normalizedAvatarHeight.value}cm，体重 ${normalizedAvatarWeight.value}kg，${avatarBodyShape.value}，整体身形比例保持一致`,
+)
 // 与后端 createTask 实际预扣金额完全一致；数字人形象按张数动态预估，更贴近实际结算。
 const avatarEstimate = useBillingEstimate({
   taskType: 'AVATAR_GENERATE',
@@ -346,7 +421,15 @@ const { showTaskProgressBar, barProgressPercent, reset: resetSmoothProgress } = 
   taskProgress,
 )
 
-const canGenerate = computed(() => Boolean(form.avatarName && form.prompt && form.imageCount >= 1))
+const canGenerate = computed(() =>
+  Boolean(
+    form.avatarName
+    && form.prompt
+    && form.imageCount >= 1
+    && avatarNumberInRange(form.heightCm, AVATAR_HEIGHT_MIN_CM, AVATAR_HEIGHT_MAX_CM)
+    && avatarNumberInRange(form.weightKg, AVATAR_WEIGHT_MIN_KG, AVATAR_WEIGHT_MAX_KG),
+  ),
+)
 const selectedReferenceAssets = computed(() => {
   const selectedIds = new Set(form.referenceAssetIds)
   return referenceAssets.value.filter((asset) => selectedIds.has(asset.assetId))
@@ -481,6 +564,7 @@ async function submitUpload() {
 }
 
 async function submitGenerate() {
+  normalizeAvatarBodyForm()
   if (!canGenerate.value) {
     return
   }
@@ -600,7 +684,11 @@ async function applyAvatarResult(result: AvatarGenerateTaskResult) {
     prompt: form.prompt,
     referenceAssetIds: null,
     previewUrl: url,
-    metadataJson: null,
+    metadataJson: JSON.stringify({
+      heightCm: normalizedAvatarHeight.value,
+      weightKg: normalizedAvatarWeight.value,
+      bodyShapeLabel: avatarBodyShape.value,
+    }),
     defaultAvatar: false,
     createdAt: '',
     updatedAt: '',
@@ -633,6 +721,55 @@ function visibilityLabel(avatar: AvatarItem) {
   if (avatar.visibility === 'PRIVATE') return '私有'
   return avatar.ownerUserId == null ? '公共' : '私有'
 }
+
+function normalizeAvatarBodyForm() {
+  form.heightCm = normalizedAvatarHeight.value
+  form.weightKg = normalizedAvatarWeight.value
+}
+
+function normalizeNumber(value: unknown, min: number, max: number, fallback: number) {
+  const numeric = Number(value)
+  if (!Number.isFinite(numeric)) {
+    return fallback
+  }
+  return Math.max(min, Math.min(max, Math.round(numeric)))
+}
+
+function avatarNumberInRange(value: unknown, min: number, max: number) {
+  const numeric = Number(value)
+  return Number.isFinite(numeric) && numeric >= min && numeric <= max
+}
+
+function bodyShapeLabel(heightCm: number, weightKg: number) {
+  const meters = heightCm / 100
+  const bmi = meters > 0 ? weightKg / (meters * meters) : 0
+  if (bmi < 18.5) return '清瘦身形'
+  if (bmi < 24) return '匀称身形'
+  if (bmi < 28) return '结实身形'
+  return '宽厚身形'
+}
+
+function avatarBodyMetaText(avatar: AvatarItem) {
+  const meta = parseAvatarMetadata(avatar.metadataJson)
+  const height = Number(meta.heightCm)
+  const weight = Number(meta.weightKg)
+  if (!Number.isFinite(height) || !Number.isFinite(weight)) {
+    return ''
+  }
+  return `身高 ${Math.round(height)}cm · 体重 ${Math.round(weight)}kg`
+}
+
+function parseAvatarMetadata(metadataJson?: string | null): Record<string, unknown> {
+  if (!metadataJson) {
+    return {}
+  }
+  try {
+    const parsed = JSON.parse(metadataJson) as unknown
+    return parsed && typeof parsed === 'object' && !Array.isArray(parsed) ? parsed as Record<string, unknown> : {}
+  } catch {
+    return {}
+  }
+}
 </script>
 
 <style scoped>
@@ -651,8 +788,8 @@ function visibilityLabel(avatar: AvatarItem) {
   padding: 24px 28px;
   border: 1px solid #e1ecff;
   border-radius: var(--app-radius-lg);
-  background: linear-gradient(180deg, #f8fbff 0%, #eef6ff 100%);
-  box-shadow: var(--app-shadow);
+  background: #ffffff;
+  box-shadow: none;
 }
 
 .avatar-eyebrow {
@@ -856,6 +993,89 @@ function visibilityLabel(avatar: AvatarItem) {
   line-height: 1.6;
 }
 
+.avatar-body-panel {
+  display: grid;
+  gap: 12px;
+  border: 1px solid rgba(37, 99, 235, 0.18);
+  border-radius: var(--app-radius-sm);
+  background: rgba(255, 255, 255, 0.82);
+  padding: 12px;
+}
+
+.avatar-body-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.avatar-body-head strong {
+  color: var(--app-text-main);
+  font-size: 13px;
+}
+
+.avatar-body-head span {
+  color: var(--app-primary);
+  font-size: 12px;
+  font-weight: 800;
+}
+
+.avatar-body-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.avatar-body-control {
+  display: grid;
+  gap: 8px;
+  color: var(--app-text-main);
+  font-size: 13px;
+  font-weight: 800;
+}
+
+.avatar-unit-input {
+  display: flex;
+  align-items: center;
+  border: 1px solid var(--app-border);
+  border-radius: var(--app-radius-sm);
+  background: #fff;
+  overflow: hidden;
+}
+
+.avatar-unit-input input {
+  min-width: 0;
+  border: 0;
+  background: transparent;
+  padding: 9px 10px;
+}
+
+.avatar-unit-input span {
+  flex: 0 0 auto;
+  border-left: 1px solid var(--app-border);
+  color: var(--app-text-secondary);
+  padding: 0 10px;
+  font-size: 12px;
+  font-weight: 800;
+}
+
+.avatar-range {
+  width: 100%;
+  accent-color: var(--app-primary);
+}
+
+.avatar-body-chip {
+  display: inline-flex;
+  width: fit-content;
+  margin-top: 5px;
+  border-radius: 999px;
+  background: var(--app-primary-soft);
+  color: var(--app-primary);
+  padding: 3px 8px;
+  font-size: 11px;
+  font-weight: 800;
+}
+
 .avatar-outfit-options {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
@@ -1050,7 +1270,7 @@ function visibilityLabel(avatar: AvatarItem) {
 .avatar-progress-fill {
   height: 100%;
   border-radius: 999px;
-  background: linear-gradient(90deg, var(--app-primary) 0%, #6366f1 100%);
+  background: var(--hs-primary, var(--app-primary));
   transition: width 0.35s ease;
 }
 
@@ -1162,6 +1382,203 @@ function visibilityLabel(avatar: AvatarItem) {
 
   .avatar-hero {
     flex-direction: column;
+  }
+}
+
+/* P2 visual refresh: avatar workspace */
+.avatar-page {
+  width: min(1240px, calc(100% - 40px));
+  margin: 0 auto;
+}
+
+.avatar-content {
+  width: 100%;
+}
+
+.avatar-layout {
+  grid-template-columns: minmax(360px, 0.95fr) minmax(0, 1.05fr);
+  gap: 16px;
+}
+
+.avatar-panel,
+.avatar-hero {
+  border: 1px solid var(--hs-border, #d9e1ec);
+  border-radius: 8px;
+  background: #ffffff;
+  box-shadow: none;
+}
+
+.avatar-hero {
+  background: #ffffff;
+}
+
+.avatar-hero h2,
+.avatar-section-heading h3,
+.avatar-section-heading-compact strong {
+  color: var(--hs-text, #172033);
+}
+
+.avatar-hero p,
+.avatar-small,
+.avatar-fullbody-note small,
+.avatar-outfit-options small,
+.avatar-prompt-preview,
+.avatar-status {
+  color: var(--hs-muted, #667085);
+}
+
+.avatar-eyebrow,
+.avatar-section-heading-compact span,
+.avatar-saved-badge {
+  border: 1px solid var(--hs-primary-border, #bfdbfe);
+  border-radius: 999px;
+  background: var(--hs-primary-soft, #eff6ff);
+  color: var(--hs-primary, #2563eb);
+}
+
+.avatar-source-tabs {
+  border: 1px solid var(--hs-border, #d9e1ec);
+  border-radius: 8px;
+  background: var(--hs-surface-soft, #f8fafc);
+  padding: 4px;
+}
+
+.avatar-source-tabs button {
+  border-radius: 6px;
+  color: var(--hs-muted, #667085);
+}
+
+.avatar-source-tabs button.active {
+  background: #ffffff;
+  color: var(--hs-primary, #2563eb);
+  box-shadow: none;
+}
+
+.avatar-form input,
+.avatar-form select,
+.avatar-form textarea {
+  border-color: var(--hs-border, #d9e1ec);
+  border-radius: 6px;
+  background: #ffffff;
+  color: var(--hs-text, #172033);
+}
+
+.avatar-form input:focus,
+.avatar-form select:focus,
+.avatar-form textarea:focus {
+  border-color: var(--hs-primary, #2563eb);
+  box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.1);
+  outline: none;
+}
+
+.avatar-outfit-panel,
+.avatar-reference-block,
+.avatar-reference-guide,
+.avatar-prompt-preview,
+.avatar-fullbody-note {
+  border-color: var(--hs-border, #d9e1ec);
+  border-radius: 8px;
+  background: var(--hs-surface-soft, #f8fafc);
+}
+
+.avatar-fullbody-note,
+.avatar-prompt-preview {
+  background: #ffffff;
+}
+
+.avatar-outfit-options button {
+  border-color: var(--hs-border, #d9e1ec);
+  border-radius: 6px;
+  background: #ffffff;
+  color: var(--hs-text, #172033);
+}
+
+.avatar-outfit-options button.active {
+  border-color: var(--hs-primary-border, #bfdbfe);
+  background: var(--hs-primary-soft, #eff6ff);
+  color: var(--hs-primary, #2563eb);
+}
+
+.avatar-reference-actions,
+.avatar-reference-item,
+.avatar-card,
+.avatar-library-card {
+  border: 1px solid var(--hs-border, #d9e1ec);
+  border-radius: 8px;
+  background: #ffffff;
+}
+
+.avatar-reference-item {
+  padding: 8px;
+}
+
+.avatar-reference-item img,
+.avatar-library-card img {
+  border-radius: 6px;
+}
+
+.avatar-progress-track {
+  background: #dbeafe;
+}
+
+.avatar-progress-fill {
+  background: var(--hs-primary, #2563eb);
+}
+
+.avatar-card,
+.avatar-library-card {
+  box-shadow: none;
+}
+
+.avatar-card {
+  background: var(--hs-surface-soft, #f8fafc);
+}
+
+.avatar-library-card.active {
+  border-color: var(--hs-primary-border, #bfdbfe);
+  background: var(--hs-primary-soft, #eff6ff);
+}
+
+.avatar-public-badge {
+  border-color: var(--hs-primary-border, #bfdbfe);
+  border-radius: 6px;
+  background: var(--hs-primary-soft, #eff6ff);
+  color: var(--hs-primary, #2563eb);
+}
+
+.avatar-ref-delete {
+  border-radius: 6px;
+}
+
+@media (max-width: 1024px) {
+  .avatar-page {
+    width: calc(100% - 32px);
+  }
+
+  .avatar-layout {
+    grid-template-columns: 1fr;
+  }
+}
+
+@media (max-width: 560px) {
+  .avatar-page {
+    width: calc(100% - 24px);
+  }
+
+  .avatar-panel {
+    padding: 14px;
+  }
+
+  .avatar-form-grid,
+  .avatar-outfit-options,
+  .avatar-library-card,
+  .avatar-reference-item {
+    grid-template-columns: 1fr;
+  }
+
+  .avatar-task-head-right {
+    max-width: none;
+    align-items: stretch;
   }
 }
 </style>

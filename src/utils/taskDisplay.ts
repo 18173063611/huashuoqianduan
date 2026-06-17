@@ -27,6 +27,7 @@ const TASK_TYPE_LABELS: Record<string, string> = {
   SEEDANCE_FIRST_LAST_FRAME_VIDEO: '图生视频',
   SEEDANCE_REFERENCE_VIDEO: '图生视频',
   SEEDANCE_CAR_SALES_VIDEO: '汽车销售成片',
+  QUICK_RENDER: '一键成片编排',
 }
 
 /** 任务结果弹窗中按「视频」渲染的任务类型（含新旧 Seedance）。 */

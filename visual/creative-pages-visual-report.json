@@ -1,0 +1,1234 @@
+{
+  "generatedAt": "2026-06-17T02:13:58.258Z",
+  "viewport": {
+    "width": 1920,
+    "height": 1080
+  },
+  "pages": [
+    {
+      "key": "benchmark-create",
+      "label": "爆款对标创作",
+      "url": "http://localhost:5173/video-parse?entry=creation",
+      "screenshotPath": "D:\\javacode\\huashuo\\huashuoqianduan\\visual\\benchmark-create-regression.png",
+      "status": "ok",
+      "checks": [
+        {
+          "item": "页面根节点",
+          "status": "ok",
+          "detail": "1520px x 1770px"
+        },
+        {
+          "item": "横向溢出",
+          "status": "ok",
+          "detail": "scrollWidth 1920px，viewport 1920px，溢出 0px"
+        },
+        {
+          "item": "左侧菜单保留",
+          "status": "ok",
+          "detail": "菜单宽 216px，页面 x 308px"
+        },
+        {
+          "item": "顶部全局入口",
+          "status": "ok",
+          "detail": "top 13px，right 32px"
+        },
+        {
+          "item": "标题居中",
+          "status": "ok",
+          "detail": "标题中心偏移 0px"
+        },
+        {
+          "item": "选择参考视频与生成准备高度",
+          "status": "ok",
+          "detail": "左侧 242px，右侧 242px，差值 0px"
+        },
+        {
+          "item": "输入区域底部留白",
+          "status": "ok",
+          "detail": "底部留白 19px，输入卡片总高 316px"
+        },
+        {
+          "item": "平台入口紧凑度",
+          "status": "ok",
+          "detail": "平台行高度 46px"
+        },
+        {
+          "item": "爆款输入区按钮高度均衡",
+          "status": "ok",
+          "detail": "高度范围 40px - 40px，差值 0px"
+        },
+        {
+          "item": "爆款输入区按钮尺寸克制",
+          "status": "ok",
+          "detail": "最大按钮 326px x 40px"
+        }
+      ],
+      "metrics": {
+        "viewport": {
+          "width": 1920,
+          "height": 1080
+        },
+        "body": {
+          "scrollWidth": 1920,
+          "scrollHeight": 1898
+        },
+        "root": {
+          "x": 308,
+          "y": 86,
+          "width": 1520,
+          "height": 1770,
+          "right": 1828,
+          "bottom": 1856
+        },
+        "sidebar": {
+          "x": 0,
+          "y": 0,
+          "width": 216,
+          "height": 1080,
+          "right": 216,
+          "bottom": 1080
+        },
+        "topbarActions": {
+          "x": 1379,
+          "y": 13,
+          "width": 509,
+          "height": 38,
+          "right": 1888,
+          "bottom": 51
+        },
+        "title": {
+          "x": 937,
+          "y": 96,
+          "width": 262,
+          "height": 36,
+          "right": 1199,
+          "bottom": 132
+        },
+        "head": {
+          "x": 308,
+          "y": 86,
+          "width": 1520,
+          "height": 86,
+          "right": 1828,
+          "bottom": 172
+        },
+        "inputStage": {
+          "x": 308,
+          "y": 190,
+          "width": 1520,
+          "height": 316,
+          "right": 1828,
+          "bottom": 506
+        },
+        "linkPanel": {
+          "x": 329,
+          "y": 245,
+          "width": 1098,
+          "height": 242,
+          "right": 1427,
+          "bottom": 487
+        },
+        "readyCard": {
+          "x": 1447,
+          "y": 245,
+          "width": 360,
+          "height": 242,
+          "right": 1807,
+          "bottom": 487
+        },
+        "platformRow": {
+          "x": 346,
+          "y": 370,
+          "width": 1064,
+          "height": 46,
+          "right": 1410,
+          "bottom": 416
+        },
+        "stageList": null,
+        "previewRail": null,
+        "materialGrid": null,
+        "vehicleBundleCount": 0,
+        "hasVehicleEmptyState": false,
+        "buttons": [
+          {
+            "text": "创作中心",
+            "className": "app-menu-section-button active open",
+            "x": 14,
+            "y": 90,
+            "width": 185,
+            "height": 42,
+            "visible": true,
+            "inInputStage": false,
+            "inAssetReuse": false,
+            "isCommandButton": false
+          },
+          {
+            "text": "AI智能创作",
+            "className": "app-menu-item",
+            "x": 44,
+            "y": 136,
+            "width": 155,
+            "height": 34,
+            "visible": true,
+            "inInputStage": false,
+            "inAssetReuse": false,
+            "isCommandButton": false
+          },
+          {
+            "text": "爆款对标创作",
+            "className": "app-menu-item active",
+            "x": 44,
+            "y": 173,
+            "width": 155,
+            "height": 34,
+            "visible": true,
+            "inInputStage": false,
+            "inAssetReuse": false,
+            "isCommandButton": false
+          },
+          {
+            "text": "资产复用创作",
+            "className": "app-menu-item",
+            "x": 44,
+            "y": 210,
+            "width": 155,
+            "height": 34,
+            "visible": true,
+            "inInputStage": false,
+            "inAssetReuse": false,
+            "isCommandButton": false
+          },
+          {
+            "text": "AI资产生产工具",
+            "className": "app-menu-section-button",
+            "x": 14,
+            "y": 250,
+            "width": 185,
+            "height": 42,
+            "visible": true,
+            "inInputStage": false,
+            "inAssetReuse": false,
+            "isCommandButton": false
+          },
+          {
+            "text": "演演示用户门店账号⌄",
+            "className": "app-sidebar-user",
+            "x": 14,
+            "y": 1006,
+            "width": 187,
+            "height": 56,
+            "visible": true,
+            "inInputStage": false,
+            "inAssetReuse": false,
+            "isCommandButton": false
+          },
+          {
+            "text": "任务中心",
+            "className": "app-ghost-button app-task-entry",
+            "x": 1379,
+            "y": 13,
+            "width": 103,
+            "height": 38,
+            "visible": true,
+            "inInputStage": false,
+            "inAssetReuse": false,
+            "isCommandButton": false
+          },
+          {
+            "text": "积分99",
+            "className": "app-credit-pill",
+            "x": 1494,
+            "y": 15,
+            "width": 97,
+            "height": 34,
+            "visible": true,
+            "inInputStage": false,
+            "inAssetReuse": false,
+            "isCommandButton": false
+          },
+          {
+            "text": "资产中心",
+            "className": "app-assets-nav-btn",
+            "x": 1603,
+            "y": 15,
+            "width": 103,
+            "height": 34,
+            "visible": true,
+            "inInputStage": false,
+            "inAssetReuse": false,
+            "isCommandButton": false
+          },
+          {
+            "text": "",
+            "className": "app-icon-button",
+            "x": 1718,
+            "y": 15,
+            "width": 34,
+            "height": 34,
+            "visible": true,
+            "inInputStage": false,
+            "inAssetReuse": false,
+            "isCommandButton": false
+          },
+          {
+            "text": "演演示用户⌄",
+            "className": "app-user-menu-button",
+            "x": 1764,
+            "y": 15,
+            "width": 124,
+            "height": 34,
+            "visible": true,
+            "inInputStage": false,
+            "inAssetReuse": false,
+            "isCommandButton": false
+          },
+          {
+            "text": "使用教程",
+            "className": "ghost-button",
+            "x": 1600,
+            "y": 98,
+            "width": 108,
+            "height": 38,
+            "visible": true,
+            "inInputStage": false,
+            "inAssetReuse": false,
+            "isCommandButton": false
+          },
+          {
+            "text": "创作记录",
+            "className": "ghost-button",
+            "x": 1720,
+            "y": 98,
+            "width": 108,
+            "height": 38,
+            "visible": true,
+            "inInputStage": false,
+            "inAssetReuse": false,
+            "isCommandButton": false
+          },
+          {
+            "text": "粘贴并解析",
+            "className": "primary-button",
+            "x": 1128,
+            "y": 316,
+            "width": 128,
+            "height": 40,
+            "visible": true,
+            "inInputStage": true,
+            "inAssetReuse": false,
+            "isCommandButton": true
+          },
+          {
+            "text": "上传本地视频",
+            "className": "secondary-button",
+            "x": 1266,
+            "y": 316,
+            "width": 144,
+            "height": 40,
+            "visible": true,
+            "inInputStage": true,
+            "inAssetReuse": false,
+            "isCommandButton": true
+          },
+          {
+            "text": "⌁自动",
+            "className": "active",
+            "x": 351,
+            "y": 375,
+            "width": 72,
+            "height": 36,
+            "visible": true,
+            "inInputStage": true,
+            "inAssetReuse": false,
+            "isCommandButton": false
+          },
+          {
+            "text": "抖音",
+            "className": "",
+            "x": 432,
+            "y": 375,
+            "width": 72,
+            "height": 36,
+            "visible": true,
+            "inInputStage": true,
+            "inAssetReuse": false,
+            "isCommandButton": false
+          },
+          {
+            "text": "小红书",
+            "className": "",
+            "x": 513,
+            "y": 375,
+            "width": 85,
+            "height": 36,
+            "visible": true,
+            "inInputStage": true,
+            "inAssetReuse": false,
+            "isCommandButton": false
+          },
+          {
+            "text": "视频号",
+            "className": "",
+            "x": 607,
+            "y": 375,
+            "width": 85,
+            "height": 36,
+            "visible": true,
+            "inInputStage": true,
+            "inAssetReuse": false,
+            "isCommandButton": false
+          },
+          {
+            "text": "TikTok",
+            "className": "",
+            "x": 701,
+            "y": 375,
+            "width": 89,
+            "height": 36,
+            "visible": true,
+            "inInputStage": true,
+            "inAssetReuse": false,
+            "isCommandButton": false
+          },
+          {
+            "text": "快手",
+            "className": "",
+            "x": 799,
+            "y": 375,
+            "width": 72,
+            "height": 36,
+            "visible": true,
+            "inInputStage": true,
+            "inAssetReuse": false,
+            "isCommandButton": false
+          },
+          {
+            "text": "B站",
+            "className": "",
+            "x": 880,
+            "y": 375,
+            "width": 68,
+            "height": 36,
+            "visible": true,
+            "inInputStage": true,
+            "inAssetReuse": false,
+            "isCommandButton": false
+          },
+          {
+            "text": "YouTube",
+            "className": "",
+            "x": 957,
+            "y": 375,
+            "width": 102,
+            "height": 36,
+            "visible": true,
+            "inInputStage": true,
+            "inAssetReuse": false,
+            "isCommandButton": false
+          },
+          {
+            "text": "Facebook",
+            "className": "",
+            "x": 1068,
+            "y": 375,
+            "width": 108,
+            "height": 36,
+            "visible": true,
+            "inInputStage": true,
+            "inAssetReuse": false,
+            "isCommandButton": false
+          },
+          {
+            "text": "确认生成",
+            "className": "primary-button",
+            "x": 1464,
+            "y": 378,
+            "width": 326,
+            "height": 40,
+            "visible": true,
+            "inInputStage": true,
+            "inAssetReuse": false,
+            "isCommandButton": true
+          },
+          {
+            "text": "从资产中心选择车辆图片",
+            "className": "secondary-button",
+            "x": 1464,
+            "y": 430,
+            "width": 326,
+            "height": 40,
+            "visible": true,
+            "inInputStage": true,
+            "inAssetReuse": false,
+            "isCommandButton": true
+          },
+          {
+            "text": "重新解析",
+            "className": "secondary-button",
+            "x": 1703,
+            "y": 543,
+            "width": 106,
+            "height": 36,
+            "visible": true,
+            "inInputStage": false,
+            "inAssetReuse": false,
+            "isCommandButton": true
+          },
+          {
+            "text": "复制文案",
+            "className": "secondary-button",
+            "x": 1000,
+            "y": 774,
+            "width": 78,
+            "height": 34,
+            "visible": true,
+            "inInputStage": false,
+            "inAssetReuse": false,
+            "isCommandButton": true
+          },
+          {
+            "text": "AI 优化文案",
+            "className": "secondary-button",
+            "x": 342,
+            "y": 1205,
+            "width": 452,
+            "height": 36,
+            "visible": true,
+            "inInputStage": false,
+            "inAssetReuse": false,
+            "isCommandButton": true
+          },
+          {
+            "text": "调整分镜",
+            "className": "secondary-button",
+            "x": 842,
+            "y": 1121,
+            "width": 452,
+            "height": 36,
+            "visible": true,
+            "inInputStage": false,
+            "inAssetReuse": false,
+            "isCommandButton": true
+          },
+          {
+            "text": "从资产中心选择",
+            "className": "secondary-button",
+            "x": 1342,
+            "y": 1044,
+            "width": 452,
+            "height": 36,
+            "visible": true,
+            "inInputStage": false,
+            "inAssetReuse": false,
+            "isCommandButton": true
+          },
+          {
+            "text": "选择车图/素材",
+            "className": "secondary-button",
+            "x": 1669,
+            "y": 1631,
+            "width": 127,
+            "height": 34,
+            "visible": true,
+            "inInputStage": false,
+            "inAssetReuse": false,
+            "isCommandButton": true
+          },
+          {
+            "text": "上一步",
+            "className": "secondary-button",
+            "x": 327,
+            "y": 1698,
+            "width": 1482,
+            "height": 44,
+            "visible": true,
+            "inInputStage": false,
+            "inAssetReuse": false,
+            "isCommandButton": true
+          },
+          {
+            "text": "进入方案确认",
+            "className": "primary-button",
+            "x": 327,
+            "y": 1758,
+            "width": 1482,
+            "height": 44,
+            "visible": true,
+            "inInputStage": false,
+            "inAssetReuse": false,
+            "isCommandButton": true
+          },
+          {
+            "text": "提交反馈",
+            "className": "task-dock-fab",
+            "x": 1842,
+            "y": 936,
+            "width": 56,
+            "height": 56,
+            "visible": true,
+            "inInputStage": false,
+            "inAssetReuse": false,
+            "isCommandButton": false
+          },
+          {
+            "text": "任务中心",
+            "className": "task-dock-fab",
+            "x": 1842,
+            "y": 1002,
+            "width": 56,
+            "height": 56,
+            "visible": true,
+            "inInputStage": false,
+            "inAssetReuse": false,
+            "isCommandButton": false
+          }
+        ],
+        "overflowingTexts": [],
+        "titleText": "爆款对标创作 爆款驱动"
+      }
+    },
+    {
+      "key": "asset-reuse",
+      "label": "资产复用创作",
+      "url": "http://localhost:5173/asset-reuse",
+      "screenshotPath": "D:\\javacode\\huashuo\\huashuoqianduan\\visual\\asset-reuse-regression.png",
+      "status": "ok",
+      "checks": [
+        {
+          "item": "页面根节点",
+          "status": "ok",
+          "detail": "1450px x 1159px"
+        },
+        {
+          "item": "横向溢出",
+          "status": "ok",
+          "detail": "scrollWidth 1920px，viewport 1920px，溢出 0px"
+        },
+        {
+          "item": "左侧菜单保留",
+          "status": "ok",
+          "detail": "菜单宽 216px，页面 x 343px"
+        },
+        {
+          "item": "顶部全局入口",
+          "status": "ok",
+          "detail": "top 13px，right 32px"
+        },
+        {
+          "item": "主内容与方案预览对齐",
+          "status": "ok",
+          "detail": "顶部差值 0px"
+        },
+        {
+          "item": "车型素材包展示",
+          "status": "ok",
+          "detail": "当前展示 1 个车型素材包"
+        },
+        {
+          "item": "车型素材包文字截断",
+          "status": "ok",
+          "detail": "未发现车型素材包标题溢出"
+        },
+        {
+          "item": "资产复用页按钮高度均衡",
+          "status": "ok",
+          "detail": "高度范围 32px - 40px，差值 8px"
+        },
+        {
+          "item": "资产复用页按钮尺寸克制",
+          "status": "ok",
+          "detail": "最大按钮 292px x 40px"
+        }
+      ],
+      "metrics": {
+        "viewport": {
+          "width": 1920,
+          "height": 1080
+        },
+        "body": {
+          "scrollWidth": 1920,
+          "scrollHeight": 1287
+        },
+        "root": {
+          "x": 343,
+          "y": 86,
+          "width": 1450,
+          "height": 1159,
+          "right": 1793,
+          "bottom": 1245
+        },
+        "sidebar": {
+          "x": 0,
+          "y": 0,
+          "width": 216,
+          "height": 1080,
+          "right": 216,
+          "bottom": 1080
+        },
+        "topbarActions": {
+          "x": 1379,
+          "y": 13,
+          "width": 509,
+          "height": 38,
+          "right": 1888,
+          "bottom": 51
+        },
+        "title": {
+          "x": 343,
+          "y": 89,
+          "width": 378,
+          "height": 31,
+          "right": 721,
+          "bottom": 120
+        },
+        "head": {
+          "x": 343,
+          "y": 86,
+          "width": 1450,
+          "height": 64,
+          "right": 1793,
+          "bottom": 150
+        },
+        "inputStage": null,
+        "linkPanel": null,
+        "readyCard": null,
+        "platformRow": null,
+        "stageList": {
+          "x": 343,
+          "y": 281,
+          "width": 1100,
+          "height": 810,
+          "right": 1443,
+          "bottom": 1091
+        },
+        "previewRail": {
+          "x": 1463,
+          "y": 281,
+          "width": 330,
+          "height": 964,
+          "right": 1793,
+          "bottom": 1245
+        },
+        "materialGrid": {
+          "x": 362,
+          "y": 944,
+          "width": 1062,
+          "height": 128,
+          "right": 1424,
+          "bottom": 1072
+        },
+        "vehicleBundleCount": 1,
+        "hasVehicleEmptyState": false,
+        "buttons": [
+          {
+            "text": "创作中心",
+            "className": "app-menu-section-button active open",
+            "x": 14,
+            "y": 90,
+            "width": 185,
+            "height": 42,
+            "visible": true,
+            "inInputStage": false,
+            "inAssetReuse": false,
+            "isCommandButton": false
+          },
+          {
+            "text": "AI智能创作",
+            "className": "app-menu-item",
+            "x": 44,
+            "y": 136,
+            "width": 155,
+            "height": 34,
+            "visible": true,
+            "inInputStage": false,
+            "inAssetReuse": false,
+            "isCommandButton": false
+          },
+          {
+            "text": "爆款对标创作",
+            "className": "app-menu-item",
+            "x": 44,
+            "y": 173,
+            "width": 155,
+            "height": 34,
+            "visible": true,
+            "inInputStage": false,
+            "inAssetReuse": false,
+            "isCommandButton": false
+          },
+          {
+            "text": "资产复用创作",
+            "className": "app-menu-item active",
+            "x": 44,
+            "y": 210,
+            "width": 155,
+            "height": 34,
+            "visible": true,
+            "inInputStage": false,
+            "inAssetReuse": false,
+            "isCommandButton": false
+          },
+          {
+            "text": "AI资产生产工具",
+            "className": "app-menu-section-button",
+            "x": 14,
+            "y": 250,
+            "width": 185,
+            "height": 42,
+            "visible": true,
+            "inInputStage": false,
+            "inAssetReuse": false,
+            "isCommandButton": false
+          },
+          {
+            "text": "演演示用户门店账号⌄",
+            "className": "app-sidebar-user",
+            "x": 14,
+            "y": 1006,
+            "width": 187,
+            "height": 56,
+            "visible": true,
+            "inInputStage": false,
+            "inAssetReuse": false,
+            "isCommandButton": false
+          },
+          {
+            "text": "任务中心",
+            "className": "app-ghost-button app-task-entry",
+            "x": 1379,
+            "y": 13,
+            "width": 103,
+            "height": 38,
+            "visible": true,
+            "inInputStage": false,
+            "inAssetReuse": false,
+            "isCommandButton": false
+          },
+          {
+            "text": "积分99",
+            "className": "app-credit-pill",
+            "x": 1494,
+            "y": 15,
+            "width": 97,
+            "height": 34,
+            "visible": true,
+            "inInputStage": false,
+            "inAssetReuse": false,
+            "isCommandButton": false
+          },
+          {
+            "text": "资产中心",
+            "className": "app-assets-nav-btn",
+            "x": 1603,
+            "y": 15,
+            "width": 103,
+            "height": 34,
+            "visible": true,
+            "inInputStage": false,
+            "inAssetReuse": false,
+            "isCommandButton": false
+          },
+          {
+            "text": "",
+            "className": "app-icon-button",
+            "x": 1718,
+            "y": 15,
+            "width": 34,
+            "height": 34,
+            "visible": true,
+            "inInputStage": false,
+            "inAssetReuse": false,
+            "isCommandButton": false
+          },
+          {
+            "text": "演演示用户⌄",
+            "className": "app-user-menu-button",
+            "x": 1764,
+            "y": 15,
+            "width": 124,
+            "height": 34,
+            "visible": true,
+            "inInputStage": false,
+            "inAssetReuse": false,
+            "isCommandButton": false
+          },
+          {
+            "text": "刷新资产",
+            "className": "el-button",
+            "x": 1543,
+            "y": 101,
+            "width": 101,
+            "height": 34,
+            "visible": true,
+            "inInputStage": false,
+            "inAssetReuse": true,
+            "isCommandButton": true
+          },
+          {
+            "text": "进入方案确认",
+            "className": "el-button el-button--primary is-disabled",
+            "x": 1666,
+            "y": 101,
+            "width": 127,
+            "height": 34,
+            "visible": true,
+            "inInputStage": false,
+            "inAssetReuse": true,
+            "isCommandButton": true
+          },
+          {
+            "text": "进入资产中心 ›",
+            "className": "link-action",
+            "x": 1337,
+            "y": 304,
+            "width": 87,
+            "height": 17,
+            "visible": true,
+            "inInputStage": false,
+            "inAssetReuse": true,
+            "isCommandButton": false
+          },
+          {
+            "text": "资产中心选择",
+            "className": "active",
+            "x": 362,
+            "y": 338,
+            "width": 130,
+            "height": 34,
+            "visible": true,
+            "inInputStage": false,
+            "inAssetReuse": true,
+            "isCommandButton": false
+          },
+          {
+            "text": "AI生成新文案",
+            "className": "",
+            "x": 502,
+            "y": 338,
+            "width": 131,
+            "height": 34,
+            "visible": true,
+            "inInputStage": false,
+            "inAssetReuse": true,
+            "isCommandButton": false
+          },
+          {
+            "text": "进入资产中心 ›",
+            "className": "link-action",
+            "x": 1337,
+            "y": 530,
+            "width": 87,
+            "height": 17,
+            "visible": true,
+            "inInputStage": false,
+            "inAssetReuse": true,
+            "isCommandButton": false
+          },
+          {
+            "text": "更多数字人 ›",
+            "className": "link-action",
+            "x": 606,
+            "y": 708,
+            "width": 74,
+            "height": 17,
+            "visible": true,
+            "inInputStage": false,
+            "inAssetReuse": true,
+            "isCommandButton": false
+          },
+          {
+            "text": "不使用数字人",
+            "className": "reuse-choice-card muted",
+            "x": 362,
+            "y": 742,
+            "width": 154,
+            "height": 54,
+            "visible": true,
+            "inInputStage": false,
+            "inAssetReuse": true,
+            "isCommandButton": false
+          },
+          {
+            "text": "更多配音 ›",
+            "className": "link-action",
+            "x": 991,
+            "y": 708,
+            "width": 61,
+            "height": 17,
+            "visible": true,
+            "inInputStage": false,
+            "inAssetReuse": true,
+            "isCommandButton": false
+          },
+          {
+            "text": "不使用配音",
+            "className": "reuse-choice-card muted",
+            "x": 734,
+            "y": 742,
+            "width": 154,
+            "height": 54,
+            "visible": true,
+            "inInputStage": false,
+            "inAssetReuse": true,
+            "isCommandButton": false
+          },
+          {
+            "text": "更多音乐 ›",
+            "className": "link-action",
+            "x": 1363,
+            "y": 708,
+            "width": 61,
+            "height": 17,
+            "visible": true,
+            "inInputStage": false,
+            "inAssetReuse": true,
+            "isCommandButton": false
+          },
+          {
+            "text": "不使用音乐",
+            "className": "reuse-choice-card muted",
+            "x": 1106,
+            "y": 742,
+            "width": 154,
+            "height": 54,
+            "visible": true,
+            "inInputStage": false,
+            "inAssetReuse": true,
+            "isCommandButton": false
+          },
+          {
+            "text": "重置",
+            "className": "el-button",
+            "x": 1364,
+            "y": 850,
+            "width": 60,
+            "height": 32,
+            "visible": true,
+            "inInputStage": false,
+            "inAssetReuse": true,
+            "isCommandButton": true
+          },
+          {
+            "text": "车型素材包",
+            "className": "active",
+            "x": 362,
+            "y": 896,
+            "width": 116,
+            "height": 34,
+            "visible": true,
+            "inInputStage": false,
+            "inAssetReuse": true,
+            "isCommandButton": false
+          },
+          {
+            "text": "文案模板",
+            "className": "",
+            "x": 488,
+            "y": 896,
+            "width": 102,
+            "height": 34,
+            "visible": true,
+            "inInputStage": false,
+            "inAssetReuse": true,
+            "isCommandButton": false
+          },
+          {
+            "text": "分镜模板",
+            "className": "",
+            "x": 600,
+            "y": 896,
+            "width": 102,
+            "height": 34,
+            "visible": true,
+            "inInputStage": false,
+            "inAssetReuse": true,
+            "isCommandButton": false
+          },
+          {
+            "text": "数字人",
+            "className": "",
+            "x": 712,
+            "y": 896,
+            "width": 88,
+            "height": 34,
+            "visible": true,
+            "inInputStage": false,
+            "inAssetReuse": true,
+            "isCommandButton": false
+          },
+          {
+            "text": "背景音乐",
+            "className": "",
+            "x": 810,
+            "y": 896,
+            "width": 102,
+            "height": 34,
+            "visible": true,
+            "inInputStage": false,
+            "inAssetReuse": true,
+            "isCommandButton": false
+          },
+          {
+            "text": "视频素材",
+            "className": "",
+            "x": 922,
+            "y": 896,
+            "width": 102,
+            "height": 34,
+            "visible": true,
+            "inInputStage": false,
+            "inAssetReuse": true,
+            "isCommandButton": false
+          },
+          {
+            "text": "创建素材包",
+            "className": "upload-tile",
+            "x": 362,
+            "y": 944,
+            "width": 345,
+            "height": 128,
+            "visible": true,
+            "inInputStage": false,
+            "inAssetReuse": true,
+            "isCommandButton": false
+          },
+          {
+            "text": "捷途 G700 · 银灰 展厅版银灰 展厅版 · 私有素材包 · JSON · ",
+            "className": "vehicle-bundle-card",
+            "x": 721,
+            "y": 944,
+            "width": 345,
+            "height": 128,
+            "visible": true,
+            "inInputStage": false,
+            "inAssetReuse": true,
+            "isCommandButton": false
+          },
+          {
+            "text": "编辑",
+            "className": "",
+            "x": 1748,
+            "y": 354,
+            "width": 26,
+            "height": 17,
+            "visible": true,
+            "inInputStage": false,
+            "inAssetReuse": true,
+            "isCommandButton": false
+          },
+          {
+            "text": "编辑",
+            "className": "",
+            "x": 1748,
+            "y": 410,
+            "width": 26,
+            "height": 17,
+            "visible": true,
+            "inInputStage": false,
+            "inAssetReuse": true,
+            "isCommandButton": false
+          },
+          {
+            "text": "编辑",
+            "className": "",
+            "x": 1748,
+            "y": 466,
+            "width": 26,
+            "height": 17,
+            "visible": true,
+            "inInputStage": false,
+            "inAssetReuse": true,
+            "isCommandButton": false
+          },
+          {
+            "text": "编辑",
+            "className": "",
+            "x": 1748,
+            "y": 522,
+            "width": 26,
+            "height": 17,
+            "visible": true,
+            "inInputStage": false,
+            "inAssetReuse": true,
+            "isCommandButton": false
+          },
+          {
+            "text": "编辑",
+            "className": "",
+            "x": 1748,
+            "y": 578,
+            "width": 26,
+            "height": 17,
+            "visible": true,
+            "inInputStage": false,
+            "inAssetReuse": true,
+            "isCommandButton": false
+          },
+          {
+            "text": "编辑",
+            "className": "",
+            "x": 1748,
+            "y": 634,
+            "width": 26,
+            "height": 17,
+            "visible": true,
+            "inInputStage": false,
+            "inAssetReuse": true,
+            "isCommandButton": false
+          },
+          {
+            "text": "进入方案确认",
+            "className": "el-button el-button--primary is-disabled selection-submit",
+            "x": 1482,
+            "y": 1105,
+            "width": 292,
+            "height": 40,
+            "visible": true,
+            "inInputStage": false,
+            "inAssetReuse": true,
+            "isCommandButton": true
+          },
+          {
+            "text": "保存为草稿",
+            "className": "el-button is-disabled save-draft-button",
+            "x": 1494,
+            "y": 1155,
+            "width": 292,
+            "height": 40,
+            "visible": true,
+            "inInputStage": false,
+            "inAssetReuse": true,
+            "isCommandButton": true
+          },
+          {
+            "text": "提交反馈",
+            "className": "task-dock-fab",
+            "x": 1842,
+            "y": 936,
+            "width": 56,
+            "height": 56,
+            "visible": true,
+            "inInputStage": false,
+            "inAssetReuse": false,
+            "isCommandButton": false
+          },
+          {
+            "text": "任务中心",
+            "className": "task-dock-fab",
+            "x": 1842,
+            "y": 1002,
+            "width": 56,
+            "height": 56,
+            "visible": true,
+            "inInputStage": false,
+            "inAssetReuse": false,
+            "isCommandButton": false
+          }
+        ],
+        "overflowingTexts": [],
+        "titleText": "资产复用创作 从资产中心选择素材，快速生成视频"
+      }
+    }
+  ],
+  "status": "ok"
+}

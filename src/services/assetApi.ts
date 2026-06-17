@@ -13,12 +13,42 @@ export interface ListAssetsParams {
   sourceType?: string
   assetGroup?: string
   sort?: AssetListSort
+  pageNo?: number
+  pageSize?: number
+  includePreview?: boolean
 }
 
 export interface UploadMaterialAssetOptions {
   projectId?: number | null
   publish?: boolean
   metadataJson?: string
+}
+
+const ASSET_CONTENT_TIMEOUT_MS = 8000
+
+async function fetchTextWithTimeout(url: string, init?: RequestInit, timeoutMs = ASSET_CONTENT_TIMEOUT_MS) {
+  const controller = typeof AbortController !== 'undefined' ? new AbortController() : null
+  let timeoutId: ReturnType<typeof setTimeout> | null = null
+  if (controller && timeoutMs > 0) {
+    timeoutId = setTimeout(() => controller.abort(), timeoutMs)
+  }
+  try {
+    const res = await fetch(url, {
+      ...init,
+      signal: controller?.signal || init?.signal,
+    })
+    const text = await res.text()
+    return { res, text }
+  } catch (error) {
+    if (error instanceof DOMException && error.name === 'AbortError') {
+      throw new Error(`加载资产内容超时（${Math.round(timeoutMs / 1000)}秒）：${url}`)
+    }
+    throw error
+  } finally {
+    if (timeoutId != null) {
+      clearTimeout(timeoutId)
+    }
+  }
 }
 
 export async function getAssets(params?: ListAssetsParams) {
@@ -37,6 +67,15 @@ export async function getAssets(params?: ListAssetsParams) {
   }
   if (params?.sort) {
     search.set('sort', params.sort)
+  }
+  if (params?.pageNo && Number.isFinite(params.pageNo) && params.pageNo > 0) {
+    search.set('pageNo', String(Math.floor(params.pageNo)))
+  }
+  if (params?.pageSize && Number.isFinite(params.pageSize) && params.pageSize > 0) {
+    search.set('pageSize', String(Math.floor(params.pageSize)))
+  }
+  if (params?.includePreview === false) {
+    search.set('includePreview', 'false')
   }
   if (params?.scope && params.scope !== 'all') {
     search.set('scope', params.scope)
@@ -81,9 +120,9 @@ export async function getAssetTextContent(asset: AssetItem) {
   const headers = token ? { Authorization: `Bearer ${token}` } : undefined
   const primaryUrl = `${API_BASE_URL}/assets/${asset.assetId}/content`
 
-  const primary = await fetch(primaryUrl, { headers })
-  if (primary.ok) {
-    return primary.text()
+  const primary = await fetchTextWithTimeout(primaryUrl, { headers })
+  if (primary.res.ok) {
+    return primary.text
   }
 
   const fileUrl = asset.fileUrl || ''
@@ -91,16 +130,14 @@ export async function getAssetTextContent(asset: AssetItem) {
     ? fileUrl
     : `${API_ORIGIN}${fileUrl.startsWith('/') ? fileUrl : `/${fileUrl}`}`
   if (!fallbackUrl || fallbackUrl === primaryUrl) {
-    const text = await primary.text().catch(() => '')
-    throw new Error(`HTTP ${primary.status}: ${text}`)
+    throw new Error(`HTTP ${primary.res.status}: ${primary.text}`)
   }
 
-  const fallback = await fetch(fallbackUrl, { headers })
-  const text = await fallback.text()
-  if (!fallback.ok) {
-    throw new Error(`HTTP ${fallback.status}: ${text}`)
+  const fallback = await fetchTextWithTimeout(fallbackUrl, { headers })
+  if (!fallback.res.ok) {
+    throw new Error(`HTTP ${fallback.res.status}: ${fallback.text}`)
   }
-  return text
+  return fallback.text
 }
 
 export function saveAsset(assetId: number) {
@@ -125,6 +162,16 @@ export function updateAssetGroup(assetId: number, assetGroup: string | null) {
   return request<AssetItem>(`/assets/${assetId}/group`, {
     method: 'PATCH',
     body: JSON.stringify({ assetGroup }),
+  })
+}
+
+export function updateAssetCover(
+  assetId: number,
+  payload: { thumbnailUrl: string; metadataJson?: string | null },
+) {
+  return request<AssetItem>(`/assets/${assetId}/cover`, {
+    method: 'PATCH',
+    body: JSON.stringify(payload),
   })
 }
 

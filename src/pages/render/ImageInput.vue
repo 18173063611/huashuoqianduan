@@ -194,4 +194,32 @@ void props
 .image-input-error {
   margin: 0;
 }
+
+.image-input-label {
+  color: var(--hs-text);
+  font-size: 13px;
+  font-weight: 650;
+}
+
+.image-input-file {
+  border-color: var(--hs-border-strong);
+  border-radius: 8px;
+  background: var(--hs-surface-muted);
+}
+
+.image-input-cta {
+  border-radius: 6px;
+  background: var(--hs-primary);
+  font-weight: 650;
+}
+
+.image-input-meta {
+  color: var(--hs-text-muted);
+  font-weight: 500;
+}
+
+.image-input-preview {
+  border-color: var(--hs-border);
+  border-radius: 8px;
+}
 </style>

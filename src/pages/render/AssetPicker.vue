@@ -193,6 +193,7 @@
 import { computed, ref, watch } from 'vue'
 import { getAssets, getAssetTextContent, type AssetListScope } from '../../services/assetApi'
 import { API_ORIGIN } from '../../services/request'
+import { useAuthRequired } from '../../composables/useAuthRequired'
 import type { AssetItem, AssetType } from '../../types/assetTypes'
 import {
   assetWorkflowDisplayMeta,
@@ -233,6 +234,7 @@ const props = defineProps<{
 const emit = defineEmits<{
   (e: 'select', payload: { asset: AssetItem; url: string }): void
 }>()
+const { requireAuth } = useAuthRequired()
 
 const assets = ref<AssetItem[]>([])
 const keyword = ref('')
@@ -447,6 +449,7 @@ watch(
 )
 
 async function openPicker() {
+  if (!requireAuth('登录后可从资产中心选择素材')) return
   modalOpen.value = true
   await loadAssets()
 }
@@ -1830,5 +1833,98 @@ function formatFileSize(size: number) {
     align-items: stretch;
     flex-direction: column;
   }
+}
+
+.asset-picker-compact,
+.asset-picker-modal,
+.asset-picker-active-video,
+.asset-picker-empty {
+  border-color: var(--hs-border);
+  border-radius: 8px;
+  box-shadow: none;
+}
+
+.asset-picker-compact,
+.asset-picker-active-video {
+  background: var(--hs-surface-muted);
+}
+
+.asset-picker-summary strong,
+.asset-picker-modal-head h2,
+.asset-picker-active-video strong {
+  color: var(--hs-text);
+  font-weight: 700;
+}
+
+.asset-picker-summary p,
+.asset-picker-modal-head p,
+.asset-picker-active-video small,
+.asset-picker-modal-foot span {
+  color: var(--hs-text-muted);
+}
+
+.asset-picker-open,
+.asset-picker-button {
+  border-color: var(--hs-border);
+  border-radius: 6px;
+  color: var(--hs-text-muted);
+  font-weight: 650;
+}
+
+.asset-picker-open:hover:not(:disabled),
+.asset-picker-button:hover:not(:disabled) {
+  border-color: #bfdbfe;
+  background: var(--hs-primary-soft);
+  color: var(--hs-primary);
+}
+
+.asset-picker-primary,
+.asset-picker-primary:hover:not(:disabled) {
+  border-color: var(--hs-primary);
+  background: var(--hs-primary);
+  color: #fff;
+}
+
+.asset-picker-hint,
+.asset-picker-source-link,
+.asset-picker-icon {
+  color: var(--hs-primary);
+}
+
+.asset-picker-search input:focus {
+  border-color: var(--hs-primary);
+  box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.1);
+}
+
+.asset-picker-scope-filter,
+.asset-picker-role-filter button {
+  border-color: var(--hs-border);
+  border-radius: 8px;
+}
+
+.asset-picker-scope-filter button.active {
+  color: var(--hs-primary);
+}
+
+.asset-picker-role-filter button.active,
+.asset-picker-role-tag {
+  border-color: #bfdbfe;
+  background: var(--hs-primary-soft);
+  color: var(--hs-primary);
+}
+
+.asset-picker-item {
+  border-color: var(--hs-border);
+  border-radius: 8px;
+}
+
+.asset-picker-item.active,
+.asset-picker-item:hover:not(:disabled) {
+  border-color: #bfdbfe;
+  background: var(--hs-primary-soft);
+}
+
+.asset-picker-item.active {
+  box-shadow: inset 0 0 0 1px #bfdbfe;
 }
 </style>

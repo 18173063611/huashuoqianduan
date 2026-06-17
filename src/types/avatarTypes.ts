@@ -30,6 +30,8 @@ export interface AvatarGenerateRequest {
   framing?: 'FULL_BODY' | string
   outfitPreset?: string
   outfitDescription?: string
+  heightCm: number
+  weightKg: number
   imageCount: number
   size: string
 }
@@ -57,6 +59,9 @@ export interface AvatarGenerateTaskResult {
   avatarIds: number[]
   previewUrls: string[]
   remoteImageUrls?: string[]
+  heightCm?: number | null
+  weightKg?: number | null
+  bodyShapeLabel?: string | null
 }
 
 export interface AvatarUpdateRequest {

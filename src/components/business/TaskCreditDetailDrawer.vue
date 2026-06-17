@@ -336,7 +336,7 @@ function formatDelta(n: number) {
 }
 
 .drawer-footer-link a {
-  color: #4f46e5;
+  color: var(--hs-primary, #2563eb);
   font-weight: 600;
   text-decoration: none;
 }

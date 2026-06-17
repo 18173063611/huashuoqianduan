@@ -118,6 +118,132 @@ export interface AdminModelSaveRequest {
   concurrencyLimit?: number
 }
 
+export interface AdminTaskProviderOps {
+  ticketId?: number
+  providerTaskId?: string
+  providerStatus?: string
+  elapsedSeconds?: number
+  timeoutSeconds?: number
+  canDeleteProviderTask?: boolean
+  nextAction?: string
+  alertLevel?: string
+  alertReason?: string
+  alertedAt?: string
+  opsStatus?: string
+  priority?: string
+  assigneeAdminId?: number
+  supplierTicketId?: string
+  remark?: string
+  supplierResponse?: string
+  attachmentJson?: string
+  operatorAdminId?: number
+  updatedAt?: string
+  slaDeadlineAt?: string
+  retryApprovalStatus?: string
+  retryRequestedByAdminId?: number
+  retryRequestedAt?: string
+  retryApprovedByAdminId?: number
+  retryApprovedAt?: string
+  retryApprovalRemark?: string
+  manualRetryRequired?: boolean
+  canManualRetry?: boolean
+  actions?: AdminProviderOpsActionItem[]
+}
+
+export interface AdminProviderOpsActionItem {
+  actionId: number
+  ticketId: number
+  taskId: number
+  actionType: string
+  fromStatus?: string
+  toStatus?: string
+  operatorAdminId?: number
+  supplierTicketId?: string
+  remark?: string
+  supplierResponse?: string
+  attachmentJson?: string
+  retryApprovalStatus?: string
+  createdAt?: string
+}
+
+export interface AdminProviderOpsTicketItem {
+  ticketId: number
+  taskId: number
+  ownerUserId?: number
+  taskType?: string
+  taskStatus?: string
+  provider?: string
+  modelCode?: string
+  errorMessage?: string
+  providerTaskId?: string
+  providerStatus?: string
+  opsStatus?: string
+  priority?: string
+  assigneeAdminId?: number
+  supplierTicketId?: string
+  canDeleteProviderTask?: boolean
+  nextAction?: string
+  alertLevel?: string
+  alertReason?: string
+  alertElapsedSeconds?: number
+  alertTimeoutSeconds?: number
+  slaDeadlineAt?: string
+  slaOverdue?: boolean
+  supplierResponse?: string
+  attachmentJson?: string
+  remark?: string
+  retryApprovalStatus?: string
+  retryRequestedByAdminId?: number
+  retryRequestedAt?: string
+  retryApprovedByAdminId?: number
+  retryApprovedAt?: string
+  retryApprovalRemark?: string
+  manualRetryRequired?: boolean
+  canManualRetry?: boolean
+  createdAt?: string
+  updatedAt?: string
+  closedAt?: string
+  taskCreatedAt?: string
+  taskUpdatedAt?: string
+  actions?: AdminProviderOpsActionItem[]
+}
+
+export interface AdminProviderOpsTicketQuery {
+  status?: string
+  priority?: string
+  assigneeAdminId?: number
+  overdueOnly?: boolean
+  supplierTicketId?: string
+  providerTaskId?: string
+  taskType?: string
+  retryApprovalStatus?: string
+  pageNo?: number
+  pageSize?: number
+}
+
+export interface AdminTaskProviderOpsUpdateRequest {
+  opsStatus: string
+  priority?: string
+  assigneeAdminId?: number
+  slaDeadlineAt?: string
+  supplierTicketId?: string
+  remark?: string
+  supplierResponse?: string
+  attachmentJson?: string
+}
+
+export interface AdminTaskManualRetryApplyRequest {
+  supplierTicketId?: string
+  remark?: string
+}
+
+export interface AdminTaskManualRetryRequest {
+  approved: boolean
+  confirmProviderResolved?: boolean
+  supplierTicketId?: string
+  remark?: string
+}
+
 export interface AdminTaskItem {
   taskId: number
   ownerUserId?: number
@@ -138,6 +264,7 @@ export interface AdminTaskItem {
   messageId?: string
   errorCode?: string
   errorMessage?: string
+  providerOps?: AdminTaskProviderOps | null
   traceId?: string
   createdAt?: string
   updatedAt?: string
@@ -150,6 +277,8 @@ export interface AdminTaskQuery {
   taskType?: string
   status?: string
   modelCode?: string
+  providerOpsOnly?: boolean
+  providerOpsStatus?: string
   pageNo?: number
   pageSize?: number
 }
@@ -338,6 +467,7 @@ export type AdminUserPage = PageResult<AdminUserItem>
 export type AdminCreditLogPage = PageResult<AdminCreditLogItem>
 export type AdminModelPage = PageResult<AdminModelItem>
 export type AdminTaskPage = PageResult<AdminTaskItem>
+export type AdminProviderOpsTicketPage = PageResult<AdminProviderOpsTicketItem>
 export type AdminAssetPage = PageResult<AdminAssetItem>
 export type AdminOperationLogPage = PageResult<AdminOperationLogItem>
 export type AdminBillingStepPage = PageResult<AdminBillingStepItem>

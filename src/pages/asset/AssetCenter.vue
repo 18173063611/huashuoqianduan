@@ -66,6 +66,17 @@
           <button
             type="button"
             class="asset-scope-btn"
+            :class="{ 'asset-scope-btn-active': listScope === 'all' }"
+            role="tab"
+            :aria-selected="listScope === 'all'"
+            :disabled="loading"
+            @click="listScope = 'all'"
+          >
+            全部素材
+          </button>
+          <button
+            type="button"
+            class="asset-scope-btn"
             :class="{ 'asset-scope-btn-active': listScope === 'global' }"
             role="tab"
             :aria-selected="listScope === 'global'"
@@ -84,6 +95,23 @@
             @click="listScope = 'private'"
           >
             私有素材
+          </button>
+        </div>
+
+        <div v-if="activeCategory === 'materials'" class="asset-business-segment" role="tablist" aria-label="资产业务视图">
+          <button
+            v-for="view in businessViewOptions"
+            :key="view.key"
+            type="button"
+            class="asset-business-btn"
+            :class="{ 'asset-business-btn-active': selectedBusinessView === view.key }"
+            role="tab"
+            :aria-selected="selectedBusinessView === view.key"
+            :disabled="loading"
+            @click="selectBusinessView(view.key)"
+          >
+            <strong>{{ view.label }}</strong>
+            <span>{{ view.hint }}</span>
           </button>
         </div>
 
@@ -141,6 +169,24 @@
           <option value="fileNameAsc">按文件名（A到Z）</option>
           <option value="fileSizeDesc">按大小（大到小）</option>
         </select>
+        <div v-if="activeCategory === 'materials'" class="asset-view-segment" role="tablist" aria-label="资产视图">
+          <button
+            type="button"
+            :class="{ active: assetViewMode === 'grid' }"
+            :disabled="loading"
+            @click="assetViewMode = 'grid'"
+          >
+            网格
+          </button>
+          <button
+            type="button"
+            :class="{ active: assetViewMode === 'list' }"
+            :disabled="loading"
+            @click="assetViewMode = 'list'"
+          >
+            列表
+          </button>
+        </div>
         <input
           v-model="keyword"
           class="asset-search"
@@ -176,17 +222,21 @@
       <template v-else-if="selectedWorkflowStage === 'sceneBundle'">
         场景素材包 · <strong>查看并复用汽车销售场景图片组合</strong>
       </template>
+      <template v-else-if="activeCategory === 'materials'">
+        {{ selectedBusinessViewOption.label }} · <strong>{{ businessViewStatusText }}</strong>
+      </template>
       <template v-else-if="listScope === 'global'">
         公共素材 · <strong>全员可见</strong>
       </template>
-      <template v-else-if="activeCategory === 'materials'">
-        私有素材 · <strong>当前账号下上传/生成</strong>
-      </template>
-      <span v-if="activeCategory === 'materials'" class="asset-count">共 {{ assets.length }} 条</span>
+      <span v-if="activeCategory === 'materials'" class="asset-count">
+        {{ assetHasMore ? `已显示 ${assets.length}+ 条` : `共 ${assets.length} 条` }}
+      </span>
     </div>
 
     <p v-if="jumpHint" class="asset-jump-hint app-muted">{{ jumpHint }}</p>
-    <p v-if="errorMessage" class="app-error">{{ errorMessage }}</p>
+    <p v-if="errorMessage && (activeCategory !== 'materials' || assets.length > 0)" class="app-error">
+      {{ errorMessage }}
+    </p>
 
     <section v-if="showMaterialContextActions" class="asset-context-actions" aria-label="当前功能操作">
       <template v-if="selectedWorkflowStage === 'material'">
@@ -282,6 +332,19 @@
       </div>
     </div>
 
+    <div v-else-if="activeCategory === 'materials' && loading && assets.length === 0" class="app-empty asset-empty">
+      <div class="asset-empty-title">正在加载资产</div>
+      <div class="asset-empty-subtitle">正在获取当前筛选下的最近素材，请稍候。</div>
+    </div>
+
+    <div v-else-if="activeCategory === 'materials' && errorMessage && assets.length === 0" class="app-empty asset-empty">
+      <div class="asset-empty-title">资产加载失败</div>
+      <div class="asset-empty-subtitle">{{ errorMessage }}</div>
+      <button class="app-primary-button asset-empty-action" type="button" :disabled="loading" @click="refreshCurrent">
+        重试
+      </button>
+    </div>
+
     <div v-else-if="assets.length === 0" class="app-empty asset-empty">
       <div class="asset-empty-title">暂无资产</div>
       <div class="asset-empty-subtitle">{{ emptySubtitle }}</div>
@@ -295,7 +358,7 @@
       </button>
     </div>
 
-    <div v-else class="app-file-list asset-file-list">
+    <div v-else class="app-file-list asset-file-list" :class="`asset-file-list--${assetViewMode}`">
       <div
         v-for="asset in assets"
         :id="assetRowDomId(asset.assetId)"
@@ -309,8 +372,9 @@
             {{ displayAssetMeta(asset) }}
             <template v-if="asset.createdAt"> · {{ formatTime(asset.createdAt) }}</template>
           </p>
-          <div v-if="asset.assetGroup" class="asset-row-tags">
-            <span class="asset-group-pill">{{ asset.assetGroup }}</span>
+          <div class="asset-row-tags">
+            <span class="asset-group-pill asset-business-pill">{{ assetBusinessLabel(asset) }}</span>
+            <span v-if="asset.assetGroup" class="asset-group-pill">{{ asset.assetGroup }}</span>
           </div>
           <div class="asset-row-preview">
             <template v-if="isImage(asset)">
@@ -321,15 +385,9 @@
             </template>
             <template v-else-if="isVideo(asset)">
               <div class="asset-video-thumb">
-                <video
-                  :src="resolveFileUrl(asset.fileUrl)"
-                  :poster="videoPosterUrl(asset) || undefined"
-                  muted
-                  playsinline
-                  preload="metadata"
-                  aria-label="视频画面预览"
-                  @loadedmetadata="handleVideoMetadataLoaded(asset, $event)"
-                />
+                <img :src="videoPosterUrl(asset)" alt="视频封面" />
+                <span class="asset-video-play" aria-hidden="true">▶</span>
+                <span class="asset-video-cover-badge">{{ videoPosterSourceLabel(asset) }}</span>
                 <span v-if="videoDurationText(asset)" class="asset-video-duration">{{ videoDurationText(asset) }}</span>
               </div>
             </template>
@@ -350,13 +408,13 @@
 
         <div class="asset-row-actions">
           <button
-            v-if="canOpenStructuredPreview(asset)"
+            v-if="canOpenAssetPreview(asset)"
             class="app-secondary-button asset-open"
             type="button"
             :disabled="previewLoading"
             @click="openAssetPreview(asset)"
           >
-            {{ previewLoading && previewAsset?.assetId === asset.assetId ? '加载中...' : isCarModelBundleAsset(asset) || isSceneMaterialBundleAsset(asset) ? '查看' : '预览' }}
+            {{ previewLoading && previewAsset?.assetId === asset.assetId ? '加载中...' : assetPreviewActionLabel(asset) }}
           </button>
           <a v-else class="app-secondary-button asset-open" :href="resolveFileUrl(asset.fileUrl)" target="_blank" rel="noreferrer">预览</a>
           <button class="app-secondary-button" type="button" @click="copyLink(asset)">复制链接</button>
@@ -370,7 +428,7 @@
             加入车型素材包
           </button>
           <button
-            v-if="listScope === 'global' && hasToken"
+            v-if="canSavePublicAsset(asset)"
             class="app-secondary-button"
             type="button"
             :disabled="loading"
@@ -379,7 +437,7 @@
             保存到私有
           </button>
           <button
-            v-if="listScope === 'private' && hasToken && !isAlreadyPublishedAsset(asset)"
+            v-if="canPublishPrivateAsset(asset)"
             class="app-secondary-button"
             type="button"
             :disabled="loading"
@@ -388,7 +446,7 @@
             发布到公共
           </button>
           <button
-            v-else-if="listScope === 'private' && hasToken && isAlreadyPublishedAsset(asset)"
+            v-else-if="canShowAlreadyPublished(asset)"
             class="app-secondary-button asset-status-button"
             type="button"
             disabled
@@ -414,7 +472,7 @@
             编辑
           </button>
           <button
-            v-if="listScope === 'global' && hasToken && canUnpublish(asset)"
+            v-if="canUnpublish(asset)"
             class="app-secondary-button asset-danger"
             type="button"
             :disabled="loading"
@@ -440,7 +498,7 @@
             metadata
           </button>
           <button
-            v-if="listScope === 'private' && asset.ownerUserId != null"
+            v-if="canDeletePrivateAsset(asset)"
             class="app-secondary-button asset-danger"
             type="button"
             title="删除该私有资产（不可恢复）"
@@ -451,6 +509,19 @@
           </button>
         </div>
       </div>
+    </div>
+
+    <div v-if="activeCategory === 'materials' && assets.length > 0" class="asset-pagination-row">
+      <button
+        v-if="assetHasMore"
+        class="app-secondary-button"
+        type="button"
+        :disabled="loading || assetLoadingMore"
+        @click="loadMoreAssets"
+      >
+        {{ assetLoadingMore ? '加载中...' : '加载更多' }}
+      </button>
+      <span v-else class="asset-pagination-done">已显示当前筛选下的最近 {{ assets.length }} 条资产</span>
     </div>
 
     <div v-if="groupModalOpen" class="asset-modal-backdrop" @click.self="closeGroupEditor">
@@ -595,7 +666,42 @@
             </div>
           </article>
 
-          <div v-if="isCarBundlePreview" class="asset-preview-car-bundle">
+          <div v-if="previewAsset && isVideo(previewAsset)" class="asset-preview-video-player">
+            <video
+              :src="resolveFileUrl(previewAsset.fileUrl)"
+              :poster="videoPosterUrl(previewAsset) || undefined"
+              controls
+              preload="metadata"
+              playsinline
+              @loadedmetadata="handleVideoMetadataLoaded(previewAsset, $event)"
+            />
+            <div class="asset-preview-video-meta">
+              <strong>{{ previewAsset.fileName }}</strong>
+              <small>{{ displayAssetMeta(previewAsset) }}</small>
+              <small v-if="videoDurationText(previewAsset)">时长 {{ videoDurationText(previewAsset) }}</small>
+              <div class="asset-video-cover-tools">
+                <span>{{ videoPosterSourceLabel(previewAsset) }}</span>
+                <label>
+                  <input
+                    type="file"
+                    accept="image/*"
+                    :disabled="videoCoverUploadingAssetId === previewAsset.assetId"
+                    @change="handleVideoCoverSelected(previewAsset, $event)"
+                  />
+                  {{ videoCoverUploadingAssetId === previewAsset.assetId ? '保存中...' : '选择封面' }}
+                </label>
+                <button
+                  v-if="localVideoCoverUrl(previewAsset)"
+                  type="button"
+                  @click="clearVideoCoverOverride(previewAsset)"
+                >
+                  恢复系统封面
+                </button>
+              </div>
+            </div>
+          </div>
+
+          <div v-else-if="isCarBundlePreview" class="asset-preview-car-bundle">
             <div class="asset-preview-car-head">
               <strong>{{ carBundleTitle }}</strong>
               <span>{{ carBundleImages.length }} 张素材</span>
@@ -691,20 +797,23 @@
 
 <script setup lang="ts">
 import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue'
-import { useRouter } from 'vue-router'
+import { useRoute, useRouter } from 'vue-router'
 import {
   deleteAsset,
   getAssets,
+  getAssetDetail,
   getAssetTextContent,
   publishAsset,
   saveAsset,
   unpublishAsset,
+  updateAssetCover,
   updateAssetGroup,
   updateAssetContent,
   uploadMaterialAsset,
 } from '../../services/assetApi'
 import type { AssetListScope, AssetListSort } from '../../services/assetApi'
 import { API_ORIGIN, getAuthToken } from '../../services/request'
+import carPlaceholderImage from '../../assets/car.png'
 import { getAuthUser, type AuthUser } from '../../services/authSession'
 import type { AssetItem, AssetType } from '../../types/assetTypes'
 import {
@@ -789,6 +898,7 @@ interface CarModelBundlePayload {
   updatedAt?: string
 }
 
+const route = useRoute()
 const router = useRouter()
 
 const embedPanel = computed(() => props.panelMode === 'materials' || props.panelMode === 'voices')
@@ -802,13 +912,13 @@ const headTitle = computed(() => {
 
 const headSubtitle = computed(() => {
   if (props.panelMode === 'materials') {
-    return '筛选公共或私有素材，预览、复制链接，并管理当前账号下的资产。'
+    return '筛选全部、公共或私有素材，预览、复制链接，并管理当前账号下的资产。'
   }
   if (props.panelMode === 'voices') {
     return voicesHeadSubtitle.value
   }
   return activeCategory.value === 'materials'
-    ? '筛选公共或私有素材，预览、复制链接，并管理当前账号下的资产。'
+    ? '筛选全部、公共或私有素材，预览、复制链接，并管理当前账号下的资产。'
     : voicesHeadSubtitle.value
 })
 
@@ -847,6 +957,8 @@ const UNGROUPED_GROUP_KEY = '__ungrouped'
 const GROUP_BENCHMARK = '爆款对标'
 const GROUP_STORYBOARD = '分镜脚本'
 const CAR_MODEL_BUNDLE_GROUP = '汽车素材包'
+const ASSET_PAGE_SIZE = 24
+const INLINE_PREVIEW_BATCH_SIZE = 6
 
 const WORKFLOW_STAGE_OPTIONS = [
   { key: '', label: '全部功能', sourceTypes: [] },
@@ -917,6 +1029,56 @@ const WORKFLOW_STAGE_OPTIONS = [
 
 type WorkflowStageKey = (typeof WORKFLOW_STAGE_OPTIONS)[number]['key']
 
+const BUSINESS_VIEW_OPTIONS = [
+  {
+    key: 'image',
+    label: '图片素材',
+    hint: '车辆、场景、封面',
+    subtitle: '车辆图片、场景图和封面素材',
+    defaultAssetType: 'IMAGE',
+  },
+  {
+    key: 'video',
+    label: '视频素材',
+    hint: '成片、参考、混剪',
+    subtitle: '成片结果、参考视频和可复用片段',
+    defaultAssetType: 'VIDEO',
+  },
+  {
+    key: 'copy',
+    label: '文案资产',
+    hint: '口播、对标、字幕',
+    subtitle: '口播文案、爆款对标和字幕文本',
+  },
+  {
+    key: 'storyboard',
+    label: '分镜资产',
+    hint: '镜头脚本、结构',
+    subtitle: '分镜脚本、镜头结构和视频分析结果',
+  },
+  {
+    key: 'audio',
+    label: '音频资产',
+    hint: '口播、BGM、音效',
+    subtitle: '口播音频、背景音乐和参考音频',
+    defaultAssetType: 'AUDIO',
+  },
+  {
+    key: 'avatar',
+    label: '数字人资产',
+    hint: '形象、口播视频',
+    subtitle: '数字人形象、主播图和数字人口播视频',
+  },
+  {
+    key: 'template',
+    label: '模板库',
+    hint: '文案、分镜、BGM',
+    subtitle: '文案模板、分镜模板、数字人模板和背景音乐模板',
+  },
+] as const
+
+type BusinessViewKey = (typeof BUSINESS_VIEW_OPTIONS)[number]['key']
+
 const ASSET_GROUP_PRESETS = [
   CAR_MODEL_BUNDLE_GROUP,
   SCENE_MATERIAL_BUNDLE_GROUP,
@@ -930,6 +1092,9 @@ const ASSET_GROUP_PRESETS = [
 const assets = ref<AssetItem[]>([])
 const voices = ref<VoicePresetItem[]>([])
 const loading = ref(false)
+const assetLoadingMore = ref(false)
+const assetHasMore = ref(false)
+const assetPageNo = ref(1)
 const errorMessage = ref('')
 const highlightedId = ref<number | null>(null)
 const jumpHint = ref('')
@@ -937,9 +1102,11 @@ const selectedType = ref<'' | AssetType>('')
 const selectedSourceType = ref<string>('')
 const selectedAssetGroup = ref<string>('')
 const selectedWorkflowStage = ref<WorkflowStageKey>('')
+const selectedBusinessView = ref<BusinessViewKey>('image')
 const sortKey = ref<AssetListSort>('createdAtDesc')
+const assetViewMode = ref<'grid' | 'list'>('grid')
 const keyword = ref('')
-const listScope = ref<AssetListScope>('global')
+const listScope = ref<AssetListScope>('all')
 const activeCategory = ref<'materials' | 'voices'>('materials')
 const voiceListScope = ref<'private' | 'public'>('private')
 const hasToken = ref(false)
@@ -952,6 +1119,12 @@ const carBundleInitialPayload = ref<CarModelBundlePayload | null>(null)
 const carBundleInitialAssets = ref<AssetItem[]>([])
 let keywordReloadTimer: number | null = null
 let highlightClearTimer: number | null = null
+let highlightFilterSyncing = false
+let resolvingHighlightAssetId: number | null = null
+let assetLoadSeq = 0
+let reloadQueued = false
+let lastAssetQueryKey = ''
+let routeFilterSyncing = false
 
 watch(
   () => props.panelMode,
@@ -988,6 +1161,9 @@ const previewPayload = ref<unknown>(null)
 const previewShotIndex = ref(-1)
 const inlinePreviewByAssetId = ref<Record<number, AssetInlinePreview>>({})
 const videoDurationByAssetId = ref<Record<number, string>>({})
+const VIDEO_COVER_OVERRIDE_KEY = 'huashuo_video_cover_overrides'
+const videoCoverOverrides = ref<Record<string, string>>(loadVideoCoverOverrides())
+const videoCoverUploadingAssetId = ref<number | null>(null)
 let inlinePreviewLoadSeq = 0
 
 const voicesHeadTitle = computed(() =>
@@ -1017,7 +1193,7 @@ const emptySubtitle = computed(() => {
   if (listScope.value === 'private') {
     return '当前账号下尚无私有资产，可在各模块上传或生成后查看。'
   }
-  return '当前没有符合条件的公共素材。'
+  return `当前没有符合条件的${selectedBusinessViewOption.value.label}。`
 })
 
 const sourceTypeOptions = computed(() => {
@@ -1045,6 +1221,14 @@ const assetGroupOptions = computed(() => {
 })
 
 const workflowStageOptions = computed(() => WORKFLOW_STAGE_OPTIONS)
+const businessViewOptions = computed(() => BUSINESS_VIEW_OPTIONS)
+const selectedBusinessViewOption = computed(
+  () => BUSINESS_VIEW_OPTIONS.find((item) => item.key === selectedBusinessView.value) || BUSINESS_VIEW_OPTIONS[0],
+)
+const businessViewStatusText = computed(() => {
+  const scope = listScopeLabel(listScope.value)
+  return `${scope} · ${selectedBusinessViewOption.value.subtitle}`
+})
 const showMaterialContextActions = computed(() =>
   activeCategory.value === 'materials' &&
   (selectedWorkflowStage.value === 'material' || selectedWorkflowStage.value === 'carBundle' || selectedWorkflowStage.value === 'sceneBundle'),
@@ -1082,6 +1266,12 @@ const filteredVoices = computed(() => {
     )
   })
 })
+
+function listScopeLabel(scope: AssetListScope) {
+  if (scope === 'global') return '公共素材'
+  if (scope === 'private') return '私有素材'
+  return '全部素材'
+}
 
 const previewRecord = computed(() => (isRecord(previewPayload.value) ? previewPayload.value : null))
 
@@ -1248,10 +1438,24 @@ const rewritePreviewTitle = computed(() => {
 })
 
 onMounted(() => {
+  syncAssetViewFromRoute()
   void refreshCurrent()
 })
 
-watch([activeCategory, listScope, voiceListScope, selectedType, selectedSourceType, selectedAssetGroup, selectedWorkflowStage, sortKey], () => {
+watch(
+  () => [route.query.assetView, route.query.view, route.query.workflowStage] as const,
+  () => {
+    if (syncAssetViewFromRoute()) {
+      if (loading.value || assetLoadingMore.value) {
+        reloadQueued = true
+      } else {
+        void refreshCurrent()
+      }
+    }
+  },
+)
+
+watch([activeCategory, listScope, voiceListScope, selectedBusinessView, selectedType, selectedSourceType, selectedAssetGroup, selectedWorkflowStage, sortKey], () => {
   scheduleReload()
 })
 
@@ -1276,7 +1480,11 @@ onBeforeUnmount(() => {
 })
 
 function scheduleReload() {
-  if (loading.value) {
+  if (highlightFilterSyncing || routeFilterSyncing) {
+    return
+  }
+  if (loading.value || assetLoadingMore.value) {
+    reloadQueued = true
     return
   }
   void refreshCurrent()
@@ -1290,8 +1498,30 @@ function scheduleKeywordReload() {
   }, 320)
 }
 
-async function loadAssets() {
-  loading.value = true
+function currentAssetQueryKey() {
+  return JSON.stringify({
+    activeCategory: activeCategory.value,
+    listScope: listScope.value,
+    voiceListScope: voiceListScope.value,
+    selectedBusinessView: selectedBusinessView.value,
+    selectedType: selectedType.value,
+    selectedSourceType: selectedSourceType.value,
+    selectedAssetGroup: selectedAssetGroup.value,
+    selectedWorkflowStage: selectedWorkflowStage.value,
+    sortKey: sortKey.value,
+    keyword: keyword.value.trim(),
+  })
+}
+
+async function loadAssets(options?: { append?: boolean }) {
+  const append = options?.append === true && activeCategory.value === 'materials'
+  const queryKey = currentAssetQueryKey()
+  const seq = ++assetLoadSeq
+  if (append) {
+    assetLoadingMore.value = true
+  } else {
+    loading.value = true
+  }
   errorMessage.value = ''
   hasToken.value = !!getAuthToken()
   currentUser.value = getAuthUser()
@@ -1303,34 +1533,67 @@ async function loadAssets() {
           return
         }
         const res = await getVoicePresets()
+        if (seq !== assetLoadSeq) return
         voices.value = res.records || []
         return
       }
       const res = await getVoiceCatalog()
+      if (seq !== assetLoadSeq) return
       voices.value = res.records || []
       return
     }
+    const nextPageNo = append ? assetPageNo.value + 1 : 1
+    if (!append && queryKey !== lastAssetQueryKey) {
+      assets.value = []
+      inlinePreviewByAssetId.value = {}
+      assetHasMore.value = false
+    }
     const rows = await getAssets({
       scope: listScope.value,
-      assetType: selectedWorkflowStage.value === 'carBundle' ? 'JSON' : selectedType.value || undefined,
+      assetType: assetTypeForCurrentQuery(),
       sourceType: selectedWorkflowStage.value ? undefined : selectedSourceType.value || undefined,
       assetGroup: selectedAssetGroup.value || undefined,
       keyword: keyword.value || undefined,
       sort: sortKey.value,
+      pageNo: nextPageNo,
+      pageSize: ASSET_PAGE_SIZE,
     })
-    assets.value = rows.filter(matchesWorkflowStage)
+    if (seq !== assetLoadSeq) return
+    const filteredRows = rows.filter(matchesWorkflowStage).filter(matchesBusinessView)
+    if (append) {
+      const existingIds = new Set(assets.value.map((asset) => asset.assetId))
+      assets.value = [...assets.value, ...filteredRows.filter((asset) => !existingIds.has(asset.assetId))]
+    } else {
+      assets.value = filteredRows
+      inlinePreviewByAssetId.value = {}
+    }
+    assetPageNo.value = nextPageNo
+    assetHasMore.value = rows.length >= ASSET_PAGE_SIZE
+    lastAssetQueryKey = queryKey
     void loadInlineAssetPreviews()
     await nextTick()
     if (props.highlightAssetId != null && props.highlightAssetId > 0) {
       applyHighlightWhenReady(props.highlightAssetId)
     }
   } catch (error) {
-    errorMessage.value = error instanceof Error ? error.message : '加载资产失败'
+    if (seq === assetLoadSeq) {
+      errorMessage.value = error instanceof Error ? error.message : '加载资产失败'
+      if (!append) {
+        assetHasMore.value = false
+      }
+    }
   } finally {
-    loading.value = false
+    if (seq === assetLoadSeq) {
+      loading.value = false
+      assetLoadingMore.value = false
+    }
     await nextTick()
-    if (props.highlightAssetId != null && props.highlightAssetId > 0) {
+    if (seq === assetLoadSeq && props.highlightAssetId != null && props.highlightAssetId > 0) {
       applyHighlightWhenReady(props.highlightAssetId)
+    }
+    if (seq === assetLoadSeq && reloadQueued && !loading.value && !assetLoadingMore.value) {
+      reloadQueued = false
+      void refreshCurrent()
     }
   }
 }
@@ -1345,23 +1608,29 @@ async function loadInlineAssetPreviews() {
 
   const previewable = assets.value
     .filter((asset) => canOpenStructuredPreview(asset))
-    .slice(0, 36)
-  await Promise.all(
-    previewable.map(async (asset) => {
-      try {
-        const text = await getAssetTextContent(asset)
-        if (seq !== inlinePreviewLoadSeq) {
-          return
+    .slice(0, 24)
+  for (let i = 0; i < previewable.length; i += INLINE_PREVIEW_BATCH_SIZE) {
+    if (seq !== inlinePreviewLoadSeq) {
+      return
+    }
+    const batch = previewable.slice(i, i + INLINE_PREVIEW_BATCH_SIZE)
+    await Promise.all(
+      batch.map(async (asset) => {
+        try {
+          const text = await getAssetTextContent(asset)
+          if (seq !== inlinePreviewLoadSeq) {
+            return
+          }
+          inlinePreviewByAssetId.value = {
+            ...inlinePreviewByAssetId.value,
+            [asset.assetId]: buildInlinePreviewFromContent(asset, text),
+          }
+        } catch {
+          // Keep metadata fallback if the preview endpoint is unavailable.
         }
-        inlinePreviewByAssetId.value = {
-          ...inlinePreviewByAssetId.value,
-          [asset.assetId]: buildInlinePreviewFromContent(asset, text),
-        }
-      } catch {
-        // Keep metadata fallback if the preview endpoint is unavailable.
-      }
-    }),
-  )
+      }),
+    )
+  }
 }
 
 function assetInlinePreview(asset: AssetItem) {
@@ -1517,6 +1786,13 @@ function refreshCurrent() {
   void loadAssets()
 }
 
+function loadMoreAssets() {
+  if (loading.value || assetLoadingMore.value || !assetHasMore.value) {
+    return
+  }
+  void loadAssets({ append: true })
+}
+
 function openMaterialUpload() {
   if (!hasToken.value) {
     errorMessage.value = '请先登录后再上传素材到私有资产。'
@@ -1543,6 +1819,7 @@ async function handleMaterialUploadChange(event: Event) {
   const publishAfterUpload = uploadPublishToPublic.value
   const uploadMetadata = currentWritableAssetMetadata()
   let latestAssetId: number | null = null
+  let latestAsset: AssetItem | null = null
   try {
     for (const file of files) {
       const uploaded = await uploadMaterialAsset(file, {
@@ -1550,10 +1827,12 @@ async function handleMaterialUploadChange(event: Event) {
         metadataJson: uploadMetadata ? JSON.stringify(uploadMetadata) : undefined,
       })
       latestAssetId = uploaded.assetId
+      latestAsset = uploaded
     }
     selectedType.value = ''
     selectedSourceType.value = ''
     selectedWorkflowStage.value = 'material'
+    selectedBusinessView.value = latestAsset ? businessViewForAsset(latestAsset) : selectedBusinessView.value
     keyword.value = ''
     sortKey.value = 'createdAtDesc'
     listScope.value = publishAfterUpload ? 'global' : 'private'
@@ -1640,6 +1919,7 @@ async function handleCarBundleCreated(asset: AssetItem) {
   selectedSourceType.value = ''
   selectedAssetGroup.value = ''
   selectedWorkflowStage.value = 'carBundle'
+  selectedBusinessView.value = 'image'
   keyword.value = ''
   sortKey.value = 'createdAtDesc'
   listScope.value = uploadPublishToPublic.value ? 'global' : 'private'
@@ -1653,6 +1933,7 @@ async function handleCarBundleUpdated(asset: AssetItem) {
   selectedSourceType.value = ''
   selectedAssetGroup.value = ''
   selectedWorkflowStage.value = 'carBundle'
+  selectedBusinessView.value = 'image'
   keyword.value = ''
   sortKey.value = 'createdAtDesc'
   listScope.value = String(asset.visibility || '').toUpperCase() === 'PUBLIC' ? 'global' : 'private'
@@ -1673,15 +1954,76 @@ async function reloadAndHighlightAsset(assetId: number) {
   }, 6000)
 }
 
+function selectBusinessView(view: BusinessViewKey) {
+  selectedBusinessView.value = view
+  selectedType.value = ''
+  selectedSourceType.value = ''
+  selectedAssetGroup.value = ''
+  selectedWorkflowStage.value = ''
+  keyword.value = ''
+}
+
+function syncAssetViewFromRoute() {
+  let changed = false
+  routeFilterSyncing = true
+  const view = parseBusinessViewQuery(route.query.assetView ?? route.query.view)
+  const stage = parseWorkflowStageQuery(route.query.workflowStage)
+  try {
+    if (view && selectedBusinessView.value !== view) {
+      selectedBusinessView.value = view
+      selectedType.value = ''
+      selectedSourceType.value = ''
+      selectedAssetGroup.value = ''
+      selectedWorkflowStage.value = ''
+      keyword.value = ''
+      changed = true
+    }
+    if (stage && selectedWorkflowStage.value !== stage) {
+      selectWorkflowStage(stage)
+      changed = true
+    }
+  } finally {
+    void nextTick(() => {
+      routeFilterSyncing = false
+    })
+  }
+  return changed
+}
+
+function parseBusinessViewQuery(value: unknown): BusinessViewKey | null {
+  const raw = String(Array.isArray(value) ? value[0] || '' : value || '')
+  return BUSINESS_VIEW_OPTIONS.some((item) => item.key === raw) ? raw as BusinessViewKey : null
+}
+
+function parseWorkflowStageQuery(value: unknown): WorkflowStageKey | null {
+  const raw = String(Array.isArray(value) ? value[0] || '' : value || '')
+  return WORKFLOW_STAGE_OPTIONS.some((item) => item.key === raw) ? raw as WorkflowStageKey : null
+}
+
 function selectWorkflowStage(stage: WorkflowStageKey) {
   selectedWorkflowStage.value = stage
   if (stage) {
     selectedSourceType.value = ''
   }
+  if (stage === 'benchmark') {
+    selectedBusinessView.value = 'copy'
+  } else if (stage === 'storyboard') {
+    selectedBusinessView.value = 'storyboard'
+  } else if (stage === 'voice') {
+    selectedBusinessView.value = 'audio'
+  } else if (stage === 'digitalHuman') {
+    selectedBusinessView.value = 'avatar'
+  } else if (stage === 'video') {
+    selectedBusinessView.value = 'video'
+  } else if (stage === 'material') {
+    selectedBusinessView.value = 'image'
+  }
   if (stage === 'carBundle') {
+    selectedBusinessView.value = 'image'
     selectedType.value = 'JSON'
     selectedAssetGroup.value = ''
   } else if (stage === 'sceneBundle') {
+    selectedBusinessView.value = 'image'
     selectedType.value = ''
     selectedAssetGroup.value = ''
   } else if (stage === 'material') {
@@ -1694,6 +2036,17 @@ function selectSpecificSourceType() {
   if (selectedSourceType.value) {
     selectedWorkflowStage.value = ''
   }
+}
+
+function assetTypeForCurrentQuery(): AssetType | undefined {
+  if (selectedWorkflowStage.value === 'carBundle') {
+    return 'JSON'
+  }
+  if (selectedType.value) {
+    return selectedType.value
+  }
+  const option = selectedBusinessViewOption.value
+  return 'defaultAssetType' in option ? option.defaultAssetType as AssetType : undefined
 }
 
 function currentWritableAssetGroup() {
@@ -1730,6 +2083,167 @@ function matchesWorkflowStage(asset: AssetItem) {
   return matchesAssetWorkflowStage(asset, selectedWorkflowStage.value)
 }
 
+function matchesBusinessView(asset: AssetItem) {
+  if (selectedWorkflowStage.value === 'carBundle' || selectedWorkflowStage.value === 'sceneBundle') {
+    return true
+  }
+  switch (selectedBusinessView.value) {
+    case 'image':
+      return isBusinessImageAsset(asset)
+    case 'video':
+      return isBusinessVideoAsset(asset)
+    case 'copy':
+      return isCopyBusinessAsset(asset)
+    case 'storyboard':
+      return isStoryboardBusinessAsset(asset)
+    case 'audio':
+      return isAudioBusinessAsset(asset)
+    case 'avatar':
+      return isAvatarBusinessAsset(asset)
+    case 'template':
+      return isTemplateLibraryAsset(asset)
+    default:
+      return true
+  }
+}
+
+function assetBusinessLabel(asset: AssetItem) {
+  if (selectedBusinessView.value === 'image' && isBusinessImageAsset(asset)) return businessViewLabel('image')
+  if (selectedBusinessView.value === 'video' && isBusinessVideoAsset(asset)) return businessViewLabel('video')
+  if (selectedBusinessView.value === 'copy' && isCopyBusinessAsset(asset)) return businessViewLabel('copy')
+  if (selectedBusinessView.value === 'storyboard' && isStoryboardBusinessAsset(asset)) return businessViewLabel('storyboard')
+  if (selectedBusinessView.value === 'audio' && isAudioBusinessAsset(asset)) return businessViewLabel('audio')
+  if (selectedBusinessView.value === 'avatar' && isAvatarBusinessAsset(asset)) return businessViewLabel('avatar')
+  if (selectedBusinessView.value === 'template' && isTemplateLibraryAsset(asset)) return businessViewLabel('template')
+  if (isTemplateLibraryAsset(asset)) return '模板库'
+  if (isAvatarBusinessAsset(asset)) return '数字人资产'
+  if (isStoryboardBusinessAsset(asset)) return '分镜资产'
+  if (isCopyBusinessAsset(asset)) return '文案资产'
+  if (isAudioBusinessAsset(asset)) return '音频资产'
+  if (isBusinessVideoAsset(asset)) return '视频素材'
+  if (isBusinessImageAsset(asset)) return '图片素材'
+  return '素材资产'
+}
+
+function businessViewLabel(key: BusinessViewKey) {
+  return BUSINESS_VIEW_OPTIONS.find((item) => item.key === key)?.label || '素材资产'
+}
+
+function businessViewForAsset(asset: AssetItem): BusinessViewKey {
+  if (isTemplateLibraryAsset(asset)) return 'template'
+  if (isAvatarBusinessAsset(asset)) return 'avatar'
+  if (isStoryboardBusinessAsset(asset)) return 'storyboard'
+  if (isCopyBusinessAsset(asset)) return 'copy'
+  if (isAudioBusinessAsset(asset)) return 'audio'
+  if (isBusinessVideoAsset(asset)) return 'video'
+  return 'image'
+}
+
+function isBusinessImageAsset(asset: AssetItem) {
+  return (isImage(asset) && !isAvatarBusinessAsset(asset)) || isCarModelBundleAsset(asset) || isSceneMaterialBundleAsset(asset)
+}
+
+function isBusinessVideoAsset(asset: AssetItem) {
+  return isVideo(asset) && !isAvatarBusinessAsset(asset)
+}
+
+function isCopyBusinessAsset(asset: AssetItem) {
+  const role = normalizedAssetRole(asset)
+  const text = assetBusinessSearchText(asset)
+  return (
+    isBenchmarkAsset(asset) ||
+    role === 'voice_script' ||
+    role === 'subtitle' ||
+    ((isText(asset) || isJson(asset)) &&
+      includesAnyBusinessToken(text, ['copywriting', 'script', 'voice_script', 'subtitle', '文案', '脚本', '口播', '字幕', '对标', 'douyin']))
+  )
+}
+
+function isStoryboardBusinessAsset(asset: AssetItem) {
+  const role = normalizedAssetRole(asset)
+  const text = assetBusinessSearchText(asset)
+  return (
+    isStoryboardAsset(asset) ||
+    role === 'storyboard_json' ||
+    ((isJson(asset) || isText(asset)) && includesAnyBusinessToken(text, ['storyboard', 'shot', '分镜', '镜头', '脚本结构']))
+  )
+}
+
+function isAudioBusinessAsset(asset: AssetItem) {
+  const role = normalizedAssetRole(asset)
+  const text = assetBusinessIdentityText(asset)
+  return (
+    isAudio(asset) ||
+    role === 'bgm' ||
+    role === 'voiceover' ||
+    role === 'reference_audio' ||
+    includesAnyBusinessToken(text, ['tts_generate', 'voice_sample', 'bgm', 'music', 'audio', '音频', '口播音频', '背景音乐'])
+  )
+}
+
+function isAvatarBusinessAsset(asset: AssetItem) {
+  const role = normalizedAssetRole(asset)
+  const sourceType = String(asset.sourceType || '').trim().toUpperCase()
+  const text = assetBusinessIdentityText(asset)
+  return (
+    ['AVATAR_GENERATE', 'DIGITAL_HUMAN_GENERATE'].includes(sourceType) ||
+    role === 'host_image' ||
+    role === 'host_video' ||
+    includesAnyBusinessToken(text, ['avatar_generate', 'digital_human_generate', 'digital_human', 'avatar', 'host_image', 'host_video', '数字人', '主播'])
+  )
+}
+
+function isTemplateLibraryAsset(asset: AssetItem) {
+  const text = assetBusinessIdentityText(asset)
+  const metadata = parseJsonObject(asset.metadataJson)
+  return Boolean(
+    metadata?.publicTemplate ||
+      metadata?.templateRole ||
+      metadata?.templateType ||
+      includesAnyBusinessToken(text, [
+        'template',
+        '_template',
+        'copywriting_template',
+        'storyboard_template',
+        'headline_template',
+        'bgm_template',
+        'selling_point_template',
+        '模板',
+        '文案模板',
+        '分镜模板',
+        '数字人模板',
+        '背景音乐模板',
+        '大字报模板',
+        '卖点模板',
+      ]),
+  )
+}
+
+function assetBusinessSearchText(asset: AssetItem) {
+  return [
+    asset.fileName,
+    asset.assetGroup,
+    asset.sourceType,
+    asset.kind,
+    asset.mimeType,
+    asset.metadataJson,
+  ].filter(Boolean).join(' ').toLowerCase()
+}
+
+function assetBusinessIdentityText(asset: AssetItem) {
+  return [
+    asset.fileName,
+    asset.assetGroup,
+    asset.sourceType,
+    asset.kind,
+    asset.mimeType,
+  ].filter(Boolean).join(' ').toLowerCase()
+}
+
+function includesAnyBusinessToken(text: string, tokens: string[]) {
+  return tokens.some((token) => text.includes(token.toLowerCase()))
+}
+
 function sourceTypeLabel(sourceType: string | null | undefined) {
   return sourceTypeLabelShared(sourceType)
 }
@@ -1748,12 +2262,23 @@ function clearHighlightTimer() {
   }
 }
 
-function applyHighlightWhenReady(assetId: number) {
+async function applyHighlightWhenReady(assetId: number) {
   if (loading.value) {
     return
   }
   const found = assets.value.some((asset) => asset.assetId === assetId)
   if (!found) {
+    if (resolvingHighlightAssetId !== assetId) {
+      resolvingHighlightAssetId = assetId
+      try {
+        const moved = await moveHighlightAssetIntoCurrentView(assetId)
+        if (moved) {
+          return
+        }
+      } finally {
+        resolvingHighlightAssetId = null
+      }
+    }
     jumpHint.value = '该资产不在当前列表中，可切换范围或刷新后再试。'
     emit('highlightConsumed')
     return
@@ -1772,6 +2297,27 @@ function applyHighlightWhenReady(assetId: number) {
   }, 6000)
 }
 
+async function moveHighlightAssetIntoCurrentView(assetId: number) {
+  try {
+    const asset = await getAssetDetail(assetId)
+    highlightFilterSyncing = true
+    activeCategory.value = 'materials'
+    listScope.value = String(asset.visibility || '').toUpperCase() === 'PRIVATE' ? 'private' : 'global'
+    selectedBusinessView.value = businessViewForAsset(asset)
+    selectedType.value = asset.assetType
+    selectedSourceType.value = ''
+    selectedAssetGroup.value = ''
+    selectedWorkflowStage.value = ''
+    keyword.value = ''
+  } catch {
+    return false
+  } finally {
+    highlightFilterSyncing = false
+  }
+  await loadAssets()
+  return true
+}
+
 function assetRowDomId(assetId: number) {
   return `asset-row-${assetId}`
 }
@@ -1784,16 +2330,190 @@ function resolveFileUrl(url: string) {
 }
 
 function videoPosterUrl(asset: AssetItem) {
+  return localVideoCoverUrl(asset) || backendVideoPosterUrl(asset) || carPlaceholderImage
+}
+
+function backendVideoPosterUrl(asset: AssetItem) {
+  const poster = backendVideoPosterRaw(asset)
+  return poster ? resolveFileUrl(poster) : ''
+}
+
+function backendVideoPosterRaw(asset: AssetItem) {
   const metadata = parseJsonObject(asset.metadataJson)
-  const poster = firstNonEmptyText(
+  return firstNonEmptyText(
     asset.thumbnailUrl || '',
     stringField(metadata, 'coverUrl'),
     stringField(metadata, 'thumbnailUrl'),
     stringField(metadata, 'posterUrl'),
     stringField(metadata, 'poster'),
     stringField(metadata, 'poster_url'),
+    stringField(metadata, 'firstFrameUrl'),
+    stringField(metadata, 'lastFrameUrl'),
+    firstSegmentPosterUrl(metadata),
   )
-  return poster ? resolveFileUrl(poster) : ''
+}
+
+function firstSegmentPosterUrl(metadata: Record<string, unknown> | null) {
+  const raw = metadata?.segmentVideos
+  if (!Array.isArray(raw)) {
+    return ''
+  }
+  for (const item of raw) {
+    if (!isRecord(item)) {
+      continue
+    }
+    const cover = firstNonEmptyText(
+      stringField(item, 'coverUrl'),
+      stringField(item, 'coverImageUrl'),
+      stringField(item, 'thumbnailUrl'),
+      stringField(item, 'posterUrl'),
+      stringField(item, 'firstFrameUrl'),
+      stringField(item, 'lastFrameUrl'),
+    )
+    if (cover) {
+      return cover
+    }
+  }
+  return ''
+}
+
+function localVideoCoverUrl(asset: AssetItem) {
+  return videoCoverOverrides.value[String(asset.assetId)] || ''
+}
+
+function videoPosterSourceLabel(asset: AssetItem) {
+  if (localVideoCoverUrl(asset)) return '自选封面'
+  const metadata = parseJsonObject(asset.metadataJson)
+  if (stringField(metadata, 'coverSource') === 'user_upload' || metadata?.coverAssetId != null) {
+    return '自选封面'
+  }
+  if (backendVideoPosterRaw(asset)) return '系统封面'
+  return '系统自动封面'
+}
+
+function loadVideoCoverOverrides() {
+  if (typeof window === 'undefined') return {}
+  try {
+    const raw = window.localStorage.getItem(VIDEO_COVER_OVERRIDE_KEY)
+    const parsed = raw ? JSON.parse(raw) : {}
+    return isRecord(parsed) ? Object.fromEntries(
+      Object.entries(parsed).filter(([, value]) => typeof value === 'string'),
+    ) as Record<string, string> : {}
+  } catch {
+    return {}
+  }
+}
+
+function persistVideoCoverOverrides() {
+  if (typeof window === 'undefined') return
+  try {
+    window.localStorage.setItem(VIDEO_COVER_OVERRIDE_KEY, JSON.stringify(videoCoverOverrides.value))
+  } catch {
+    jumpHint.value = '封面已应用，但浏览器本地存储空间不足，刷新后可能不会保留。'
+  }
+}
+
+async function handleVideoCoverSelected(asset: AssetItem, event: Event) {
+  const input = event.target as HTMLInputElement
+  const file = input.files?.[0] || null
+  input.value = ''
+  if (!file) return
+  if (!file.type.startsWith('image/')) {
+    previewError.value = '请选择 JPG、PNG、WEBP 等图片作为封面。'
+    return
+  }
+  if (!hasToken.value) {
+    previewError.value = '请先登录后再设置视频封面。'
+    return
+  }
+  videoCoverUploadingAssetId.value = asset.assetId
+  try {
+    const coverAsset = await uploadMaterialAsset(file, {
+      metadataJson: JSON.stringify({
+        from: 'video_cover_upload',
+        assetRole: 'video_cover',
+        assetGroup: '视频封面',
+        targetAssetId: asset.assetId,
+        targetFileName: asset.fileName,
+        createdBy: 'asset_center_cover_tool',
+      }),
+    })
+    const coverUrl = coverAsset.fileUrl || coverAsset.thumbnailUrl || ''
+    if (!coverUrl) {
+      throw new Error('封面上传后未返回可用地址')
+    }
+    const updated = await updateAssetCover(asset.assetId, {
+      thumbnailUrl: coverUrl,
+      metadataJson: buildVideoCoverMetadata(asset, coverAsset, coverUrl),
+    })
+    applyUpdatedAsset(updated)
+    removeLocalVideoCover(asset)
+    previewError.value = ''
+    jumpHint.value = '封面已保存到资产中心。'
+  } catch (error) {
+    applyLocalVideoCover(asset, file, `封面保存失败，已临时应用本地封面：${messageFromError(error)}`)
+  } finally {
+    videoCoverUploadingAssetId.value = null
+  }
+}
+
+function buildVideoCoverMetadata(asset: AssetItem, coverAsset: AssetItem, coverUrl: string) {
+  const metadata = parseJsonObject(asset.metadataJson) || {}
+  return JSON.stringify({
+    ...metadata,
+    coverUrl,
+    thumbnailUrl: coverUrl,
+    posterUrl: coverUrl,
+    coverAssetId: coverAsset.assetId,
+    coverSource: 'user_upload',
+    coverUpdatedAt: new Date().toISOString(),
+  })
+}
+
+function applyUpdatedAsset(updated: AssetItem) {
+  assets.value = assets.value.map((item) => (item.assetId === updated.assetId ? updated : item))
+  if (previewAsset.value?.assetId === updated.assetId) {
+    previewAsset.value = updated
+  }
+}
+
+function applyLocalVideoCover(asset: AssetItem, file: File, failureMessage?: string) {
+  const reader = new FileReader()
+  reader.onload = () => {
+    const result = typeof reader.result === 'string' ? reader.result : ''
+    if (!result) {
+      previewError.value = '封面读取失败，请换一张图片重试。'
+      return
+    }
+    videoCoverOverrides.value = {
+      ...videoCoverOverrides.value,
+      [String(asset.assetId)]: result,
+    }
+    persistVideoCoverOverrides()
+    previewError.value = failureMessage || ''
+    jumpHint.value = failureMessage ? '封面临时预览已应用。' : '已设置本地自选封面。'
+  }
+  reader.onerror = () => {
+    previewError.value = '封面读取失败，请换一张图片重试。'
+  }
+  reader.readAsDataURL(file)
+}
+
+function removeLocalVideoCover(asset: AssetItem) {
+  const key = String(asset.assetId)
+  if (!videoCoverOverrides.value[key]) return
+  const next = { ...videoCoverOverrides.value }
+  delete next[key]
+  videoCoverOverrides.value = next
+  persistVideoCoverOverrides()
+}
+
+function clearVideoCoverOverride(asset: AssetItem) {
+  const next = { ...videoCoverOverrides.value }
+  delete next[String(asset.assetId)]
+  videoCoverOverrides.value = next
+  persistVideoCoverOverrides()
+  jumpHint.value = '已恢复系统封面。'
 }
 
 function videoDurationText(asset: AssetItem) {
@@ -1891,6 +2611,20 @@ function isText(asset: AssetItem) {
 
 function canOpenStructuredPreview(asset: AssetItem) {
   return isJson(asset) || isText(asset)
+}
+
+function canOpenAssetPreview(asset: AssetItem) {
+  return isVideo(asset) || canOpenStructuredPreview(asset)
+}
+
+function assetPreviewActionLabel(asset: AssetItem) {
+  if (isVideo(asset)) {
+    return '预览'
+  }
+  if (isCarModelBundleAsset(asset) || isSceneMaterialBundleAsset(asset)) {
+    return '查看'
+  }
+  return '预览'
 }
 
 function structuredPreviewHint(asset: AssetItem) {
@@ -2104,6 +2838,36 @@ function isAlreadyPublishedAsset(asset: AssetItem) {
   )
 }
 
+function assetVisibility(asset: AssetItem) {
+  return String(asset.visibility || '').toUpperCase()
+}
+
+function isPublicAsset(asset: AssetItem) {
+  return assetVisibility(asset) === 'PUBLIC'
+}
+
+function isOwnedPrivateAsset(asset: AssetItem) {
+  return assetVisibility(asset) === 'PRIVATE' &&
+    currentUser.value?.userId != null &&
+    asset.ownerUserId === currentUser.value.userId
+}
+
+function canSavePublicAsset(asset: AssetItem) {
+  return hasToken.value && isPublicAsset(asset)
+}
+
+function canPublishPrivateAsset(asset: AssetItem) {
+  return hasToken.value && isOwnedPrivateAsset(asset) && !isAlreadyPublishedAsset(asset)
+}
+
+function canShowAlreadyPublished(asset: AssetItem) {
+  return hasToken.value && isOwnedPrivateAsset(asset) && isAlreadyPublishedAsset(asset)
+}
+
+function canDeletePrivateAsset(asset: AssetItem) {
+  return hasToken.value && isOwnedPrivateAsset(asset)
+}
+
 function normalizedAssetRole(asset: AssetItem | null | undefined) {
   return normalizedAssetRoleShared(asset)
 }
@@ -2148,10 +2912,14 @@ async function copyLink(asset: AssetItem) {
 async function openAssetPreview(asset: AssetItem) {
   previewAsset.value = asset
   previewModalOpen.value = true
-  previewLoading.value = true
   previewError.value = ''
   previewPayload.value = null
   previewShotIndex.value = -1
+  if (isVideo(asset)) {
+    previewLoading.value = false
+    return
+  }
+  previewLoading.value = true
   try {
     const text = await getAssetTextContent(asset)
     const parsed = parseJsonObject(text)
@@ -2237,7 +3005,10 @@ async function handlePublish(asset: AssetItem) {
 }
 
 function canUnpublish(asset: AssetItem) {
-  return asset.createdByUserId != null
+  return hasToken.value &&
+    isPublicAsset(asset) &&
+    currentUser.value?.userId != null &&
+    asset.createdByUserId === currentUser.value.userId
 }
 
 async function handleUnpublish(asset: AssetItem) {
@@ -2424,6 +3195,10 @@ function prettyJson(input: string) {
   } catch {
     return input
   }
+}
+
+function messageFromError(error: unknown) {
+  return error instanceof Error ? error.message : String(error || '未知错误')
 }
 
 function parseJsonObject(value: string | null | undefined): Record<string, unknown> | null {
@@ -2735,6 +3510,56 @@ async function playVoiceSample(voice: VoicePresetItem) {
   gap: 6px;
 }
 
+.asset-business-segment {
+  display: grid;
+  grid-column: 1 / -1;
+  grid-template-columns: repeat(auto-fit, minmax(132px, 1fr));
+  gap: 8px;
+}
+
+.asset-business-btn {
+  display: grid;
+  min-height: 64px;
+  align-content: center;
+  gap: 4px;
+  border: 1px solid #e5e7eb;
+  border-radius: 8px;
+  background: #fff;
+  color: #344054;
+  padding: 10px 12px;
+  text-align: left;
+  cursor: pointer;
+}
+
+.asset-business-btn:hover:not(:disabled),
+.asset-business-btn-active {
+  border-color: #bfdbfe;
+  background: #eff6ff;
+  color: #2563eb;
+}
+
+.asset-business-btn:disabled {
+  cursor: not-allowed;
+  opacity: 0.65;
+}
+
+.asset-business-btn strong {
+  overflow: hidden;
+  font-size: 13px;
+  font-weight: 850;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.asset-business-btn span {
+  overflow: hidden;
+  color: #667085;
+  font-size: 12px;
+  font-weight: 650;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
 .asset-stage-btn {
   height: 32px;
   border: 1px solid #e5e7eb;
@@ -2992,6 +3817,19 @@ async function playVoiceSample(voice: VoicePresetItem) {
   margin-top: 12px;
 }
 
+.asset-pagination-row {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 40px;
+  padding: 4px 0 2px;
+}
+
+.asset-pagination-done {
+  color: #94a3b8;
+  font-size: 12px;
+}
+
 .asset-row-main {
   flex: 1;
   min-width: 0;
@@ -3031,6 +3869,12 @@ async function playVoiceSample(voice: VoicePresetItem) {
   font-weight: 800;
 }
 
+.asset-business-pill {
+  border-color: #bbf7d0;
+  background: #ecfdf3;
+  color: #027a48;
+}
+
 .asset-row-actions {
   display: flex;
   flex-shrink: 0;
@@ -3063,12 +3907,46 @@ async function playVoiceSample(voice: VoicePresetItem) {
   aspect-ratio: 16 / 9;
 }
 
-.asset-video-thumb video {
+.asset-video-thumb video,
+.asset-video-thumb img {
   display: block;
   width: 100%;
   height: 100%;
   object-fit: cover;
+}
+
+.asset-video-thumb video {
   pointer-events: none;
+}
+
+.asset-video-play {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  display: grid;
+  width: 40px;
+  height: 40px;
+  place-items: center;
+  border-radius: 999px;
+  background: rgba(15, 23, 42, 0.72);
+  color: #fff;
+  font-size: 15px;
+  line-height: 1;
+  transform: translate(-50%, -50%);
+  box-shadow: 0 10px 24px rgba(15, 23, 42, 0.2);
+}
+
+.asset-video-cover-badge {
+  position: absolute;
+  top: 8px;
+  left: 8px;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.9);
+  color: #1d4ed8;
+  padding: 4px 8px;
+  font-size: 11px;
+  font-weight: 850;
+  line-height: 1;
 }
 
 .asset-video-duration {
@@ -3457,6 +4335,80 @@ async function playVoiceSample(voice: VoicePresetItem) {
   text-decoration: underline;
 }
 
+.asset-preview-video-player {
+  display: grid;
+  gap: 12px;
+}
+
+.asset-preview-video-player video {
+  width: 100%;
+  max-height: min(62vh, 620px);
+  border-radius: 12px;
+  background: #020617;
+}
+
+.asset-preview-video-meta {
+  display: grid;
+  gap: 4px;
+  border: 1px solid #edf0f6;
+  border-radius: 12px;
+  background: #fbfcff;
+  padding: 12px;
+}
+
+.asset-preview-video-meta strong {
+  color: #111827;
+}
+
+.asset-preview-video-meta small {
+  color: #667085;
+  line-height: 1.5;
+}
+
+.asset-video-cover-tools {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 10px;
+  margin-top: 6px;
+}
+
+.asset-video-cover-tools > span {
+  display: inline-flex;
+  min-height: 26px;
+  align-items: center;
+  border-radius: 999px;
+  background: #eff6ff;
+  color: #1d4ed8;
+  padding: 0 10px;
+  font-size: 12px;
+  font-weight: 850;
+}
+
+.asset-video-cover-tools label,
+.asset-video-cover-tools button {
+  display: inline-flex;
+  min-height: 30px;
+  align-items: center;
+  justify-content: center;
+  border: 1px solid #d9e1ec;
+  border-radius: 8px;
+  background: #ffffff;
+  color: #172033;
+  padding: 0 12px;
+  font-size: 12px;
+  font-weight: 850;
+  cursor: pointer;
+}
+
+.asset-video-cover-tools input {
+  display: none;
+}
+
+.asset-video-cover-tools button {
+  color: #1d4ed8;
+}
+
 .asset-preview-video-info {
   display: grid;
   grid-template-columns: 168px minmax(0, 1fr);
@@ -3654,5 +4606,262 @@ async function playVoiceSample(voice: VoicePresetItem) {
 
 .asset-center-panel--embed .asset-center-head p {
   font-size: 12px;
+}
+
+.asset-center-panel {
+  gap: 16px;
+}
+
+.asset-center-head {
+  grid-template-columns: minmax(220px, 0.48fr) minmax(0, 1.52fr);
+}
+
+.asset-center-head h2 {
+  color: var(--hs-text);
+  font-size: 18px;
+  font-weight: 700;
+  letter-spacing: 0;
+}
+
+.asset-center-head p {
+  color: var(--hs-text-muted);
+}
+
+.asset-header-actions {
+  grid-template-columns:
+    repeat(3, minmax(128px, 1fr))
+    minmax(142px, 0.8fr)
+    minmax(128px, 0.7fr)
+    minmax(190px, 1.2fr)
+    auto;
+}
+
+.asset-category-segment,
+.asset-scope-segment {
+  border-radius: 8px;
+  background: #f3f4f6;
+}
+
+.asset-category-segment {
+  border-color: var(--hs-border);
+  background: var(--hs-surface-muted);
+}
+
+.asset-stage-btn,
+.asset-scope-btn,
+.asset-view-segment button {
+  border-radius: 6px;
+  font-weight: 650;
+}
+
+.asset-stage-btn:hover:not(:disabled),
+.asset-stage-btn-active {
+  border-color: #bfdbfe;
+  background: var(--hs-primary-soft);
+  color: var(--hs-primary);
+}
+
+.asset-view-segment {
+  display: inline-flex;
+  min-height: 36px;
+  border: 1px solid var(--hs-border);
+  border-radius: 8px;
+  background: var(--hs-surface-muted);
+  padding: 3px;
+}
+
+.asset-view-segment button {
+  border: 0;
+  background: transparent;
+  color: var(--hs-text-muted);
+  padding: 0 10px;
+  font-size: 12.5px;
+  cursor: pointer;
+}
+
+.asset-view-segment button.active {
+  background: #fff;
+  color: var(--hs-primary);
+  box-shadow: 0 1px 2px rgba(15, 23, 42, 0.06);
+}
+
+.asset-type-select,
+.asset-search {
+  border-radius: 6px;
+  background-color: #fff;
+}
+
+.asset-type-select:focus,
+.asset-search:focus {
+  border-color: var(--hs-primary);
+  box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.1);
+}
+
+.app-selected-project,
+.asset-context-actions {
+  border-color: #bfdbfe;
+  border-radius: 8px;
+  background: var(--hs-primary-soft);
+  color: var(--hs-primary);
+}
+
+.asset-file-list,
+.asset-empty,
+.voice-library-list {
+  border: 1px solid var(--hs-border);
+  border-radius: 8px;
+  background: #fff;
+  box-shadow: none;
+}
+
+.asset-file-list--grid {
+  grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
+  align-items: stretch;
+}
+
+.asset-file-list--grid .app-file-item {
+  display: grid;
+  grid-template-columns: 1fr;
+  align-content: start;
+  gap: 12px;
+  min-height: 100%;
+  border-color: var(--hs-border);
+  border-radius: 8px;
+  background: #fff;
+  padding: 12px;
+}
+
+.asset-file-list--list .app-file-item {
+  display: flex;
+  border-color: var(--hs-border);
+  border-radius: 8px;
+  background: #fff;
+}
+
+.asset-file-list .app-file-item:hover {
+  border-color: #bfdbfe;
+  background: #fff;
+}
+
+.asset-file-list--grid .asset-row-main {
+  display: grid;
+  gap: 8px;
+}
+
+.asset-file-list--grid .asset-row-preview {
+  order: -1;
+}
+
+.asset-file-list--grid .asset-row-preview img,
+.asset-file-list--grid .asset-video-thumb,
+.asset-file-list--grid .asset-result-card {
+  width: 100%;
+}
+
+.asset-file-list--grid .asset-row-preview img,
+.asset-file-list--grid .asset-video-thumb {
+  aspect-ratio: 16 / 10;
+  height: auto;
+  border-radius: 6px;
+  object-fit: cover;
+}
+
+.asset-file-list--grid .asset-row-title {
+  white-space: normal;
+  line-height: 1.45;
+}
+
+.asset-row-title {
+  color: var(--hs-text);
+  font-size: 14px;
+  font-weight: 700;
+}
+
+.asset-row-meta {
+  color: var(--hs-text-muted);
+  font-size: 12px;
+  line-height: 1.55;
+}
+
+.asset-group-pill {
+  border-color: #bfdbfe;
+  background: var(--hs-primary-soft);
+  color: var(--hs-primary);
+}
+
+.asset-business-pill {
+  border-color: #bbf7d0;
+  background: #ecfdf3;
+  color: #027a48;
+}
+
+.asset-file-list--grid .asset-row-actions {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  align-items: stretch;
+  width: 100%;
+}
+
+.asset-file-list--grid .asset-row-actions .app-secondary-button {
+  min-height: 32px;
+  padding: 6px 8px;
+  font-size: 12px;
+}
+
+.asset-result-card {
+  border-radius: 6px;
+  background: var(--hs-surface-muted);
+}
+
+.asset-row-highlight {
+  outline: 2px solid #bfdbfe;
+  background: var(--hs-primary-soft) !important;
+}
+
+.asset-preview-modal,
+.asset-modal {
+  border-radius: 8px;
+}
+
+@media (max-width: 980px) {
+  .asset-center-head {
+    grid-template-columns: 1fr;
+  }
+
+  .asset-header-actions {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .asset-view-segment {
+    width: 100%;
+  }
+
+  .asset-view-segment button {
+    flex: 1;
+  }
+}
+
+@media (max-width: 640px) {
+  .asset-header-actions {
+    grid-template-columns: 1fr;
+  }
+
+  .asset-stage-segment {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .asset-business-segment {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .asset-stage-btn {
+    min-height: 34px;
+    padding: 0 8px;
+  }
+
+  .asset-business-btn {
+    min-height: 58px;
+  }
 }
 </style>

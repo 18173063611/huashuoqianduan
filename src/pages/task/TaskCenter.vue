@@ -2,11 +2,18 @@
   <section class="app-card app-page-stack">
     <div class="app-card-header">
       <div>
-        <h2 class="app-card-title">任务中心</h2>
+        <h2 class="app-card-title">{{ pageTitle }}</h2>
         <p class="app-muted">
-          登录后查看与您账号相关的<strong>全部任务</strong>（含公共演示任务与本人任务）。可在
-          <RouterLink class="task-hub-asset-link" to="/assets?tab=tasks">资产中心 · 最近任务</RouterLink>
-          查看预扣与积分详情。
+          <template v-if="isMyVideosPage">
+            登录后查看最近生成的视频结果、封面预览与生成状态；完整积分流水仍可在
+            <RouterLink class="task-hub-asset-link" to="/assets?tab=tasks">资产中心 · 最近任务</RouterLink>
+            查看。
+          </template>
+          <template v-else>
+            登录后查看与您账号相关的<strong>全部任务</strong>（含公共演示任务与本人任务）。可在
+            <RouterLink class="task-hub-asset-link" to="/assets?tab=tasks">资产中心 · 最近任务</RouterLink>
+            查看预扣与积分详情。
+          </template>
         </p>
       </div>
       <button
@@ -73,7 +80,46 @@
 
       <p v-if="errorMessage" class="app-error">{{ errorMessage }}</p>
 
-      <div v-if="tasks.length === 0 && !loading" class="app-empty">暂无符合条件的任务。</div>
+      <section v-if="showMyVideoGallery" class="my-video-result-section" aria-label="我的视频结果">
+        <article
+          v-for="card in myVideoCards"
+          :key="card.task.taskId"
+          class="my-video-result-card"
+          :class="{ 'my-video-result-card--active': card.active }"
+        >
+          <div class="my-video-result-cover">
+            <img v-if="card.coverUrl" :src="card.coverUrl" alt="视频封面" />
+            <div v-else class="my-video-result-placeholder">AI</div>
+            <span class="app-task-status" :class="statusPillClass(card.task.status)">{{ taskStatusLabel(card.task.status) }}</span>
+          </div>
+          <div class="my-video-result-body">
+            <div>
+              <strong>{{ card.title }}</strong>
+              <p>{{ card.subtitle }}</p>
+            </div>
+            <small>{{ card.meta }}</small>
+          </div>
+          <div class="my-video-result-actions">
+            <button
+              type="button"
+              class="app-secondary-button task-open-asset"
+              :disabled="resultLoading"
+              @click="openResult(card.task)"
+            >
+              {{ card.active ? '查看进度' : '查看结果' }}
+            </button>
+            <RouterLink
+              v-if="card.assetId"
+              class="my-video-result-asset-link"
+              :to="{ name: 'AssetCenter', query: { tab: 'materials', highlight: String(card.assetId), assetView: 'video' } }"
+            >
+              资产
+            </RouterLink>
+          </div>
+        </article>
+      </section>
+
+      <div v-else-if="tasks.length === 0 && !loading" class="app-empty">暂无符合条件的任务。</div>
       <div v-else class="app-file-list">
         <div v-for="task in tasks" :key="task.taskId" class="app-file-item task-row">
           <div class="task-row-main">
@@ -101,6 +147,22 @@
               >
                 {{ segment.label }}
               </span>
+            </div>
+            <div
+              v-for="provider in providerDiagnosticList(task)"
+              :key="provider.providerTaskId"
+              class="task-provider-diagnostics"
+              :class="`task-provider-diagnostics--${provider.level}`"
+            >
+              <div class="task-provider-diagnostics-main">
+                <span>平台任务 {{ provider.providerTaskId }}</span>
+                <span>状态 {{ provider.statusLabel }}</span>
+                <span v-if="provider.elapsedSeconds != null">等待 {{ formatDurationSeconds(provider.elapsedSeconds) }}</span>
+                <span v-if="provider.timeoutSeconds != null">窗口 {{ formatDurationSeconds(provider.timeoutSeconds) }}</span>
+                <span>{{ provider.canDeleteProviderTask ? '可自动删除' : '不可自动删除' }}</span>
+                <span>{{ provider.canDeleteProviderTask ? '系统可补偿重试' : '仅人工重试' }}</span>
+              </div>
+              <p>{{ provider.actionLabel }}</p>
             </div>
             <p class="task-row-meta task-row-meta-primary">
               <el-tooltip v-if="task.taskType" :content="task.taskType" placement="top">
@@ -166,7 +228,7 @@
       </div>
     </template>
 
-    <div v-if="resultModalOpen" class="task-result-mask" @click.self="closeResultModal">
+    <div v-if="resultModalOpen" class="task-result-mask" @click.self="closeResultModal()">
       <section class="task-result-modal" role="dialog" aria-modal="true" aria-label="任务结果">
         <header class="task-result-head">
           <div>
@@ -190,22 +252,112 @@
               class="task-result-import-button"
               @click="importSelectedRenderParameters"
             >
-              导入视频制作
+              继续编辑参数
             </button>
-            <button type="button" class="task-result-close" aria-label="关闭" @click="closeResultModal">×</button>
+            <button type="button" class="task-result-close" aria-label="关闭" @click="closeResultModal()">×</button>
           </div>
         </header>
 
         <p v-if="resultError" class="app-error">{{ resultError }}</p>
-
         <div v-else-if="isVideoResultTaskType(selectedResultTask?.taskType)" class="task-result-video">
-          <video v-if="seedanceVideoUrl" :src="seedanceVideoUrl" controls preload="metadata" />
-          <div v-else-if="carSalesPartialVisible" class="task-result-partial">
-            <strong>{{ selectedCarSalesStageText }}</strong>
-            <span>{{ carSalesCompletedSegmentCount }} / {{ carSalesSegmentCount }} 段已完成</span>
+          <div
+            v-if="selectedProviderDiagnostics"
+            class="task-provider-diagnostics task-provider-diagnostics--modal"
+            :class="`task-provider-diagnostics--${selectedProviderDiagnostics.level}`"
+          >
+            <div class="task-provider-diagnostics-main">
+              <span>平台任务 {{ selectedProviderDiagnostics.providerTaskId }}</span>
+              <span>状态 {{ selectedProviderDiagnostics.statusLabel }}</span>
+              <span v-if="selectedProviderDiagnostics.elapsedSeconds != null">
+                等待 {{ formatDurationSeconds(selectedProviderDiagnostics.elapsedSeconds) }}
+              </span>
+              <span v-if="selectedProviderDiagnostics.timeoutSeconds != null">
+                窗口 {{ formatDurationSeconds(selectedProviderDiagnostics.timeoutSeconds) }}
+              </span>
+              <span>{{ selectedProviderDiagnostics.canDeleteProviderTask ? '可自动删除' : '不可自动删除' }}</span>
+              <span>{{ selectedProviderDiagnostics.canDeleteProviderTask ? '系统可补偿重试' : '仅人工重试' }}</span>
+            </div>
+            <p>{{ selectedProviderDiagnostics.actionLabel }}</p>
           </div>
-          <div v-else class="task-result-empty">
-            {{ isActiveTask(selectedResultTask) ? '任务正在准备中，完成首个片段后可在这里预览。' : '未找到视频地址。' }}
+
+          <div class="task-video-detail">
+            <div class="task-video-preview">
+              <video
+                v-if="seedanceVideoUrl"
+                :src="seedanceVideoUrl"
+                :poster="selectedVideoCoverUrl || undefined"
+                controls
+                preload="metadata"
+              />
+              <img v-else-if="selectedVideoCoverUrl" class="task-video-cover" :src="selectedVideoCoverUrl" alt="视频封面" />
+              <div v-else-if="carSalesPartialVisible" class="task-result-partial">
+                <strong>{{ selectedCarSalesStageText }}</strong>
+                <span>{{ carSalesCompletedSegmentCount }} / {{ carSalesSegmentCount }} 段已完成</span>
+              </div>
+              <div v-else class="task-result-empty">
+                {{ isActiveTask(selectedResultTask) ? '任务正在准备中，完成首个片段后可在这里预览。' : '未找到视频地址。' }}
+              </div>
+            </div>
+
+            <aside class="task-video-info-card">
+              <div>
+                <h4>视频信息</h4>
+                <p>{{ selectedVideoSubtitle }}</p>
+              </div>
+              <dl class="task-video-info-list">
+                <div>
+                  <dt>标题</dt>
+                  <dd>{{ selectedResultTask ? displayTitle(selectedResultTask) : '汽车销售成片' }}</dd>
+                </div>
+                <div>
+                  <dt>生成时间</dt>
+                  <dd>{{ selectedVideoTimeLabel }}</dd>
+                </div>
+                <div>
+                  <dt>视频时长</dt>
+                  <dd>{{ selectedVideoDurationLabel }}</dd>
+                </div>
+                <div>
+                  <dt>视频比例</dt>
+                  <dd>{{ selectedVideoAspectRatioLabel }}</dd>
+                </div>
+                <div>
+                  <dt>使用模型</dt>
+                  <dd>{{ selectedResultTask?.modelCode ? compactModel(selectedResultTask.modelCode) : '-' }}</dd>
+                </div>
+                <div>
+                  <dt>消耗积分</dt>
+                  <dd>{{ selectedVideoCreditLabel }}</dd>
+                </div>
+              </dl>
+              <div class="task-video-next-actions">
+                <a
+                  v-if="seedanceVideoUrl"
+                  class="task-video-action"
+                  :href="seedanceVideoUrl"
+                  target="_blank"
+                  rel="noreferrer"
+                >
+                  下载视频
+                </a>
+                <button
+                  v-if="canImportSelectedRenderParameters"
+                  type="button"
+                  class="task-video-action"
+                  @click="importSelectedRenderParameters"
+                >
+                  继续编辑参数
+                </button>
+                <button
+                  v-if="selectedResultAssetId"
+                  type="button"
+                  class="task-video-action task-video-action--primary"
+                  @click="openSelectedResultAsset"
+                >
+                  查看结果资产
+                </button>
+              </div>
+            </aside>
           </div>
           <div v-if="carSalesSegmentVideos.length" class="task-result-segments">
             <h4>{{ seedanceVideoUrl ? '分段视频' : '已完成片段预览' }}</h4>
@@ -450,7 +602,7 @@
 <script setup lang="ts">
 
 import { computed, ref, watch, watchEffect } from 'vue'
-import { RouterLink, useRouter } from 'vue-router'
+import { RouterLink, useRoute, useRouter } from 'vue-router'
 import { ElMessage } from 'element-plus'
 import TaskRowSmoothProgress from '../../components/TaskRowSmoothProgress.vue'
 import AssetPicker from '../render/AssetPicker.vue'
@@ -508,6 +660,27 @@ interface ManualComposeSegment {
   source: 'current' | 'asset'
 }
 
+interface ProviderRuntimeDiagnostics {
+  providerTaskId: string
+  providerStatus: string
+  statusLabel: string
+  elapsedSeconds: number | null
+  timeoutSeconds: number | null
+  level: 'info' | 'warning' | 'danger'
+  canDeleteProviderTask: boolean
+  actionLabel: string
+}
+
+interface MyVideoResultCard {
+  task: TaskItem
+  title: string
+  subtitle: string
+  meta: string
+  coverUrl: string
+  assetId: number | null
+  active: boolean
+}
+
 const props = withDefaults(
   defineProps<{
     /** 为 false 时停止轮询（例如切换离开任务页） */
@@ -529,6 +702,7 @@ const IMPORTABLE_RENDER_TASK_TYPES = new Set([
   'IMAGE_TO_VIDEO_SEEDANCE_2_0_FAST',
 ])
 
+const route = useRoute()
 const router = useRouter()
 
 const hasToken = ref(false)
@@ -539,7 +713,9 @@ const loading = ref(false)
 const retryingTaskId = ref<number | null>(null)
 const errorMessage = ref('')
 const taskTypeFilter = ref('')
-const statusFilter = ref('')
+const statusFilter = ref(parseRouteStatusFilter(route.query.status))
+const pendingRouteTaskId = ref<number | null>(null)
+const openingRouteTaskId = ref<number | null>(null)
 const resultModalOpen = ref(false)
 const resultLoading = ref(false)
 const resultError = ref('')
@@ -557,6 +733,18 @@ let loadInFlight = false
 
 const canQuery = computed(() => hasToken.value)
 const hasSessionTasks = computed(() => getSessionTaskIds().length > 0)
+const isMyVideosPage = computed(() => route.name === 'my-videos')
+const pageTitle = computed(() => (isMyVideosPage.value ? '我的视频' : '任务中心'))
+const myVideoCards = computed<MyVideoResultCard[]>(() =>
+  tasks.value
+    .filter((task) => isVideoResultTaskType(task.taskType))
+    .map((task) => buildMyVideoResultCard(task)),
+)
+const showMyVideoGallery = computed(() =>
+  isMyVideosPage.value &&
+  myVideoCards.value.length > 0 &&
+  (!taskTypeFilter.value || isVideoResultTaskType(taskTypeFilter.value)),
+)
 const resultObject = computed(() => {
   const primary = isRecord(selectedTaskResult.value) ? selectedTaskResult.value : null
   const fallback = isRecord(selectedOutputJson.value) ? selectedOutputJson.value : null
@@ -565,11 +753,55 @@ const resultObject = computed(() => {
   }
   return fallback || primary
 })
+const selectedProviderDiagnostics = computed(() =>
+  selectedResultTask.value ? providerDiagnostics(selectedResultTask.value) : null,
+)
 const outputObject = computed(() => (isRecord(selectedOutputJson.value) ? selectedOutputJson.value : null))
 const seedanceVideoUrl = computed(() => stringField(resultObject.value, 'videoUrl'))
 const carSalesSegmentVideos = computed<Record<string, unknown>[]>(() => {
   const raw = resultObject.value?.segmentVideos
   return Array.isArray(raw) ? raw.filter(isRecord) : []
+})
+const selectedVideoCoverUrl = computed(() => {
+  const resultAsset = objectField(resultObject.value, 'asset') || objectField(outputObject.value, 'asset')
+  const resultOutputAsset =
+    objectField(resultObject.value, 'outputAsset') ||
+    objectField(resultObject.value, 'resultAsset') ||
+    objectField(outputObject.value, 'outputAsset') ||
+    objectField(outputObject.value, 'resultAsset')
+  const fromResult =
+    firstStringField(resultObject.value, [
+      'coverUrl',
+      'coverImageUrl',
+      'thumbnailUrl',
+      'posterUrl',
+      'previewImageUrl',
+      'firstFrameUrl',
+      'lastFrameUrl',
+    ]) ||
+    firstStringField(outputObject.value, [
+      'coverUrl',
+      'coverImageUrl',
+      'thumbnailUrl',
+      'posterUrl',
+      'previewImageUrl',
+      'firstFrameUrl',
+      'lastFrameUrl',
+    ]) ||
+    firstStringField(resultAsset, ['thumbnailUrl', 'coverUrl', 'fileUrl']) ||
+    firstStringField(resultOutputAsset, ['thumbnailUrl', 'coverUrl', 'fileUrl'])
+  const fromInput = firstStringField(selectedTaskParameterObject.value, [
+    'coverUrl',
+    'coverImageUrl',
+    'thumbnailUrl',
+    'posterUrl',
+    'firstFrameUrl',
+    'lastFrameUrl',
+  ])
+  const fromSegment = carSalesSegmentVideos.value
+    .map((segment) => firstStringField(segment, ['coverUrl', 'thumbnailUrl', 'posterUrl', 'firstFrameUrl', 'lastFrameUrl']))
+    .find(Boolean)
+  return normalizePreviewUrl(fromResult || fromInput || fromSegment || '')
 })
 const canRegenerateCarSalesSegment = computed(() => {
   const task = selectedResultTask.value
@@ -652,6 +884,51 @@ const canImportSelectedRenderParameters = computed(() =>
     selectedTaskParameters.value,
   ),
 )
+const selectedTaskParameterObject = computed(() =>
+  isRecord(selectedTaskParameters.value) ? selectedTaskParameters.value : null,
+)
+const selectedResultAssetId = computed(() => {
+  const taskAssetId = selectedResultTask.value ? resultAssetId(selectedResultTask.value) : null
+  return (
+    taskAssetId ??
+    numberField(resultObject.value, 'resultAssetId') ??
+    numberField(resultObject.value, 'finalAssetId') ??
+    null
+  )
+})
+const selectedVideoSubtitle = computed(() => {
+  const task = selectedResultTask.value
+  if (!task) return '视频生成任务详情'
+  return `${taskStatusLabel(task.status)} · 任务 ID ${task.taskId}`
+})
+const selectedVideoTimeLabel = computed(() => {
+  const task = selectedResultTask.value
+  if (!task) return '-'
+  return formatFriendlyDateTime(task.finishedAt || task.createdAt || task.updatedAt)
+})
+const selectedVideoDurationLabel = computed(() => {
+  const seconds =
+    numberField(resultObject.value, 'durationSeconds') ??
+    numberField(resultObject.value, 'totalDurationSeconds') ??
+    numberField(selectedTaskParameterObject.value, 'durationSeconds') ??
+    numberField(selectedTaskParameterObject.value, 'targetDuration')
+  return seconds == null ? '-' : formatDurationSeconds(seconds)
+})
+const selectedVideoAspectRatioLabel = computed(() =>
+  formatAspectRatio(
+    stringField(resultObject.value, 'aspectRatio') ||
+      stringField(selectedTaskParameterObject.value, 'aspectRatio') ||
+      stringField(selectedTaskParameterObject.value, 'ratio') ||
+      '9:16',
+  ),
+)
+const selectedVideoCreditLabel = computed(() => {
+  const cost =
+    selectedResultTask.value?.creditCost ??
+    numberField(resultObject.value, 'credits') ??
+    numberField(resultObject.value, 'creditCost')
+  return typeof cost === 'number' && Number.isFinite(cost) ? `${cost} 积分` : '-'
+})
 
 function refreshAuthState() {
   hasToken.value = !!getAuthToken()
@@ -670,6 +947,27 @@ watch(
     }
     refreshAuthState()
     void loadData(false)
+  },
+  { immediate: true },
+)
+
+watch(
+  () => route.query.status,
+  (value) => {
+    const next = parseRouteStatusFilter(value)
+    if (statusFilter.value !== next) {
+      statusFilter.value = next
+    }
+  },
+)
+
+watch(
+  () => route.query.taskId,
+  (value) => {
+    pendingRouteTaskId.value = parseRouteTaskId(value)
+    if (props.panelActive && pendingRouteTaskId.value) {
+      void openPendingRouteTask()
+    }
   },
   { immediate: true },
 )
@@ -776,6 +1074,7 @@ async function loadData(silent: boolean) {
         summary.value = sum
       }
     }
+    await openPendingRouteTask()
   } catch (error) {
     if (!silent) {
       errorMessage.value = error instanceof Error ? error.message : '加载任务失败'
@@ -785,6 +1084,49 @@ async function loadData(silent: boolean) {
     if (!silent) {
       loading.value = false
     }
+  }
+}
+
+function parseRouteTaskId(value: unknown) {
+  const raw = Array.isArray(value) ? value[0] : value
+  if (typeof raw !== 'string' && typeof raw !== 'number') {
+    return null
+  }
+  const taskId = Number(raw)
+  return Number.isFinite(taskId) && taskId > 0 ? taskId : null
+}
+
+function parseRouteStatusFilter(value: unknown) {
+  const raw = String(Array.isArray(value) ? value[0] || '' : value || '').toUpperCase()
+  return ['QUEUED', 'RUNNING', 'SUCCESS', 'FAILED', 'RETRYABLE', 'CANCELED'].includes(raw) ? raw : ''
+}
+
+async function openPendingRouteTask() {
+  const taskId = pendingRouteTaskId.value
+  if (!props.panelActive || !taskId) {
+    return
+  }
+  if (openingRouteTaskId.value === taskId) {
+    return
+  }
+  if (resultModalOpen.value && selectedResultTask.value?.taskId === taskId) {
+    return
+  }
+  openingRouteTaskId.value = taskId
+  try {
+    let task = tasks.value.find((item) => item.taskId === taskId) || null
+    if (!task) {
+      const detail = await getTaskDetail(taskId)
+      task = detail
+      if (!tasks.value.some((item) => item.taskId === detail.taskId)) {
+        tasks.value = [detail, ...tasks.value]
+      }
+    }
+    await openResult(task)
+  } catch (error) {
+    errorMessage.value = error instanceof Error ? error.message : '打开任务结果失败'
+  } finally {
+    openingRouteTaskId.value = null
   }
 }
 
@@ -869,6 +1211,25 @@ function displayTitle(task: TaskItem) {
   return taskTypeLabel(task.taskType)
 }
 
+function formatAspectRatio(value: string) {
+  const normalized = value.trim()
+  if (!normalized) return '-'
+  if (normalized === '9:16') return '9:16 竖版'
+  if (normalized === '16:9') return '16:9 横版'
+  if (normalized.toLowerCase() === 'auto') return '跟随素材'
+  return normalized
+}
+
+function openSelectedResultAsset() {
+  if (!selectedResultAssetId.value) {
+    return
+  }
+  void router.push({
+    name: 'AssetCenter',
+    query: { tab: 'materials', highlight: String(selectedResultAssetId.value) },
+  })
+}
+
 function compactModel(code: string | null | undefined) {
   if (!code) return '—'
   return code.length > 36 ? `${code.slice(0, 18)}…${code.slice(-8)}` : code
@@ -880,9 +1241,22 @@ function creditRefundHint(task: TaskItem): string | null {
   if (cost <= 0) {
     return null
   }
+  const settlementStatus = String(task.settlementStatus || '').trim().toUpperCase()
+  if (settlementStatus === 'REFUNDED') {
+    return '已退款'
+  }
+  if (settlementStatus === 'PARTIAL_REFUNDED') {
+    return '部分退款'
+  }
+  if (settlementStatus === 'SETTLED') {
+    return null
+  }
   const s = String(task.status || '')
   if (s === 'SUCCESS' || s === 'QUEUED' || s === 'RUNNING') {
     return null
+  }
+  if (settlementStatus === 'PRECHARGED') {
+    return '未退款'
   }
   if (s === 'CANCELED') {
     return '已退款'
@@ -915,6 +1289,67 @@ function isCarSalesTask(task: TaskItem | null | undefined) {
 
 function canOpenRunningProgress(task: TaskItem) {
   return isCarSalesTask(task) && isActiveTask(task)
+}
+
+function buildMyVideoResultCard(task: TaskItem): MyVideoResultCard {
+  const output = taskOutputObject(task)
+  const input = taskInputObject(task)
+  const assetId =
+    resultAssetId(task) ??
+    numberField(output, 'resultAssetId') ??
+    numberField(output, 'finalAssetId') ??
+    null
+  const duration =
+    numberField(output, 'durationSeconds') ??
+    numberField(output, 'totalDurationSeconds') ??
+    numberField(input, 'durationSeconds') ??
+    numberField(input, 'targetDuration')
+  const aspect = formatAspectRatio(stringField(output, 'aspectRatio') || stringField(input, 'aspectRatio') || '9:16')
+  const time = formatFriendlyDateTime(task.finishedAt || task.createdAt || task.updatedAt)
+  const cost = typeof task.creditCost === 'number' && task.creditCost > 0 ? ` · ${task.creditCost} 积分` : ''
+  return {
+    task,
+    title: displayTitle(task),
+    subtitle: `${taskTypeLabel(task.taskType)} · ${taskStatusLabel(task.status)}`,
+    meta: `${time} · ${duration == null ? '时长未知' : formatDurationSeconds(duration)} · ${aspect}${cost}`,
+    coverUrl: taskVideoCoverUrl(task),
+    assetId,
+    active: isActiveTask(task),
+  }
+}
+
+function taskInputObject(task: TaskItem) {
+  const parsed = parseJsonObject(task.inputJson)
+  return isRecord(parsed) ? parsed : null
+}
+
+function taskVideoCoverUrl(task: TaskItem) {
+  const output = taskOutputObject(task)
+  const input = taskInputObject(task)
+  const resultAsset = objectField(output, 'asset')
+  const resultOutputAsset =
+    objectField(output, 'outputAsset') ||
+    objectField(output, 'resultAsset')
+  const segments = Array.isArray(output?.segmentVideos) ? output.segmentVideos.filter(isRecord) : []
+  const fromSegment = segments
+    .map((segment) => firstStringField(segment, ['coverUrl', 'thumbnailUrl', 'posterUrl', 'firstFrameUrl', 'lastFrameUrl']))
+    .find(Boolean)
+  return normalizePreviewUrl(
+    firstStringField(output, [
+      'coverUrl',
+      'coverImageUrl',
+      'thumbnailUrl',
+      'posterUrl',
+      'previewImageUrl',
+      'firstFrameUrl',
+      'lastFrameUrl',
+    ]) ||
+      firstStringField(resultAsset, ['thumbnailUrl', 'coverUrl', 'fileUrl']) ||
+      firstStringField(resultOutputAsset, ['thumbnailUrl', 'coverUrl', 'fileUrl']) ||
+      firstStringField(input, ['coverUrl', 'coverImageUrl', 'thumbnailUrl', 'posterUrl', 'firstFrameUrl', 'lastFrameUrl']) ||
+      fromSegment ||
+      '',
+  )
 }
 
 function taskStatusLabel(status: string) {
@@ -1037,6 +1472,171 @@ function taskProgressCaption(task: TaskItem) {
   return `正在并行生成 ${total} 段视频，完成的片段会先进入进度详情。`
 }
 
+function providerDiagnosticList(task: TaskItem) {
+  const provider = providerDiagnostics(task)
+  return provider ? [provider] : []
+}
+
+function providerDiagnostics(task: TaskItem): ProviderRuntimeDiagnostics | null {
+  const output = taskOutputObject(task)
+  const alert = isRecord(output?.providerOpsAlert) ? output.providerOpsAlert : null
+  const parsedError = parseProviderFailureMessage(task.errorMessage)
+  const providerTaskId =
+    stringField(output, 'activeProviderTaskId') ||
+    stringField(alert, 'providerTaskId') ||
+    parsedError.providerTaskId
+  if (!providerTaskId) {
+    return null
+  }
+  const providerStatus =
+    stringField(output, 'activeProviderStatus') ||
+    stringField(alert, 'providerStatus') ||
+    parsedError.providerStatus ||
+    'unknown'
+  const elapsedSeconds =
+    numberField(output, 'activeSegmentElapsedSeconds') ??
+    numberField(alert, 'elapsedSeconds') ??
+    elapsedSecondsFromTaskStart(task)
+  const timeoutSeconds =
+    numberField(output, 'activeSegmentTimeoutSeconds') ??
+    numberField(alert, 'timeoutSeconds') ??
+    parsedError.timeoutSeconds
+  const normalizedStatus = providerStatus.toLowerCase()
+  const canDeleteProviderTask =
+    booleanField(alert, 'canDeleteProviderTask') ?? normalizedStatus === 'queued'
+  const nearTimeout =
+    typeof elapsedSeconds === 'number' &&
+    typeof timeoutSeconds === 'number' &&
+    timeoutSeconds > 0 &&
+    elapsedSeconds >= timeoutSeconds * 0.75
+  const overtime =
+    typeof elapsedSeconds === 'number' &&
+    typeof timeoutSeconds === 'number' &&
+    timeoutSeconds > 0 &&
+    elapsedSeconds >= timeoutSeconds
+  const failed = ['FAILED', 'RETRYABLE', 'CANCELED'].includes(String(task.status || '').toUpperCase())
+  const level: ProviderRuntimeDiagnostics['level'] =
+    failed || overtime ? 'danger' : nearTimeout || !!alert ? 'warning' : 'info'
+  return {
+    providerTaskId,
+    providerStatus,
+    statusLabel: providerStatusLabel(providerStatus),
+    elapsedSeconds,
+    timeoutSeconds,
+    level,
+    canDeleteProviderTask,
+    actionLabel: providerActionLabel(
+      providerStatus,
+      canDeleteProviderTask,
+      failed,
+      parsedError.cleanupSkippedReason,
+    ),
+  }
+}
+
+function parseProviderFailureMessage(message?: string | null) {
+  const text = message || ''
+  const providerTaskId =
+    text.match(/providerTaskId=([^\s]+)/)?.[1] ||
+    text.match(/taskId=(cgt-[^\s]+)/)?.[1] ||
+    ''
+  const providerStatus =
+    text.match(/lastStatus=([^\s]+)/)?.[1] ||
+    text.match(/最近状态=([^\s]+)/)?.[1] ||
+    ''
+  const timeoutRaw = text.match(/pollTimeoutSeconds=(\d+)/)?.[1]
+  const cleanupSkippedReason = text.match(/providerCleanupSkippedReason=([^\s]+)/)?.[1] || ''
+  return {
+    providerTaskId,
+    providerStatus,
+    timeoutSeconds: timeoutRaw ? Number(timeoutRaw) : null,
+    cleanupSkippedReason,
+  }
+}
+
+function providerStatusLabel(status: string) {
+  const raw = String(status || '').toLowerCase()
+  const map: Record<string, string> = {
+    queued: '平台排队',
+    running: '平台运行中',
+    succeeded: '平台已完成',
+    success: '平台已完成',
+    failed: '平台失败',
+    cancelled: '平台已取消',
+    canceled: '平台已取消',
+    expired: '平台已过期',
+    unknown: '未知',
+  }
+  return map[raw] || status || '未知'
+}
+
+function providerActionLabel(
+  status: string,
+  canDeleteProviderTask: boolean,
+  failed: boolean,
+  cleanupSkippedReason?: string,
+) {
+  const normalizedStatus = String(status || '').toLowerCase()
+  if (normalizedStatus === 'queued' && canDeleteProviderTask) {
+    return '平台仍在排队；系统超时后可尝试删除平台任务并重新投递。'
+  }
+  if (normalizedStatus === 'running') {
+    if (failed || cleanupSkippedReason === 'running_task_deletion_not_supported') {
+      return '平台任务仍在运行，当前不能自动删除；请交由人工或供应商核查后决定是否重试。'
+    }
+    return '平台任务运行时间偏长；如超过窗口仍无结果，建议人工核查平台侧状态。'
+  }
+  if (failed) {
+    return '任务已失败或进入可重试状态；请先核查平台侧任务是否仍在运行，再决定人工重试。'
+  }
+  return '已记录平台任务号，便于后续排查供应商侧状态。'
+}
+
+function elapsedSecondsFromTaskStart(task: TaskItem) {
+  if (!isActiveTask(task) || !task.startedAt) {
+    return null
+  }
+  const startedAt = new Date(task.startedAt).getTime()
+  if (!Number.isFinite(startedAt)) {
+    return null
+  }
+  return Math.max(0, Math.floor((Date.now() - startedAt) / 1000))
+}
+
+function numberField(value: Record<string, unknown> | null | undefined, field: string) {
+  const raw = value?.[field]
+  if (typeof raw === 'number' && Number.isFinite(raw)) {
+    return raw
+  }
+  if (typeof raw === 'string' && raw.trim()) {
+    const parsed = Number(raw)
+    return Number.isFinite(parsed) ? parsed : null
+  }
+  return null
+}
+
+function booleanField(value: Record<string, unknown> | null | undefined, field: string) {
+  const raw = value?.[field]
+  return typeof raw === 'boolean' ? raw : null
+}
+
+function formatDurationSeconds(seconds: number) {
+  if (!Number.isFinite(seconds) || seconds < 0) {
+    return '-'
+  }
+  const whole = Math.floor(seconds)
+  const hours = Math.floor(whole / 3600)
+  const minutes = Math.floor((whole % 3600) / 60)
+  const rest = whole % 60
+  if (hours > 0) {
+    return `${hours}小时${minutes}分`
+  }
+  if (minutes > 0) {
+    return `${minutes}分${rest}秒`
+  }
+  return `${rest}秒`
+}
+
 function taskSmoothProgressCeil(task: TaskItem) {
   return isCarSalesTask(task) ? 88 : 95
 }
@@ -1147,13 +1747,26 @@ async function refreshSelectedResult(silent: boolean) {
   }
 }
 
-function closeResultModal() {
+function closeResultModal(options?: { preserveRouteTaskQuery?: boolean }) {
   resultModalOpen.value = false
   resultError.value = ''
   segmentRegenerations.value = {}
   manualComposeSegments.value = []
   manualVideoPickerUrl.value = ''
   composeError.value = ''
+  if (!options?.preserveRouteTaskQuery) {
+    clearRouteTaskQuery()
+  }
+}
+
+function clearRouteTaskQuery() {
+  if (route.query.taskId == null) {
+    return
+  }
+  const next = { ...route.query }
+  delete next.taskId
+  pendingRouteTaskId.value = null
+  void router.replace({ path: route.path, query: next })
 }
 
 function isImportableRenderTaskType(taskType: string | null | undefined) {
@@ -1174,7 +1787,7 @@ async function importSelectedRenderParameters() {
     savedAt: Date.now(),
     source: 'task-center',
   })
-  closeResultModal()
+  closeResultModal({ preserveRouteTaskQuery: true })
   await router.push({
     name: 'render',
     query: { importTask: String(task.taskId) },
@@ -1200,6 +1813,21 @@ function isRecord(value: unknown): value is Record<string, unknown> {
 function stringField(value: Record<string, unknown> | null | undefined, field: string) {
   const raw = value?.[field]
   return typeof raw === 'string' ? raw : ''
+}
+
+function firstStringField(value: Record<string, unknown> | null | undefined, fields: string[]) {
+  for (const field of fields) {
+    const raw = stringField(value, field).trim()
+    if (raw) {
+      return raw
+    }
+  }
+  return ''
+}
+
+function objectField(value: Record<string, unknown> | null | undefined, field: string) {
+  const raw = value?.[field]
+  return isRecord(raw) ? raw : null
 }
 
 function arrayStringField(value: Record<string, unknown> | null | undefined, field: string) {
@@ -1767,6 +2395,48 @@ section.app-card.app-page-stack {
   line-height: 1.5;
 }
 
+.task-provider-diagnostics {
+  margin: 10px 0 0;
+  padding: 10px 12px;
+  border: 1px solid #d9e1ec;
+  border-radius: 8px;
+  background: #f8fafc;
+  color: #344054;
+  font-size: 12px;
+  line-height: 1.45;
+}
+
+.task-provider-diagnostics-main {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px 12px;
+  font-weight: 700;
+}
+
+.task-provider-diagnostics-main span {
+  overflow-wrap: anywhere;
+}
+
+.task-provider-diagnostics p {
+  margin: 6px 0 0;
+}
+
+.task-provider-diagnostics--warning {
+  border-color: #fed7aa;
+  background: #fff7ed;
+  color: #9a3412;
+}
+
+.task-provider-diagnostics--danger {
+  border-color: #fecaca;
+  background: #fef2f2;
+  color: #991b1b;
+}
+
+.task-provider-diagnostics--modal {
+  margin-bottom: 12px;
+}
+
 .task-unread {
   color: #6c5ce7;
   font-weight: 500;
@@ -1865,6 +2535,106 @@ section.app-card.app-page-stack {
 }
 
 .task-hub-asset-link:hover {
+  text-decoration: underline;
+}
+
+.my-video-result-section {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(248px, 1fr));
+  gap: 16px;
+}
+
+.my-video-result-card {
+  display: grid;
+  overflow: hidden;
+  border: 1px solid #e6edf8;
+  border-radius: 10px;
+  background: #fff;
+  box-shadow: 0 14px 36px rgba(15, 23, 42, 0.06);
+}
+
+.my-video-result-card--active {
+  border-color: #bfdbfe;
+  box-shadow: 0 18px 46px rgba(37, 99, 235, 0.1);
+}
+
+.my-video-result-cover {
+  position: relative;
+  aspect-ratio: 16 / 10;
+  overflow: hidden;
+  background: linear-gradient(135deg, #dbeafe, #eef2ff);
+}
+
+.my-video-result-cover img,
+.my-video-result-placeholder {
+  width: 100%;
+  height: 100%;
+}
+
+.my-video-result-cover img {
+  display: block;
+  object-fit: cover;
+}
+
+.my-video-result-placeholder {
+  display: grid;
+  place-items: center;
+  color: #2563eb;
+  font-size: 24px;
+  font-weight: 800;
+}
+
+.my-video-result-cover .app-task-status {
+  position: absolute;
+  right: 10px;
+  bottom: 10px;
+  backdrop-filter: blur(8px);
+}
+
+.my-video-result-body,
+.my-video-result-actions {
+  padding: 12px 14px;
+}
+
+.my-video-result-body {
+  display: grid;
+  gap: 10px;
+}
+
+.my-video-result-body strong {
+  display: block;
+  overflow: hidden;
+  color: #111827;
+  font-size: 15px;
+  font-weight: 750;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.my-video-result-body p,
+.my-video-result-body small {
+  margin: 0;
+  color: #6b7280;
+  font-size: 12px;
+  line-height: 1.5;
+}
+
+.my-video-result-actions {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  border-top: 1px solid #f1f5f9;
+}
+
+.my-video-result-asset-link {
+  color: #2563eb;
+  font-size: 13px;
+  font-weight: 700;
+  text-decoration: none;
+}
+
+.my-video-result-asset-link:hover {
   text-decoration: underline;
 }
 
@@ -2006,6 +2776,140 @@ section.app-card.app-page-stack {
   max-height: 600px;
   border-radius: 10px;
   background: #111827;
+}
+
+.task-video-detail {
+  display: grid;
+  grid-template-columns: minmax(220px, 320px) minmax(0, 1fr);
+  gap: 24px;
+  align-items: center;
+  border: 1px solid #e6ecf7;
+  border-radius: 8px;
+  background: #fff;
+  padding: 16px;
+}
+
+.task-video-preview {
+  display: grid;
+  width: min(280px, 100%);
+  aspect-ratio: 9 / 16;
+  justify-self: center;
+  overflow: hidden;
+  border-radius: 8px;
+  background: #101828;
+  box-shadow: 0 18px 38px rgba(16, 24, 40, 0.16);
+}
+
+.task-video-preview video,
+.task-video-cover {
+  width: 100%;
+  height: 100%;
+  max-height: none;
+  border-radius: 0;
+  object-fit: cover;
+}
+
+.task-video-cover {
+  display: block;
+}
+
+.task-video-preview .task-result-empty,
+.task-video-preview .task-result-partial {
+  min-height: 100%;
+  align-content: center;
+  border: 0;
+  border-radius: 0;
+  background: linear-gradient(135deg, #dbeafe, #53627a 52%, #101828);
+  color: #fff;
+  padding: 18px;
+}
+
+.task-video-info-card {
+  display: grid;
+  min-width: 0;
+  gap: 16px;
+}
+
+.task-video-info-card h4,
+.task-video-info-card p,
+.task-video-info-list,
+.task-video-info-list dt,
+.task-video-info-list dd {
+  margin: 0;
+}
+
+.task-video-info-card h4 {
+  color: #101828;
+  font-size: 22px;
+  font-weight: 900;
+  line-height: 1.2;
+}
+
+.task-video-info-card p {
+  margin-top: 7px;
+  color: #667085;
+  font-size: 13px;
+  line-height: 1.6;
+}
+
+.task-video-info-list {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.task-video-info-list div {
+  display: grid;
+  min-width: 0;
+  gap: 4px;
+  border: 1px solid #e6ecf7;
+  border-radius: 8px;
+  background: #fbfcff;
+  padding: 11px 12px;
+}
+
+.task-video-info-list dt {
+  color: #667085;
+  font-size: 12px;
+  font-weight: 850;
+}
+
+.task-video-info-list dd {
+  min-width: 0;
+  overflow: hidden;
+  color: #101828;
+  font-size: 13px;
+  font-weight: 850;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.task-video-next-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.task-video-action {
+  display: inline-flex;
+  min-height: 38px;
+  align-items: center;
+  justify-content: center;
+  border: 1px solid #dfe7f5;
+  border-radius: 8px;
+  background: #fff;
+  color: #344054;
+  cursor: pointer;
+  font-size: 13px;
+  font-weight: 850;
+  padding: 0 14px;
+  text-decoration: none;
+}
+
+.task-video-action--primary {
+  border-color: #155eef;
+  background: #155eef;
+  color: #fff;
 }
 
 .task-result-partial {
@@ -2560,12 +3464,359 @@ section.app-card.app-page-stack {
 
 @media (max-width: 720px) {
   .task-result-mask {
+    right: auto;
+    width: 100dvw;
+    max-width: 100%;
+    box-sizing: border-box;
+    place-items: stretch;
+    align-items: center;
     padding: 14px;
   }
 
   .task-result-modal {
+    width: 100%;
+    max-width: calc(100dvw - 28px);
+    min-width: 0;
+    box-sizing: border-box;
     max-height: calc(100vh - 28px);
     padding: 16px;
+  }
+
+  .task-result-head,
+  .task-result-video,
+  .task-video-detail,
+  .task-parameter-panel {
+    max-width: 100%;
+    min-width: 0;
+  }
+
+  .task-video-detail,
+  .task-video-info-list {
+    grid-template-columns: 1fr;
+  }
+
+  .task-video-preview {
+    width: min(230px, 100%);
+  }
+
+  .task-video-next-actions {
+    display: grid;
+    grid-template-columns: 1fr;
+  }
+}
+
+/* P1 visual refresh: compact task queue surface */
+section.app-card.app-page-stack {
+  border: 1px solid var(--hs-border, #d9e1ec);
+  border-radius: 8px;
+  background: var(--hs-surface, #ffffff);
+  box-shadow: none;
+  padding: 18px;
+}
+
+.app-card-header {
+  align-items: flex-start;
+  border-bottom: 1px solid var(--hs-border, #d9e1ec);
+  padding-bottom: 14px;
+}
+
+.app-card-title {
+  color: var(--hs-text, #172033);
+  font-size: 18px;
+  line-height: 1.3;
+}
+
+.app-muted {
+  color: var(--hs-muted, #667085);
+}
+
+.task-hub-asset-link,
+.task-result-head a,
+.task-segment-actions a,
+.task-result-asset-link,
+.task-result-bgm {
+  color: var(--hs-primary, #2563eb);
+}
+
+.task-hint,
+.app-selected-project {
+  border: 1px solid var(--hs-primary-border, #bfdbfe);
+  border-radius: 8px;
+  background: var(--hs-primary-soft, #eff6ff);
+  color: var(--hs-text, #172033);
+  padding: 11px 12px;
+}
+
+.task-count-inline {
+  color: var(--hs-muted, #667085);
+  font-weight: 600;
+}
+
+.task-toolbar {
+  grid-template-columns: minmax(180px, 240px) minmax(150px, 190px);
+  gap: 10px;
+  justify-content: flex-start;
+}
+
+.task-toolbar .asset-type-select,
+.storyboard-shot-select {
+  min-height: 36px;
+  border-color: var(--hs-border, #d9e1ec);
+  border-radius: 6px;
+  background-color: #ffffff;
+  color: var(--hs-text, #172033);
+}
+
+.task-toolbar .asset-type-select:hover:not(:disabled),
+.storyboard-shot-select:hover,
+.storyboard-nav-button:hover:not(:disabled) {
+  border-color: var(--hs-primary-border, #bfdbfe);
+}
+
+.task-toolbar .asset-type-select:focus,
+.storyboard-shot-select:focus {
+  border-color: var(--hs-primary, #2563eb);
+  box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.1);
+}
+
+.app-file-list {
+  gap: 10px;
+}
+
+.app-file-item.task-row {
+  grid-template-columns: minmax(0, 1fr) auto;
+  border: 1px solid var(--hs-border, #d9e1ec);
+  border-radius: 8px;
+  background: #ffffff;
+  box-shadow: none;
+  padding: 14px;
+  transition: border-color 0.16s ease, background-color 0.16s ease;
+}
+
+.app-file-item.task-row:hover {
+  border-color: var(--hs-primary-border, #bfdbfe);
+  background: var(--hs-surface-soft, #f8fafc);
+  box-shadow: none;
+  transform: none;
+}
+
+.app-file-item.task-row .task-row-main > strong {
+  color: var(--hs-text, #172033);
+  font-size: 14px;
+  font-weight: 750;
+}
+
+.task-row-stage,
+.task-row-meta {
+  color: var(--hs-muted, #667085);
+}
+
+.task-row-meta-primary {
+  color: #475467;
+}
+
+.task-row-err {
+  border-color: #fecaca;
+  background: #fef2f2;
+  color: #b42318;
+}
+
+.task-retry-chip {
+  border-color: #fed7aa;
+  background: #fff7ed;
+  color: #b45309;
+}
+
+.task-segment-badge {
+  border-radius: 6px;
+  box-shadow: none;
+}
+
+.task-segment-badge--done {
+  border-color: #bbf7d0;
+  background: #f0fdf4;
+  color: #15803d;
+}
+
+.task-segment-badge--active {
+  border-color: var(--hs-primary-border, #bfdbfe);
+  background: var(--hs-primary-soft, #eff6ff);
+  color: var(--hs-primary, #2563eb);
+}
+
+.task-segment-badge--pending {
+  border-color: var(--hs-border, #d9e1ec);
+  background: #f8fafc;
+  color: var(--hs-muted, #667085);
+}
+
+.app-task-status,
+.task-status-pill--OTHER {
+  border: 1px solid var(--hs-border, #d9e1ec);
+  border-radius: 999px;
+  background: #f8fafc;
+  color: var(--hs-muted, #667085);
+  font-size: 12px;
+  font-weight: 750;
+}
+
+.task-status-pill--QUEUED {
+  border-color: var(--hs-primary-border, #bfdbfe);
+  background: var(--hs-primary-soft, #eff6ff);
+  color: var(--hs-primary, #2563eb);
+}
+
+.task-status-pill--RUNNING {
+  border-color: #bfdbfe;
+  background: #dbeafe;
+  color: #1d4ed8;
+}
+
+.task-status-pill--SUCCESS {
+  border-color: #bbf7d0;
+  background: #f0fdf4;
+  color: #15803d;
+}
+
+.task-status-pill--FAILED {
+  border-color: #fecaca;
+  background: #fef2f2;
+  color: #b42318;
+}
+
+.task-status-pill--RETRYABLE {
+  border-color: #fed7aa;
+  background: #fff7ed;
+  color: #b45309;
+}
+
+.task-status-pill--CANCELED {
+  border-color: #d0d5dd;
+  background: #f2f4f7;
+  color: #667085;
+}
+
+.task-row-actions {
+  min-width: 132px;
+}
+
+.task-row-actions .app-secondary-button,
+.storyboard-nav-button,
+.task-compose-item-actions button {
+  border-color: var(--hs-border, #d9e1ec);
+  border-radius: 6px;
+  background: #ffffff;
+  color: var(--hs-text, #172033);
+  box-shadow: none;
+}
+
+.task-row-actions .app-secondary-button:hover:not(:disabled),
+.task-compose-item-actions button:hover:not(:disabled) {
+  border-color: var(--hs-primary-border, #bfdbfe);
+  background: var(--hs-primary-soft, #eff6ff);
+  color: var(--hs-primary, #2563eb);
+}
+
+.task-result-mask {
+  background: rgba(15, 23, 42, 0.46);
+}
+
+:global(body:has(.task-result-mask) .task-dock-fab-stack) {
+  display: none;
+}
+
+.task-result-modal {
+  border: 1px solid var(--hs-border, #d9e1ec);
+  border-radius: 8px;
+  background: #ffffff;
+  box-shadow: 0 18px 42px rgba(15, 23, 42, 0.18);
+}
+
+.task-result-head {
+  border-bottom: 1px solid var(--hs-border, #d9e1ec);
+}
+
+.task-result-head h3,
+.task-compose-head h4 {
+  color: var(--hs-text, #172033);
+}
+
+.task-result-import-button,
+.task-compose-submit {
+  border: 1px solid var(--hs-primary, #2563eb);
+  border-radius: 6px;
+  background: var(--hs-primary, #2563eb);
+  color: #ffffff;
+  box-shadow: none;
+}
+
+.task-result-import-button:hover,
+.task-compose-submit:hover:not(:disabled) {
+  border-color: var(--hs-primary-hover, #1d4ed8);
+  background: var(--hs-primary-hover, #1d4ed8);
+}
+
+.task-result-close {
+  border-color: var(--hs-border, #d9e1ec);
+  background: #ffffff;
+  color: var(--hs-muted, #667085);
+}
+
+.task-result-close:hover {
+  background: #f2f4f7;
+  color: var(--hs-text, #172033);
+}
+
+.task-result-video,
+.task-result-audio,
+.task-result-table-wrap,
+.storyboard-toolbar,
+.task-result-text,
+.task-result-empty,
+.task-compose-item {
+  border-color: var(--hs-border, #d9e1ec);
+  border-radius: 8px;
+  background: var(--hs-surface-soft, #f8fafc);
+}
+
+.task-result-storyboard-table th {
+  background: #f2f4f7;
+  color: var(--hs-muted, #667085);
+}
+
+.task-result-storyboard-table th,
+.task-result-storyboard-table td {
+  border-color: var(--hs-border, #d9e1ec);
+}
+
+.task-result-bgm {
+  background: var(--hs-primary-soft, #eff6ff);
+}
+
+@media (max-width: 760px) {
+  section.app-card.app-page-stack {
+    padding: 14px;
+  }
+
+  .app-card-header,
+  .task-toolbar,
+  .app-file-item.task-row {
+    grid-template-columns: 1fr;
+  }
+
+  .app-card-header,
+  .task-row-actions {
+    display: grid;
+  }
+
+  .task-row-actions {
+    min-width: 0;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .task-row-actions .app-task-status,
+  .task-row-actions .app-secondary-button {
+    width: 100%;
   }
 }
 </style>

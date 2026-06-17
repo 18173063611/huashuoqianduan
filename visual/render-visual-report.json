@@ -1,0 +1,366 @@
+{
+  "generatedAt": "2026-06-12T08:40:54.646Z",
+  "url": "http://localhost:5173/render",
+  "viewport": {
+    "width": 1920,
+    "height": 1080
+  },
+  "images": {
+    "current": {
+      "path": "D:\\javacode\\huashuo\\huashuoqianduan\\visual\\current-render.png",
+      "width": 1920,
+      "height": 1080
+    },
+    "prototype": {
+      "path": "D:\\javacode\\huashuo\\huashuoqianduan\\visual\\prototype-render.png",
+      "width": 1597,
+      "height": 985
+    }
+  },
+  "prototypeReference": {
+    "note": "基于交付文档首页原型图人工标注，原图尺寸为 1600x1000；当前截图按要求固定 1920x1080。",
+    "sidebarWidth": 212,
+    "topbarActions": {
+      "top": 18,
+      "right": 20,
+      "height": 38
+    },
+    "mainContentStartX": 286,
+    "title": {
+      "top": 82,
+      "centerX": 800
+    },
+    "composeCard": {
+      "x": 286,
+      "y": 165,
+      "width": 1230,
+      "height": 351
+    },
+    "promptBox": {
+      "x": 302,
+      "y": 183,
+      "width": 1198,
+      "height": 118
+    },
+    "uploadCard": {
+      "width": 189,
+      "height": 108
+    },
+    "paramButton": {
+      "top": 428,
+      "height": 49
+    },
+    "generateButton": {
+      "width": 212,
+      "height": 49
+    },
+    "templateCard": {
+      "top": 572,
+      "width": 196,
+      "height": 130
+    },
+    "recentCard": {
+      "top": 760,
+      "width": 236,
+      "height": 201
+    }
+  },
+  "viewportReference": {
+    "note": "原型图实际尺寸 1597x985，主体区域按 1920x1080 等比换算；侧栏、上传卡片和按钮高度按固定控件口径比较。",
+    "sidebarWidth": 212,
+    "topbarActions": {
+      "top": 18,
+      "right": 20,
+      "height": 38
+    },
+    "mainContentStartX": 344,
+    "title": {
+      "top": 90,
+      "centerX": 960
+    },
+    "composeCard": {
+      "x": 344,
+      "y": 181,
+      "width": 1479,
+      "height": 351
+    },
+    "promptBox": {
+      "x": 363,
+      "y": 201,
+      "width": 1440,
+      "height": 118
+    },
+    "uploadCard": {
+      "width": 189,
+      "height": 108
+    },
+    "paramButton": {
+      "top": 428,
+      "height": 49
+    },
+    "generateButton": {
+      "width": 212,
+      "height": 49
+    },
+    "templateCard": {
+      "top": 627,
+      "width": 236,
+      "height": 130
+    },
+    "recentCard": {
+      "top": 833,
+      "width": 284,
+      "height": 201
+    }
+  },
+  "currentMetrics": {
+    "viewport": {
+      "width": 1920,
+      "height": 1080
+    },
+    "body": {
+      "scrollWidth": 1920,
+      "scrollHeight": 1091
+    },
+    "sidebar": {
+      "x": 0,
+      "y": 0,
+      "width": 216,
+      "height": 1080,
+      "right": 216,
+      "bottom": 1080
+    },
+    "topbarActions": {
+      "x": 1353,
+      "y": 13,
+      "width": 535,
+      "height": 38,
+      "right": 1888,
+      "bottom": 51
+    },
+    "appMain": {
+      "x": 216,
+      "y": 0,
+      "width": 1704,
+      "height": 1091,
+      "right": 1920,
+      "bottom": 1091
+    },
+    "renderPage": {
+      "x": 328,
+      "y": 86,
+      "width": 1480,
+      "height": 981,
+      "right": 1808,
+      "bottom": 1067
+    },
+    "renderHead": {
+      "x": 112,
+      "y": 86,
+      "width": 1696,
+      "height": 68,
+      "right": 1808,
+      "bottom": 154
+    },
+    "title": {
+      "x": 770,
+      "y": 86,
+      "width": 380,
+      "height": 34,
+      "right": 1150,
+      "bottom": 120
+    },
+    "composeCard": {
+      "x": 328,
+      "y": 176,
+      "width": 1480,
+      "height": 347,
+      "right": 1808,
+      "bottom": 523
+    },
+    "promptBox": {
+      "x": 347,
+      "y": 195,
+      "width": 1442,
+      "height": 126,
+      "right": 1789,
+      "bottom": 321
+    },
+    "promptTextarea": {
+      "x": 348,
+      "y": 196,
+      "width": 1440,
+      "height": 124,
+      "right": 1788,
+      "bottom": 320
+    },
+    "uploadCard": {
+      "x": 347,
+      "y": 366,
+      "width": 190,
+      "height": 108,
+      "right": 537,
+      "bottom": 474
+    },
+    "controlBar": {
+      "x": 1065,
+      "y": 428,
+      "width": 724,
+      "height": 50,
+      "right": 1789,
+      "bottom": 478
+    },
+    "firstControlField": {
+      "x": 1065,
+      "y": 428,
+      "width": 132,
+      "height": 50,
+      "right": 1197,
+      "bottom": 478
+    },
+    "generateButton": {
+      "x": 1587,
+      "y": 428,
+      "width": 202,
+      "height": 50,
+      "right": 1789,
+      "bottom": 478
+    },
+    "templateSection": {
+      "x": 328,
+      "y": 543,
+      "width": 1480,
+      "height": 184,
+      "right": 1808,
+      "bottom": 727
+    },
+    "templateCard": {
+      "x": 332,
+      "y": 597,
+      "width": 235,
+      "height": 130,
+      "right": 567,
+      "bottom": 727
+    },
+    "recentPanel": {
+      "x": 328,
+      "y": 747,
+      "width": 1480,
+      "height": 319,
+      "right": 1808,
+      "bottom": 1067
+    },
+    "recentCard": {
+      "x": 332,
+      "y": 805,
+      "width": 283,
+      "height": 261,
+      "right": 615,
+      "bottom": 1067
+    }
+  },
+  "differences": [
+    {
+      "item": "左侧导航宽度",
+      "prototype": "212px",
+      "current": "216px",
+      "delta": 4,
+      "status": "ok"
+    },
+    {
+      "item": "顶部导航位置",
+      "prototype": "top 18px / right 20px",
+      "current": "top 13px / right 32px",
+      "delta": {
+        "top": -5,
+        "right": 12
+      },
+      "status": "ok"
+    },
+    {
+      "item": "主内容起始位置",
+      "prototype": "344px",
+      "current": "328px",
+      "delta": -16,
+      "status": "ok"
+    },
+    {
+      "item": "标题位置",
+      "prototype": "top 90px / centerX 960px",
+      "current": "top 86px / centerX 960px",
+      "delta": {
+        "top": -4,
+        "centerX": 0
+      },
+      "status": "ok"
+    },
+    {
+      "item": "主卡片宽高",
+      "prototype": "1479px x 351px",
+      "current": "1480px x 347px",
+      "delta": {
+        "width": 1,
+        "height": -4
+      },
+      "status": "ok"
+    },
+    {
+      "item": "输入框高度",
+      "prototype": "118px",
+      "current": "126px",
+      "delta": 8,
+      "status": "ok"
+    },
+    {
+      "item": "上传卡片尺寸",
+      "prototype": "189px x 108px",
+      "current": "190px x 108px",
+      "delta": {
+        "width": 1,
+        "height": 0
+      },
+      "status": "ok"
+    },
+    {
+      "item": "参数按钮位置",
+      "prototype": "top 428px / height 49px",
+      "current": "top 428px / height 50px",
+      "delta": {
+        "top": 0,
+        "height": 1
+      },
+      "status": "ok"
+    },
+    {
+      "item": "生成按钮尺寸",
+      "prototype": "212px x 49px",
+      "current": "202px x 50px",
+      "delta": {
+        "width": -10,
+        "height": 1
+      },
+      "status": "ok"
+    },
+    {
+      "item": "推荐模板卡片尺寸",
+      "prototype": "236px x 130px",
+      "current": "235px x 130px",
+      "delta": {
+        "width": -1,
+        "height": 0
+      },
+      "status": "ok"
+    },
+    {
+      "item": "页面整体留白",
+      "prototype": "主卡片 x 344px / 模板 top 627px / 最近生成 top 833px",
+      "current": "主卡片 x 328px / 模板 top 597px / 最近生成 top 805px",
+      "delta": {
+        "cardX": -16,
+        "templateTop": -30,
+        "recentTop": -28
+      },
+      "status": "ok"
+    }
+  ]
+}

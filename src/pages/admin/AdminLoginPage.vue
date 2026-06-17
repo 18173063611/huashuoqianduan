@@ -105,7 +105,7 @@ async function handleSubmit() {
   border: 1px solid #e5e7eb;
   border-radius: 8px;
   background: #ffffff;
-  box-shadow: 0 20px 50px rgba(15, 23, 42, 0.08);
+  box-shadow: none;
 }
 
 .admin-login-title {
@@ -130,5 +130,23 @@ async function handleSubmit() {
 .admin-login-submit {
   width: 100%;
   margin-top: 4px;
+}
+
+/* P2 visual refresh: align admin login with shared shell */
+.admin-login-page {
+  background: var(--hs-bg, #f3f6fb);
+}
+
+.admin-login-panel {
+  border-color: var(--hs-border, #d9e1ec);
+}
+
+.admin-login-title h1 {
+  color: var(--hs-text, #172033);
+  font-size: 24px;
+}
+
+.admin-login-title p {
+  color: var(--hs-muted, #667085);
 }
 </style>

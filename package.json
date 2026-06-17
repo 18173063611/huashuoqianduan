@@ -6,7 +6,11 @@
   "scripts": {
     "dev": "vite",
     "build": "vue-tsc -b && vite build",
-    "preview": "vite preview"
+    "preview": "vite preview",
+    "visual:render": "node scripts/visual-render.mjs",
+    "visual:creative": "node scripts/visual-creative-pages.mjs",
+    "e2e:asset-reuse": "node scripts/e2e-asset-reuse.mjs",
+    "e2e:render-covers": "node scripts/e2e-render-recent-covers.mjs"
   },
   "dependencies": {
     "@element-plus/icons-vue": "^2.3.2",
@@ -18,5 +22,9 @@
     "vue": "latest",
     "vue-router": "^5.0.6",
     "vue-tsc": "latest"
+  },
+  "devDependencies": {
+    "playwright": "^1.60.0",
+    "pngjs": "^7.0.0"
   }
 }

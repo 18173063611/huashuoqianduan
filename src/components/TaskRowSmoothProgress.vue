@@ -189,7 +189,7 @@ onBeforeUnmount(() => {
   height: 100%;
   border-radius: 999px;
   min-width: 0;
-  background: linear-gradient(90deg, var(--app-primary, #4f46e5) 0%, #6366f1 100%);
+  background: var(--hs-primary, var(--app-primary, #2563eb));
   transition: width 0.35s ease;
 }
 

@@ -1,0 +1,64 @@
+{
+  "generatedAt": "2026-06-17T02:42:07.692Z",
+  "appBaseUrl": "http://localhost:5173",
+  "sceneAssets": {
+    "count": 6,
+    "firstAssetId": 19,
+    "firstFileName": "car-sales-scene-ev-charging.png",
+    "firstUrl": "/uploads/scene/2026/06/17/car-sales-scene-ev-charging.png"
+  },
+  "chains": {
+    "aiSmart": {
+      "status": "ok",
+      "bundle": {
+        "firstTitle": "捷途 G700 · 银灰 展厅版",
+        "hasCover": true
+      },
+      "selectedBundleHasImage": true,
+      "plan": {
+        "scriptLength": 349,
+        "shotCount": 3,
+        "config": "比例 9:1615 秒3 段英语讲述字幕 自定义字幕音频 仅 BGM风格 真实销售数字人出镜",
+        "metrics": "预计消耗积分660余额 99预计生成时长3-8 分钟3 段 · 15 秒素材复用1 个1 份车辆素材",
+        "hasEnglishWords": true,
+        "hasCjk": false
+      },
+      "screenshotPath": "D:\\javacode\\huashuo\\huashuoqianduan\\visual\\three-chain-ai-smart.png"
+    },
+    "benchmark": {
+      "status": "ok",
+      "bundle": {
+        "firstTitle": "捷途 G700 · 银灰 展厅版",
+        "hasCover": true
+      },
+      "selectedAssetCount": 1,
+      "plan": {
+        "scriptLength": 352,
+        "shotCount": 3,
+        "config": "比例 9:1621 秒3 段英文讲述字幕 自动音频 智能匹配爆款结构复用平台自动识别爆款文案复用爆款节奏拆解",
+        "metrics": "预计消耗积分660余额 99预计生成时长2-5 分钟3 段 · 21 秒素材复用1 个1 份车辆素材",
+        "hasEnglishWords": true,
+        "hasCjk": false
+      },
+      "screenshotPath": "D:\\javacode\\huashuo\\huashuoqianduan\\visual\\three-chain-benchmark.png"
+    },
+    "assetReuse": {
+      "status": "ok",
+      "bundle": {
+        "firstTitle": "捷途 G700 · 银灰 展厅版",
+        "hasCover": true
+      },
+      "selectedCount": 1,
+      "plan": {
+        "scriptLength": 453,
+        "shotCount": 3,
+        "config": "比例 9:1615 秒3 段英文讲述字幕 自动音频 智能匹配资产复用资产中心复用1 个素材",
+        "metrics": "预计消耗积分660余额 99预计生成时长1-2 分钟3 段 · 15 秒素材复用1 个1 份车辆素材",
+        "hasEnglishWords": true,
+        "hasCjk": false
+      },
+      "screenshotPath": "D:\\javacode\\huashuo\\huashuoqianduan\\visual\\three-chain-asset-reuse.png"
+    }
+  },
+  "status": "ok"
+}

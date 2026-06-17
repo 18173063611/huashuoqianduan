@@ -14,9 +14,12 @@ export const API_BASE_URL =
 
 export const API_ORIGIN = API_BASE_URL.replace(/\/api\/v1\/?$/, '')
 
+const DEFAULT_REQUEST_TIMEOUT_MS = normalizeTimeoutMs(import.meta.env.VITE_API_TIMEOUT_MS, 15000)
+
 interface AuthRequestInit extends RequestInit {
   authClientType?: AuthClientType
   skipAuth?: boolean
+  timeoutMs?: number
 }
 
 export function inferAuthClientType(path?: string): AuthClientType {
@@ -59,11 +62,18 @@ function redirectToLogin(clientType: AuthClientType, errorCode?: string) {
 
   const { pathname, search, hash } = window.location
   if (pathname === '/login' || pathname === '/register' || pathname === '/admin/login') return
+  if (clientType === 'USER_WEB' && (pathname === '/' || pathname === '/render' || pathname === '/quick-render')) {
+    return
+  }
 
   const currentPath = `${pathname}${search}${hash}`
   const params = new URLSearchParams({ redirect: currentPath })
-  const loginPath = clientType === 'ADMIN_WEB' ? '/admin/login' : '/login'
-  window.location.assign(`${loginPath}?${params.toString()}`)
+  if (clientType === 'ADMIN_WEB') {
+    window.location.assign(`/admin/login?${params.toString()}`)
+    return
+  }
+  params.set('login', 'required')
+  window.location.assign(`/render?${params.toString()}`)
 }
 
 function shouldNotifyAuthRefreshAfterSuccess(method: string | undefined, apiPath: string): boolean {
@@ -104,13 +114,23 @@ function buildBusinessError(payload: ApiResponse<unknown>, fallback = '请求失
   return `${detail}${payload.traceId ? `，traceId：${payload.traceId}` : ''}`
 }
 
+function normalizeTimeoutMs(value: unknown, fallback: number) {
+  const n = Number(value)
+  return Number.isFinite(n) && n >= 0 ? n : fallback
+}
+
+function timeoutMessage(url: string, timeoutMs: number) {
+  const seconds = Math.max(1, Math.round(timeoutMs / 1000))
+  return `请求超时（${seconds}秒）：${url}\n请稍后重试；若持续出现，请检查后端接口耗时、网关超时或浏览器 Network/CORS 报错。`
+}
+
 export async function request<T>(path: string, init?: AuthRequestInit): Promise<T> {
   const apiPath = normalizeApiPath(path)
   const url = `${API_BASE_URL}${apiPath}`
   const clientType = clientTypeForRequest(apiPath, init)
   const token = shouldSkipAuth(apiPath, init) ? null : getAuthToken(clientType)
   const requestInit: AuthRequestInit = init || {}
-  const { authClientType, skipAuth, ...fetchInit } = requestInit
+  const { authClientType, skipAuth, timeoutMs, ...fetchInit } = requestInit
   void authClientType
   void skipAuth
 
@@ -123,21 +143,48 @@ export async function request<T>(path: string, init?: AuthRequestInit): Promise<
   }
 
   let response: Response
+  let text = ''
+  let timedOut = false
+  const effectiveTimeoutMs = normalizeTimeoutMs(timeoutMs, DEFAULT_REQUEST_TIMEOUT_MS)
+  const upstreamSignal = fetchInit.signal
+  const abortController = typeof AbortController !== 'undefined' ? new AbortController() : null
+  let timeoutId: ReturnType<typeof setTimeout> | null = null
+  if (abortController && upstreamSignal) {
+    if (upstreamSignal.aborted) {
+      abortController.abort(upstreamSignal.reason)
+    } else {
+      upstreamSignal.addEventListener('abort', () => abortController.abort(upstreamSignal.reason), { once: true })
+    }
+  }
+  if (abortController && effectiveTimeoutMs > 0) {
+    timeoutId = setTimeout(() => {
+      timedOut = true
+      abortController.abort()
+    }, effectiveTimeoutMs)
+  }
   try {
     response = await fetch(url, {
       ...fetchInit,
       headers,
+      signal: abortController?.signal || upstreamSignal,
     })
+    text = await response.text()
   } catch (error) {
+    if (timedOut || (error instanceof DOMException && error.name === 'AbortError')) {
+      throw new Error(timeoutMessage(url, effectiveTimeoutMs))
+    }
     const pageProtocol = typeof window !== 'undefined' ? window.location.protocol : ''
     const mixedContentHint =
       pageProtocol === 'https:' && url.startsWith('http://')
         ? '\n当前页面是 https，但接口是 http，请改用 https 网关或重新配置 VITE_API_BASE_URL。'
         : ''
     throw new Error(`Failed to fetch: ${url}\n请确认后端服务可访问，或检查浏览器 Network/CORS 报错。${mixedContentHint}`)
+  } finally {
+    if (timeoutId != null) {
+      clearTimeout(timeoutId)
+    }
   }
 
-  const text = await response.text()
   const payload = parseApiResponse<T>(text)
 
   if (!response.ok) {

@@ -45,6 +45,12 @@ export function useBillingEstimate(opts: UseBillingEstimateOptions) {
   }
 
   async function refresh() {
+    if (!getAuthToken()) {
+      data.value = null
+      errorMessage.value = null
+      loading.value = false
+      return
+    }
     const partial = opts.buildRequest ? opts.buildRequest() : null
     if (partial == null && opts.buildRequest) {
       return

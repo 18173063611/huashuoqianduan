@@ -1,42 +1,64 @@
 <template>
   <Teleport to="body">
-    <div class="task-dock" aria-label="任务提醒与快捷入口">
-      <button
-        type="button"
-        class="task-dock-fab"
-        :class="{ 'task-dock-fab--open': sheetOpen }"
-        :aria-expanded="sheetOpen"
-        @click="sheetOpen = !sheetOpen"
-      >
-        <span class="task-dock-fab-icon" aria-hidden="true">☷</span>
-        <span class="task-dock-fab-label">任务</span>
-        <span v-if="processingCount > 0" class="task-dock-badge">{{ processingCount > 99 ? '99+' : processingCount }}</span>
-      </button>
+    <div class="task-dock" aria-label="任务与客服快捷入口">
+      <div class="task-dock-fab-stack">
+        <button
+          type="button"
+          class="task-dock-fab"
+          :class="{ 'task-dock-fab--open': activePanel === 'feedback' }"
+          :aria-expanded="activePanel === 'feedback'"
+          title="提交反馈"
+          @click="togglePanel('feedback')"
+        >
+          <el-icon><ChatDotRound /></el-icon>
+          <span class="task-dock-sr-only">提交反馈</span>
+        </button>
+        <button
+          type="button"
+          class="task-dock-fab"
+          :class="{ 'task-dock-fab--open': activePanel === 'task' }"
+          :aria-expanded="activePanel === 'task'"
+          title="任务中心"
+          @click="togglePanel('task')"
+        >
+          <el-icon><Tickets /></el-icon>
+          <span class="task-dock-sr-only">任务中心</span>
+          <span v-if="processingCount > 0" class="task-dock-badge">{{ processingCount > 99 ? '99+' : processingCount }}</span>
+        </button>
+      </div>
 
       <div
-        v-if="sheetOpen"
+        v-if="activePanel"
         class="task-dock-backdrop"
         role="presentation"
-        @click.self="sheetOpen = false"
+        @click.self="activePanel = null"
       />
       <aside
-        v-if="sheetOpen"
+        v-if="activePanel"
         class="task-dock-sheet"
+        :class="{ 'task-dock-sheet--feedback': activePanel === 'feedback' }"
         role="dialog"
         aria-modal="true"
         aria-labelledby="task-dock-sheet-title"
       >
         <div class="task-dock-sheet-head">
-          <h2 id="task-dock-sheet-title" class="task-dock-sheet-title">进行中的任务</h2>
+          <h2 id="task-dock-sheet-title" class="task-dock-sheet-title">{{ sheetTitle }}</h2>
           <p class="task-dock-sheet-lead">
-            已完成任务请在「资产中心」中查看产出，或通过消息通知跳转。
+            {{ sheetLead }}
           </p>
-          <button type="button" class="task-dock-close app-ghost-button" @click="sheetOpen = false">关闭</button>
+          <button type="button" class="task-dock-close" title="关闭" @click="activePanel = null">
+            <el-icon><Close /></el-icon>
+          </button>
         </div>
         <div class="task-dock-sheet-body">
           <TaskCenter
-            :panel-active="sheetOpen"
+            v-if="activePanel === 'task'"
+            :panel-active="activePanel === 'task'"
             @open-asset="onOpenAsset"
+          />
+          <CustomerFeedbackPanel
+            v-else
+            :panel-active="activePanel === 'feedback'"
           />
         </div>
       </aside>
@@ -45,19 +67,32 @@
 </template>
 
 <script setup lang="ts">
-import { onBeforeUnmount, ref, watch } from 'vue'
+import { computed, onBeforeUnmount, ref, watch } from 'vue'
+import { ChatDotRound, Close, Tickets } from '@element-plus/icons-vue'
+import CustomerFeedbackPanel from './CustomerFeedbackPanel.vue'
 import TaskCenter from '../pages/task/TaskCenter.vue'
 import { getAuthToken } from '../services/request'
 import { getTaskSummary } from '../services/taskApi'
+import { useAuthRequired } from '../composables/useAuthRequired'
 
 const emit = defineEmits<{
   openAsset: [assetId: number]
 }>()
+const { requireAuth } = useAuthRequired()
 
-const sheetOpen = ref(false)
+type ActivePanel = 'task' | 'feedback' | null
+
+const activePanel = ref<ActivePanel>(null)
 const processingCount = ref(0)
 let pollTimer: number | null = null
 let badgeRefreshInFlight = false
+
+const sheetTitle = computed(() => (activePanel.value === 'feedback' ? '客服反馈' : '进行中的任务'))
+const sheetLead = computed(() =>
+  activePanel.value === 'feedback'
+    ? '提交问题、建议、任务异常或投诉，支持图片、视频、音频和文档附件。'
+    : '已完成任务请在「资产中心」中查看产出，或通过消息通知跳转。',
+)
 
 function canPoll() {
   return !!getAuthToken()
@@ -104,29 +139,39 @@ watch(
 onBeforeUnmount(stopPolling)
 
 function onOpenAsset(assetId: number) {
-  sheetOpen.value = false
+  activePanel.value = null
   emit('openAsset', assetId)
+}
+
+function togglePanel(panel: Exclude<ActivePanel, null>) {
+  if (panel === 'task' && !requireAuth('登录后可查看任务中心')) return
+  activePanel.value = activePanel.value === panel ? null : panel
 }
 </script>
 
 <style scoped>
-.task-dock-fab {
+.task-dock-fab-stack {
   position: fixed;
   right: 22px;
   bottom: 22px;
   z-index: 50;
+  display: grid;
+  gap: 10px;
+}
+
+.task-dock-fab {
   display: inline-flex;
+  width: 56px;
+  height: 56px;
   align-items: center;
-  gap: 8px;
-  padding: 12px 16px;
-  border-radius: 999px;
-  border: 1px solid rgba(124, 108, 255, 0.35);
-  background: linear-gradient(135deg, #6c5ce7, #8a7cff);
+  justify-content: center;
+  border-radius: 50%;
+  border: 1px solid var(--hs-primary);
+  background: var(--hs-primary);
   color: #ffffff;
-  font-size: 14px;
-  font-weight: 600;
+  font-size: 22px;
   cursor: pointer;
-  box-shadow: 0 10px 28px rgba(124, 108, 255, 0.35);
+  box-shadow: var(--hs-shadow-floating);
   transition:
     transform 0.15s ease,
     box-shadow 0.15s ease,
@@ -135,20 +180,24 @@ function onOpenAsset(assetId: number) {
 
 .task-dock-fab:hover {
   transform: translateY(-1px);
-  box-shadow: 0 14px 32px rgba(124, 108, 255, 0.42);
+  box-shadow: var(--hs-shadow-floating);
 }
 
 .task-dock-fab--open {
-  opacity: 0.92;
+  opacity: 0;
+  pointer-events: none;
 }
 
-.task-dock-fab-icon {
-  font-size: 16px;
-  line-height: 1;
-}
-
-.task-dock-fab-label {
-  line-height: 1;
+.task-dock-sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
 }
 
 .task-dock-badge {
@@ -190,6 +239,10 @@ function onOpenAsset(assetId: number) {
   box-shadow: -12px 0 40px rgba(0, 0, 0, 0.12);
 }
 
+.task-dock-sheet--feedback {
+  width: min(600px, 100vw);
+}
+
 .task-dock-sheet-head {
   flex-shrink: 0;
   padding: 20px 20px 12px;
@@ -216,11 +269,51 @@ function onOpenAsset(assetId: number) {
   position: absolute;
   top: 16px;
   right: 16px;
+  display: inline-grid;
+  width: 32px;
+  height: 32px;
+  place-items: center;
+  border: 1px solid transparent;
+  border-radius: 50%;
+  background: transparent;
+  color: #667085;
+}
+
+.task-dock-close:hover {
+  border-color: #dbe3ef;
+  background: #f3f6fb;
+  color: #172033;
 }
 
 .task-dock-sheet-body {
   flex: 1;
   overflow: auto;
   padding: 12px 12px 88px;
+}
+
+@media (max-width: 1024px) {
+  .task-dock-fab-stack {
+    right: 14px;
+    bottom: 14px;
+  }
+
+  .task-dock-fab {
+    width: 48px;
+    height: 48px;
+    font-size: 19px;
+  }
+}
+
+@media (max-width: 720px) {
+  .task-dock-fab-stack {
+    right: max(12px, calc(100vw - 100dvw + 12px));
+    bottom: 12px;
+  }
+
+  .task-dock-sheet,
+  .task-dock-sheet--feedback {
+    width: 100dvw;
+    max-width: 100dvw;
+  }
 }
 </style>
