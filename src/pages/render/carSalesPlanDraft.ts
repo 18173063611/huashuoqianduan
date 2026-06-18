@@ -4,7 +4,11 @@ import { generateStoryboard, rewriteScript } from '../../services/scriptApi'
 import type { AssetItem, AssetType } from '../../types/assetTypes'
 import type { BillingEstimateResponse } from '../../types/creditTypes'
 import type { StoryboardShotItem } from '../../types/scriptTypes'
-import type { QuickRenderAssetRole, QuickRenderRequest } from '../../types/videoTypes'
+import type { CarSalesAssetRoleBinding, QuickRenderAssetRole, QuickRenderRequest } from '../../types/videoTypes'
+import {
+  buildCarModelBundleAssetRoleBindings,
+  carModelBundleCoverUrl,
+} from './carModelBundle'
 
 export type CarSalesPlanSource = 'ai-smart' | 'benchmark' | 'asset-reuse'
 
@@ -209,8 +213,11 @@ export function buildQuickRenderRequestFromPlanDraft(
   plan: AiPlanPreview,
 ): QuickRenderRequest {
   const script = plan.script.trim()
+  const assetRoleBindings = buildPlanAssetRoleBindings(draft)
+  const vehicleImageUrls = planBindingImageUrls(assetRoleBindings, false)
+  const sceneImageUrls = planBindingImageUrls(assetRoleBindings, true)
   const coverAsset = draftCoverAsset(draft)
-  const coverUrl = draft.coverUrl || assetCoverUrl(coverAsset)
+  const coverUrl = draft.coverUrl || assetCoverUrl(coverAsset) || vehicleImageUrls[0] || sceneImageUrls[0]
   return {
     intent: 'car_sales',
     assetIds: draft.assets.map((item) => item.assetId),
@@ -220,6 +227,9 @@ export function buildQuickRenderRequestFromPlanDraft(
         .filter((item) => item.textContent && item.textContent.trim())
         .map((item) => [String(item.assetId), item.textContent || '']),
     ),
+    imageUrls: vehicleImageUrls.length ? vehicleImageUrls : undefined,
+    sceneImageUrls: sceneImageUrls.length ? sceneImageUrls : undefined,
+    assetRoleBindings: assetRoleBindings.length ? assetRoleBindings : undefined,
     coverAssetId: draft.coverAssetId || coverAsset?.assetId || null,
     coverUrl: coverUrl || undefined,
     aspectRatio: draft.aspectRatio,
@@ -244,6 +254,26 @@ export function buildQuickRenderRequestFromPlanDraft(
   }
 }
 
+function buildPlanAssetRoleBindings(draft: CarSalesPlanDraft): CarSalesAssetRoleBinding[] {
+  return draft.assets.flatMap((asset) =>
+    asset.role === 'car_model_bundle'
+      ? buildCarModelBundleAssetRoleBindings(asset, asset.textContent)
+      : [],
+  )
+}
+
+function planBindingImageUrls(bindings: CarSalesAssetRoleBinding[], sceneOnly: boolean) {
+  const urls = bindings
+    .filter((binding) => {
+      const role = String(binding.assetRole || '').toLowerCase()
+      const isScene = role.startsWith('scene_')
+      return sceneOnly ? isScene : !isScene
+    })
+    .map((binding) => binding.url)
+    .filter((url): url is string => typeof url === 'string' && url.length > 0)
+  return Array.from(new Set(urls))
+}
+
 function draftCoverAsset(draft: CarSalesPlanDraft) {
   if (draft.coverAssetId) {
     const explicit = draft.assets.find((item) => item.assetId === draft.coverAssetId)
@@ -258,6 +288,10 @@ function draftCoverAsset(draft: CarSalesPlanDraft) {
 
 function assetCoverUrl(asset: CarSalesPlanDraftAsset | null | undefined) {
   if (!asset) return ''
+  if (asset.role === 'car_model_bundle') {
+    const cover = carModelBundleCoverUrl(asset, asset.textContent)
+    if (cover) return cover
+  }
   const metadata = parseMetadataObject(asset.metadataJson)
   return asset.thumbnailUrl
     || metadataText(metadata, 'thumbnailUrl')

@@ -433,6 +433,7 @@ import type { AvatarItem } from '../../types/avatarTypes'
 import type { TaskItem } from '../../types/taskTypes'
 import type { TemplateItem } from '../../types/templateTypes'
 import type {
+  CarSalesAssetRoleBinding,
   DigitalHumanTaskDetailResponse,
   QuickRenderAssetRole,
   QuickRenderRequest,
@@ -460,6 +461,13 @@ import CarSalesAssetSelectDrawer, {
   type CarSalesAssetCategoryKey,
   type CarSalesAssetSelectPayload,
 } from './CarSalesAssetSelectDrawer.vue'
+import {
+  buildCarModelBundleAssetRoleBindings,
+  carModelBundleCoverUrl,
+  carModelBundleDeclaredImageCount,
+  carModelBundleImageUrls,
+  parseCarModelBundleRecord,
+} from './carModelBundle'
 
 interface QuickMaterial {
   asset: AssetItem
@@ -2706,6 +2714,13 @@ async function submitQuickRender() {
   busy.value = true
   stopRenderTracking()
 
+  const bundleBindings = selectedCarBundleAssetRoleBindings()
+  const bundleVehicleImageUrls = bindingImageUrls(bundleBindings, false)
+  const bundleSceneImageUrls = bindingImageUrls(bundleBindings, true)
+  const bundleCoverUrl = carModelBundleMaterial.value
+    ? carModelBundleCoverUrl(carModelBundleMaterial.value.asset, carModelBundleMaterial.value.textContent, resolveMediaUrl)
+    : ''
+
   const payload: QuickRenderRequest = {
     intent: 'car_sales',
     assetIds: materials.value.map((item) => item.asset.assetId),
@@ -2715,6 +2730,10 @@ async function submitQuickRender() {
         .filter((item) => item.textContent && item.textContent.trim())
         .map((item) => [String(item.asset.assetId), item.textContent || '']),
     ),
+    imageUrls: bundleVehicleImageUrls.length ? bundleVehicleImageUrls : undefined,
+    sceneImageUrls: bundleSceneImageUrls.length ? bundleSceneImageUrls : undefined,
+    assetRoleBindings: bundleBindings.length ? bundleBindings : undefined,
+    coverUrl: bundleCoverUrl || undefined,
     aspectRatio: aspectRatio.value,
     subtitleMode: subtitleMode.value,
     subtitleLanguage: subtitleLanguage.value,
@@ -3335,7 +3354,7 @@ function carBundleImageBriefs(record: Record<string, unknown> | null) {
 }
 
 function carBundleMaterialRecord(item: QuickMaterial) {
-  return parseQuickAssetMetadata(item.textContent) || parseQuickAssetMetadata(item.asset.metadataJson)
+  return parseCarModelBundleRecord(item.textContent, item.asset.metadataJson)
 }
 
 function carBundleMaterialTitle(item: QuickMaterial) {
@@ -3361,71 +3380,36 @@ function carBundleMaterialMeta(item: QuickMaterial) {
 }
 
 function carBundleMaterialImages(item: QuickMaterial) {
-  const record = carBundleMaterialRecord(item)
-  const images = record ? carBundleImageUrls(record).map(resolveMediaUrl).filter(Boolean) : []
+  const images = carModelBundleImageUrls(item.asset, item.textContent, resolveMediaUrl)
   if (images.length) {
     return images
   }
-  const metadata = parseQuickAssetMetadata(item.asset.metadataJson)
-  const cover = firstText(
-    item.asset.thumbnailUrl || '',
-    quickMetadataText(metadata, 'thumbnailUrl'),
-    quickMetadataText(metadata, 'coverUrl'),
-    quickMetadataText(metadata, 'coverImageUrl'),
-    quickMetadataText(metadata, 'firstFrameUrl'),
-  )
-  return cover ? [resolveMediaUrl(cover)] : []
+  const cover = carModelBundleCoverUrl(item.asset, item.textContent, resolveMediaUrl)
+  return cover ? [cover] : []
 }
 
 function carBundleMaterialImageCount(item: QuickMaterial) {
-  const record = carBundleMaterialRecord(item)
-  const declaredCount = quickMetadataNumber(record, 'imageCount') || quickMetadataNumber(record, 'componentCount')
-  return declaredCount || carBundleMaterialImages(item).length
+  return carModelBundleDeclaredImageCount(item.asset, item.textContent) || carBundleMaterialImages(item).length
 }
 
-function carBundleImageUrls(record: Record<string, unknown>) {
-  const previewImages = record.previewImages
-  if (Array.isArray(previewImages)) {
-    const urls = previewImages
-      .filter((item): item is string => typeof item === 'string' && item.trim().length > 0)
-      .map((item) => item.trim())
-    if (urls.length) {
-      return Array.from(new Set(urls))
-    }
-  }
-  const rawImages = record.images
-  if (!Array.isArray(rawImages)) {
+function selectedCarBundleAssetRoleBindings(): CarSalesAssetRoleBinding[] {
+  const bundle = carModelBundleMaterial.value
+  if (!bundle) {
     return []
   }
-  const urls: string[] = []
-  for (const item of rawImages) {
-    if (!isPlainRecord(item)) {
-      continue
-    }
-    const url = firstText(
-      quickMetadataText(item, 'url'),
-      quickMetadataText(item, 'fileUrl'),
-      quickMetadataText(item, 'imageUrl'),
-      quickMetadataText(item, 'thumbnailUrl'),
-      quickMetadataText(item, 'coverUrl'),
-    )
-    if (url) {
-      urls.push(url)
-    }
-  }
-  return Array.from(new Set(urls))
+  return buildCarModelBundleAssetRoleBindings(bundle.asset, bundle.textContent, resolveMediaUrl)
 }
 
-function quickMetadataNumber(metadata: Record<string, unknown> | null, key: string) {
-  const value = metadata?.[key]
-  if (typeof value === 'number' && Number.isFinite(value)) {
-    return value
-  }
-  if (typeof value === 'string' && value.trim()) {
-    const parsed = Number(value.trim())
-    return Number.isFinite(parsed) ? parsed : 0
-  }
-  return 0
+function bindingImageUrls(bindings: CarSalesAssetRoleBinding[], sceneOnly: boolean) {
+  const urls = bindings
+    .filter((binding) => {
+      const role = String(binding.assetRole || '').toLowerCase()
+      const isScene = role.startsWith('scene_')
+      return sceneOnly ? isScene : !isScene
+    })
+    .map((binding) => binding.url)
+    .filter((url): url is string => typeof url === 'string' && url.length > 0)
+  return Array.from(new Set(urls))
 }
 
 function firstText(...values: Array<string | null | undefined>) {

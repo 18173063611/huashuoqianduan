@@ -195,6 +195,7 @@ import { getAssets, getAssetTextContent, type AssetListScope } from '../../servi
 import { API_ORIGIN } from '../../services/request'
 import { useAuthRequired } from '../../composables/useAuthRequired'
 import type { AssetItem, AssetType } from '../../types/assetTypes'
+import { carModelBundleCoverUrl } from './carModelBundle'
 import {
   assetWorkflowDisplayMeta,
   assetWorkflowDisplayTitle,
@@ -825,7 +826,7 @@ function buildJsonPreview(asset: AssetItem, text: string): AssetPickerPreview {
       title: assetWorkflowDisplayTitle(asset) || `车型素材包：${title}`,
       subtitle: ['车型素材包', color, `${images.length} 张图片`].filter(Boolean).join(' · '),
       detail: labels.length ? `包含：${labels.join('、')}` : '选择后会自动填入车型图和部位标记。',
-      coverUrl: resolveUrl(textAt(objectAt(images[0]), 'url')),
+      coverUrl: carModelBundleCoverUrl(asset, text, resolveUrl),
     }
   }
   const meta = parseObject(asset.metadataJson)

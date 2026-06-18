@@ -116,17 +116,22 @@ export type QuickRenderAssetRole =
   | 'car_exterior_front'
   | 'car_exterior_side'
   | 'car_exterior_rear'
+  | 'car_exterior_45'
   | 'car_interior_dashboard'
   | 'car_interior_front_seat'
   | 'car_interior_back_seat'
+  | 'car_interior_steering'
+  | 'car_interior_trunk'
   | 'car_detail_sunroof'
   | 'car_detail_light'
   | 'car_detail_wheel'
   | 'car_detail_logo'
+  | 'car_detail_seat_material'
   | 'scene_showroom'
   | 'scene_outdoor'
   | 'scene_road'
   | 'scene_night'
+  | 'scene_material_bundle'
   | 'host_image'
   | 'voiceover'
   | 'bgm'
@@ -146,6 +151,9 @@ export interface QuickRenderRequest {
   assetIds: number[]
   assetRoles: Record<string, QuickRenderAssetRole>
   assetTextContents?: Record<string, string>
+  imageUrls?: string[]
+  sceneImageUrls?: string[]
+  assetRoleBindings?: CarSalesAssetRoleBinding[]
   coverAssetId?: number | null
   coverUrl?: string
   aspectRatio: '9:16' | '16:9' | 'auto'
@@ -266,7 +274,7 @@ export interface CarSalesVideoSceneRequest {
 }
 
 export interface CarSalesAssetRoleBinding {
-  assetId?: number
+  assetId?: number | null
   url?: string
   assetType?: string
   assetRole?: string
