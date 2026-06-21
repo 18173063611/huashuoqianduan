@@ -5349,8 +5349,8 @@ onBeforeUnmount(stopAllTracking)
 }
 
 .quick-compose-body {
-  grid-template-columns: minmax(390px, 1fr) minmax(760px, auto);
-  gap: 24px;
+  grid-template-columns: minmax(360px, min(42%, 470px)) minmax(0, 1fr);
+  gap: 18px;
   align-items: end;
 }
 
@@ -5418,29 +5418,33 @@ onBeforeUnmount(stopAllTracking)
 
 .quick-control-area {
   align-self: end;
-  min-width: 880px;
+  width: 100%;
+  min-width: 0;
 }
 
 .quick-control-bar {
   align-items: stretch;
-  flex-wrap: nowrap;
-  gap: 10px;
+  flex-wrap: wrap;
+  gap: 6px;
+  max-width: 100%;
 }
 
 .quick-control-field {
-  min-width: 156px;
+  min-width: 118px;
   min-height: 50px;
+  gap: 6px;
   border-color: #e0e7f3;
   border-radius: 10px;
+  padding: 0 10px;
   box-shadow: 0 10px 22px rgba(15, 23, 42, 0.03);
 }
 
 .quick-control-field select {
-  min-width: 70px;
+  min-width: 58px;
 }
 
 .quick-drawer-button {
-  min-width: 112px;
+  min-width: 96px;
   min-height: 50px;
   border-radius: 10px;
   background: #fff;
@@ -5448,7 +5452,7 @@ onBeforeUnmount(stopAllTracking)
 }
 
 .quick-generate-button {
-  min-width: 202px;
+  min-width: 160px;
   min-height: 50px;
   border-radius: 10px;
   background: linear-gradient(90deg, #155eef 0%, #8b5cf6 100%);
@@ -5468,7 +5472,7 @@ onBeforeUnmount(stopAllTracking)
 }
 
 .quick-credit-line {
-  width: 202px;
+  width: min(180px, 100%);
   justify-self: end;
   text-align: center;
 }
