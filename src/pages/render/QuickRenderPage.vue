@@ -1037,7 +1037,7 @@ function buildTemplateMatchContext(): TemplateMatchContext {
     if (selectedIds.includes(template.id)) {
       tags.add(template.title)
       template.keywords.slice(0, 3).forEach((tag) => tags.add(tag))
-      textParts.push(template.prompt)
+      textParts.push(template.title, template.tags, template.keywords.join(' '))
     }
   }
 
@@ -1210,8 +1210,10 @@ function scoreTemplateCandidate(
 async function applyMatchedTemplateCandidate(candidate: MatchedTemplateCandidate) {
   templateMatchError.value = ''
   if (candidate.template) {
-    const tags = candidate.tags.length ? `，标签：${candidate.tags.slice(0, 4).join('、')}` : ''
-    appendPromptLine(`参考「${candidate.template.title}」模板组织脚本和分镜${tags}。`)
+    const appliedCount = await appendTemplateAssets(candidate.template)
+    if (!appliedCount) {
+      templateMatchError.value = `模板「${candidate.template.title}」未绑定可用资产，请选择文案或分镜资产后生成。`
+    }
     return
   }
   if (!candidate.asset) {
@@ -1230,18 +1232,39 @@ async function applyMatchedTemplateCandidate(candidate: MatchedTemplateCandidate
         hostAppearanceEnabled: true,
       }
     }
-    appendPromptLine(`已选用${candidate.typeLabel}「${candidate.title}」作为生成参考。`)
   } catch (error) {
     templateMatchError.value = error instanceof Error ? error.message : '推荐资产应用失败'
   }
 }
 
-function appendPromptLine(line: string) {
-  const current = goalText.value.trim()
-  if (current.includes(line)) {
-    return
+async function appendTemplateAssets(template: TemplateItem) {
+  const refs = Array.isArray(template.assets) ? template.assets : []
+  let count = 0
+  for (const ref of refs) {
+    const assetId = Number(ref.assetId)
+    if (!Number.isFinite(assetId) || assetId <= 0) {
+      continue
+    }
+    try {
+      const asset = await getAssetDetail(assetId)
+      const role = normalizeQuickAssetRole(ref.role) || inferTemplateAssetRole(asset)
+      rememberClassifiedAssetUrl(asset, role)
+      await appendMaterial(asset, {
+        name: asset.fileName || '',
+        type: asset.mimeType || '',
+      }, role)
+      if (role === 'host_image' || role === 'host_video') {
+        advancedSettings.value = {
+          ...advancedSettings.value,
+          hostAppearanceEnabled: true,
+        }
+      }
+      count += 1
+    } catch {
+      // 模板可能绑定了已删除或无权限资产，跳过并继续尝试其他资产。
+    }
   }
-  goalText.value = `${current ? `${current}\n` : '帮我生成一条汽车销售视频，'}${line}`.slice(0, 500)
+  return count
 }
 
 function buildSellingPointMatchReason(
@@ -1251,7 +1274,7 @@ function buildSellingPointMatchReason(
   contextHits: string[],
   hasContext: boolean,
 ) {
-  if (selected) return '已选择，会优先进入方案上下文'
+  if (selected) return '已选择，会优先匹配文案/分镜资产'
   const hits = uniqueShortTags([...contextHits, ...textHits]).slice(0, 2)
   if (hits.length) return `命中 ${hits.join('、')}`
   if (!hasContext) return '默认高频卖点，适合新建需求'
@@ -1894,11 +1917,6 @@ function applySellingPointTemplate(template: (typeof sellingPointTemplates)[numb
   if (!selectedSellingPointIds.value.includes(template.id)) {
     selectedSellingPointIds.value.push(template.id)
   }
-  const current = goalText.value.trim()
-  if (current.includes(template.prompt)) {
-    return
-  }
-  goalText.value = (current ? `${current}\n${template.prompt}` : template.prompt).slice(0, 500)
 }
 
 async function appendMaterial(asset: AssetItem, file: QuickFileLike, forcedRole?: QuickRenderAssetRole) {
@@ -2384,7 +2402,7 @@ function confirmAiPlanAndSubmit() {
 function buildPlanSourceText() {
   const selectedTemplates = sellingPointTemplates
     .filter((item) => selectedSellingPointIds.value.includes(item.id))
-    .map((item) => `${item.title}：${item.prompt}`)
+    .map((item) => selectedSellingPointSummary(item))
   const narrationReference = matchedNarrationReferenceText()
   const storyboardReference = matchedStoryboardReferenceText()
   const bundleContext = carBundleScriptContext.value
@@ -2405,6 +2423,15 @@ function buildPlanSourceText() {
     advancedPromptText.value ? `高级配置：${advancedPromptText.value}` : '',
   ].filter(Boolean)
   return parts.join('\n')
+}
+
+function selectedSellingPointSummary(template: SellingPointTemplate) {
+  const tags = uniqueShortTags([
+    template.title,
+    ...splitTagText(template.tags),
+    ...template.keywords.slice(0, 4),
+  ]).slice(0, 6)
+  return tags.join('、') || template.title
 }
 
 function buildFallbackPlanScript() {
@@ -5092,26 +5119,6 @@ onBeforeUnmount(stopAllTracking)
   font-weight: 900;
 }
 
-.quick-template-strip button:nth-child(2) .quick-template-icon {
-  background: #7c3aed;
-}
-
-.quick-template-strip button:nth-child(3) .quick-template-icon {
-  background: #2563eb;
-}
-
-.quick-template-strip button:nth-child(4) .quick-template-icon {
-  background: #f97316;
-}
-
-.quick-template-strip button:nth-child(5) .quick-template-icon {
-  background: #06b6d4;
-}
-
-.quick-template-strip button:nth-child(6) .quick-template-icon {
-  background: #f43f5e;
-}
-
 .quick-template-strip b {
   color: #155eef;
   font-size: 12px;
@@ -5734,38 +5741,63 @@ onBeforeUnmount(stopAllTracking)
 
 .quick-template-icon {
   grid-row: 1 / 4;
-  width: 42px;
-  height: 42px;
-  border-radius: 10px;
-  font-size: 0;
+  display: grid;
+  width: 44px;
+  height: 44px;
+  place-items: center;
+  border: 1px solid #bfd7ff;
+  border-radius: 12px;
+  background:
+    linear-gradient(180deg, rgba(255, 255, 255, 0.96), rgba(239, 246, 255, 0.94)),
+    #fff;
+  color: #155eef;
+  box-shadow:
+    inset 0 0 0 1px rgba(255, 255, 255, 0.78),
+    0 10px 22px rgba(21, 94, 239, 0.16);
 }
 
-.quick-template-icon::before {
-  font-size: 19px;
+.quick-template-icon svg {
+  width: 22px;
+  height: 22px;
+  stroke-width: 2.25;
 }
 
-.quick-template-strip button:nth-child(1) .quick-template-icon::before {
-  content: "▦";
+.quick-template-icon--family-space {
+  border-color: #9cc4ff;
+  color: #155eef;
 }
 
-.quick-template-strip button:nth-child(2) .quick-template-icon::before {
-  content: "◔";
+.quick-template-icon--smart-cabin {
+  border-color: #c7b6ff;
+  color: #6d28d9;
 }
 
-.quick-template-strip button:nth-child(3) .quick-template-icon::before {
-  content: "▰";
+.quick-template-icon--exterior-value {
+  border-color: #ffbf8a;
+  color: #ea580c;
 }
 
-.quick-template-strip button:nth-child(4) .quick-template-icon::before {
-  content: "↯";
+.quick-template-icon--performance {
+  border-color: #8ddce8;
+  color: #0891b2;
 }
 
-.quick-template-strip button:nth-child(5) .quick-template-icon::before {
-  content: "◒";
+.quick-template-icon--range-saving {
+  border-color: #8fdcc2;
+  color: #059669;
 }
 
-.quick-template-strip button:nth-child(6) .quick-template-icon::before {
-  content: "▣";
+.quick-template-icon--store-promo {
+  border-color: #f8a7b8;
+  color: #e11d48;
+}
+
+.quick-template-strip button:hover .quick-template-icon,
+.quick-template-strip button.active .quick-template-icon {
+  background: #fff;
+  box-shadow:
+    inset 0 0 0 1px rgba(255, 255, 255, 0.9),
+    0 12px 26px rgba(21, 94, 239, 0.2);
 }
 
 .quick-template-strip strong,

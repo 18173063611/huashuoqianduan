@@ -16,7 +16,9 @@
         :disabled="busy"
         @click="$emit('apply-template', template)"
       >
-        <span class="quick-template-icon">{{ template.title.slice(0, 1) }}</span>
+        <span :class="['quick-template-icon', `quick-template-icon--${template.id}`]" aria-hidden="true">
+          <component :is="templateIcon(template.id)" />
+        </span>
         <strong>
           {{ template.title }}
           <em>{{ template.matchScore }}%</em>
@@ -71,6 +73,8 @@
 </template>
 
 <script setup lang="ts">
+import { Brush, Cpu, House, Money, Odometer, Shop, TrendCharts } from '@element-plus/icons-vue'
+import type { Component } from 'vue'
 import type { AssetItem } from '../../../../types/assetTypes'
 import type { TemplateItem } from '../../../../types/templateTypes'
 
@@ -116,4 +120,18 @@ defineEmits<{
   'refresh-match': [showAuthPrompt: boolean]
   'apply-candidate': [candidate: MatchedTemplateCandidateView]
 }>()
+
+const templateIcons: Record<string, Component> = {
+  'family-space': House,
+  'smart-cabin': Cpu,
+  'exterior-value': Brush,
+  performance: Odometer,
+  'range-saving': TrendCharts,
+  'store-promo': Shop,
+  'price-offer': Money,
+}
+
+function templateIcon(id: string) {
+  return templateIcons[id] || TrendCharts
+}
 </script>
