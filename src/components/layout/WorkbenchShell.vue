@@ -98,50 +98,58 @@ function navigateToMenu(key: MenuKey) {
   if (!publicMenuKeys.has(key) && !requireAuth(authActionLabelForMenu(key))) {
     return
   }
-  pendingActiveKey.value = key
+  const pushWithPending = (target: Parameters<typeof router.push>[0]) => {
+    pendingActiveKey.value = key
+    void router.push(target).catch(() => {
+      pendingActiveKey.value = null
+    })
+  }
   if (key === 'render') {
     if (route.name === 'render' && route.query.mode !== 'manual') {
+      pendingActiveKey.value = null
       return
     }
-    void router.push({ name: 'render' })
+    pushWithPending({ name: 'render' })
     return
   }
   if (key === 'render-manual') {
     if (route.name === 'render' && route.query.mode === 'manual') {
+      pendingActiveKey.value = null
       return
     }
-    void router.push({ name: 'render', query: { mode: 'manual' } })
+    pushWithPending({ name: 'render', query: { mode: 'manual' } })
     return
   }
   if (key === 'benchmark-create') {
-    void router.push({ name: 'video-parse', query: { entry: 'creation' } })
+    pushWithPending({ name: 'video-parse', query: { entry: 'creation' } })
     return
   }
   if (key === 'my-videos-all') {
-    void router.push({ name: 'my-videos' })
+    pushWithPending({ name: 'my-videos' })
     return
   }
   if (key === 'my-videos-running') {
-    void router.push({ name: 'my-videos', query: { status: 'RUNNING' } })
+    pushWithPending({ name: 'my-videos', query: { status: 'RUNNING' } })
     return
   }
   if (key === 'my-videos-success') {
-    void router.push({ name: 'my-videos', query: { status: 'SUCCESS' } })
+    pushWithPending({ name: 'my-videos', query: { status: 'SUCCESS' } })
     return
   }
   if (key === 'my-videos-failed') {
-    void router.push({ name: 'my-videos', query: { status: 'FAILED' } })
+    pushWithPending({ name: 'my-videos', query: { status: 'FAILED' } })
     return
   }
   const assetQuery = assetMenuQueries[key]
   if (assetQuery) {
-    void router.push({ name: 'AssetCenter', query: assetQuery })
+    pushWithPending({ name: 'AssetCenter', query: assetQuery })
     return
   }
   if (route.name === key) {
+    pendingActiveKey.value = null
     return
   }
-  void router.push({ name: key })
+  pushWithPending({ name: key })
 }
 
 function goAssetHub(assetId?: number) {

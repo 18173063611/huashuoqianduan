@@ -1213,16 +1213,18 @@ onMounted(loadAssets)
   position: relative;
   display: flex;
   align-items: center;
-  justify-content: space-between;
+  justify-content: center;
   gap: 20px;
-  min-height: 64px;
-  text-align: left;
+  min-height: 86px;
+  text-align: center;
 }
 
 .asset-title-line {
   display: flex;
   align-items: center;
+  justify-content: center;
   gap: 14px;
+  width: 100%;
 }
 
 .asset-back {
@@ -1238,11 +1240,11 @@ onMounted(loadAssets)
 .asset-reuse-head h1 {
   display: inline-flex;
   align-items: center;
-  flex-wrap: wrap;
+  justify-content: center;
   gap: 10px;
   margin: 0;
   color: #0f172a;
-  font-size: 26px;
+  font-size: 30px;
   font-weight: 900;
   line-height: 1.2;
 }
@@ -1260,13 +1262,16 @@ onMounted(loadAssets)
 }
 
 .asset-title-line p {
-  margin: 8px 0 0;
+  margin: 10px 0 0;
   color: #667085;
-  font-size: 14px;
+  font-size: 16px;
   font-weight: 650;
 }
 
 .asset-reuse-actions {
+  position: absolute;
+  top: 12px;
+  right: 0;
   display: flex;
   align-items: center;
   gap: 10px;
@@ -2167,6 +2172,12 @@ onMounted(loadAssets)
   .stage-title--tools {
     align-items: stretch;
     flex-direction: column;
+  }
+
+  .asset-reuse-actions {
+    position: static;
+    justify-content: center;
+    flex-wrap: wrap;
   }
 
   .asset-steps {

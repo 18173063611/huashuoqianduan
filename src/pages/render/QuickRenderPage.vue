@@ -4909,6 +4909,7 @@ onBeforeUnmount(stopAllTracking)
 
 .quick-control-field {
   display: inline-flex;
+  flex: 0 0 auto;
   min-height: 52px;
   align-items: center;
   gap: 8px;
@@ -4916,15 +4917,19 @@ onBeforeUnmount(stopAllTracking)
   border-radius: 8px;
   background: #fff;
   padding: 0 12px;
+  white-space: nowrap;
 }
 
 .quick-control-field span {
+  flex: 0 0 auto;
   color: #344054;
   font-size: 13px;
   font-weight: 850;
+  white-space: nowrap;
 }
 
 .quick-control-field select {
+  flex: 0 0 auto;
   min-width: 78px;
   border: 0;
   background: transparent;
@@ -4935,18 +4940,22 @@ onBeforeUnmount(stopAllTracking)
 }
 
 .quick-drawer-button {
+  flex: 0 0 auto;
   width: auto;
   min-height: 52px;
   border-color: #bfdbfe;
   color: #155eef;
   padding: 0 16px;
+  white-space: nowrap;
 }
 
 .quick-generate-button {
+  flex: 0 0 auto;
   min-width: 168px;
   min-height: 52px;
   border-radius: 8px;
   box-shadow: 0 14px 26px rgba(21, 94, 239, 0.22);
+  white-space: nowrap;
 }
 
 .quick-generate-button--needs-input {
@@ -5409,7 +5418,7 @@ onBeforeUnmount(stopAllTracking)
 
 .quick-control-area {
   align-self: end;
-  min-width: 760px;
+  min-width: 880px;
 }
 
 .quick-control-bar {
@@ -5419,7 +5428,7 @@ onBeforeUnmount(stopAllTracking)
 }
 
 .quick-control-field {
-  min-width: 132px;
+  min-width: 156px;
   min-height: 50px;
   border-color: #e0e7f3;
   border-radius: 10px;
@@ -5431,6 +5440,7 @@ onBeforeUnmount(stopAllTracking)
 }
 
 .quick-drawer-button {
+  min-width: 112px;
   min-height: 50px;
   border-radius: 10px;
   background: #fff;

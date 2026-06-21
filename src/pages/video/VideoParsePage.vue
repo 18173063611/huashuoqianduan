@@ -11,16 +11,6 @@
             <p>从优秀案例中提炼卖点、文案和成片结构。</p>
           </div>
         </div>
-        <div class="benchmark-head-actions">
-          <button type="button" class="ghost-button">
-            <el-icon><Reading /></el-icon>
-            <span>使用教程</span>
-          </button>
-          <button type="button" class="ghost-button">
-            <el-icon><Clock /></el-icon>
-            <span>创作记录</span>
-          </button>
-        </div>
       </header>
 
       <section class="benchmark-stage-card benchmark-input-stage">
@@ -872,7 +862,6 @@ import { useBillingEstimate } from '../../composables/useBillingEstimate'
 import { useSmoothTaskProgress } from '../../composables/useSmoothTaskProgress'
 import { normalizePublicMediaUrl } from '../../utils/mediaUrl'
 import {
-  Clock,
   Coin,
   Collection,
   Document,
@@ -880,7 +869,6 @@ import {
   Link,
   MagicStick,
   PictureRounded,
-  Reading,
   Refresh,
   Timer,
   Upload,

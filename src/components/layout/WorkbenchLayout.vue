@@ -279,7 +279,7 @@ const activeSectionKey = computed<MenuSectionKey | ''>(() => {
 const showPageHeading = computed(() => {
   if (route.name === 'render') return false
   if (route.name === 'asset-reuse') return false
-  if (route.name === 'video-parse' && route.query.entry === 'creation') return false
+  if (route.name === 'video-parse') return false
   return true
 })
 const pageTitle = computed(() => {
