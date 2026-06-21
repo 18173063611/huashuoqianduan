@@ -110,7 +110,9 @@ function isRequestInstructionSentence(sentence: string) {
 }
 
 function isPlanContextLabelSentence(sentence: string) {
-  return /^(?:[\s"'()[\]{}-]+)*(?:\u7528\u6237\u9700\u6c42|\u8f66\u578b\u7d20\u6750\u5305|\u8f66\u578b|\u7d20\u6750\u6458\u8981|\u53c2\u8003\u7206\u6b3e\u7ed3\u6784|\u53c2\u8003\u7ed3\u6784|\u9875\u9762\u4e0a\u4e0b\u6587|\u5df2\u9009\u7d20\u6750|\u751f\u6210\u53c2\u6570|\u7248\u672c|\u5907\u6ce8)\s*[：:]/u.test(sentence.trim())
+  const text = sentence.trim()
+  return /^(?:[\s"'()[\]{}-]+)*(?:\u7528\u6237\u9700\u6c42|\u8f66\u578b\u7d20\u6750\u5305|\u8f66\u578b|\u7d20\u6750\u6458\u8981|\u53c2\u8003\u7206\u6b3e\u7ed3\u6784|\u53c2\u8003\u7ed3\u6784|\u9875\u9762\u4e0a\u4e0b\u6587|\u5df2\u9009\u7d20\u6750|\u751f\u6210\u53c2\u6570|\u7248\u672c|\u5907\u6ce8)\s*[：:]/u.test(text) ||
+    /^(?:\u7531\u8f66\u7cfb\u7d20\u6750\u91c7\u96c6|\u56fd\u5185[\/\u4e0e]\u6d77\u5916|\u5df2\u6e05\u7406|\u5df2\u8865\u5145|\u5df2\u4ece\u61c2\u8f66\u5e1d|\u989c\u8272\u4e0d\u4e00\u81f4|Public car model bundle|Replaced with)/u.test(text)
 }
 
 function normalizeScriptCompareText(value: string) {
