@@ -82,7 +82,7 @@ export function sanitizePlanScript(script: string, userPrompt?: string) {
   if (!original) return ''
   let text = original
   const promptKey = normalizeScriptCompareText(userPrompt || '')
-  for (let index = 0; index < 2; index += 1) {
+  for (let index = 0; index < 6; index += 1) {
     const next = stripLeadingUserInstructionSentence(text, promptKey)
     if (next === text) break
     text = next
@@ -101,12 +101,16 @@ function stripLeadingUserInstructionSentence(script: string, promptKey: string) 
     firstKey.includes(promptKey.slice(0, compareLength)) ||
     promptKey.includes(firstKey.slice(0, compareLength))
   ))
-  if (!promptLooksCopied && !isRequestInstructionSentence(firstSentence)) return text
+  if (!promptLooksCopied && !isRequestInstructionSentence(firstSentence) && !isPlanContextLabelSentence(firstSentence)) return text
   return text.slice(match?.[1]?.length || 0).trimStart()
 }
 
 function isRequestInstructionSentence(sentence: string) {
   return /^(?:[\s"'()[\]{}:：,，.\u3002!?！？-]+)*(?:(?:\u8bf7)?\u5e2e\u6211|\u7ed9\u6211|\u9ebb\u70e6|\u6839\u636e|\u57fa\u4e8e|\u4f7f\u7528|\u56f4\u7ed5|\u6309|\u6309\u7167).{0,120}(?:\u89c6\u9891|\u77ed\u89c6\u9891|\u6587\u6848|\u811a\u672c|\u5206\u955c|\u65b9\u6848|\u5e7f\u544a|\u53e3\u64ad|\u9500\u552e)/u.test(sentence.trim())
+}
+
+function isPlanContextLabelSentence(sentence: string) {
+  return /^(?:[\s"'()[\]{}-]+)*(?:\u7528\u6237\u9700\u6c42|\u8f66\u578b\u7d20\u6750\u5305|\u8f66\u578b|\u7d20\u6750\u6458\u8981|\u53c2\u8003\u7206\u6b3e\u7ed3\u6784|\u53c2\u8003\u7ed3\u6784|\u9875\u9762\u4e0a\u4e0b\u6587|\u5df2\u9009\u7d20\u6750|\u751f\u6210\u53c2\u6570|\u7248\u672c|\u5907\u6ce8)\s*[：:]/u.test(sentence.trim())
 }
 
 function normalizeScriptCompareText(value: string) {
