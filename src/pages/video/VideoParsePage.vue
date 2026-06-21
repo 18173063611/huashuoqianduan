@@ -814,7 +814,9 @@
       :loading="planPreviewLoading || planSubmitting"
       :error="planPreviewError"
       :plan="planPreview"
+      :aspect-ratio="benchmarkPlanDraft?.aspectRatio"
       @update-script="updatePlanScript"
+      @update-storyboard-shot="updatePlanStoryboardShot"
       @back="planPreviewOpen = false"
       @refresh="prepareBenchmarkPlanPreview"
       @confirm="confirmBenchmarkPlan"
@@ -829,7 +831,7 @@
 
 <script setup lang="ts">
 import { computed, onBeforeUnmount, ref, watch } from 'vue'
-import { useRouter } from 'vue-router'
+import { useRoute, useRouter } from 'vue-router'
 import { downloadShareVideo, rewriteDouyinCopywriting, startDouyinParseWithTranscript } from '../../services/writerDouyinApi'
 import { API_BASE_URL, API_ORIGIN } from '../../services/request'
 import type {
@@ -853,6 +855,12 @@ import {
   uploadingLocalVideo,
 } from '../../stores/videoParseLocalUploadState'
 import { rememberSessionTaskId } from '../../services/sessionTaskStore'
+import {
+  getPendingCarSalesPlanTask,
+  newPendingCarSalesPlanTaskId,
+  removePendingCarSalesPlanTask,
+  upsertPendingCarSalesPlanTask,
+} from '../../services/carSalesPlanTaskStore'
 import { cancelTask } from '../../services/taskApi'
 import { trackTaskResult } from '../../services/taskRealtime'
 import { newVideoIdempotencyKey, quickRenderVideo } from '../../services/videoApi'
@@ -899,6 +907,7 @@ import youtubeIcon from '../../assets/platforms/youtube.svg'
 // 抖音解析 / 爆款对标：核心计费动作是 VIDEO_PARSE（视频理解）。
 const parseEstimate = useBillingEstimate({ taskType: 'VIDEO_PARSE' })
 const router = useRouter()
+const route = useRoute()
 const { requireAuth } = useAuthRequired()
 
 const emit = defineEmits<{
@@ -1020,6 +1029,7 @@ const planSubmitting = ref(false)
 const planPreviewError = ref('')
 const planPreview = ref<AiPlanPreview | null>(null)
 const benchmarkPlanDraft = ref<CarSalesPlanDraft | null>(null)
+const currentPendingPlanTaskId = ref('')
 const benchmarkAssetDrawerOpen = ref(false)
 const benchmarkDraftAssets = ref<CarSalesPlanDraftAsset[]>([])
 const parseAbort = ref<AbortController | null>(null)
@@ -1078,6 +1088,12 @@ watch(videoUrl, (value) => {
     platformAutoHint.value = `已根据链接识别为${label}，将按该平台解析。`
   }
 })
+
+watch(
+  () => route.query.planDraftId,
+  () => restoreBenchmarkPendingPlanFromRoute(),
+  { immediate: true },
+)
 
 onBeforeUnmount(() => {
   parseAbort.value?.abort()
@@ -1989,11 +2005,42 @@ async function prepareBenchmarkPlanPreview() {
   planPreviewError.value = ''
   try {
     planPreview.value = await prepareCarSalesAiPlanPreview(draft)
+    persistBenchmarkPendingPlanTask()
   } catch (error) {
     planPreviewError.value = error instanceof Error ? error.message : '方案生成失败'
   } finally {
     planPreviewLoading.value = false
   }
+}
+
+function persistBenchmarkPendingPlanTask() {
+  if (!benchmarkPlanDraft.value || !planPreview.value) return
+  const id = currentPendingPlanTaskId.value || newPendingCarSalesPlanTaskId('benchmark')
+  currentPendingPlanTaskId.value = id
+  upsertPendingCarSalesPlanTask({
+    id,
+    source: 'benchmark',
+    title: benchmarkPlanDraft.value.title || '爆款对标方案',
+    routeName: 'video-parse',
+    routeQuery: { entry: 'creation' },
+    aspectRatio: benchmarkPlanDraft.value.aspectRatio,
+    plan: planPreview.value,
+    draft: benchmarkPlanDraft.value,
+    request: buildQuickRenderRequestFromPlanDraft(benchmarkPlanDraft.value, planPreview.value),
+  })
+}
+
+function restoreBenchmarkPendingPlanFromRoute() {
+  const planDraftId = typeof route.query.planDraftId === 'string' ? route.query.planDraftId : ''
+  if (!planDraftId) return
+  const task = getPendingCarSalesPlanTask(planDraftId)
+  if (!task || task.source !== 'benchmark' || !task.draft) return
+  currentPendingPlanTaskId.value = task.id
+  benchmarkPlanDraft.value = task.draft
+  planPreview.value = task.plan
+  planPreviewError.value = ''
+  planPreviewLoading.value = false
+  planPreviewOpen.value = true
 }
 
 function buildBenchmarkPlanDraft(): CarSalesPlanDraft {
@@ -2060,6 +2107,20 @@ function updatePlanScript(value: string) {
     ...planPreview.value,
     script: value,
   }
+  persistBenchmarkPendingPlanTask()
+}
+
+function updatePlanStoryboardShot(index: number, field: 'visual' | 'narration', value: string) {
+  if (!planPreview.value) return
+  planPreview.value = {
+    ...planPreview.value,
+    storyboard: planPreview.value.storyboard.map((shot) =>
+      shot.index === index
+        ? { ...shot, [field]: value.trim() }
+        : shot,
+    ),
+  }
+  persistBenchmarkPendingPlanTask()
 }
 
 async function confirmBenchmarkPlan() {
@@ -2077,6 +2138,8 @@ async function confirmBenchmarkPlan() {
     const payload = buildQuickRenderRequestFromPlanDraft(draftWithAsset, planPreview.value)
     const submitted = await quickRenderVideo(payload, newVideoIdempotencyKey())
     const taskId = submitted.task?.taskId || submitted.digitalHumanTask?.taskId || null
+    removePendingCarSalesPlanTask(currentPendingPlanTaskId.value)
+    currentPendingPlanTaskId.value = ''
     if (taskId) {
       rememberSessionTaskId(taskId)
       applyMessage.value = '已提交爆款对标生成任务'

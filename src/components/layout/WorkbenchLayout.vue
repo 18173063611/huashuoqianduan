@@ -280,6 +280,7 @@ const showPageHeading = computed(() => {
   if (route.name === 'render') return false
   if (route.name === 'asset-reuse') return false
   if (route.name === 'video-parse') return false
+  if (['script-rewrite', 'storyboard', 'avatar', 'voice'].includes(String(route.name || ''))) return false
   return true
 })
 const pageTitle = computed(() => {

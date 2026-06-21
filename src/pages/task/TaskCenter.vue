@@ -80,6 +80,29 @@
 
       <p v-if="errorMessage" class="app-error">{{ errorMessage }}</p>
 
+      <section v-if="pendingPlanTasks.length && !isMyVideosPage" class="pending-plan-section" aria-label="待确认方案">
+        <div class="pending-plan-section-head">
+          <div>
+            <strong>待确认方案</strong>
+            <p>方案已生成，可返回对应页面继续确认并提交视频生成。</p>
+          </div>
+          <span>{{ pendingPlanTasks.length }} 个</span>
+        </div>
+        <article v-for="task in pendingPlanTasks" :key="task.id" class="pending-plan-card">
+          <div>
+            <strong>{{ task.title }}</strong>
+            <p>
+              {{ pendingPlanSourceLabel(task.source) }} · 比例 {{ task.aspectRatio }} ·
+              {{ task.plan.segmentCount }} 段 · 预计 {{ task.plan.estimatedCredits }} 积分 ·
+              {{ formatFriendlyDateTime(task.updatedAt) }}
+            </p>
+          </div>
+          <button type="button" class="app-primary-button" @click="continuePendingPlanTask(task)">
+            继续生成
+          </button>
+        </article>
+      </section>
+
       <section v-if="showMyVideoGallery" class="my-video-result-section" aria-label="我的视频结果">
         <article
           v-for="card in myVideoCards"
@@ -601,7 +624,7 @@
 
 <script setup lang="ts">
 
-import { computed, ref, watch, watchEffect } from 'vue'
+import { computed, onBeforeUnmount, onMounted, ref, watch, watchEffect } from 'vue'
 import { RouterLink, useRoute, useRouter } from 'vue-router'
 import { ElMessage } from 'element-plus'
 import TaskRowSmoothProgress from '../../components/TaskRowSmoothProgress.vue'
@@ -622,6 +645,10 @@ import {
   savePendingRenderTaskImport,
 } from '../../services/renderTaskImport'
 import { getSessionTaskIds } from '../../services/sessionTaskStore'
+import {
+  listPendingCarSalesPlanTasks,
+  type PendingCarSalesPlanTask,
+} from '../../services/carSalesPlanTaskStore'
 import type { AssetItem } from '../../types/assetTypes'
 import type { TaskItem, TaskResultItem, TaskSummaryResponse } from '../../types/taskTypes'
 import { isStoryboardScriptTask, isVideoResultTaskType, taskTypeLabel } from '../../utils/taskDisplay'
@@ -707,6 +734,7 @@ const router = useRouter()
 
 const hasToken = ref(false)
 const tasks = ref<TaskItem[]>([])
+const pendingPlanTasks = ref<PendingCarSalesPlanTask[]>(listPendingCarSalesPlanTasks())
 const summary = ref<TaskSummaryResponse | null>(null)
 const loading = ref(false)
 /** 重试请求进行中时记录 taskId，用于仅禁用对应行的重试按钮 */
@@ -745,6 +773,26 @@ const showMyVideoGallery = computed(() =>
   myVideoCards.value.length > 0 &&
   (!taskTypeFilter.value || isVideoResultTaskType(taskTypeFilter.value)),
 )
+
+function refreshPendingPlanTasks() {
+  pendingPlanTasks.value = listPendingCarSalesPlanTasks()
+}
+
+function pendingPlanSourceLabel(source: PendingCarSalesPlanTask['source']) {
+  if (source === 'benchmark') return '爆款对标'
+  if (source === 'asset-reuse') return '资产复用'
+  return 'AI智能创作'
+}
+
+function continuePendingPlanTask(task: PendingCarSalesPlanTask) {
+  void router.push({
+    name: task.routeName,
+    query: {
+      ...(task.routeQuery || {}),
+      planDraftId: task.id,
+    },
+  })
+}
 const resultObject = computed(() => {
   const primary = isRecord(selectedTaskResult.value) ? selectedTaskResult.value : null
   const fallback = isRecord(selectedOutputJson.value) ? selectedOutputJson.value : null
@@ -933,6 +981,17 @@ const selectedVideoCreditLabel = computed(() => {
 function refreshAuthState() {
   hasToken.value = !!getAuthToken()
 }
+
+onMounted(() => {
+  refreshPendingPlanTasks()
+  window.addEventListener('huashuo:pending-car-sales-plans-changed', refreshPendingPlanTasks)
+  window.addEventListener('storage', refreshPendingPlanTasks)
+})
+
+onBeforeUnmount(() => {
+  window.removeEventListener('huashuo:pending-car-sales-plans-changed', refreshPendingPlanTasks)
+  window.removeEventListener('storage', refreshPendingPlanTasks)
+})
 
 watch(
   () =>
@@ -2212,6 +2271,65 @@ section.app-card.app-page-stack {
   gap: 12px;
   margin-top: 0;
   margin-bottom: 16px;
+}
+
+.pending-plan-section {
+  display: grid;
+  gap: 10px;
+  margin-bottom: 16px;
+  border: 1px solid #dfe7f5;
+  border-radius: 8px;
+  background: #f8fbff;
+  padding: 14px;
+}
+
+.pending-plan-section-head,
+.pending-plan-card {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 14px;
+}
+
+.pending-plan-section-head strong,
+.pending-plan-card strong {
+  color: #101828;
+  font-size: 14px;
+  font-weight: 900;
+}
+
+.pending-plan-section-head p,
+.pending-plan-card p {
+  margin: 4px 0 0;
+  color: #667085;
+  font-size: 12px;
+  line-height: 1.5;
+}
+
+.pending-plan-section-head > span {
+  flex: 0 0 auto;
+  border-radius: 999px;
+  background: #e8f1ff;
+  color: #155eef;
+  font-size: 12px;
+  font-weight: 850;
+  padding: 5px 10px;
+}
+
+.pending-plan-card {
+  border: 1px solid #e6ecf7;
+  border-radius: 8px;
+  background: #fff;
+  padding: 12px;
+}
+
+.pending-plan-card > div {
+  min-width: 0;
+}
+
+.pending-plan-card .app-primary-button {
+  min-width: 96px;
+  white-space: nowrap;
 }
 
 .task-toolbar .asset-type-select {

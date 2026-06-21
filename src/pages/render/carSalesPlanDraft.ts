@@ -77,6 +77,45 @@ export interface CarSalesPlanDraft {
   warnings?: string[]
 }
 
+export function sanitizePlanScript(script: string, userPrompt?: string) {
+  const original = (script || '').trim()
+  if (!original) return ''
+  let text = original
+  const promptKey = normalizeScriptCompareText(userPrompt || '')
+  for (let index = 0; index < 2; index += 1) {
+    const next = stripLeadingUserInstructionSentence(text, promptKey)
+    if (next === text) break
+    text = next
+  }
+  return text.trim() || original
+}
+
+function stripLeadingUserInstructionSentence(script: string, promptKey: string) {
+  const text = script.trimStart()
+  const match = text.match(/^([\s\S]*?(?:[\u3002.!?！？]\s*|\r?\n|$))/u)
+  const firstSentence = match?.[1]?.trim() || ''
+  if (!firstSentence) return text
+  const firstKey = normalizeScriptCompareText(firstSentence)
+  const compareLength = Math.min(36, Math.max(12, Math.min(promptKey.length, firstKey.length)))
+  const promptLooksCopied = Boolean(promptKey && firstKey && (
+    firstKey.includes(promptKey.slice(0, compareLength)) ||
+    promptKey.includes(firstKey.slice(0, compareLength))
+  ))
+  if (!promptLooksCopied && !isRequestInstructionSentence(firstSentence)) return text
+  return text.slice(match?.[1]?.length || 0).trimStart()
+}
+
+function isRequestInstructionSentence(sentence: string) {
+  return /^(?:[\s"'()[\]{}:：,，.\u3002!?！？-]+)*(?:(?:\u8bf7)?\u5e2e\u6211|\u7ed9\u6211|\u9ebb\u70e6|\u6839\u636e|\u57fa\u4e8e|\u4f7f\u7528|\u56f4\u7ed5|\u6309|\u6309\u7167).{0,120}(?:\u89c6\u9891|\u77ed\u89c6\u9891|\u6587\u6848|\u811a\u672c|\u5206\u955c|\u65b9\u6848|\u5e7f\u544a|\u53e3\u64ad|\u9500\u552e)/u.test(sentence.trim())
+}
+
+function normalizeScriptCompareText(value: string) {
+  return (value || '')
+    .toLowerCase()
+    .replace(/[\s"'“”‘’()[\]{}:：,，.\u3002!?！？;；、-]+/gu, '')
+    .trim()
+}
+
 export function planAssetFromAssetItem(
   asset: AssetItem,
   role: QuickRenderAssetRole,
@@ -102,14 +141,14 @@ export async function prepareCarSalesAiPlanPreview(draft: CarSalesPlanDraft): Pr
 
   let scriptFallback = false
   let storyboardFallback = false
-  let script = draft.script?.trim() || ''
+  let script = sanitizePlanScript(draft.script?.trim() || '', draft.prompt)
   let scriptVersionId: number | null = null
 
   if (shouldUseLocalPlanOnly) {
     scriptFallback = true
     storyboardFallback = true
     warnings.push('当前积分余额不足，已跳过 AI 文案与分镜接口，使用本地方案预览。')
-    script = scriptMatchesTargetLanguage(script, draft.nativeVoiceLanguage) ? script : buildFallbackPlanScript(draft)
+    script = scriptMatchesTargetLanguage(script, draft.nativeVoiceLanguage) ? script : sanitizePlanScript(buildFallbackPlanScript(draft), draft.prompt)
   } else if (script && scriptMatchesTargetLanguage(script, draft.nativeVoiceLanguage)) {
     scriptFallback = false
   } else {
@@ -124,11 +163,12 @@ export async function prepareCarSalesAiPlanPreview(draft: CarSalesPlanDraft): Pr
       script = scriptMatchesTargetLanguage(rewrittenText, draft.nativeVoiceLanguage)
         ? rewrittenText
         : fallbackScript
+      script = sanitizePlanScript(script, draft.prompt)
       scriptVersionId = rewritten.scriptVersionId || null
       scriptFallback = !rewrittenText || script === fallbackScript
     } catch (error) {
       scriptFallback = true
-      script = buildFallbackPlanScript(draft)
+      script = sanitizePlanScript(buildFallbackPlanScript(draft), draft.prompt)
       warnings.push(`文案生成失败，已使用本地方案：${errorMessageFrom(error)}`)
     }
   }
@@ -176,7 +216,6 @@ export async function ensureCarSalesPlanDraftAsset(draft: CarSalesPlanDraft, pla
   const content = JSON.stringify({
     source: draft.source,
     title: draft.title,
-    prompt: draft.prompt,
     referenceUrl: draft.referenceUrl,
     coverUrl: draft.coverUrl,
     script: plan.script,
@@ -246,6 +285,12 @@ export function buildQuickRenderRequestFromPlanDraft(
     model: draft.model,
     segmentCount: draft.segmentCount,
     segmentDuration: draft.segmentDuration,
+    generatedStoryboard: plan.storyboard.map((shot) => ({
+      index: shot.index,
+      visual: shot.visual,
+      narration: shot.narration,
+      duration: shot.duration,
+    })),
     goalText: buildGoalTextForRequest(draft, plan),
     outputPurpose: 'car_sales_video',
     hostAppearanceEnabled: Boolean(draft.hostAppearanceEnabled),
@@ -333,7 +378,8 @@ function buildPlanSourceText(draft: CarSalesPlanDraft) {
 
 function buildGoalTextForRequest(draft: CarSalesPlanDraft, plan: AiPlanPreview) {
   return [
-    draft.prompt || draft.title || sourceLabel(draft.source),
+    draft.title || sourceLabel(draft.source),
+    plan.storyboard.length ? `confirmed storyboard: ${plan.storyboard.map((shot) => shot.visual.trim()).filter(Boolean).join('; ')}` : '',
     draft.referenceUrl ? `参考链接：${draft.referenceUrl}` : '',
     plan.configItems.length ? `方案配置：${plan.configItems.join('，')}` : '',
   ].filter(Boolean).join('\n')
@@ -418,7 +464,7 @@ function buildFallbackStoryboard(script: string, draft: CarSalesPlanDraft): AiPl
   return Array.from({ length: draft.segmentCount }).map((_, index) => ({
     index: index + 1,
     visual: visuals[index % visuals.length],
-    narration: lines[index] || lines[lines.length - 1] || draft.prompt || '汽车销售短视频',
+    narration: sanitizePlanScript(lines[index] || lines[lines.length - 1] || draft.title || '汽车销售短视频', draft.prompt),
     duration: draft.segmentDuration,
   }))
 }
@@ -427,7 +473,7 @@ function normalizeStoryboardShots(shots: StoryboardShotItem[] | undefined, draft
   return (shots || []).slice(0, draft.segmentCount).map((shot, index) => ({
     index: shot.index || index + 1,
     visual: shot.visual || '车辆销售画面',
-    narration: shot.narration || draft.prompt || '汽车销售口播',
+    narration: sanitizePlanScript(shot.narration || draft.title || '汽车销售口播', draft.prompt),
     duration: Math.max(1, Math.round(shot.estDurationSec || draft.segmentDuration)),
   }))
 }

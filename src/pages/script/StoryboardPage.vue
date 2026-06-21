@@ -1,5 +1,9 @@
 <template>
   <div class="storyboard-page app-page-stack">
+    <header class="tool-page-hero">
+      <h1>分镜生成</h1>
+      <p>解析脚本或参考视频，生成可编辑的镜头结构。</p>
+    </header>
     <section class="app-card storyboard-template-panel">
       <div class="storyboard-template-head">
         <div>

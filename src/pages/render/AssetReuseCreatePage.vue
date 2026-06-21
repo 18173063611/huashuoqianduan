@@ -413,7 +413,9 @@
       :loading="planPreviewLoading || planSubmitting"
       :error="planPreviewError"
       :plan="planPreview"
+      :aspect-ratio="assetReusePlanDraft?.aspectRatio"
       @update-script="updatePlanScript"
+      @update-storyboard-shot="updatePlanStoryboardShot"
       @back="planPreviewOpen = false"
       @refresh="prepareAssetReusePlanPreview"
       @confirm="confirmAssetReusePlan"
@@ -433,7 +435,7 @@
 
 <script setup lang="ts">
 import { computed, onMounted, reactive, ref, watch, type Component } from 'vue'
-import { useRouter } from 'vue-router'
+import { useRoute, useRouter } from 'vue-router'
 import {
   Collection,
   Document,
@@ -451,6 +453,12 @@ import {
 import { ElMessage } from 'element-plus'
 import { getAssetTextContent, getAssets, type AssetListScope, type ListAssetsParams } from '../../services/assetApi'
 import { rememberSessionTaskId } from '../../services/sessionTaskStore'
+import {
+  getPendingCarSalesPlanTask,
+  newPendingCarSalesPlanTaskId,
+  removePendingCarSalesPlanTask,
+  upsertPendingCarSalesPlanTask,
+} from '../../services/carSalesPlanTaskStore'
 import { newVideoIdempotencyKey, quickRenderVideo } from '../../services/videoApi'
 import { useAuthRequired } from '../../composables/useAuthRequired'
 import type { AssetItem, AssetType } from '../../types/assetTypes'
@@ -525,6 +533,7 @@ const roleOptions: Array<{ value: QuickRenderAssetRole; label: string }> = [
 ]
 
 const router = useRouter()
+const route = useRoute()
 const { requireAuth } = useAuthRequired()
 const filters = reactive({
   category: 'vehicle' as AssetReuseCategoryKey,
@@ -543,6 +552,7 @@ const planSubmitting = ref(false)
 const planPreviewError = ref('')
 const planPreview = ref<AiPlanPreview | null>(null)
 const assetReusePlanDraft = ref<CarSalesPlanDraft | null>(null)
+const currentPendingPlanTaskId = ref('')
 const assetPreviewTextById = ref<Record<number, string>>({})
 const assetPreviewLoadingById = ref<Record<number, boolean>>({})
 const assetPreviewDialog = reactive({
@@ -933,11 +943,42 @@ async function prepareAssetReusePlanPreview() {
     const draft = await buildAssetReusePlanDraft()
     assetReusePlanDraft.value = draft
     planPreview.value = await prepareCarSalesAiPlanPreview(draft)
+    persistAssetReusePendingPlanTask()
   } catch (unknownError) {
     planPreviewError.value = unknownError instanceof Error ? unknownError.message : '方案生成失败'
   } finally {
     planPreviewLoading.value = false
   }
+}
+
+function persistAssetReusePendingPlanTask() {
+  if (!assetReusePlanDraft.value || !planPreview.value) return
+  const id = currentPendingPlanTaskId.value || newPendingCarSalesPlanTaskId('asset-reuse')
+  currentPendingPlanTaskId.value = id
+  upsertPendingCarSalesPlanTask({
+    id,
+    source: 'asset-reuse',
+    title: assetReusePlanDraft.value.title || '资产复用方案',
+    routeName: 'asset-reuse',
+    routeQuery: {},
+    aspectRatio: assetReusePlanDraft.value.aspectRatio,
+    plan: planPreview.value,
+    draft: assetReusePlanDraft.value,
+    request: buildQuickRenderRequestFromPlanDraft(assetReusePlanDraft.value, planPreview.value),
+  })
+}
+
+function restoreAssetReusePendingPlanFromRoute() {
+  const planDraftId = typeof route.query.planDraftId === 'string' ? route.query.planDraftId : ''
+  if (!planDraftId) return
+  const task = getPendingCarSalesPlanTask(planDraftId)
+  if (!task || task.source !== 'asset-reuse' || !task.draft) return
+  currentPendingPlanTaskId.value = task.id
+  assetReusePlanDraft.value = task.draft
+  planPreview.value = task.plan
+  planPreviewError.value = ''
+  planPreviewLoading.value = false
+  planPreviewOpen.value = true
 }
 
 async function buildAssetReusePlanDraft(): Promise<CarSalesPlanDraft> {
@@ -1005,6 +1046,20 @@ function updatePlanScript(value: string) {
     ...planPreview.value,
     script: value,
   }
+  persistAssetReusePendingPlanTask()
+}
+
+function updatePlanStoryboardShot(index: number, field: 'visual' | 'narration', value: string) {
+  if (!planPreview.value) return
+  planPreview.value = {
+    ...planPreview.value,
+    storyboard: planPreview.value.storyboard.map((shot) =>
+      shot.index === index
+        ? { ...shot, [field]: value.trim() }
+        : shot,
+    ),
+  }
+  persistAssetReusePendingPlanTask()
 }
 
 async function confirmAssetReusePlan() {
@@ -1020,6 +1075,8 @@ async function confirmAssetReusePlan() {
     const payload = buildQuickRenderRequestFromPlanDraft(assetReusePlanDraft.value, planPreview.value)
     const submitted = await quickRenderVideo(payload, newVideoIdempotencyKey())
     const taskId = submitted.task?.taskId || submitted.digitalHumanTask?.taskId || null
+    removePendingCarSalesPlanTask(currentPendingPlanTaskId.value)
+    currentPendingPlanTaskId.value = ''
     if (taskId) {
       rememberSessionTaskId(taskId)
       ElMessage.success('已提交资产复用生成任务')
@@ -1190,6 +1247,12 @@ watch(
   () => {
     void loadAssets()
   },
+)
+
+watch(
+  () => route.query.planDraftId,
+  () => restoreAssetReusePendingPlanFromRoute(),
+  { immediate: true },
 )
 
 onMounted(loadAssets)
@@ -1600,11 +1663,46 @@ onMounted(loadAssets)
 }
 
 .asset-card-row--story {
-  grid-template-columns: repeat(5, minmax(0, 1fr));
+  grid-template-columns: 1fr;
+}
+
+.asset-stage-card--copy .asset-card-row,
+.asset-card-row--story {
+  grid-template-columns: 1fr;
+  gap: 8px;
+  min-height: 0;
+}
+
+.asset-stage-card--copy .reuse-choice-card,
+.asset-card-row--story .reuse-shot-card {
+  min-height: 58px;
+  align-items: center;
+  border-color: #e6ecf7;
+  background: #fbfcff;
+}
+
+.asset-stage-card--copy .reuse-choice-card {
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 4px 12px;
+  padding: 10px 12px;
+}
+
+.asset-stage-card--copy .reuse-card-excerpt,
+.asset-card-row--story .reuse-card-excerpt {
+  display: none;
+}
+
+.asset-stage-card--copy .reuse-card-actions {
+  grid-row: 1 / span 2;
+  grid-column: 2;
+}
+
+.asset-stage-card--copy .reuse-choice-card small {
+  grid-column: 1 / -1;
 }
 
 .reuse-shot-card {
-  grid-template-columns: 70px minmax(0, 1fr);
+  grid-template-columns: 56px minmax(0, 1fr) auto;
   gap: 10px;
   min-height: 76px;
   align-items: center;
@@ -1616,10 +1714,15 @@ onMounted(loadAssets)
   grid-column: 2;
 }
 
+.asset-card-row--story .reuse-card-actions {
+  grid-row: 1 / span 2;
+  grid-column: 3;
+}
+
 .shot-thumb {
   display: grid;
-  width: 70px;
-  height: 54px;
+  width: 56px;
+  height: 42px;
   grid-row: span 2;
   place-items: center;
   overflow: hidden;

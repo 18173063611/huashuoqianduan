@@ -1,5 +1,9 @@
 <template>
   <section class="voice-page app-page-stack">
+    <header class="tool-page-hero">
+      <h1>声音生成</h1>
+      <p>选择音色并生成口播音频，管理可复用声音资产。</p>
+    </header>
     <div class="voice-content">
       <div class="voice-layout">
         <section class="app-card voice-panel">

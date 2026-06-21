@@ -1,5 +1,9 @@
 <template>
   <div class="script-workspace">
+    <header class="tool-page-hero">
+      <h1>文案生成</h1>
+      <p>解析或改写销售文案，沉淀可复用口播脚本。</p>
+    </header>
     <section class="app-card copy-template-panel">
       <div class="copy-template-head">
         <div>

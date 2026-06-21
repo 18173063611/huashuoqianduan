@@ -409,6 +409,33 @@ select {
   letter-spacing: 0;
 }
 
+.tool-page-hero {
+  grid-column: 1 / -1;
+  display: grid;
+  justify-items: center;
+  gap: 6px;
+  margin: 24px auto 6px;
+  text-align: center;
+}
+
+.tool-page-hero h1 {
+  margin: 0;
+  color: var(--app-text);
+  font-size: 30px;
+  font-weight: 900;
+  line-height: 1.2;
+  letter-spacing: 0;
+}
+
+.tool-page-hero p {
+  max-width: 620px;
+  margin: 0;
+  color: var(--app-text-secondary);
+  font-size: 14px;
+  font-weight: 650;
+  line-height: 1.6;
+}
+
 .app-hero p {
   margin: 0;
   color: var(--app-text-secondary);

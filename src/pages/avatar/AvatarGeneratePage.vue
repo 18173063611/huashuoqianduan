@@ -1,5 +1,9 @@
 <template>
   <section class="avatar-page app-page-stack">
+    <header class="tool-page-hero">
+      <h1>数字人形象</h1>
+      <p>生成或上传讲解形象，作为后续成片的人物资产。</p>
+    </header>
     <div class="avatar-content">
       <div class="avatar-layout">
         <section class="app-card avatar-panel">

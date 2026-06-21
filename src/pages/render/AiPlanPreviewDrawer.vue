@@ -77,8 +77,11 @@
                   <span>配置信息</span>
                   <button type="button">预览占位</button>
                 </div>
-                <div class="ai-plan-phone-preview">
-                  <div class="ai-plan-phone-top">9:16</div>
+                <div
+                  class="ai-plan-phone-preview"
+                  :class="{ 'ai-plan-phone-preview--wide': previewAspectRatio === '16:9' }"
+                >
+                  <div class="ai-plan-phone-top">{{ previewAspectRatio }}</div>
                   <strong>{{ plan.script.split('\n')[0] || '汽车销售短视频' }}</strong>
                   <span>{{ plan.totalDuration }} 秒 · {{ plan.segmentCount }} 段</span>
                   <div class="ai-plan-phone-play">播放预览</div>
@@ -146,14 +149,18 @@
 </template>
 
 <script setup lang="ts">
+import { computed } from 'vue'
 import type { AiPlanPreview } from './carSalesPlanDraft'
 
-defineProps<{
+const props = defineProps<{
   modelValue: boolean
   loading: boolean
   error: string
   plan: AiPlanPreview | null
+  aspectRatio?: '9:16' | '16:9' | 'auto'
 }>()
+
+const previewAspectRatio = computed(() => props.aspectRatio === '16:9' ? '16:9' : '9:16')
 
 defineEmits<{
   'update:modelValue': [value: boolean]
@@ -460,6 +467,11 @@ defineEmits<{
     linear-gradient(135deg, #b7d7f7, #394867 62%, #172033);
   color: #fff;
   padding: 16px;
+}
+
+.ai-plan-phone-preview--wide {
+  aspect-ratio: 16 / 9;
+  min-height: 0;
 }
 
 .ai-plan-phone-top {
