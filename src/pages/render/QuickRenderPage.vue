@@ -699,6 +699,7 @@ const templateCandidates = ref<TemplateItem[]>([])
 const templateAssetCandidates = ref<AssetItem[]>([])
 const templateMatchLoading = ref(false)
 const templateMatchError = ref('')
+const templatePromptInjections = ref<Record<string, string>>({})
 const quickPickedImageUrl = ref('')
 const quickPickedSceneImageUrl = ref('')
 const quickPickedCarBundleUrl = ref('')
@@ -781,7 +782,7 @@ function guardAccountFileInput(event: MouseEvent, actionName: string) {
 const promptCharacterCount = computed(() => goalText.value.length)
 const promptHelperText = computed(() =>
   goalText.value.trim()
-    ? '需求会写入车型文案改写和方案上下文。'
+    ? '输入框可展示模板和补充需求；模板文案仅用于资产匹配，生成时不会混入最终提示词。'
     : hasCarModelBundle.value
       ? '可留空，AI 会根据车型素材包、卖点模板和参数自动改写口播文案。'
       : '选择车型素材包后，可补充活动、目标客户或门店政策。',
@@ -1123,9 +1124,10 @@ async function loadTemplateMatchCandidates(showAuthPrompt = false) {
   templateMatchLoading.value = true
   templateMatchError.value = ''
   try {
+    const keywords = templateMatchQueryKeywords()
     const [templates, assets] = await Promise.all([
-      getTemplates({ scope: 'all', sort: 'publishedAtDesc' }).catch(() => [] as TemplateItem[]),
-      getAssets({ scope: 'all', sort: 'createdAtDesc' }).catch(() => [] as AssetItem[]),
+      loadTemplateCandidatesByKeywords(keywords),
+      loadTemplateAssetCandidatesByKeywords(keywords),
     ])
     templateCandidates.value = templates.slice(0, 40)
     templateAssetCandidates.value = assets.filter(isTemplateAssetCandidate).slice(0, 60)
@@ -1139,6 +1141,63 @@ async function loadTemplateMatchCandidates(showAuthPrompt = false) {
   } finally {
     templateMatchLoading.value = false
   }
+}
+
+async function loadTemplateCandidatesByKeywords(keywords: string[]) {
+  const requests = [
+    getTemplates({ scope: 'all', sort: 'publishedAtDesc' }).catch(() => [] as TemplateItem[]),
+    ...keywords.slice(0, 3).map((keyword) =>
+      getTemplates({ scope: 'all', sort: 'publishedAtDesc', keyword }).catch(() => [] as TemplateItem[]),
+    ),
+  ]
+  return dedupeById((await Promise.all(requests)).flat(), (item) => item.templateId)
+}
+
+async function loadTemplateAssetCandidatesByKeywords(keywords: string[]) {
+  const requests = [
+    getAssets({ scope: 'all', sort: 'createdAtDesc', pageSize: 80, includePreview: false }).catch(() => [] as AssetItem[]),
+    ...keywords.slice(0, 4).map((keyword) =>
+      getAssets({ scope: 'all', sort: 'createdAtDesc', keyword, pageSize: 40, includePreview: false }).catch(() => [] as AssetItem[]),
+    ),
+  ]
+  return dedupeById((await Promise.all(requests)).flat(), (item) => item.assetId)
+}
+
+function templateMatchQueryKeywords() {
+  const context = matchContext.value
+  const tokens = uniqueShortTags([
+    ...context.tags,
+    ...selectedSellingPointIds.value.flatMap((id) => {
+      const template = sellingPointTemplates.find((item) => item.id === id)
+      return template ? [template.title, ...splitTagText(template.tags), ...template.keywords.slice(0, 3)] : []
+    }),
+    ...extractSearchKeywordsFromText(goalText.value),
+    ...extractSearchKeywordsFromText(userGoalTextForGeneration()),
+  ])
+  return tokens
+    .filter((token) => token.length >= 2 && token.length <= 16)
+    .slice(0, 6)
+}
+
+function extractSearchKeywordsFromText(value: string) {
+  return value
+    .split(/[，,。.!！?？、/|;；\s\n]+/)
+    .map((item) => item.trim())
+    .filter((item) => item.length >= 2 && item.length <= 16)
+}
+
+function dedupeById<T>(items: T[], idOf: (item: T) => number | null | undefined) {
+  const seen = new Set<number>()
+  const result: T[] = []
+  for (const item of items) {
+    const id = idOf(item)
+    if (typeof id !== 'number' || !Number.isFinite(id) || seen.has(id)) {
+      continue
+    }
+    seen.add(id)
+    result.push(item)
+  }
+  return result
 }
 
 function buildMatchedTemplateCandidateFromTemplate(template: TemplateItem): MatchedTemplateCandidate {
@@ -1914,9 +1973,13 @@ function goAvatarCreatePage() {
 }
 
 function applySellingPointTemplate(template: (typeof sellingPointTemplates)[number]) {
-  if (!selectedSellingPointIds.value.includes(template.id)) {
-    selectedSellingPointIds.value.push(template.id)
+  if (selectedSellingPointIds.value.includes(template.id)) {
+    selectedSellingPointIds.value = selectedSellingPointIds.value.filter((id) => id !== template.id)
+    removeTemplatePromptFromGoalText(template)
+    return
   }
+  selectedSellingPointIds.value.push(template.id)
+  appendTemplatePromptToGoalText(template)
 }
 
 async function appendMaterial(asset: AssetItem, file: QuickFileLike, forcedRole?: QuickRenderAssetRole) {
@@ -2267,8 +2330,63 @@ function videoStyleLabel(style: CarSalesAdvancedSettings['videoStyle']) {
 }
 
 function buildGoalTextForRequest() {
-  const parts = [goalText.value.trim(), advancedPromptText.value].filter(Boolean)
+  const parts = [userGoalTextForGeneration(), advancedPromptText.value].filter(Boolean)
   return parts.length ? parts.join('\n') : undefined
+}
+
+function appendTemplatePromptToGoalText(template: SellingPointTemplate) {
+  const prompt = template.prompt.trim()
+  if (!prompt) return
+  templatePromptInjections.value = {
+    ...templatePromptInjections.value,
+    [template.id]: prompt,
+  }
+  const current = goalText.value.trim()
+  if (current.includes(prompt)) {
+    return
+  }
+  goalText.value = (current ? `${current}\n${prompt}` : prompt).slice(0, 500)
+}
+
+function removeTemplatePromptFromGoalText(template: SellingPointTemplate) {
+  const prompt = templatePromptInjections.value[template.id] || template.prompt.trim()
+  const { [template.id]: _removed, ...rest } = templatePromptInjections.value
+  templatePromptInjections.value = rest
+  if (!prompt) return
+  goalText.value = removePromptBlock(goalText.value, prompt)
+}
+
+function userGoalTextForGeneration() {
+  return stripTemplatePromptsFromGoalText(goalText.value)
+}
+
+function stripTemplatePromptsFromGoalText(value: string) {
+  const prompts = uniqueShortTags([
+    ...Object.values(templatePromptInjections.value),
+    ...sellingPointTemplates.map((template) => template.prompt),
+  ]).sort((left, right) => right.length - left.length)
+  return prompts.reduce((text, prompt) => removePromptBlock(text, prompt), value).trim()
+}
+
+function removePromptBlock(value: string, prompt: string) {
+  const target = prompt.trim()
+  if (!target) return value.trim()
+  let cleaned = value
+    .split(target)
+    .join('\n')
+  const maxPrefixLength = Math.min(target.length - 1, cleaned.length)
+  for (let length = maxPrefixLength; length >= 12; length -= 1) {
+    const prefix = target.slice(0, length)
+    if (cleaned.endsWith(prefix)) {
+      cleaned = `${cleaned.slice(0, -prefix.length)}\n`
+      break
+    }
+  }
+  return cleaned
+    .split(/\n+/)
+    .map((line) => line.trim())
+    .filter(Boolean)
+    .join('\n')
 }
 
 function overlayForRequest(overlay: CarSalesAdvancedSettings['headlineOverlay']) {
@@ -2406,10 +2524,11 @@ function buildPlanSourceText() {
   const narrationReference = matchedNarrationReferenceText()
   const storyboardReference = matchedStoryboardReferenceText()
   const bundleContext = carBundleScriptContext.value
+  const userGoal = userGoalTextForGeneration()
   const parts = [
     bundleContext ? `车型资料：${carBundleContextSearchText(bundleContext)}` : '',
-    goalText.value.trim()
-      ? `用户补充需求：${goalText.value.trim()}`
+    userGoal
+      ? `用户补充需求：${userGoal}`
       : '用户补充需求：未填写，请根据车型素材包和卖点模板自动生成。',
     selectedTemplates.length ? `已选卖点：${selectedTemplates.join('；')}` : '',
     narrationReference ? `参考口播文案：${narrationReference.slice(0, 1200)}` : '',
@@ -2435,7 +2554,7 @@ function selectedSellingPointSummary(template: SellingPointTemplate) {
 }
 
 function buildFallbackPlanScript() {
-  const goal = goalText.value.trim()
+  const goal = userGoalTextForGeneration()
   const bundleContext = carBundleScriptContext.value
   if (voiceLanguage.value === 'en-US') {
     const rawCarName = bundleContext?.brandModel || bundleContext?.title || ''
@@ -2505,6 +2624,7 @@ function normalizeStoryboardShots(shots: StoryboardShotItem[]) {
 
 function buildFallbackStoryboard(script: string): AiPlanStoryboardShot[] {
   const lines = normalizeNarrationText(script).split(/\n+/).filter(Boolean)
+  const fallbackGoal = userGoalTextForGeneration()
   const visualTemplates = [
     '车辆外观开场，镜头从车头或侧身进入，建立第一眼吸引力。',
     '展示内饰、空间或核心配置，用稳定镜头突出真实质感。',
@@ -2514,7 +2634,7 @@ function buildFallbackStoryboard(script: string): AiPlanStoryboardShot[] {
   return Array.from({ length: segmentCount.value }).map((_, index) => ({
     index: index + 1,
     visual: visualTemplates[index % visualTemplates.length],
-    narration: lines[index] || lines[lines.length - 1] || goalText.value.trim(),
+    narration: lines[index] || lines[lines.length - 1] || fallbackGoal,
     duration: segmentDuration.value,
   }))
 }
