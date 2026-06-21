@@ -52,8 +52,20 @@
                         <strong>镜头 {{ shot.index }}</strong>
                         <span>{{ shot.duration }}s</span>
                       </div>
-                      <p>{{ shot.visual }}</p>
-                      <small>{{ shot.narration }}</small>
+                      <textarea
+                        class="ai-plan-shot-visual"
+                        :value="shot.visual"
+                        rows="2"
+                        maxlength="260"
+                        @input="$emit('update-storyboard-shot', shot.index, 'visual', ($event.target as HTMLTextAreaElement).value)"
+                      />
+                      <textarea
+                        class="ai-plan-shot-narration"
+                        :value="shot.narration"
+                        rows="2"
+                        maxlength="220"
+                        @input="$emit('update-storyboard-shot', shot.index, 'narration', ($event.target as HTMLTextAreaElement).value)"
+                      />
                     </div>
                   </article>
                 </div>
@@ -146,6 +158,7 @@ defineProps<{
 defineEmits<{
   'update:modelValue': [value: boolean]
   'update-script': [value: string]
+  'update-storyboard-shot': [index: number, field: 'visual' | 'narration', value: string]
   refresh: []
   confirm: []
   back: []
@@ -402,19 +415,31 @@ defineEmits<{
   font-weight: 900;
 }
 
-.ai-plan-shot-title span,
-.ai-plan-storyboard small,
-.ai-plan-storyboard p {
+.ai-plan-shot-title span {
   margin: 0;
   color: #667085;
   font-size: 12px;
   line-height: 1.55;
 }
 
-.ai-plan-storyboard p {
-  margin-top: 4px;
+.ai-plan-shot-visual,
+.ai-plan-shot-narration {
+  width: 100%;
+  min-height: 52px;
+  margin-top: 6px;
+  border: 1px solid #e6ecf7;
+  border-radius: 8px;
+  background: #fff;
   color: #344054;
   font-size: 13px;
+  line-height: 1.55;
+  padding: 8px;
+  resize: vertical;
+}
+
+.ai-plan-shot-narration {
+  color: #667085;
+  font-size: 12px;
 }
 
 .ai-plan-config-card {

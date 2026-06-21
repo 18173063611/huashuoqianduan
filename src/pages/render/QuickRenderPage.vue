@@ -384,6 +384,7 @@
       :error="planPreviewError"
       :plan="planPreview"
       @update-script="updatePlanScript"
+      @update-storyboard-shot="updatePlanStoryboardShot"
       @refresh="prepareAiPlanPreview"
       @confirm="confirmAiPlanAndSubmit"
       @back="planPreviewOpen = false"
@@ -410,10 +411,10 @@ import { getAssets, getAssetDetail, getAssetTextContent, uploadMaterialAsset } f
 import { getAvatars } from '../../services/avatarApi'
 import { getBillingEstimate } from '../../services/creditApi'
 import { API_ORIGIN } from '../../services/request'
-import { generateStoryboard, rewriteScript } from '../../services/scriptApi'
 import { getTemplates } from '../../services/templateApi'
 import { rewriteDouyinCopywriting } from '../../services/writerDouyinApi'
 import {
+  generateCarSalesAiPlan,
   getDigitalHumanVideoTask,
   newVideoIdempotencyKey,
   quickRenderVideo,
@@ -433,6 +434,7 @@ import type { TaskItem } from '../../types/taskTypes'
 import type { TemplateItem } from '../../types/templateTypes'
 import type {
   CarSalesAssetRoleBinding,
+  CarSalesAiPlanShot,
   DigitalHumanTaskDetailResponse,
   QuickRenderAssetRole,
   QuickRenderRequest,
@@ -440,7 +442,6 @@ import type {
   VideoTaskVO,
 } from '../../types/videoTypes'
 import type { BillingEstimateResponse } from '../../types/creditTypes'
-import type { StoryboardShotItem } from '../../types/scriptTypes'
 import type { DouyinRewriteWriterVO } from '../../types/writerDouyinTypes'
 import { taskTypeLabel } from '../../utils/taskDisplay'
 import { formatFriendlyDateTime } from '../../utils/timeFormat'
@@ -521,13 +522,6 @@ interface MatchedTemplateCandidate {
   reasons: string[]
   template?: TemplateItem
   asset?: AssetItem
-}
-
-interface AutoMatchedPlanAsset {
-  material: QuickMaterial
-  role: QuickRenderAssetRole
-  text: string
-  label: string
 }
 
 const props = withDefaults(defineProps<{ embedded?: boolean }>(), {
@@ -782,9 +776,9 @@ function guardAccountFileInput(event: MouseEvent, actionName: string) {
 const promptCharacterCount = computed(() => goalText.value.length)
 const promptHelperText = computed(() =>
   goalText.value.trim()
-    ? '输入框可展示模板和补充需求；模板文案仅用于资产匹配，生成时不会混入最终提示词。'
+    ? '输入框可展示模板和补充需求；方案生成会使用你实际补充的需求和车型素材包信息。'
     : hasCarModelBundle.value
-      ? '可留空，AI 会根据车型素材包、卖点模板和参数自动改写口播文案。'
+      ? '可留空，AI 会根据车型素材包名称、摘要、卖点和参数生成口播文案与分镜。'
       : '选择车型素材包后，可补充活动、目标客户或门店政策。',
 )
 const promptPlaceholder = computed(() =>
@@ -2007,103 +2001,6 @@ async function appendMaterial(asset: AssetItem, file: QuickFileLike, forcedRole?
   return material
 }
 
-async function ensureAiSmartMatchedAssets(warnings: string[]) {
-  if (!templateAssetCandidates.value.length) {
-    await loadTemplateMatchCandidates(false)
-  }
-  const matched: AutoMatchedPlanAsset[] = []
-  if (!hasMaterialRole('voice_script', 'benchmark_json')) {
-    const narration = await autoApplyBestPlanAsset(['voice_script', 'benchmark_json'])
-    if (narration) {
-      matched.push(narration)
-      warnings.push(`已自动匹配口播文案资产「${narration.label}」。`)
-    } else {
-      warnings.push('未匹配到可用口播文案资产，将由 AI 根据车型素材包和需求生成口播文案。')
-    }
-  }
-  if (!hasMaterialRole('storyboard_json')) {
-    const storyboard = await autoApplyBestPlanAsset(['storyboard_json'])
-    if (storyboard) {
-      matched.push(storyboard)
-      warnings.push(`已自动匹配分镜资产「${storyboard.label}」。`)
-    } else {
-      warnings.push('未匹配到可用分镜资产，将根据口播文案自动生成分镜。')
-    }
-  }
-  return matched
-}
-
-function hasMaterialRole(...roles: QuickRenderAssetRole[]) {
-  return materials.value.some((item) => roles.includes(item.role))
-}
-
-async function autoApplyBestPlanAsset(roles: QuickRenderAssetRole[]): Promise<AutoMatchedPlanAsset | null> {
-  const picked = bestAutoPlanAssetForRoles(roles)
-  if (!picked) {
-    return null
-  }
-  rememberClassifiedAssetUrl(picked.asset, picked.role)
-  const material = await appendMaterial(picked.asset, {
-    name: picked.asset.fileName || '',
-    type: picked.asset.mimeType || '',
-  }, picked.role)
-  const text = await ensureMaterialTextContent(material)
-  return {
-    material,
-    role: picked.role,
-    text,
-    label: picked.asset.fileName || `资产 ${picked.asset.assetId}`,
-  }
-}
-
-function bestAutoPlanAssetForRoles(roles: QuickRenderAssetRole[]) {
-  return templateAssetCandidates.value
-    .map((asset) => {
-      const role = inferAutoPlanAssetRole(asset)
-      if (!role || !roles.includes(role)) {
-        return null
-      }
-      const candidate = scoreTemplateCandidate(buildMatchedTemplateCandidateFromAsset(asset), matchContext.value)
-      const text = assetMatchText(asset)
-      const preferredRoleBonus = role === roles[0] ? 18 : 10
-      const typeBonus = ['TEXT', 'JSON'].includes(asset.assetType) ? 10 : 0
-      const roleTextBonus = autoPlanRoleTextBonus(role, text)
-      const sourceBonus = asset.sourceType && asset.sourceType !== 'UPLOAD' ? 6 : 0
-      const visibilityBonus = asset.visibility === 'public' ? 4 : 2
-      return {
-        asset,
-        role,
-        score: candidate.score + preferredRoleBonus + typeBonus + roleTextBonus + sourceBonus + visibilityBonus,
-      }
-    })
-    .filter((item): item is { asset: AssetItem; role: QuickRenderAssetRole; score: number } => Boolean(item))
-    .sort((left, right) => right.score - left.score)[0] || null
-}
-
-function inferAutoPlanAssetRole(asset: AssetItem): QuickRenderAssetRole | '' {
-  const role = inferTemplateAssetRole(asset)
-  if (role === 'voice_script' || role === 'benchmark_json' || role === 'storyboard_json') {
-    return role
-  }
-  const fallbackRole = inferRole({ name: asset.fileName || '', type: asset.mimeType || '' }, asset)
-  return fallbackRole === 'voice_script' || fallbackRole === 'benchmark_json' || fallbackRole === 'storyboard_json'
-    ? fallbackRole
-    : ''
-}
-
-function autoPlanRoleTextBonus(role: QuickRenderAssetRole, text: string) {
-  if (role === 'voice_script') {
-    return textIncludesAny(text, ['voice_script', '口播', '文案', 'copywriting', 'script']) ? 16 : 4
-  }
-  if (role === 'benchmark_json') {
-    return textIncludesAny(text, ['benchmark', '对标', 'douyin', '抖音', 'transcript']) ? 16 : 4
-  }
-  if (role === 'storyboard_json') {
-    return textIncludesAny(text, ['storyboard', '分镜', '镜头', 'segment', 'shot']) ? 16 : 4
-  }
-  return 0
-}
-
 async function ensureMaterialTextContent(material: QuickMaterial) {
   if (material.textContent?.trim()) {
     return material.textContent.trim()
@@ -2126,104 +2023,12 @@ async function ensureMaterialTextContent(material: QuickMaterial) {
 }
 
 async function ensurePlanTextMaterialsReady() {
-  const roles: QuickRenderAssetRole[] = ['car_model_bundle', 'voice_script', 'benchmark_json', 'storyboard_json', 'subtitle']
+  const roles: QuickRenderAssetRole[] = ['car_model_bundle']
   const targets = materials.value.filter((item) => roles.includes(item.role))
   if (!targets.length) {
     return
   }
   await Promise.all(targets.map((item) => ensureMaterialTextContent(item)))
-}
-
-function matchedNarrationReferenceText() {
-  const material = firstMaterialByRoles(['voice_script', 'benchmark_json'])
-  if (!material?.textContent?.trim()) {
-    return ''
-  }
-  return material.role === 'voice_script'
-    ? normalizeNarrationText(material.textContent)
-    : extractNarrationFromJsonText(material.textContent)
-}
-
-function matchedStoryboardReferenceText() {
-  const material = firstMaterialByRoles(['storyboard_json'])
-  return material?.textContent?.trim() || ''
-}
-
-function firstMaterialByRoles(roles: QuickRenderAssetRole[]) {
-  return roles
-    .map((role) => materials.value.find((item) => item.role === role && item.textContent?.trim()))
-    .find(Boolean) || null
-}
-
-function buildStoryboardFromMatchedAssets(): AiPlanStoryboardShot[] {
-  return parseStoryboardTextToPlanShots(matchedStoryboardReferenceText())
-}
-
-function parseStoryboardTextToPlanShots(value: string): AiPlanStoryboardShot[] {
-  const raw = value.trim()
-  if (!raw) {
-    return []
-  }
-  try {
-    const parsed = JSON.parse(raw) as unknown
-    const rows = storyboardRowsFromUnknown(parsed)
-    if (rows.length) {
-      return rows.slice(0, segmentCount.value).map((row, index) => ({
-        index: numberFromRecord(row, ['index', 'order', 'segmentIndex', 'shotIndex']) || index + 1,
-        visual: textFromRecord(row, ['visual', 'visualPrompt', 'prompt', 'shot', 'description', 'scene']) || `展示车辆卖点镜头 ${index + 1}`,
-        narration: textFromRecord(row, ['narration', 'voiceText', 'content', 'script', 'text', 'copywriting']),
-        duration: Math.max(1, Math.round(numberFromRecord(row, ['estDurationSec', 'durationSec', 'duration', 'seconds']) || segmentDuration.value)),
-      }))
-    }
-  } catch {
-    // 非 JSON 的分镜文本不强制解析，继续使用接口或本地分镜兜底。
-  }
-  return []
-}
-
-function storyboardRowsFromUnknown(value: unknown): Record<string, unknown>[] {
-  if (Array.isArray(value)) {
-    return value.filter(isPlainRecord)
-  }
-  if (!isPlainRecord(value)) {
-    return []
-  }
-  for (const key of ['storyboard', 'shots', 'scenes', 'segments', 'scripts', 'items', 'data', 'result', 'output']) {
-    const rows = storyboardRowsFromUnknown(value[key])
-    if (rows.length) {
-      return rows
-    }
-  }
-  return []
-}
-
-function textFromRecord(record: Record<string, unknown>, keys: string[]) {
-  for (const key of keys) {
-    const value = record[key]
-    if (typeof value === 'string' && value.trim()) {
-      return value.trim()
-    }
-  }
-  return ''
-}
-
-function numberFromRecord(record: Record<string, unknown>, keys: string[]) {
-  for (const key of keys) {
-    const value = record[key]
-    if (typeof value === 'number' && Number.isFinite(value)) {
-      return value
-    }
-    if (typeof value === 'string') {
-      const matched = value.match(/\d+(?:\.\d+)?/)
-      if (matched) {
-        const parsed = Number(matched[0])
-        if (Number.isFinite(parsed)) {
-          return parsed
-        }
-      }
-    }
-  }
-  return 0
 }
 
 function rememberPickedAssetUrl(asset: AssetItem, url: string) {
@@ -2423,61 +2228,45 @@ async function prepareAiPlanPreview() {
   let scriptFallback = false
   let storyboardFallback = false
   let script = ''
-  let scriptVersionId: number | null = null
   await ensurePlanTextMaterialsReady()
-  await ensureAiSmartMatchedAssets(warnings)
-  const matchedNarrationText = matchedNarrationReferenceText()
-  const usableMatchedNarrationText = narrationLanguageMismatch(matchedNarrationText, voiceLanguage.value)
-    ? ''
-    : matchedNarrationText
   const sourceText = buildPlanSourceText()
   const estimate = await fetchPlanBillingEstimate(warnings)
   const shouldUseLocalPlanOnly = estimate?.enoughBalance === false
+  let storyboard: AiPlanStoryboardShot[] = []
 
   if (shouldUseLocalPlanOnly) {
     scriptFallback = true
     storyboardFallback = true
     warnings.push('当前积分余额不足，已跳过 AI 文案与分镜接口，使用本地方案预览。')
-    script = usableMatchedNarrationText || buildFallbackPlanScript()
+    script = buildFallbackPlanScript()
   } else {
     try {
-      const rewritten = await rewriteScript({
+      const aiPlan = await generateCarSalesAiPlan({
+        prompt: userGoalTextForGeneration() || goalText.value.trim() || '根据车型素材包生成汽车销售视频',
+        carModelName: carBundleMaterialForPlanName(),
+        carModelSummary: carBundleScriptContext.value ? carBundleContextSearchText(carBundleScriptContext.value) : '',
+        sellingPoints: selectedSellingPointLabels(),
+        aspectRatio: aspectRatio.value,
+        voiceLanguage: voiceLanguage.value,
+        totalDuration: totalDuration.value,
+        segmentCount: segmentCount.value,
+        segmentDuration: segmentDuration.value,
         sourceText,
-        style: voiceLanguage.value === 'en-US'
-          ? 'English automotive sales voiceover. Return natural English only and do not include Chinese copy.'
-          : '汽车销售短视频口播',
-        targetLength: Math.min(900, Math.max(260, segmentCount.value * 140)),
       })
-      script = normalizePlanScriptForTargetLanguage(rewritten.rewrittenText || '', warnings)
-      scriptVersionId = rewritten.scriptVersionId || null
+      script = normalizeNarrationText(aiPlan.script || '')
+      storyboard = normalizeAiPlanStoryboardShots(aiPlan.storyboard)
       if (!script) {
-        throw new Error('文案接口返回为空')
+        throw new Error('方案接口返回文案为空')
+      }
+      if (!storyboard.length) {
+        throw new Error('方案接口返回分镜为空')
       }
     } catch (error) {
       scriptFallback = true
-      warnings.push(`文案生成使用本地兜底：${errorMessageFrom(error)}`)
-      script = usableMatchedNarrationText || buildFallbackPlanScript()
-    }
-  }
-
-  script = normalizePlanScriptForTargetLanguage(script, warnings)
-
-  let storyboard: AiPlanStoryboardShot[] = buildStoryboardFromMatchedAssets()
-  if (storyboard.length) {
-    storyboardFallback = false
-  } else if (!shouldUseLocalPlanOnly && scriptVersionId != null) {
-    try {
-      const response = await generateStoryboard({ scriptVersionId })
-      storyboard = normalizeStoryboardShots(response.storyboard)
-      if (!storyboard.length) {
-        throw new Error('分镜接口返回为空')
-      }
-    } catch (error) {
       storyboardFallback = true
-      warnings.push(`分镜生成使用本地兜底：${errorMessageFrom(error)}`)
+      warnings.push(`AI 方案生成使用本地兜底：${errorMessageFrom(error)}`)
+      script = buildFallbackPlanScript()
     }
-  } else {
-    storyboardFallback = true
   }
   if (!storyboard.length) {
     storyboard = buildFallbackStoryboard(script)
@@ -2510,6 +2299,18 @@ function updatePlanScript(value: string) {
   }
 }
 
+function updatePlanStoryboardShot(index: number, field: 'visual' | 'narration', value: string) {
+  if (!planPreview.value) return
+  planPreview.value = {
+    ...planPreview.value,
+    storyboard: planPreview.value.storyboard.map((shot) =>
+      shot.index === index
+        ? { ...shot, [field]: value.trim() }
+        : shot,
+    ),
+  }
+}
+
 function confirmAiPlanAndSubmit() {
   if (!requireAuth('登录后可生成汽车销售视频')) return
   if (!planPreview.value || planPreviewLoading.value) return
@@ -2521,8 +2322,6 @@ function buildPlanSourceText() {
   const selectedTemplates = sellingPointTemplates
     .filter((item) => selectedSellingPointIds.value.includes(item.id))
     .map((item) => selectedSellingPointSummary(item))
-  const narrationReference = matchedNarrationReferenceText()
-  const storyboardReference = matchedStoryboardReferenceText()
   const bundleContext = carBundleScriptContext.value
   const userGoal = userGoalTextForGeneration()
   const parts = [
@@ -2531,8 +2330,6 @@ function buildPlanSourceText() {
       ? `用户补充需求：${userGoal}`
       : '用户补充需求：未填写，请根据车型素材包和卖点模板自动生成。',
     selectedTemplates.length ? `已选卖点：${selectedTemplates.join('；')}` : '',
-    narrationReference ? `参考口播文案：${narrationReference.slice(0, 1200)}` : '',
-    storyboardReference ? `参考分镜：${storyboardReference.slice(0, 1200)}` : '',
     `车辆素材：${vehicleMaterialCount.value} 份，全部素材：${materials.value.length} 个`,
     `生成参数：${totalDuration.value} 秒，${segmentCount.value} 段，比例 ${aspectRatio.value}，${voiceLanguageLabel.value}`,
     `字幕策略：${subtitleLabel.value}`,
@@ -2553,25 +2350,21 @@ function selectedSellingPointSummary(template: SellingPointTemplate) {
   return tags.join('、') || template.title
 }
 
+function selectedSellingPointLabels() {
+  return sellingPointTemplates
+    .filter((item) => selectedSellingPointIds.value.includes(item.id))
+    .map((item) => selectedSellingPointSummary(item))
+    .filter(Boolean)
+}
+
+function carBundleMaterialForPlanName() {
+  const material = carModelBundleMaterial.value
+  return material ? carBundleMaterialTitle(material) : ''
+}
+
 function buildFallbackPlanScript() {
   const goal = userGoalTextForGeneration()
   const bundleContext = carBundleScriptContext.value
-  if (voiceLanguage.value === 'en-US') {
-    const rawCarName = bundleContext?.brandModel || bundleContext?.title || ''
-    const carName = rawCarName && !/[\u4E00-\u9FFF]/.test(rawCarName) ? rawCarName : 'the selected SUV'
-    const rawBrief = bundleContext?.notes || bundleContext?.imageBriefs.slice(0, 3).join(', ') || ''
-    const brief = rawBrief && !/[\u4E00-\u9FFF]/.test(rawBrief) ? rawBrief : ''
-    const englishGoal = goal && !/[\u4E00-\u9FFF]/.test(goal) ? goal : ''
-    return normalizeNarrationText(
-      [
-        englishGoal || `Create a short sales video for ${carName}.`,
-        `Start with a clean hero shot of ${carName}, then quickly show the cabin, rear seats, and cargo space.`,
-        brief ? `Use the available model package details: ${brief}.` : '',
-        'Highlight comfort, space, smart features, and family travel value with natural English voiceover.',
-        'End with a clear call to action: book a test drive or visit the showroom for the latest offer.',
-      ].filter(Boolean).join('\n'),
-    )
-  }
   const sellingPoints = sellingPointTemplates
     .filter((item) => selectedSellingPointIds.value.includes(item.id))
     .map((item) => item.title)
@@ -2597,28 +2390,12 @@ function buildFallbackPlanScript() {
   )
 }
 
-function normalizePlanScriptForTargetLanguage(text: string, warnings?: string[]) {
-  const normalized = normalizeNarrationText(text)
-  if (!normalized) {
-    return ''
-  }
-  if (!narrationLanguageMismatch(normalized, voiceLanguage.value)) {
-    return normalized
-  }
-  warnings?.push(
-    voiceLanguage.value === 'en-US'
-      ? '文案语言与英文讲述不一致，已切换为英文兜底台词。'
-      : '文案语言与中文讲述不一致，已切换为中文兜底台词。',
-  )
-  return buildFallbackPlanScript()
-}
-
-function normalizeStoryboardShots(shots: StoryboardShotItem[]) {
+function normalizeAiPlanStoryboardShots(shots: CarSalesAiPlanShot[]) {
   return (shots || []).slice(0, segmentCount.value).map((shot, index) => ({
     index: shot.index || index + 1,
     visual: shot.visual || `展示车辆卖点镜头 ${index + 1}`,
     narration: shot.narration || '',
-    duration: Math.max(1, Math.round(shot.estDurationSec || segmentDuration.value)),
+    duration: Math.max(1, Math.round(shot.duration || segmentDuration.value)),
   }))
 }
 
@@ -2715,6 +2492,71 @@ async function ensureNarrationReadyForSubmit() {
   } catch {
     errorMessage.value = narrationError.value || '讲述文案生成失败'
     return null
+  }
+}
+
+async function resolveFinalVoiceTextForSubmit(source: string) {
+  const normalized = normalizeNarrationText(source)
+  if (!normalized) {
+    return ''
+  }
+  if (!narrationLanguageMismatch(normalized, voiceLanguage.value)) {
+    return normalized
+  }
+  try {
+    return await localizeAdHocNarrationText(normalized)
+  } catch {
+    errorMessage.value = narrationError.value || `生成${voiceLanguageLabel.value}失败`
+    return null
+  }
+}
+
+async function localizeAdHocNarrationText(source: string) {
+  stopNarrationTracking?.()
+  stopNarrationTracking = null
+  narrationError.value = ''
+  narrationLocalizationLoading.value = true
+  narrationTaskProgress.value = 0
+  try {
+    const task = await rewriteDouyinCopywriting({
+      originalText: source,
+      style: narrationRewriteStyle(voiceLanguage.value),
+      introduce: narrationRewriteInstruction(voiceLanguage.value),
+    })
+    narrationTaskProgress.value = task.progress ?? 0
+    if (!task.taskId) {
+      throw new Error('文案生成任务未返回 taskId')
+    }
+    return await new Promise<string>((resolve, reject) => {
+      stopNarrationTracking = trackTaskResult<DouyinRewriteWriterVO>(task.taskId, {
+        onStatus(message) {
+          narrationTaskProgress.value = message.progress
+        },
+        onResult(taskResult) {
+          const text = normalizeNarrationText(taskResult.result?.translatedText || '')
+          if (!text) {
+            reject(new Error('豆包返回的讲述文案为空'))
+            return
+          }
+          narrationTaskProgress.value = taskResult.progress ?? 100
+          stopNarrationTracking = null
+          resolve(text)
+        },
+        onFailure(message) {
+          stopNarrationTracking = null
+          reject(new Error(message.errorMessage || '讲述文案生成失败'))
+        },
+        onError(error) {
+          stopNarrationTracking = null
+          reject(error)
+        },
+      })
+    })
+  } catch (error) {
+    narrationError.value = error instanceof Error ? error.message : '讲述文案生成失败'
+    throw error
+  } finally {
+    narrationLocalizationLoading.value = false
   }
 }
 
@@ -2853,7 +2695,10 @@ async function submitQuickRender() {
   if (finalNarration == null) {
     return
   }
-  const finalVoiceTextForRequest = normalizePlanScriptForTargetLanguage(planScript || finalNarration || '')
+  const finalVoiceTextForRequest = await resolveFinalVoiceTextForSubmit(planScript || finalNarration || '')
+  if (finalVoiceTextForRequest == null) {
+    return
+  }
   busy.value = true
   stopRenderTracking()
 
@@ -2893,6 +2738,12 @@ async function submitQuickRender() {
     model: advancedSettings.value.model,
     segmentCount: segmentCount.value,
     segmentDuration: segmentDuration.value,
+    generatedStoryboard: planPreview.value?.storyboard.map((shot) => ({
+      index: shot.index,
+      visual: shot.visual,
+      narration: shot.narration,
+      duration: shot.duration,
+    })),
     goalText: buildGoalTextForRequest(),
     outputPurpose: 'car_sales_video',
     hostAppearanceEnabled: advancedSettings.value.hostAppearanceEnabled,

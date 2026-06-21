@@ -2,6 +2,8 @@ import { request } from './request'
 import { newIdempotencyKey } from './taskApi'
 import type {
   CarSalesSegmentComposeRequest,
+  CarSalesAiPlanRequest,
+  CarSalesAiPlanResponse,
   CarSalesVideoRequest,
   DigitalHumanGenerateResponse,
   DigitalHumanTaskDetailResponse,
@@ -157,6 +159,13 @@ export function quickRenderVideo(payload: QuickRenderRequest, idempotencyKey?: s
     method: 'POST',
     body: JSON.stringify(payload),
     headers: idempotencyHeaders(idempotencyKey),
+  })
+}
+
+export function generateCarSalesAiPlan(payload: CarSalesAiPlanRequest) {
+  return request<CarSalesAiPlanResponse>('/video/car-sales/ai-plan', {
+    method: 'POST',
+    body: JSON.stringify(payload),
   })
 }
 

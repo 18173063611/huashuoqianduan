@@ -170,6 +170,7 @@ export interface QuickRenderRequest {
   model: string
   segmentCount?: number
   segmentDuration?: number
+  generatedStoryboard?: QuickRenderGeneratedStoryboardShot[]
   goalText?: string
   testBatch?: string
   sampleId?: string
@@ -179,6 +180,13 @@ export interface QuickRenderRequest {
   hostAppearanceEnabled?: boolean
   subtitleOverlay?: QuickRenderTextOverlayRequest
   headlineOverlay?: QuickRenderTextOverlayRequest
+}
+
+export interface QuickRenderGeneratedStoryboardShot {
+  index?: number | null
+  visual?: string | null
+  narration?: string | null
+  duration?: number | null
 }
 
 export interface QuickRenderTextOverlayRequest {
@@ -208,6 +216,32 @@ export interface QuickRenderResponse {
   assets: QuickRenderRecognizedAsset[]
   summary: string
   normalizedRequest?: unknown
+}
+
+export interface CarSalesAiPlanRequest {
+  prompt: string
+  carModelName?: string
+  carModelSummary?: string
+  sellingPoints?: string[]
+  aspectRatio?: '9:16' | '16:9' | 'auto'
+  voiceLanguage?: string
+  totalDuration?: number
+  segmentCount?: number
+  segmentDuration?: number
+  sourceText?: string
+}
+
+export interface CarSalesAiPlanShot {
+  index?: number | null
+  visual?: string | null
+  narration?: string | null
+  duration?: number | null
+}
+
+export interface CarSalesAiPlanResponse {
+  script: string
+  storyboard: CarSalesAiPlanShot[]
+  model?: string | null
 }
 
 export interface DigitalHumanVideoRequest {
