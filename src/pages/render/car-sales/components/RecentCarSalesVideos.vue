@@ -18,23 +18,11 @@
     </div>
 
     <p v-if="recentError" class="app-error">{{ recentError }}</p>
-    <div v-if="recentLoading && recentTasks.length === 0" class="quick-recent-list quick-recent-list--placeholder">
-      <RecentPlaceholderCard
-        v-for="item in recentVisualPlaceholders"
-        :key="item.id"
-        :item="item"
-        :car-placeholder-image="carPlaceholderImage"
-        @go-task-center="$emit('go-task-center')"
-      />
+    <div v-if="recentLoading && recentTasks.length === 0" class="quick-recent-empty">
+      正在加载最近生成...
     </div>
-    <div v-else-if="recentTasks.length === 0" class="quick-recent-list quick-recent-list--placeholder">
-      <RecentPlaceholderCard
-        v-for="item in recentVisualPlaceholders"
-        :key="item.id"
-        :item="item"
-        :car-placeholder-image="carPlaceholderImage"
-        @go-task-center="$emit('go-task-center')"
-      />
+    <div v-else-if="recentTasks.length === 0" class="quick-recent-empty">
+      暂无最近生成作品，生成完成后会展示在这里。
     </div>
     <div v-else class="quick-recent-list">
       <article
@@ -98,17 +86,9 @@
 
 <script setup lang="ts">
 import type { TaskItem } from '../../../../types/taskTypes'
-import RecentPlaceholderCard from './RecentPlaceholderCard.vue'
-
-export interface RecentVisualPlaceholder {
-  id: string
-  title: string
-  meta: string
-}
 
 defineProps<{
   recentTasks: TaskItem[]
-  recentVisualPlaceholders: RecentVisualPlaceholder[]
   recentLoading: boolean
   recentError: string
   currentTaskId: number | null
@@ -133,3 +113,17 @@ defineEmits<{
   'go-asset-result': [assetId: number]
 }>()
 </script>
+
+<style scoped>
+.quick-recent-empty {
+  display: grid;
+  min-height: 120px;
+  place-items: center;
+  border: 1px dashed #d8e2f0;
+  border-radius: 8px;
+  background: #f8fbff;
+  color: #667085;
+  font-size: 14px;
+  font-weight: 700;
+}
+</style>

@@ -17,7 +17,11 @@
 </template>
 
 <script setup lang="ts">
-import type { RecentVisualPlaceholder } from './RecentCarSalesVideos.vue'
+interface RecentVisualPlaceholder {
+  id: string
+  title: string
+  meta: string
+}
 
 defineProps<{
   item: RecentVisualPlaceholder

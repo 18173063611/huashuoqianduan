@@ -141,30 +141,6 @@
               </button>
             </div>
 
-            <div class="benchmark-sample-row" aria-label="示例链接">
-              <article>
-                <span class="sample-cover sample-cover--one"></span>
-                <div>
-                  <strong>比亚迪宋PLUS真实体验，后排空间太舒服了！</strong>
-                  <p>抖音｜123.4w 播放｜2024-05-12</p>
-                </div>
-              </article>
-              <article>
-                <span class="sample-cover sample-cover--two"></span>
-                <div>
-                  <strong>10万级SUV空间天花板，家用首选！</strong>
-                  <p>快手｜90.7w 播放｜2024-05-10</p>
-                </div>
-              </article>
-              <article>
-                <span class="sample-cover sample-cover--three"></span>
-                <div>
-                  <strong>全家出行无压力，宋PLUS空间实测</strong>
-                  <p>视频号｜56.2w 播放｜2024-05-08</p>
-                </div>
-              </article>
-            </div>
-
             <div v-if="downloading || downloadProgressText" class="download-progress-panel" role="status">
               <div class="download-progress-head">
                 <span>{{ downloadStatusText }}</span>
@@ -213,7 +189,7 @@
             <div class="ready-stat-list">
               <span><em><el-icon><Coin /></el-icon>预计消耗</em><strong>20 积分</strong></span>
               <span><em><el-icon><Timer /></el-icon>预计耗时</em><strong>1-2 分钟</strong></span>
-              <span><em><el-icon><PictureRounded /></el-icon>已关联车辆图片</em><strong>{{ benchmarkDraftAssets.length || 4 }} 张</strong></span>
+              <span><em><el-icon><PictureRounded /></el-icon>已关联车辆图片</em><strong>{{ benchmarkDraftAssets.length }} 张</strong></span>
             </div>
             <button class="primary-button" type="button" :disabled="planPreviewLoading || planSubmitting" @click="prepareBenchmarkPlanPreview">
               <el-icon><MagicStick /></el-icon>
@@ -252,16 +228,19 @@
         </div>
         <div class="analysis-result-grid">
           <article class="benchmark-video-summary-card">
-            <div class="benchmark-video-cover">
+            <div v-if="benchmarkHasParsedContent" class="benchmark-video-cover">
               <img v-if="videoCoverUrl" :src="videoCoverUrl" alt="" />
               <span v-else aria-hidden="true"></span>
               <b><el-icon><VideoPlay /></el-icon></b>
-              <small>{{ douyinParse ? durationText : '00:28' }}</small>
+              <small>{{ douyinParse ? durationText : '--:--' }}</small>
             </div>
-            <div>
-              <h3>{{ douyinParse?.title || '家用 SUV 空间实测' }}</h3>
-              <p>🔥 123.4w　⌚ {{ douyinParse ? durationText : '00:28' }}　{{ selectedPlatform === 'auto' ? '抖音' : selectedPlatform }}</p>
-              <p>作者：{{ douyinParse?.author?.nickname || '汽车测评小王' }}</p>
+            <div v-else class="benchmark-empty-block">
+              解析完成后展示参考视频信息。
+            </div>
+            <div v-if="benchmarkHasParsedContent">
+              <h3>{{ douyinParse?.title || localVideoFileName || '已解析参考视频' }}</h3>
+              <p>平台：{{ selectedPlatform === 'auto' ? '自动识别' : selectedPlatform }}<template v-if="douyinParse">　⌚ {{ durationText }}</template></p>
+              <p v-if="douyinParse?.author?.nickname">作者：{{ douyinParse.author.nickname }}</p>
             </div>
           </article>
           <article class="script-extract-card">
@@ -279,37 +258,32 @@
 
           <article class="keyword-card">
             <h3><el-icon><MagicStick /></el-icon>爆款关键词提炼</h3>
-            <div class="keyword-tags">
-              <span>家用空间大</span>
-              <span>后排舒适</span>
-              <span>后备箱容量大</span>
-              <span>全家出行</span>
-              <span>10-15万SUV</span>
-              <span>真实体验</span>
+            <div v-if="benchmarkKeywordTags.length" class="keyword-tags">
+              <span v-for="tag in benchmarkKeywordTags" :key="tag">{{ tag }}</span>
+            </div>
+            <div v-else class="benchmark-empty-block">
+              解析或输入文案后展示关键词。
             </div>
             <div class="basic-info-grid">
               <span>平台</span><strong>{{ selectedPlatform === 'auto' ? '自动识别' : selectedPlatform }}</strong>
-              <span>点赞量</span><strong>{{ douyinParse ? '8.7w' : '--' }}</strong>
-              <span>发布时间</span><strong>2024-05-12</strong>
               <span>视频时长</span><strong>{{ douyinParse ? durationText : '--:--' }}</strong>
             </div>
           </article>
 
           <article class="shot-structure-card">
-            <h3><el-icon><Collection /></el-icon>分镜结构（共 6 段）</h3>
-            <div class="shot-track">
-              <div v-for="shot in 6" :key="shot" class="shot-mini-card">
-                <span>{{ String(shot).padStart(2, '0') }}</span>
-                <strong>{{ ['痛点引入', '后排空间展示', '头部空间展示', '后备箱展示', '带娃出行场景', '总结推荐'][shot - 1] }}</strong>
-                <small>{{ ['3.5s', '4.0s', '4.5s', '5.0s', '6.0s', '6.0s'][shot - 1] }}</small>
+            <h3><el-icon><Collection /></el-icon>分镜结构（共 {{ benchmarkShotStructure.length }} 段）</h3>
+            <div v-if="benchmarkShotStructure.length" class="shot-track">
+              <div v-for="shot in benchmarkShotStructure" :key="shot.index" class="shot-mini-card">
+                <span>{{ String(shot.index).padStart(2, '0') }}</span>
+                <strong>{{ shot.title }}</strong>
+                <small v-if="shot.durationLabel">{{ shot.durationLabel }}</small>
               </div>
             </div>
-            <div class="style-tags">
-              <span>真实测评</span>
-              <span>口语化表达</span>
-              <span>对比突出</span>
-              <span>场景化展示</span>
-              <span>数据/体验结合</span>
+            <div v-else class="benchmark-empty-block">
+              解析完成后从真实文案中拆分分镜结构。
+            </div>
+            <div v-if="benchmarkKeywordTags.length" class="style-tags">
+              <span v-for="tag in benchmarkKeywordTags.slice(0, 5)" :key="`style-${tag}`">{{ tag }}</span>
             </div>
           </article>
         </div>
@@ -359,12 +333,13 @@
 
             <article class="scheme-card">
               <h3><el-icon><Collection /></el-icon>分镜（可调整）</h3>
-              <div class="scheme-shot-list">
-                <span v-for="shot in 6" :key="shot">
-                  <strong>{{ String(shot).padStart(2, '0') }}</strong>
-                  {{ ['痛点引入', '后排空间展示', '头部空间展示', '后备箱展示', '带娃出行场景', '总结推荐'][shot - 1] }}
+              <div v-if="benchmarkShotStructure.length" class="scheme-shot-list">
+                <span v-for="shot in benchmarkShotStructure" :key="shot.index">
+                  <strong>{{ String(shot.index).padStart(2, '0') }}</strong>
+                  {{ shot.title }}
                 </span>
               </div>
+              <p v-else class="scheme-empty-text">解析后展示可调整分镜。</p>
               <button type="button" class="secondary-button">调整分镜</button>
             </article>
 
@@ -418,7 +393,7 @@
             <article>
               <span>预计生成时长</span>
               <strong>1 - 2 分钟</strong>
-              <small>视频时长：{{ douyinParse ? durationText : '00:28' }}</small>
+              <small>视频时长：{{ douyinParse ? durationText : '--:--' }}</small>
             </article>
           </div>
           <div class="benchmark-asset-bridge">
@@ -1177,6 +1152,42 @@ const videoPreviewMediaUrl = computed(() => {
 })
 
 const rewrittenLength = computed(() => rewrittenText.value.replace(/\s/g, '').length)
+const benchmarkAnalysisText = computed(() => [
+  douyinParse.value?.title || '',
+  sourceText.value,
+  rewrittenText.value,
+].filter(Boolean).join('\n'))
+const benchmarkHasParsedContent = computed(() => Boolean(douyinParse.value || benchmarkAnalysisText.value.trim()))
+const benchmarkKeywordTags = computed(() => {
+  const text = benchmarkAnalysisText.value
+  if (!text.trim()) return []
+  const candidates: Array<{ label: string; patterns: string[] }> = [
+    { label: '家用空间', patterns: ['空间', '后排', '后备箱', '家庭', '全家'] },
+    { label: '舒适体验', patterns: ['舒适', '座椅', '乘坐', '静音'] },
+    { label: '智能座舱', patterns: ['智能', '座舱', '中控', '车机', '辅助驾驶'] },
+    { label: '外观颜值', patterns: ['外观', '颜值', '车身', '线条', '造型'] },
+    { label: '动力性能', patterns: ['动力', '加速', '操控', '性能'] },
+    { label: '续航省油', patterns: ['续航', '油耗', '省油', '能耗', '电耗'] },
+    { label: '到店促销', patterns: ['优惠', '到店', '试驾', '补贴', '活动', '权益'] },
+  ]
+  return candidates
+    .filter((item) => item.patterns.some((pattern) => text.includes(pattern)))
+    .map((item) => item.label)
+    .slice(0, 6)
+})
+const benchmarkShotStructure = computed(() => {
+  const text = rewrittenText.value.trim() || sourceText.value.trim()
+  if (!text) return []
+  const units = splitBenchmarkScriptUnits(text).slice(0, 6)
+  if (!units.length) return []
+  const totalSeconds = douyinParse.value?.durationSeconds || 0
+  const perShotDuration = totalSeconds > 0 ? Math.max(1, Math.round((totalSeconds / units.length) * 10) / 10) : 0
+  return units.map((unit, index) => ({
+    index: index + 1,
+    title: compactBenchmarkShotTitle(unit),
+    durationLabel: perShotDuration ? `${perShotDuration}s` : '',
+  }))
+})
 
 const insightItems = computed(() => {
   const p = douyinParse.value
@@ -1268,6 +1279,34 @@ function normalizeDisplayImageUrl(value: string) {
     return `${API_BASE_URL}/writer/media/cover?url=${encodeURIComponent(url)}`
   }
   return url
+}
+
+function splitBenchmarkScriptUnits(text: string) {
+  const normalized = text
+    .replace(/\u00a0/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim()
+  if (!normalized) return []
+  const parts = normalized
+    .split(/(?<=[。！？!?；;])|\n+/)
+    .map((item) => item.trim())
+    .filter(Boolean)
+  if (parts.length > 1) return parts
+  const clauses = normalized
+    .split(/[，,、]/)
+    .map((item) => item.trim())
+    .filter(Boolean)
+  if (clauses.length > 1) return clauses
+  return [normalized]
+}
+
+function compactBenchmarkShotTitle(text: string) {
+  const clean = text
+    .replace(/[。！？!?；;，,、]+$/g, '')
+    .replace(/\s+/g, '')
+    .trim()
+  if (!clean) return '分镜片段'
+  return clean.length > 12 ? `${clean.slice(0, 12)}...` : clean
 }
 
 function isCoverLikePath(path: string) {
@@ -3950,6 +3989,29 @@ function applyScript() {
   color: #667085;
   font-size: 13px;
   font-weight: 700;
+}
+
+.benchmark-empty-block,
+.scheme-empty-text {
+  display: grid;
+  min-height: 74px;
+  align-items: center;
+  border: 1px dashed #d8e2f0;
+  border-radius: 8px;
+  background: #f8fbff;
+  color: #667085;
+  padding: 12px;
+  font-size: 13px;
+  font-weight: 750;
+  line-height: 1.6;
+}
+
+.benchmark-empty-block {
+  grid-column: 1 / -1;
+}
+
+.scheme-empty-text {
+  margin: 0 0 12px;
 }
 
 .script-extract-card h3,

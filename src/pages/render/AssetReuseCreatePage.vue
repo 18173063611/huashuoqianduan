@@ -66,17 +66,27 @@
                 <span></span>
                 <small></small>
               </article>
-              <button
+              <article
                 v-for="asset in categoryAssets('copy', 5)"
                 :key="asset.assetId"
-                type="button"
                 :class="['reuse-choice-card', { selected: isSelected(asset.assetId) }]"
+                role="button"
+                tabindex="0"
                 @click="toggleAssetFromCategory(asset, 'copy')"
+                @keydown.enter.prevent="toggleAssetFromCategory(asset, 'copy')"
+                @keydown.space.prevent="toggleAssetFromCategory(asset, 'copy')"
               >
                 <strong>{{ asset.fileName }}</strong>
                 <span>{{ sourceLabel(asset) }}｜{{ assetTypeLabel(asset.assetType) }}</span>
+                <p class="reuse-card-excerpt">{{ assetPreviewExcerpt(asset) }}</p>
+                <div class="reuse-card-actions">
+                  <button type="button" @click.stop="toggleAssetFromCategory(asset, 'copy')">
+                    {{ isSelected(asset.assetId) ? '已选择' : '选择' }}
+                  </button>
+                  <button type="button" @click.stop="openAssetTextPreview(asset, '文案预览')">预览</button>
+                </div>
                 <small>{{ formatDate(asset.updatedAt || asset.createdAt) }}</small>
-              </button>
+              </article>
               <article v-if="!loading && categoryAssets('copy', 1).length === 0" class="reuse-empty-card">
                 暂无文案资产，可先在资产中心上传，或使用 AI 智能创作沉淀文案。
               </article>
@@ -95,20 +105,30 @@
                 <strong></strong>
                 <small></small>
               </article>
-              <button
+              <article
                 v-for="asset in categoryAssets('storyboard', 5)"
                 :key="asset.assetId"
-                type="button"
                 :class="['reuse-shot-card', { selected: isSelected(asset.assetId) }]"
+                role="button"
+                tabindex="0"
                 @click="toggleAssetFromCategory(asset, 'storyboard')"
+                @keydown.enter.prevent="toggleAssetFromCategory(asset, 'storyboard')"
+                @keydown.space.prevent="toggleAssetFromCategory(asset, 'storyboard')"
               >
                 <span class="shot-thumb">
                   <img v-if="isVisualAsset(asset) && mediaUrl(asset)" :src="mediaUrl(asset)" alt="" />
                   <el-icon v-else :size="20"><component :is="categoryIcon('storyboard')" /></el-icon>
                 </span>
                 <strong>{{ asset.fileName }}</strong>
+                <p class="reuse-card-excerpt">{{ assetPreviewExcerpt(asset) }}</p>
+                <div class="reuse-card-actions reuse-card-actions--story">
+                  <button type="button" @click.stop="toggleAssetFromCategory(asset, 'storyboard')">
+                    {{ isSelected(asset.assetId) ? '已选择' : '选择' }}
+                  </button>
+                  <button type="button" @click.stop="openAssetTextPreview(asset, '分镜脚本预览')">预览</button>
+                </div>
                 <small>{{ sourceLabel(asset) }}｜{{ formatDate(asset.updatedAt || asset.createdAt) }}</small>
-              </button>
+              </article>
               <article v-if="!loading && categoryAssets('storyboard', 1).length === 0" class="reuse-empty-card">
                 暂无分镜资产，解析爆款视频后会自动沉淀可复用分镜。
               </article>
@@ -398,6 +418,16 @@
       @refresh="prepareAssetReusePlanPreview"
       @confirm="confirmAssetReusePlan"
     />
+    <el-dialog v-model="assetPreviewDialog.open" :title="assetPreviewDialog.title" width="720px">
+      <div v-if="assetPreviewDialog.loading" class="asset-text-preview-state">正在加载预览...</div>
+      <div v-else-if="assetPreviewDialog.error" class="asset-text-preview-state asset-text-preview-state--error">
+        {{ assetPreviewDialog.error }}
+      </div>
+      <pre v-else class="asset-text-preview-body">{{ assetPreviewDialog.text }}</pre>
+      <template #footer>
+        <el-button @click="assetPreviewDialog.open = false">关闭</el-button>
+      </template>
+    </el-dialog>
   </section>
 </template>
 
@@ -513,6 +543,15 @@ const planSubmitting = ref(false)
 const planPreviewError = ref('')
 const planPreview = ref<AiPlanPreview | null>(null)
 const assetReusePlanDraft = ref<CarSalesPlanDraft | null>(null)
+const assetPreviewTextById = ref<Record<number, string>>({})
+const assetPreviewLoadingById = ref<Record<number, boolean>>({})
+const assetPreviewDialog = reactive({
+  open: false,
+  loading: false,
+  title: '',
+  text: '',
+  error: '',
+})
 
 const activeCategory = computed(() => categories.find((item) => item.key === filters.category) || categories[0])
 const normalizedKeyword = computed(() => filters.keyword.trim().toLowerCase())
@@ -667,6 +706,164 @@ function categoryAssets(categoryKey: AssetReuseCategoryKey, limit = 5) {
     .filter((asset) => matchesCategory(asset, categoryKey))
     .filter((asset) => !keyword || assetSearchText(asset).includes(keyword))
     .slice(0, limit)
+}
+
+watch(
+  () => [
+    ...categoryAssets('copy', 5),
+    ...categoryAssets('storyboard', 5),
+  ].map((asset) => `${asset.assetId}:${asset.updatedAt}`).join('|'),
+  () => {
+    void loadVisibleTextPreviews()
+  },
+  { immediate: true },
+)
+
+async function loadVisibleTextPreviews() {
+  const visibleTextAssets = [
+    ...categoryAssets('copy', 5),
+    ...categoryAssets('storyboard', 5),
+  ].filter(isTextPreviewAsset)
+  await Promise.all(visibleTextAssets.map((asset) => ensureAssetPreviewText(asset)))
+}
+
+function isTextPreviewAsset(asset: AssetItem) {
+  return asset.assetType === 'TEXT' || asset.assetType === 'JSON'
+}
+
+async function ensureAssetPreviewText(asset: AssetItem) {
+  if (!isTextPreviewAsset(asset) || assetPreviewTextById.value[asset.assetId] || assetPreviewLoadingById.value[asset.assetId]) {
+    return
+  }
+  assetPreviewLoadingById.value = {
+    ...assetPreviewLoadingById.value,
+    [asset.assetId]: true,
+  }
+  try {
+    const text = await getAssetTextContent(asset)
+    assetPreviewTextById.value = {
+      ...assetPreviewTextById.value,
+      [asset.assetId]: normalizeAssetPreviewText(text),
+    }
+  } catch {
+    assetPreviewTextById.value = {
+      ...assetPreviewTextById.value,
+      [asset.assetId]: metadataPreviewText(asset) || '预览内容暂时无法加载',
+    }
+  } finally {
+    const next = { ...assetPreviewLoadingById.value }
+    delete next[asset.assetId]
+    assetPreviewLoadingById.value = next
+  }
+}
+
+function assetPreviewExcerpt(asset: AssetItem) {
+  const preview = assetPreviewTextById.value[asset.assetId] || metadataPreviewText(asset)
+  if (preview) {
+    return preview.length > 70 ? `${preview.slice(0, 70)}...` : preview
+  }
+  if (assetPreviewLoadingById.value[asset.assetId]) {
+    return '正在读取开头...'
+  }
+  if (isTextPreviewAsset(asset)) {
+    void ensureAssetPreviewText(asset)
+    return '正在读取开头...'
+  }
+  return '暂无可预览文本'
+}
+
+async function openAssetTextPreview(asset: AssetItem, title: string) {
+  assetPreviewDialog.open = true
+  assetPreviewDialog.loading = true
+  assetPreviewDialog.title = `${title}：${asset.fileName}`
+  assetPreviewDialog.text = ''
+  assetPreviewDialog.error = ''
+  try {
+    await ensureAssetPreviewText(asset)
+    const text = assetPreviewTextById.value[asset.assetId] || metadataPreviewText(asset)
+    assetPreviewDialog.text = text || '暂无可预览文本'
+  } catch (unknownError) {
+    assetPreviewDialog.error = unknownError instanceof Error ? unknownError.message : '预览加载失败'
+  } finally {
+    assetPreviewDialog.loading = false
+  }
+}
+
+function metadataPreviewText(asset: AssetItem) {
+  const metadata = parseMetadata(asset.metadataJson)
+  return normalizeAssetPreviewText(
+    metadataText(metadata, 'voiceText') ||
+    metadataText(metadata, 'finalVoiceText') ||
+    metadataText(metadata, 'script') ||
+    metadataText(metadata, 'content') ||
+    metadataText(metadata, 'description') ||
+    metadataText(metadata, 'title'),
+  )
+}
+
+function normalizeAssetPreviewText(value: string | null | undefined) {
+  const raw = String(value || '').trim()
+  if (!raw) return ''
+  try {
+    const parsed = JSON.parse(raw) as unknown
+    const readable = readableTextFromJson(parsed)
+    if (readable) return normalizePlainPreviewText(readable)
+  } catch {
+    // Plain text assets are expected here.
+  }
+  return normalizePlainPreviewText(raw)
+}
+
+function readableTextFromJson(value: unknown, depth = 0): string {
+  if (!value || depth > 5) return ''
+  if (typeof value === 'string') return value
+  if (Array.isArray(value)) {
+    return value
+      .map((item) => readableTextFromJson(item, depth + 1))
+      .filter(Boolean)
+      .slice(0, 4)
+      .join('\n')
+  }
+  if (typeof value !== 'object') return ''
+  const record = value as Record<string, unknown>
+  const preferredKeys = [
+    'finalVoiceText',
+    'voiceText',
+    'narration',
+    'script',
+    'content',
+    'text',
+    'copywriting',
+    'title',
+    'visual',
+    'visualPrompt',
+    'prompt',
+  ]
+  const direct = preferredKeys
+    .map((key) => record[key])
+    .filter((item): item is string => typeof item === 'string' && Boolean(item.trim()))
+  if (direct.length) {
+    return direct.slice(0, 4).join('\n')
+  }
+  const nestedKeys = ['storyboard', 'shots', 'scenes', 'segments', 'scripts', 'items', 'data']
+  return nestedKeys
+    .map((key) => readableTextFromJson(record[key], depth + 1))
+    .filter(Boolean)
+    .slice(0, 4)
+    .join('\n')
+}
+
+function normalizePlainPreviewText(value: string) {
+  return value
+    .replace(/\u00a0/g, ' ')
+    .replace(/[\u200B-\u200D\uFEFF]/g, '')
+    .replace(/\r\n?/g, '\n')
+    .split('\n')
+    .map((line) => line.trim())
+    .filter(Boolean)
+    .join(' ')
+    .replace(/\s+/g, ' ')
+    .trim()
 }
 
 function goToAssetCenter() {
@@ -1304,6 +1501,47 @@ onMounted(loadAssets)
   line-height: 1.5;
 }
 
+.reuse-card-excerpt {
+  display: -webkit-box;
+  overflow: hidden;
+  margin: 0;
+  color: #475569;
+  font-size: 12px;
+  font-weight: 700;
+  line-height: 1.55;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+  white-space: normal;
+}
+
+.reuse-shot-card .reuse-card-excerpt,
+.reuse-shot-card .reuse-card-actions {
+  grid-column: 2;
+}
+
+.reuse-card-actions {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+}
+
+.reuse-card-actions button {
+  min-height: 28px;
+  border: 1px solid #dbe5f5;
+  border-radius: 6px;
+  background: #f8fbff;
+  color: #1261ff;
+  padding: 0 10px;
+  font-size: 12px;
+  font-weight: 850;
+  cursor: pointer;
+}
+
+.reuse-card-actions button:hover {
+  border-color: #1261ff;
+  background: #eef4ff;
+}
+
 .reuse-choice-card--skeleton {
   pointer-events: none;
 }
@@ -1873,6 +2111,40 @@ onMounted(loadAssets)
   color: #8a95a8;
   font-size: 12px;
   line-height: 1.6;
+}
+
+.asset-text-preview-state {
+  display: grid;
+  min-height: 120px;
+  place-items: center;
+  border: 1px dashed #d8e2f0;
+  border-radius: 8px;
+  background: #f8fbff;
+  color: #667085;
+  font-size: 14px;
+  font-weight: 750;
+}
+
+.asset-text-preview-state--error {
+  border-color: #fecdd3;
+  background: #fff5f5;
+  color: #be123c;
+}
+
+.asset-text-preview-body {
+  max-height: min(60vh, 560px);
+  overflow: auto;
+  margin: 0;
+  border: 1px solid #e6eefb;
+  border-radius: 8px;
+  background: #fbfdff;
+  color: #1f2937;
+  padding: 14px;
+  font-family: inherit;
+  font-size: 14px;
+  line-height: 1.8;
+  white-space: pre-wrap;
+  word-break: break-word;
 }
 
 @media (max-width: 1280px) {

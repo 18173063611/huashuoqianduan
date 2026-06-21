@@ -345,7 +345,6 @@
 
     <RecentCarSalesVideos
       :recent-tasks="recentTasks"
-      :recent-visual-placeholders="recentVisualPlaceholders"
       :recent-loading="recentLoading"
       :recent-error="recentError"
       :current-task-id="currentTaskId"
@@ -542,13 +541,7 @@ const { isLoggedIn, requireAuth } = useAuthRequired()
 const carSalesPreferences = loadCarSalesPreferences()
 const RECENT_GENERATION_TASK_TYPES = new Set(['QUICK_RENDER', 'SEEDANCE_CAR_SALES_VIDEO'])
 const RECENT_GENERATION_LIMIT = 6
-const recentVisualPlaceholders = [
-  { id: 'demo-family-suv', title: '全家出行首选SUV', meta: '15秒 | 9:16 | 示例作品' },
-  { id: 'demo-smart-cabin', title: '智能座舱 舒适升级', meta: '15秒 | 9:16 | 示例作品' },
-  { id: 'demo-range', title: '超长续航 说走就走', meta: '15秒 | 9:16 | 示例作品' },
-  { id: 'demo-store', title: '新车到店 限时优惠', meta: '15秒 | 9:16 | 示例作品' },
-  { id: 'demo-space', title: '宽敞空间 尽享舒适', meta: '15秒 | 9:16 | 示例作品' },
-]
+const HIDDEN_RECENT_GENERATION_STATUSES = new Set(['FAILED', 'RETRYABLE', 'CANCELED'])
 
 const roleOptions: Array<{ value: QuickRenderAssetRole; label: string }> = [
   { value: 'car_exterior_front', label: '车头外观' },
@@ -1517,6 +1510,9 @@ async function loadSessionTaskDetails(skipIds = new Set<number>()) {
 }
 
 function isRecentGenerationTask(task: TaskItem) {
+  if (HIDDEN_RECENT_GENERATION_STATUSES.has(String(task.status || '').toUpperCase())) {
+    return false
+  }
   if (task.taskId === currentTaskId.value) {
     return true
   }
