@@ -55,15 +55,15 @@
                       <textarea
                         class="ai-plan-shot-visual"
                         :value="shot.visual"
-                        rows="2"
-                        maxlength="260"
+                        rows="4"
+                        maxlength="900"
                         @input="$emit('update-storyboard-shot', shot.index, 'visual', ($event.target as HTMLTextAreaElement).value)"
                       />
                       <textarea
                         class="ai-plan-shot-narration"
                         :value="shot.narration"
-                        rows="2"
-                        maxlength="220"
+                        rows="3"
+                        maxlength="500"
                         @input="$emit('update-storyboard-shot', shot.index, 'narration', ($event.target as HTMLTextAreaElement).value)"
                       />
                     </div>

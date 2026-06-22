@@ -4721,8 +4721,8 @@ async function playVoiceSample(voice: VoicePresetItem) {
 
 .asset-file-list--grid .app-file-item {
   display: grid;
+  grid-template-rows: 1fr auto;
   grid-template-columns: 1fr;
-  align-content: start;
   gap: 12px;
   min-height: 100%;
   border-color: var(--hs-border);
@@ -4745,7 +4745,9 @@ async function playVoiceSample(voice: VoicePresetItem) {
 
 .asset-file-list--grid .asset-row-main {
   display: grid;
+  grid-template-rows: auto minmax(38px, auto) minmax(32px, auto) 1fr;
   gap: 8px;
+  min-width: 0;
 }
 
 .asset-file-list--grid .asset-row-preview {
@@ -4767,8 +4769,22 @@ async function playVoiceSample(voice: VoicePresetItem) {
 }
 
 .asset-file-list--grid .asset-row-title {
+  display: -webkit-box;
+  min-height: 42px;
+  overflow: hidden;
   white-space: normal;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
   line-height: 1.45;
+}
+
+.asset-file-list--grid .asset-row-meta {
+  min-height: 38px;
+}
+
+.asset-file-list--grid .asset-row-tags {
+  min-height: 32px;
+  align-content: start;
 }
 
 .asset-row-title {
@@ -4800,6 +4816,8 @@ async function playVoiceSample(voice: VoicePresetItem) {
   grid-template-columns: repeat(2, minmax(0, 1fr));
   align-items: stretch;
   width: 100%;
+  align-self: end;
+  margin-top: auto;
 }
 
 .asset-file-list--grid .asset-row-actions .app-secondary-button {

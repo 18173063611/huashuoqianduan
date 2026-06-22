@@ -12,11 +12,10 @@
           </div>
         </div>
         <div class="asset-reuse-actions">
-          <el-button :icon="Refresh" :loading="loading" @click="loadAssets">刷新资产</el-button>
           <el-button
             type="primary"
             :icon="Finished"
-            :disabled="selectedAssets.length === 0 || planPreviewLoading || planSubmitting"
+            :disabled="!canPreparePlan"
             @click="prepareAssetReusePlanPreview"
           >
             {{ planPreviewLoading ? '方案生成中...' : planSubmitting ? '提交中...' : '进入方案确认' }}
@@ -29,11 +28,11 @@
           <span>1</span>
           <strong>选择素材</strong>
         </div>
-        <div class="asset-step" :class="{ active: selectedAssets.length > 0 }">
+        <div class="asset-step" :class="{ active: hasReusableVehicle }">
           <span>2</span>
           <strong>方案确认</strong>
         </div>
-        <div class="asset-step" :class="{ active: selectedAssets.length > 0 && draftPrompt.trim() }">
+        <div class="asset-step" :class="{ active: hasReusableVehicle && hasCoreContent }">
           <span>3</span>
           <strong>生成视频</strong>
         </div>
@@ -44,250 +43,257 @@
       </nav>
 
       <p class="asset-page-note">从资产中心选择已有素材，组合生成新视频</p>
-      <el-alert v-if="error" class="asset-reuse-alert" :title="error" type="warning" show-icon :closable="false" />
 
       <div class="asset-reuse-shell">
         <main class="asset-stage-list">
-          <section class="asset-stage-card asset-stage-card--copy">
-            <div class="stage-title">
+          <section class="asset-stage-card workflow-overview-card">
+            <div class="stage-title workflow-heading">
               <span>1</span>
-              <h2>选择文案</h2>
-              <button type="button" class="link-action" @click="goToAssetCenter">进入资产中心 ›</button>
+              <div>
+                <h2>按视频制作工作区选择组件</h2>
+                <p>先选车辆素材包，再补文案、分镜、音频、人物和字幕包装；可选内容默认收起。</p>
+              </div>
             </div>
-            <div class="asset-source-tabs">
-              <button type="button" class="active">资产中心选择</button>
-              <button type="button" @click="applyAiCopyPrompt">
-                AI生成新文案
-              </button>
-            </div>
-            <div class="asset-card-row" :aria-busy="loading">
-              <article v-for="item in loading ? 5 : 0" :key="`copy-skeleton-${item}`" class="reuse-choice-card reuse-choice-card--skeleton">
-                <strong></strong>
-                <span></span>
-                <small></small>
-              </article>
-              <article
-                v-for="asset in categoryAssets('copy', 5)"
-                :key="asset.assetId"
-                :class="['reuse-choice-card', { selected: isSelected(asset.assetId) }]"
-                role="button"
-                tabindex="0"
-                @click="toggleAssetFromCategory(asset, 'copy')"
-                @keydown.enter.prevent="toggleAssetFromCategory(asset, 'copy')"
-                @keydown.space.prevent="toggleAssetFromCategory(asset, 'copy')"
-              >
-                <strong>{{ asset.fileName }}</strong>
-                <span>{{ sourceLabel(asset) }}｜{{ assetTypeLabel(asset.assetType) }}</span>
-                <p class="reuse-card-excerpt">{{ assetPreviewExcerpt(asset) }}</p>
-                <div class="reuse-card-actions">
-                  <button type="button" @click.stop="toggleAssetFromCategory(asset, 'copy')">
-                    {{ isSelected(asset.assetId) ? '已选择' : '选择' }}
-                  </button>
-                  <button type="button" @click.stop="openAssetTextPreview(asset, '文案预览')">预览</button>
-                </div>
-                <small>{{ formatDate(asset.updatedAt || asset.createdAt) }}</small>
-              </article>
-              <article v-if="!loading && categoryAssets('copy', 1).length === 0" class="reuse-empty-card">
-                暂无文案资产，可先在资产中心上传，或使用 AI 智能创作沉淀文案。
-              </article>
+            <div class="reuse-workflow-strip" aria-label="资产复用组件选择流程">
+              <span :class="{ active: hasReusableVehicle }"><strong>1</strong>车辆素材</span>
+              <span :class="{ active: hasCoreContent }"><strong>2</strong>文案/分镜</span>
+              <span :class="{ active: hasAudioOrHost }"><strong>3</strong>音频/人物</span>
+              <span><strong>4</strong>字幕/大字报</span>
             </div>
           </section>
 
-          <section class="asset-stage-card">
-            <div class="stage-title">
-              <span>2</span>
-              <h2>选择分镜</h2>
-              <button type="button" class="link-action" @click="goToAssetCenter">进入资产中心 ›</button>
-            </div>
-            <div class="asset-card-row asset-card-row--story" :aria-busy="loading">
-              <article v-for="item in loading ? 5 : 0" :key="`story-skeleton-${item}`" class="reuse-shot-card reuse-choice-card--skeleton">
-                <span class="shot-thumb"></span>
-                <strong></strong>
-                <small></small>
-              </article>
-              <article
-                v-for="asset in categoryAssets('storyboard', 5)"
-                :key="asset.assetId"
-                :class="['reuse-shot-card', { selected: isSelected(asset.assetId) }]"
-                role="button"
-                tabindex="0"
-                @click="toggleAssetFromCategory(asset, 'storyboard')"
-                @keydown.enter.prevent="toggleAssetFromCategory(asset, 'storyboard')"
-                @keydown.space.prevent="toggleAssetFromCategory(asset, 'storyboard')"
-              >
-                <span class="shot-thumb">
-                  <img v-if="isVisualAsset(asset) && mediaUrl(asset)" :src="mediaUrl(asset)" alt="" />
-                  <el-icon v-else :size="20"><component :is="categoryIcon('storyboard')" /></el-icon>
-                </span>
-                <strong>{{ asset.fileName }}</strong>
-                <p class="reuse-card-excerpt">{{ assetPreviewExcerpt(asset) }}</p>
-                <div class="reuse-card-actions reuse-card-actions--story">
-                  <button type="button" @click.stop="toggleAssetFromCategory(asset, 'storyboard')">
-                    {{ isSelected(asset.assetId) ? '已选择' : '选择' }}
-                  </button>
-                  <button type="button" @click.stop="openAssetTextPreview(asset, '分镜脚本预览')">预览</button>
+          <div class="reuse-workflow-grid">
+            <section class="asset-stage-card reuse-workflow-module">
+              <div class="workflow-module-head">
+                <div>
+                  <h2>必选：车辆素材包</h2>
+                  <p>优先选择已整理好的车型素材包；场景图和车辆补图按需展开补充。</p>
                 </div>
-                <small>{{ sourceLabel(asset) }}｜{{ formatDate(asset.updatedAt || asset.createdAt) }}</small>
-              </article>
-              <article v-if="!loading && categoryAssets('storyboard', 1).length === 0" class="reuse-empty-card">
-                暂无分镜资产，解析爆款视频后会自动沉淀可复用分镜。
-              </article>
-            </div>
-          </section>
+                <span class="workflow-badge required">必选</span>
+              </div>
+              <AssetPicker
+                title="车型素材包"
+                asset-type="JSON"
+                :selected-url="selectedCarBundleUrl"
+                :selected-name="selectedCarBundleName"
+                :source-types="['USER_UPLOAD']"
+                :asset-roles="['car_model_bundle']"
+                :role-options="CAR_MODEL_BUNDLE_ROLE_OPTIONS"
+                workflow-stage="carBundle"
+                source-hint="从资产中心选择一款已整理好的车型素材包，自动带入车型图和部位标记"
+                placeholder="搜索车型素材包..."
+                @select="handleCarBundleAssetSelect"
+              />
+              <div v-if="selectedCarBundle" class="workflow-status" :class="{ error: carBundleLoadError }">
+                <strong>{{ carBundleLoadError ? '素材包读取失败' : '已载入车型素材包' }}</strong>
+                <span v-if="!carBundleLoadError">{{ selectedCarBundleName }} · {{ selectedCarBundleImageCountText }}</span>
+                <span v-else>{{ carBundleLoadError }}</span>
+              </div>
 
-          <div class="asset-option-grid">
-            <section class="asset-stage-card asset-stage-card--compact">
-              <div class="stage-title">
-                <span>3</span>
-                <h2>选择数字人（可选）</h2>
-                <button type="button" class="link-action" @click="filters.category = 'avatar'">更多数字人 ›</button>
-              </div>
-              <div class="compact-choice-row">
-                <button type="button" class="reuse-choice-card muted">不使用数字人</button>
-              <button
-                v-for="asset in categoryAssets('avatar', 2)"
-                :key="asset.assetId"
-                type="button"
-                :class="['reuse-choice-card media-card', { selected: isSelected(asset.assetId) }]"
-                @click="toggleAssetFromCategory(asset, 'avatar')"
-              >
-                <img v-if="mediaUrl(asset)" :src="mediaUrl(asset)" alt="" />
-                <el-icon v-else class="media-card-icon"><User /></el-icon>
-                <span>{{ asset.fileName }}</span>
-              </button>
-              </div>
+              <details class="reuse-optional-group">
+                <summary>
+                  <span>场景图片 <em>可选</em></span>
+                  <small>{{ selectedSceneSelections.length ? `已选择 ${selectedSceneSelections.length} 张场景图` : '展厅、道路、门店、户外环境图，按需展开补充。' }}</small>
+                </summary>
+                <div class="reuse-optional-body">
+                  <AssetPicker
+                    title="从资产中心选择场景图片"
+                    asset-type="IMAGE"
+                    :asset-types="['IMAGE', 'COVER']"
+                    :selected-url="firstSceneSelection?.asset.fileUrl || ''"
+                    :selected-name="firstSceneSelection?.asset.fileName || ''"
+                    :asset-roles="CAR_SCENE_REFERENCE_ROLES"
+                    :role-options="CAR_SCENE_IMAGE_ROLE_OPTIONS"
+                    workflow-stage="sceneBundle"
+                    source-hint="只加载图片类资产；未打场景标签的普通图片也可在全部中选择"
+                    placeholder="搜索场景图片素材..."
+                    @select="handleSceneImageAssetSelect"
+                  />
+                  <div v-if="selectedSceneSelections.length" class="module-selected-list">
+                    <article v-for="item in selectedSceneSelections" :key="item.asset.assetId">
+                      <span>{{ roleLabel(item.role) }}</span>
+                      <strong>{{ item.asset.fileName }}</strong>
+                      <button type="button" @click="removeSelected(item.asset.assetId)">移除</button>
+                    </article>
+                  </div>
+                </div>
+              </details>
+
+              <details class="reuse-optional-group">
+                <summary>
+                  <span>补充车辆素材 <em>可选</em></span>
+                  <small>{{ selectedVehicleImageSelections.length ? `已选择 ${selectedVehicleImageSelections.length} 张车辆补图` : '多角度外观、内饰、轮毂、灯光等素材按需补充。' }}</small>
+                </summary>
+                <div class="reuse-optional-body">
+                  <AssetPicker
+                    title="从资产中心选择车辆图片"
+                    asset-type="IMAGE"
+                    :asset-types="['IMAGE', 'COVER']"
+                    :selected-url="firstVehicleImageSelection?.asset.fileUrl || ''"
+                    :selected-name="firstVehicleImageSelection?.asset.fileName || ''"
+                    :role-options="CAR_IMAGE_ROLE_OPTIONS"
+                    workflow-stage="material"
+                    source-hint="用于补充车辆外观、内饰和细节图；生成时会按角色作为参考图"
+                    placeholder="搜索车辆图片素材..."
+                    @select="handleVehicleImageAssetSelect"
+                  />
+                  <div v-if="selectedVehicleImageSelections.length" class="module-selected-list">
+                    <article v-for="item in selectedVehicleImageSelections" :key="item.asset.assetId">
+                      <span>{{ roleLabel(item.role) }}</span>
+                      <strong>{{ item.asset.fileName }}</strong>
+                      <button type="button" @click="removeSelected(item.asset.assetId)">移除</button>
+                    </article>
+                  </div>
+                </div>
+              </details>
             </section>
 
-            <section class="asset-stage-card asset-stage-card--compact">
-              <div class="stage-title">
-                <span>4</span>
-                <h2>选择配音（可选）</h2>
-                <button type="button" class="link-action" @click="filters.category = 'bgm'">更多配音 ›</button>
+            <section class="asset-stage-card reuse-workflow-module">
+              <div class="workflow-module-head">
+                <div>
+                  <h2>核心：文案与分镜</h2>
+                  <p>分镜控制画面节奏，爆款对标提供口播文案；补充目标用于约束最终方案。</p>
+                </div>
+                <span class="workflow-badge core">核心</span>
               </div>
-              <div class="compact-choice-row">
-                <button type="button" class="reuse-choice-card muted">不使用配音</button>
-                <button
-                  v-for="asset in categoryAssets('bgm', 2)"
-                  :key="asset.assetId"
-                  type="button"
-                  :class="['reuse-choice-card audio-card', { selected: isSelected(asset.assetId) }]"
-                  @click="toggleAssetWithRole(asset, 'voiceover')"
-                >
-                  <span class="audio-icon"><el-icon><Microphone /></el-icon></span>
-                  <span>{{ asset.fileName }}</span>
-                </button>
+              <AssetPicker
+                title="分镜生成结果（控制段落节奏）"
+                asset-type="JSON"
+                :selected-url="selectedStoryboardUrl"
+                :selected-name="selectedStoryboardName"
+                :source-types="['STORYBOARD_GENERATE', 'VIDEO_SCRIPT_ANALYZE', 'VIDEO_SCRIPT_URL_ANALYZE', 'USER_UPLOAD']"
+                :asset-roles="['storyboard_json']"
+                :role-options="CAR_STORYBOARD_ROLE_OPTIONS"
+                workflow-stage="storyboard"
+                source-hint="旧分镜无需重新生成；系统会只复用镜头意图、景别、运镜和段落节奏"
+                placeholder="搜索分镜生成结果..."
+                @select="handleStoryboardAssetSelect"
+              />
+              <AssetPicker
+                title="爆款对标结果（口播文案）"
+                asset-type="JSON"
+                :asset-types="['JSON', 'TEXT']"
+                :selected-url="selectedBenchmarkUrl"
+                :selected-name="selectedBenchmarkName"
+                :source-types="['DOUYIN_BENCHMARK', 'DOUYIN_PARSE_TRANSCRIPT', 'DOUYIN_REWRITE', 'DOUYIN_TRANSCRIPT', 'USER_UPLOAD']"
+                :asset-roles="['benchmark_json', 'voice_script']"
+                :role-options="CAR_BENCHMARK_ROLE_OPTIONS"
+                workflow-stage="benchmark"
+                source-hint="爆款对标产出的口播文案，可直接作为方案口播和分镜台词参考"
+                placeholder="搜索爆款对标文案..."
+                @select="handleBenchmarkAssetSelect"
+              />
+              <div class="workflow-prompt-box">
+                <div>
+                  <strong>文案补充与生成目标</strong>
+                  <button type="button" class="link-action" @click="applyAiCopyPrompt">AI生成新文案</button>
+                </div>
+                <el-input
+                  v-model="draftPrompt"
+                  type="textarea"
+                  maxlength="500"
+                  :rows="4"
+                  show-word-limit
+                  placeholder="补充本次生成目标，例如车型、卖点、门店活动、目标客户"
+                />
               </div>
-            </section>
 
-            <section class="asset-stage-card asset-stage-card--compact">
-              <div class="stage-title">
-                <span>5</span>
-                <h2>选择背景音乐（可选）</h2>
-                <button type="button" class="link-action" @click="filters.category = 'bgm'">更多音乐 ›</button>
-              </div>
-              <div class="compact-choice-row">
-                <button type="button" class="reuse-choice-card muted">不使用音乐</button>
-                <button
-                  v-for="asset in categoryAssets('bgm', 2)"
-                  :key="`bgm-${asset.assetId}`"
-                  type="button"
-                  :class="['reuse-choice-card audio-card', { selected: isSelected(asset.assetId) }]"
-                  @click="toggleAssetFromCategory(asset, 'bgm')"
-                >
-                  <span class="music-icon"><el-icon><Headset /></el-icon></span>
-                  <span>{{ asset.fileName }}</span>
-                </button>
-              </div>
+              <details class="reuse-optional-group">
+                <summary>
+                  <span>音频与人物 <em>可选</em></span>
+                  <small>口播、背景音乐、人物出镜集中在这里；默认不使用数字人，音频智能匹配。</small>
+                </summary>
+                <div class="reuse-optional-body">
+                  <div class="workflow-toggle-row">
+                    <span>人物出镜</span>
+                    <div>
+                      <button type="button" :class="{ active: !hostAppearanceEnabled }" @click="disableHostAppearance">
+                        不出镜
+                      </button>
+                      <button type="button" :class="{ active: hostAppearanceEnabled }" @click="hostAppearanceEnabled = true">
+                        虚拟人物出镜
+                      </button>
+                    </div>
+                  </div>
+                  <AssetPicker
+                    v-if="hostAppearanceEnabled"
+                    title="数字人形象"
+                    asset-type="IMAGE"
+                    :asset-types="['IMAGE', 'COVER']"
+                    :selected-url="selectedHostUrl"
+                    :selected-name="selectedHostName"
+                    :source-types="['AVATAR_GENERATE', 'USER_UPLOAD', 'MANUAL_CREATED', 'AI_GENERATED']"
+                    :asset-roles="['host_image']"
+                    :role-options="CAR_HOST_IMAGE_ROLE_OPTIONS"
+                    source-hint="选择数字人形象图片，生成时会作为销售顾问或主播参考图"
+                    placeholder="搜索数字人形象或上传图片..."
+                    @select="handleHostImageAssetSelect"
+                  />
+
+                  <details class="reuse-optional-group reuse-nested-group">
+                    <summary>
+                      <span>讲述与声音 <em>可选</em></span>
+                      <small>{{ selectedVoiceName || '默认按口播文案驱动模型；已有音频时再展开配置。' }}</small>
+                    </summary>
+                    <div class="reuse-optional-body">
+                      <AssetPicker
+                        title="口播/配音音频"
+                        asset-type="AUDIO"
+                        :selected-url="selectedVoiceUrl"
+                        :selected-name="selectedVoiceName"
+                        :source-types="['TTS_GENERATE', 'VOICE_SAMPLE', 'USER_UPLOAD']"
+                        :asset-roles="['voiceover', 'reference_audio']"
+                        :role-options="CAR_VOICE_AUDIO_ROLE_OPTIONS"
+                        source-hint="口播音频会作为字幕、节奏和最终音轨的主导来源"
+                        placeholder="搜索口播音频资产..."
+                        @select="handleVoiceAssetSelect"
+                      />
+                      <button v-if="selectedVoice" type="button" class="workflow-mini-button" @click="removeSelected(selectedVoice.asset.assetId)">
+                        不使用口播音频
+                      </button>
+                    </div>
+                  </details>
+
+                  <details class="reuse-optional-group reuse-nested-group">
+                    <summary>
+                      <span>背景音乐 BGM <em>可选</em></span>
+                      <small>{{ selectedBgmName || '只作为背景音乐混入，不参与口播、字幕或口型。' }}</small>
+                    </summary>
+                    <div class="reuse-optional-body">
+                      <AssetPicker
+                        title="背景音乐 BGM"
+                        asset-type="AUDIO"
+                        :selected-url="selectedBgmUrl"
+                        :selected-name="selectedBgmName"
+                        :source-types="['USER_UPLOAD']"
+                        :asset-roles="['bgm']"
+                        :role-options="CAR_BGM_AUDIO_ROLE_OPTIONS"
+                        source-hint="BGM 只作为背景音乐，不参与口播、字幕或口型生成"
+                        placeholder="搜索 BGM 音频资产..."
+                        @select="handleBgmAssetSelect"
+                      />
+                      <button v-if="selectedBgm" type="button" class="workflow-mini-button" @click="removeSelected(selectedBgm.asset.assetId)">
+                        不使用背景音乐
+                      </button>
+                    </div>
+                  </details>
+                </div>
+              </details>
+
+              <details class="reuse-optional-group">
+                <summary>
+                  <span>字幕与大字报 <em>可选</em></span>
+                  <small>默认自动字幕；进入方案确认后可继续调整脚本和分镜。</small>
+                </summary>
+                <div class="reuse-optional-body">
+                  <div class="workflow-static-setting">
+                    <strong>字幕</strong>
+                    <span>自动字幕 / 跟随最终口播语言 / 竖屏销售视频默认样式</span>
+                  </div>
+                </div>
+              </details>
             </section>
           </div>
-
-          <section class="asset-stage-card">
-            <div class="stage-title stage-title--tools">
-              <div>
-                <span>6</span>
-                <h2>选择素材（可选）</h2>
-              </div>
-              <div class="asset-filter-tools">
-                <el-input
-                  v-model="filters.keyword"
-                  clearable
-                  placeholder="搜索文件名、标签、来源"
-                  :prefix-icon="Search"
-                />
-                <el-select v-model="filters.scope">
-                  <el-option label="全部" value="all" />
-                  <el-option label="我的" value="private" />
-                  <el-option label="公共" value="global" />
-                </el-select>
-                <el-button @click="resetFilters">重置</el-button>
-              </div>
-            </div>
-            <div class="asset-type-tabs">
-              <button
-                v-for="category in categories"
-                :key="category.key"
-                type="button"
-                :class="{ active: filters.category === category.key }"
-                @click="filters.category = category.key"
-              >
-                {{ category.label }}
-              </button>
-            </div>
-            <div
-              class="asset-material-grid"
-              :class="{ 'asset-material-grid--packages': filters.category === 'vehicle' }"
-              :aria-busy="loading"
-            >
-              <button type="button" class="upload-tile" @click="router.push({ name: 'AssetCenter' })">
-                <span><el-icon><Upload /></el-icon></span>
-                <strong>创建素材包</strong>
-              </button>
-              <article
-                v-for="item in loading ? 6 : 0"
-                :key="`material-skeleton-${item}`"
-                class="material-card reuse-choice-card--skeleton"
-              >
-                <span class="material-preview"></span>
-                <strong></strong>
-                <small></small>
-              </article>
-              <template v-if="!loading">
-                <button
-                  v-for="asset in visibleAssets"
-                  :key="asset.assetId"
-                  type="button"
-                  :class="[filters.category === 'vehicle' ? 'vehicle-bundle-card' : 'material-card', { selected: isSelected(asset.assetId) }]"
-                  @click="toggleAssetFromCategory(asset, filters.category)"
-                >
-                  <span v-if="filters.category === 'vehicle'" class="vehicle-bundle-preview">
-                    <img v-if="carBundleCoverUrl(asset)" :src="carBundleCoverUrl(asset)" alt="" />
-                    <el-icon v-else><PictureRounded /></el-icon>
-                  </span>
-                  <span v-else class="material-preview">
-                    <img v-if="isVisualAsset(asset) && mediaUrl(asset)" :src="mediaUrl(asset)" alt="" />
-                    <el-icon v-else :size="24"><component :is="activeCategory.icon" /></el-icon>
-                  </span>
-                  <span v-if="filters.category === 'vehicle'" class="vehicle-bundle-body">
-                    <strong>{{ carBundleTitle(asset) }}</strong>
-                    <small>{{ carBundleMeta(asset) }}</small>
-                    <span class="vehicle-bundle-tags">
-                      <em>{{ carBundleImageCount(asset) ? `${carBundleImageCount(asset)} 张图片` : '图片已打包' }}</em>
-                      <em>车型素材包</em>
-                    </span>
-                  </span>
-                  <template v-else>
-                    <strong>{{ asset.fileName }}</strong>
-                    <small>{{ assetTypeLabel(asset.assetType) }}</small>
-                  </template>
-                </button>
-              </template>
-              <el-empty
-                v-if="!loading && visibleAssets.length === 0"
-                class="material-empty"
-                :description="filters.category === 'vehicle' ? '暂无车型素材包，请先在资产中心创建' : '没有找到符合条件的资产'"
-              />
-            </div>
-          </section>
         </main>
 
         <aside class="asset-preview-rail">
@@ -303,7 +309,6 @@
                   <strong>文案</strong>
                   <p>{{ selectedSummary(['voice_script', 'benchmark_json'], '待选择文案') }}</p>
                 </div>
-                <button type="button" @click="filters.category = 'copy'">编辑</button>
               </div>
               <div class="preview-item">
                 <span class="preview-icon indigo"><el-icon><Collection /></el-icon></span>
@@ -311,7 +316,6 @@
                   <strong>分镜</strong>
                   <p>{{ selectedSummary(['storyboard_json'], '待选择分镜') }}</p>
                 </div>
-                <button type="button" @click="filters.category = 'storyboard'">编辑</button>
               </div>
               <div class="preview-item">
                 <span class="preview-icon avatar"><el-icon><User /></el-icon></span>
@@ -319,7 +323,6 @@
                   <strong>数字人</strong>
                   <p>{{ selectedSummary(['host_image', 'host_video'], '不使用数字人') }}</p>
                 </div>
-                <button type="button" @click="filters.category = 'avatar'">编辑</button>
               </div>
               <div class="preview-item">
                 <span class="preview-icon voice"><el-icon><Microphone /></el-icon></span>
@@ -327,7 +330,6 @@
                   <strong>配音</strong>
                   <p>{{ selectedSummary(['voiceover'], '不使用配音') }}</p>
                 </div>
-                <button type="button" @click="filters.category = 'bgm'">编辑</button>
               </div>
               <div class="preview-item">
                 <span class="preview-icon music"><el-icon><Headset /></el-icon></span>
@@ -335,15 +337,13 @@
                   <strong>背景音乐</strong>
                   <p>{{ selectedSummary(['bgm'], '不使用音乐') }}</p>
                 </div>
-                <button type="button" @click="filters.category = 'bgm'">编辑</button>
               </div>
               <div class="preview-item">
                 <span class="preview-icon material"><el-icon><PictureRounded /></el-icon></span>
                 <div>
-                  <strong>素材</strong>
-                  <p>已选择 {{ selectedAssets.length }} 项素材</p>
+                  <strong>车辆素材</strong>
+                  <p>{{ vehicleAssetSummary }}</p>
                 </div>
-                <button type="button" @click="filters.category = 'vehicle'">编辑</button>
               </div>
             </div>
 
@@ -370,6 +370,7 @@
                 >
                   {{ selectedCoverAssetId === item.asset.assetId ? '当前封面' : '设为封面' }}
                 </button>
+                <button v-if="isTextPreviewAsset(item.asset)" type="button" @click="openAssetTextPreview(item.asset, '资产预览')">预览</button>
                 <button type="button" @click="removeSelected(item.asset.assetId)">移除</button>
               </div>
             </div>
@@ -398,7 +399,7 @@
               show-word-limit
               placeholder="补充本次生成目标，例如车型、卖点、门店活动、目标客户"
             />
-            <el-button class="selection-submit" type="primary" :disabled="selectedAssets.length === 0 || planPreviewLoading || planSubmitting" @click="prepareAssetReusePlanPreview">
+            <el-button class="selection-submit" type="primary" :disabled="!canPreparePlan" @click="prepareAssetReusePlanPreview">
               {{ planPreviewLoading ? '方案生成中...' : planSubmitting ? '提交中...' : '进入方案确认' }}
             </el-button>
             <el-button class="save-draft-button" :disabled="selectedAssets.length === 0" @click="saveAssetReuseDraft">保存为草稿</el-button>
@@ -434,24 +435,20 @@
 </template>
 
 <script setup lang="ts">
-import { computed, onMounted, reactive, ref, watch, type Component } from 'vue'
+import { computed, onMounted, reactive, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import {
   Collection,
   Document,
-  Film,
   Finished,
   Headset,
   Microphone,
   PictureRounded,
-  Refresh,
-  Search,
-  Upload,
   User,
   VideoPlay,
 } from '@element-plus/icons-vue'
 import { ElMessage } from 'element-plus'
-import { getAssetTextContent, getAssets, type AssetListScope, type ListAssetsParams } from '../../services/assetApi'
+import { getAssetTextContent } from '../../services/assetApi'
 import { rememberSessionTaskId } from '../../services/sessionTaskStore'
 import {
   getPendingCarSalesPlanTask,
@@ -464,13 +461,17 @@ import { useAuthRequired } from '../../composables/useAuthRequired'
 import type { AssetItem, AssetType } from '../../types/assetTypes'
 import type { QuickRenderAssetRole } from '../../types/videoTypes'
 import {
-  CAR_MODEL_BUNDLE_GROUP,
   assetWorkflowDisplayMeta,
   assetWorkflowDisplayTitle,
   isCarModelBundleAsset,
 } from '../../utils/assetWorkflow'
 import { normalizePublicMediaUrl } from '../../utils/mediaUrl'
 import AiPlanPreviewDrawer from './AiPlanPreviewDrawer.vue'
+import AssetPicker from './AssetPicker.vue'
+import {
+  carModelBundleCoverUrl,
+  carModelBundleDeclaredImageCount,
+} from './carModelBundle'
 import {
   buildQuickRenderRequestFromPlanDraft,
   planAssetFromAssetItem,
@@ -479,19 +480,14 @@ import {
   type CarSalesPlanDraft,
 } from './carSalesPlanDraft'
 
-type AssetReuseCategoryKey = 'vehicle' | 'copy' | 'storyboard' | 'avatar' | 'bgm' | 'video'
-
-interface AssetCategory {
-  key: AssetReuseCategoryKey
-  label: string
-  hint: string
-  icon: Component
-  defaultRole: QuickRenderAssetRole
-}
-
 interface SelectedAsset {
   asset: AssetItem
   role: QuickRenderAssetRole
+}
+
+interface AssetPickerPayload {
+  asset: AssetItem
+  url: string
 }
 
 interface StoredAssetReuseDraft {
@@ -501,18 +497,7 @@ interface StoredAssetReuseDraft {
   selectedAssets: SelectedAsset[]
 }
 
-const MAX_VISIBLE_ASSETS = 80
-const ASSET_REUSE_PAGE_SIZE = 30
 const ASSET_REUSE_DRAFT_STORAGE_KEY = 'huashuo.assetReuseDraft.v1'
-
-const categories: AssetCategory[] = [
-  { key: 'vehicle', label: '车型素材包', hint: '车型图集、卖点、参数', icon: PictureRounded, defaultRole: 'car_model_bundle' },
-  { key: 'copy', label: '文案模板', hint: '口播、卖点、爆款文案', icon: Document, defaultRole: 'voice_script' },
-  { key: 'storyboard', label: '分镜模板', hint: '镜头结构与脚本', icon: Collection, defaultRole: 'storyboard_json' },
-  { key: 'avatar', label: '数字人', hint: '形象、口播视频', icon: User, defaultRole: 'host_image' },
-  { key: 'bgm', label: '背景音乐', hint: 'BGM、口播音频', icon: Headset, defaultRole: 'bgm' },
-  { key: 'video', label: '视频素材', hint: '门店、试驾、参考片段', icon: Film, defaultRole: 'material_video' },
-]
 
 const roleOptions: Array<{ value: QuickRenderAssetRole; label: string }> = [
   { value: 'car_model_bundle', label: '车型素材包' },
@@ -527,25 +512,76 @@ const roleOptions: Array<{ value: QuickRenderAssetRole; label: string }> = [
   { value: 'host_video', label: '数字人口播' },
   { value: 'bgm', label: '背景音乐' },
   { value: 'voiceover', label: '口播音频' },
-  { value: 'material_video', label: '视频素材' },
-  { value: 'reference_video', label: '参考视频' },
-  { value: 'material', label: '普通素材' },
+]
+
+const CAR_MODEL_BUNDLE_ROLE_OPTIONS = [{ value: 'car_model_bundle', label: '车型素材包' }]
+const CAR_STORYBOARD_ROLE_OPTIONS = [{ value: 'storyboard_json', label: '分镜' }]
+const CAR_BENCHMARK_ROLE_OPTIONS = [
+  { value: 'benchmark_json', label: '爆款对标' },
+  { value: 'voice_script', label: '口播文案' },
+]
+const CAR_HOST_IMAGE_ROLE_OPTIONS = [{ value: 'host_image', label: '数字人形象' }]
+const CAR_VOICE_AUDIO_ROLE_OPTIONS = [
+  { value: 'voiceover', label: '口播音频' },
+  { value: 'reference_audio', label: '参考音频' },
+]
+const CAR_BGM_AUDIO_ROLE_OPTIONS = [{ value: 'bgm', label: 'BGM' }]
+const CAR_IMAGE_ROLE_OPTIONS = [
+  { value: 'car_exterior_front', label: '外观正面' },
+  { value: 'car_exterior_side', label: '外观侧面' },
+  { value: 'car_exterior_rear', label: '外观背面' },
+  { value: 'car_exterior_45', label: '外观 45 度' },
+  { value: 'car_interior_dashboard', label: '内饰中控' },
+  { value: 'car_interior_front_seat', label: '内饰前排' },
+  { value: 'car_interior_back_seat', label: '内饰后排' },
+  { value: 'car_detail_light', label: '车灯细节' },
+  { value: 'car_detail_wheel', label: '轮毂细节' },
+  { value: 'car_detail_logo', label: '车标细节' },
+]
+const CAR_SCENE_REFERENCE_ROLES: QuickRenderAssetRole[] = [
+  'scene_showroom',
+  'scene_outdoor',
+  'scene_road',
+  'scene_night',
+]
+const CAR_SCENE_IMAGE_ROLE_OPTIONS = [
+  { value: 'scene_showroom', label: '展厅场景' },
+  { value: 'scene_outdoor', label: '户外场景' },
+  { value: 'scene_road', label: '道路场景' },
+  { value: 'scene_night', label: '夜景/门店' },
+]
+const CAR_VEHICLE_REFERENCE_ROLES: QuickRenderAssetRole[] = CAR_IMAGE_ROLE_OPTIONS.map((item) => item.value as QuickRenderAssetRole)
+const ROLE_LABEL_OPTIONS: Array<{ value: QuickRenderAssetRole; label: string }> = [
+  ...roleOptions,
+  ...CAR_IMAGE_ROLE_OPTIONS.map((item) => ({ value: item.value as QuickRenderAssetRole, label: item.label })),
+  ...CAR_SCENE_IMAGE_ROLE_OPTIONS.map((item) => ({ value: item.value as QuickRenderAssetRole, label: item.label })),
+  ...CAR_VOICE_AUDIO_ROLE_OPTIONS.map((item) => ({ value: item.value as QuickRenderAssetRole, label: item.label })),
+  { value: 'car_interior_steering', label: '方向盘/中控' },
+  { value: 'car_interior_trunk', label: '后备箱' },
+  { value: 'car_detail_sunroof', label: '天窗细节' },
+  { value: 'car_detail_seat_material', label: '座椅材质' },
+  { value: 'scene_material_bundle', label: '场景素材包' },
+  { value: 'subtitle', label: '字幕文件' },
+]
+const SUPPORTED_ASSET_ROLES = new Set(ROLE_LABEL_OPTIONS.map((item) => item.value))
+const ASSET_REUSE_GENERATION_ROLES = new Set<QuickRenderAssetRole>(ROLE_LABEL_OPTIONS.map((item) => item.value))
+const SINGLETON_ROLE_GROUPS: QuickRenderAssetRole[][] = [
+  ['car_model_bundle'],
+  ['storyboard_json'],
+  ['benchmark_json', 'voice_script'],
+  ['host_image', 'host_video'],
+  ['voiceover', 'reference_audio'],
+  ['bgm'],
 ]
 
 const router = useRouter()
 const route = useRoute()
 const { requireAuth } = useAuthRequired()
-const filters = reactive({
-  category: 'vehicle' as AssetReuseCategoryKey,
-  keyword: '',
-  scope: 'private' as AssetListScope,
-})
-const assets = ref<AssetItem[]>([])
 const selectedAssets = ref<SelectedAsset[]>([])
 const selectedCoverAssetId = ref<number | null>(null)
 const draftPrompt = ref('')
-const loading = ref(false)
-const error = ref('')
+const hostAppearanceEnabled = ref(false)
+const carBundleLoadError = ref('')
 const planPreviewOpen = ref(false)
 const planPreviewLoading = ref(false)
 const planSubmitting = ref(false)
@@ -553,8 +589,10 @@ const planPreviewError = ref('')
 const planPreview = ref<AiPlanPreview | null>(null)
 const assetReusePlanDraft = ref<CarSalesPlanDraft | null>(null)
 const currentPendingPlanTaskId = ref('')
+const assetRawTextById = ref<Record<number, string>>({})
 const assetPreviewTextById = ref<Record<number, string>>({})
 const assetPreviewLoadingById = ref<Record<number, boolean>>({})
+const carBundleImageCountById = ref<Record<number, number>>({})
 const assetPreviewDialog = reactive({
   open: false,
   loading: false,
@@ -563,9 +601,6 @@ const assetPreviewDialog = reactive({
   error: '',
 })
 
-const activeCategory = computed(() => categories.find((item) => item.key === filters.category) || categories[0])
-const normalizedKeyword = computed(() => filters.keyword.trim().toLowerCase())
-const visibleAssets = computed(() => categoryAssets(filters.category, MAX_VISIBLE_ASSETS))
 const previewVisualUrl = computed(() => {
   if (selectedCoverAsset.value) {
     return assetCoverPreviewUrl(selectedCoverAsset.value.asset)
@@ -577,97 +612,58 @@ const selectedCoverAsset = computed(() => {
   if (!selectedCoverAssetId.value) return null
   return selectedAssets.value.find((item) => item.asset.assetId === selectedCoverAssetId.value) || null
 })
-
-async function loadAssets() {
-  loading.value = true
-  error.value = ''
-  try {
-    const requests = buildAssetReuseAssetRequests()
-    const settled = await Promise.allSettled(requests.map((params) => getAssets(params)))
-    const loaded = settled.flatMap((item) => item.status === 'fulfilled' ? item.value : [])
-    const failed = settled.find((item) => item.status === 'rejected')
-    if (loaded.length === 0 && failed?.status === 'rejected') {
-      throw failed.reason
-    }
-    assets.value = mergeAssetItems(loaded)
-    restoreAssetReuseDraft()
-    if (failed?.status === 'rejected') {
-      const message = failed.reason instanceof Error ? failed.reason.message : ''
-      error.value = message ? `部分资产加载失败：${message}` : '部分资产加载失败'
-    }
-  } catch (unknownError) {
-    assets.value = []
-    const message = unknownError instanceof Error ? unknownError.message : ''
-    error.value = message.includes('Failed to fetch') ? '资产列表暂时无法加载，请确认后端服务已启动后刷新。' : message || '资产列表加载失败'
-  } finally {
-    loading.value = false
+const selectedCarBundle = computed(() => firstSelectedByRoles(['car_model_bundle']))
+const selectedStoryboard = computed(() => firstSelectedByRoles(['storyboard_json']))
+const selectedBenchmark = computed(() => firstSelectedByRoles(['benchmark_json', 'voice_script']))
+const selectedHost = computed(() => firstSelectedByRoles(['host_image', 'host_video']))
+const selectedVoice = computed(() => firstSelectedByRoles(['voiceover', 'reference_audio']))
+const selectedBgm = computed(() => firstSelectedByRoles(['bgm']))
+const selectedSceneSelections = computed(() => selectedAssets.value.filter((item) => item.role.startsWith('scene_')))
+const selectedVehicleImageSelections = computed(() =>
+  selectedAssets.value.filter((item) => item.role.startsWith('car_') && item.role !== 'car_model_bundle'),
+)
+const firstSceneSelection = computed(() => selectedSceneSelections.value[0] || null)
+const firstVehicleImageSelection = computed(() => selectedVehicleImageSelections.value[0] || null)
+const vehicleAssetSummary = computed(() => {
+  if (selectedCarBundle.value) {
+    return selectedCarBundleName.value
   }
-}
+  const selectedVehicleCount = selectedVehicleImageSelections.value.length + selectedSceneSelections.value.length
+  return selectedVehicleCount ? `已选择 ${selectedVehicleCount} 个车辆/场景素材` : '待选择车辆素材'
+})
+const hasReusableVehicle = computed(() =>
+  Boolean(selectedCarBundle.value || selectedVehicleImageSelections.value.length || selectedSceneSelections.value.length),
+)
+const hasCoreContent = computed(() => Boolean(selectedStoryboard.value || selectedBenchmark.value || draftPrompt.value.trim()))
+const hasAudioOrHost = computed(() => Boolean(selectedHost.value || selectedVoice.value || selectedBgm.value))
+const canPreparePlan = computed(() => hasReusableVehicle.value && !planPreviewLoading.value && !planSubmitting.value)
+const selectedCarBundleUrl = computed(() => selectedAssetUrl(selectedCarBundle.value))
+const selectedCarBundleName = computed(() => selectedCarBundle.value?.asset.fileName || '')
+const selectedCarBundleImageCountText = computed(() => {
+  const asset = selectedCarBundle.value?.asset
+  if (!asset) return '等待选择'
+  const count = carBundleImageCountById.value[asset.assetId] || carBundleImageCount(asset)
+  return count > 0 ? `${count} 张图片已带入` : '图片已打包'
+})
+const selectedStoryboardUrl = computed(() => selectedAssetUrl(selectedStoryboard.value))
+const selectedStoryboardName = computed(() => selectedStoryboard.value?.asset.fileName || '')
+const selectedBenchmarkUrl = computed(() => selectedAssetUrl(selectedBenchmark.value))
+const selectedBenchmarkName = computed(() => selectedBenchmark.value?.asset.fileName || '')
+const selectedHostUrl = computed(() => selectedAssetUrl(selectedHost.value))
+const selectedHostName = computed(() => selectedHost.value?.asset.fileName || '')
+const selectedVoiceUrl = computed(() => selectedAssetUrl(selectedVoice.value))
+const selectedVoiceName = computed(() => selectedVoice.value?.asset.fileName || '')
+const selectedBgmUrl = computed(() => selectedAssetUrl(selectedBgm.value))
+const selectedBgmName = computed(() => selectedBgm.value?.asset.fileName || '')
 
-function buildAssetReuseAssetRequests(): ListAssetsParams[] {
-  const common: ListAssetsParams = {
-    scope: filters.scope,
-    sort: 'createdAtDesc',
-    pageNo: 1,
-    pageSize: ASSET_REUSE_PAGE_SIZE,
-    includePreview: false,
-  }
-  const keyword = filters.keyword.trim()
-  if (keyword) {
-    common.keyword = keyword
-  }
-  return [
-    { ...common, assetType: 'JSON', assetGroup: CAR_MODEL_BUNDLE_GROUP },
-    { ...common, assetType: 'TEXT' },
-    { ...common, assetType: 'JSON' },
-    { ...common, assetType: 'IMAGE' },
-    { ...common, assetType: 'VIDEO' },
-    { ...common, assetType: 'AUDIO' },
-  ]
-}
-
-function mergeAssetItems(items: AssetItem[]) {
-  const byId = new Map<number, AssetItem>()
-  items.forEach((item) => {
-    if (!byId.has(item.assetId)) {
-      byId.set(item.assetId, item)
-    }
-  })
-  return Array.from(byId.values()).sort((a, b) => {
-    const timeA = Date.parse(a.publishedAt || a.createdAt || a.updatedAt || '') || 0
-    const timeB = Date.parse(b.publishedAt || b.createdAt || b.updatedAt || '') || 0
-    return timeB - timeA || b.assetId - a.assetId
-  })
-}
-
-function resetFilters() {
-  filters.category = 'vehicle'
-  filters.keyword = ''
-  filters.scope = 'private'
-  void loadAssets()
-}
-
-function toggleAssetFromCategory(asset: AssetItem, categoryKey: AssetReuseCategoryKey) {
-  const existing = selectedAssets.value.find((item) => item.asset.assetId === asset.assetId)
-  if (existing) {
-    removeSelected(asset.assetId)
+function addSelectedAsset(asset: AssetItem, role: QuickRenderAssetRole, replaceRoles = singletonRolesFor(role)) {
+  if (!ASSET_REUSE_GENERATION_ROLES.has(role)) {
     return
   }
-  const category = categoryByKey(categoryKey)
-  selectedAssets.value.push({
-    asset,
-    role: inferDefaultRole(asset, category),
-  })
-  ensureDefaultCoverAsset(asset)
-}
-
-function toggleAssetWithRole(asset: AssetItem, role: QuickRenderAssetRole) {
-  const existing = selectedAssets.value.find((item) => item.asset.assetId === asset.assetId)
-  if (existing) {
-    removeSelected(asset.assetId)
-    return
-  }
-  selectedAssets.value.push({ asset, role })
+  const next = selectedAssets.value.filter((item) =>
+    item.asset.assetId !== asset.assetId && !replaceRoles.includes(item.role),
+  )
+  selectedAssets.value = [...next, { asset, role }]
   ensureDefaultCoverAsset(asset)
 }
 
@@ -681,6 +677,8 @@ function removeSelected(assetId: number) {
 function clearSelectedAssets() {
   selectedAssets.value = []
   selectedCoverAssetId.value = null
+  hostAppearanceEnabled.value = false
+  carBundleLoadError.value = ''
 }
 
 function setCoverAsset(asset: AssetItem) {
@@ -698,43 +696,134 @@ function firstCoverCandidateId() {
   return candidate?.asset.assetId ?? null
 }
 
-function isSelected(assetId: number) {
-  return selectedAssets.value.some((item) => item.asset.assetId === assetId)
+function firstSelectedByRoles(roles: QuickRenderAssetRole[]) {
+  return selectedAssets.value.find((item) => roles.includes(item.role)) || null
 }
 
-function categoryByKey(categoryKey: AssetReuseCategoryKey) {
-  return categories.find((category) => category.key === categoryKey) || categories[0]
+function selectedAssetUrl(item: SelectedAsset | null) {
+  if (!item) return ''
+  return assetCoverPreviewUrl(item.asset) || normalizePublicMediaUrl(item.asset.fileUrl || '')
 }
 
-function categoryIcon(categoryKey: AssetReuseCategoryKey) {
-  return categoryByKey(categoryKey).icon
+function singletonRolesFor(role: QuickRenderAssetRole) {
+  return SINGLETON_ROLE_GROUPS.find((group) => group.includes(role)) || []
 }
 
-function categoryAssets(categoryKey: AssetReuseCategoryKey, limit = 5) {
-  const keyword = normalizedKeyword.value
-  return assets.value
-    .filter((asset) => matchesCategory(asset, categoryKey))
-    .filter((asset) => !keyword || assetSearchText(asset).includes(keyword))
-    .slice(0, limit)
+function roleLabel(role: QuickRenderAssetRole) {
+  return ROLE_LABEL_OPTIONS.find((item) => item.value === role)?.label || role
 }
 
-watch(
-  () => [
-    ...categoryAssets('copy', 5),
-    ...categoryAssets('storyboard', 5),
-  ].map((asset) => `${asset.assetId}:${asset.updatedAt}`).join('|'),
-  () => {
-    void loadVisibleTextPreviews()
-  },
-  { immediate: true },
-)
+function supportedRole(value: string | null | undefined): QuickRenderAssetRole | '' {
+  const normalized = String(value || '').trim().toLowerCase().replace(/[\s-]+/g, '_')
+  return SUPPORTED_ASSET_ROLES.has(normalized as QuickRenderAssetRole)
+    ? normalized as QuickRenderAssetRole
+    : ''
+}
 
-async function loadVisibleTextPreviews() {
-  const visibleTextAssets = [
-    ...categoryAssets('copy', 5),
-    ...categoryAssets('storyboard', 5),
-  ].filter(isTextPreviewAsset)
-  await Promise.all(visibleTextAssets.map((asset) => ensureAssetPreviewText(asset)))
+function roleFromAsset(asset: AssetItem, fallback: QuickRenderAssetRole) {
+  const metadata = parseMetadata(asset.metadataJson)
+  return supportedRole(metadataText(metadata, 'assetRole')) ||
+    supportedRole(metadataText(metadata, 'role')) ||
+    supportedRole(asset.kind) ||
+    inferFallbackRole(asset, fallback)
+}
+
+async function cacheAssetText(asset: AssetItem) {
+  if (assetRawTextById.value[asset.assetId]) {
+    return assetRawTextById.value[asset.assetId]
+  }
+  const text = await getAssetTextContent(asset)
+  assetRawTextById.value = {
+    ...assetRawTextById.value,
+    [asset.assetId]: text,
+  }
+  assetPreviewTextById.value = {
+    ...assetPreviewTextById.value,
+    [asset.assetId]: normalizeAssetPreviewText(text),
+  }
+  return text
+}
+
+async function handleCarBundleAssetSelect(payload: AssetPickerPayload) {
+  carBundleLoadError.value = ''
+  addSelectedAsset(payload.asset, 'car_model_bundle', ['car_model_bundle'])
+  try {
+    const text = await cacheAssetText(payload.asset)
+    const count = carModelBundleDeclaredImageCount(payload.asset, text)
+    carBundleImageCountById.value = {
+      ...carBundleImageCountById.value,
+      [payload.asset.assetId]: count,
+    }
+    ElMessage.success('已载入车型素材包')
+  } catch (unknownError) {
+    carBundleLoadError.value = unknownError instanceof Error ? unknownError.message : '车型素材包读取失败'
+  }
+}
+
+async function handleStoryboardAssetSelect(payload: AssetPickerPayload) {
+  addSelectedAsset(payload.asset, 'storyboard_json', ['storyboard_json'])
+  try {
+    await cacheAssetText(payload.asset)
+    ElMessage.success('已载入分镜')
+  } catch {
+    ElMessage.warning('分镜预览读取失败，提交时会再次尝试读取')
+  }
+}
+
+async function handleBenchmarkAssetSelect(payload: AssetPickerPayload) {
+  const role = roleFromAsset(payload.asset, 'benchmark_json')
+  addSelectedAsset(payload.asset, role === 'voice_script' ? 'voice_script' : 'benchmark_json', ['benchmark_json', 'voice_script'])
+  try {
+    await cacheAssetText(payload.asset)
+    ElMessage.success('已载入口播文案')
+  } catch {
+    ElMessage.warning('文案预览读取失败，提交时会再次尝试读取')
+  }
+}
+
+function handleSceneImageAssetSelect(payload: AssetPickerPayload) {
+  const role = roleFromAsset(payload.asset, 'scene_showroom')
+  addSelectedAsset(
+    payload.asset,
+    CAR_SCENE_REFERENCE_ROLES.includes(role) ? role : 'scene_showroom',
+    [],
+  )
+}
+
+function handleVehicleImageAssetSelect(payload: AssetPickerPayload) {
+  const role = roleFromAsset(payload.asset, 'car_exterior_front')
+  if (CAR_SCENE_REFERENCE_ROLES.includes(role)) {
+    handleSceneImageAssetSelect(payload)
+    return
+  }
+  addSelectedAsset(
+    payload.asset,
+    CAR_VEHICLE_REFERENCE_ROLES.includes(role) ? role : 'car_exterior_front',
+    [],
+  )
+}
+
+function handleHostImageAssetSelect(payload: AssetPickerPayload) {
+  hostAppearanceEnabled.value = true
+  addSelectedAsset(payload.asset, 'host_image', ['host_image', 'host_video'])
+}
+
+function handleVoiceAssetSelect(payload: AssetPickerPayload) {
+  const role = roleFromAsset(payload.asset, 'voiceover')
+  addSelectedAsset(
+    payload.asset,
+    role === 'reference_audio' ? 'reference_audio' : 'voiceover',
+    ['voiceover', 'reference_audio'],
+  )
+}
+
+function handleBgmAssetSelect(payload: AssetPickerPayload) {
+  addSelectedAsset(payload.asset, 'bgm', ['bgm'])
+}
+
+function disableHostAppearance() {
+  hostAppearanceEnabled.value = false
+  selectedHost.value && removeSelected(selectedHost.value.asset.assetId)
 }
 
 function isTextPreviewAsset(asset: AssetItem) {
@@ -765,21 +854,6 @@ async function ensureAssetPreviewText(asset: AssetItem) {
     delete next[asset.assetId]
     assetPreviewLoadingById.value = next
   }
-}
-
-function assetPreviewExcerpt(asset: AssetItem) {
-  const preview = assetPreviewTextById.value[asset.assetId] || metadataPreviewText(asset)
-  if (preview) {
-    return preview.length > 70 ? `${preview.slice(0, 70)}...` : preview
-  }
-  if (assetPreviewLoadingById.value[asset.assetId]) {
-    return '正在读取开头...'
-  }
-  if (isTextPreviewAsset(asset)) {
-    void ensureAssetPreviewText(asset)
-    return '正在读取开头...'
-  }
-  return '暂无可预览文本'
 }
 
 async function openAssetTextPreview(asset: AssetItem, title: string) {
@@ -876,15 +950,10 @@ function normalizePlainPreviewText(value: string) {
     .trim()
 }
 
-function goToAssetCenter() {
-  void router.push({ name: 'AssetCenter' })
-}
-
 function applyAiCopyPrompt() {
   if (!draftPrompt.value.trim()) {
     draftPrompt.value = '请基于当前车型、门店活动和目标客户生成一条汽车销售口播文案'
   }
-  filters.category = 'copy'
   ElMessage.success('已填入文案生成提示，可继续补充需求')
 }
 
@@ -892,11 +961,12 @@ function saveAssetReuseDraft() {
   if (typeof window === 'undefined' || selectedAssets.value.length === 0) {
     return
   }
+  const generationAssets = selectedAssets.value.filter(isAssetReuseGenerationSelection)
   const draft: StoredAssetReuseDraft = {
     savedAt: new Date().toISOString(),
     draftPrompt: draftPrompt.value,
     selectedCoverAssetId: selectedCoverAssetId.value,
-    selectedAssets: selectedAssets.value,
+    selectedAssets: generationAssets,
   }
   window.localStorage.setItem(ASSET_REUSE_DRAFT_STORAGE_KEY, JSON.stringify(draft))
   ElMessage.success('草稿已保存到本地')
@@ -913,12 +983,15 @@ function restoreAssetReuseDraft() {
   try {
     const draft = JSON.parse(raw) as Partial<StoredAssetReuseDraft>
     const restoredAssets = Array.isArray(draft.selectedAssets)
-      ? draft.selectedAssets.filter((item): item is SelectedAsset => Boolean(item?.asset?.assetId && item.role))
+      ? draft.selectedAssets
+        .filter((item): item is SelectedAsset => Boolean(item?.asset?.assetId && item.role))
+        .filter(isAssetReuseGenerationSelection)
       : []
     if (!restoredAssets.length) {
       return
     }
     selectedAssets.value = restoredAssets
+    hostAppearanceEnabled.value = restoredAssets.some((item) => item.role === 'host_image' || item.role === 'host_video')
     selectedCoverAssetId.value = draft.selectedCoverAssetId ?? firstCoverCandidateId()
     if (typeof draft.draftPrompt === 'string' && !draftPrompt.value.trim()) {
       draftPrompt.value = draft.draftPrompt
@@ -933,9 +1006,19 @@ function selectedSummary(roles: QuickRenderAssetRole[], fallback: string) {
   return selected?.asset.fileName || fallback
 }
 
+function isAssetReuseGenerationSelection(item: SelectedAsset) {
+  return ASSET_REUSE_GENERATION_ROLES.has(item.role)
+}
+
 async function prepareAssetReusePlanPreview() {
   if (!requireAuth('登录后可生成资产复用视频')) return
-  if (selectedAssets.value.length === 0 || planPreviewLoading.value || planSubmitting.value) return
+  if (!canPreparePlan.value) {
+    planPreviewError.value = hasReusableVehicle.value ? '' : '请先选择车型素材包或车辆素材。'
+    if (planPreviewError.value) {
+      ElMessage.warning(planPreviewError.value)
+    }
+    return
+  }
   planPreviewOpen.value = true
   planPreviewLoading.value = true
   planPreviewError.value = ''
@@ -982,7 +1065,8 @@ function restoreAssetReusePendingPlanFromRoute() {
 }
 
 async function buildAssetReusePlanDraft(): Promise<CarSalesPlanDraft> {
-  const assets = await Promise.all(selectedAssets.value.map(async (item) => {
+  const generationSelections = selectedAssets.value.filter(isAssetReuseGenerationSelection)
+  const assets = await Promise.all(generationSelections.map(async (item) => {
     let textContent = ''
     if (item.asset.assetType === 'TEXT' || item.asset.assetType === 'JSON') {
       try {
@@ -994,7 +1078,7 @@ async function buildAssetReusePlanDraft(): Promise<CarSalesPlanDraft> {
     return planAssetFromAssetItem(item.asset, item.role, textContent)
   }))
   const hasVehicle = assets.some((asset) => asset.role === 'car_model_bundle' || asset.role.startsWith('car_') || asset.role.startsWith('scene_'))
-  const scriptAsset = assets.find((asset) => asset.role === 'voice_script' && asset.textContent)
+  const scriptAsset = assets.find((asset) => (asset.role === 'voice_script' || asset.role === 'benchmark_json') && asset.textContent)
   const storyboardAsset = assets.find((asset) => asset.role === 'storyboard_json' && asset.textContent)
   const prompt = draftPrompt.value.trim() || [
     '复用已选资产生成一条汽车销售视频',
@@ -1018,11 +1102,15 @@ async function buildAssetReusePlanDraft(): Promise<CarSalesPlanDraft> {
     nativeVoiceStyle: 'natural_sales',
     nativeSpeechStyle: 'balanced',
     burnInSubtitle: true,
-    audioPolicy: selectedAssets.value.some((item) => item.role === 'bgm') ? 'bgm' : 'auto',
+    audioPolicy: generationSelections.some((item) => item.role === 'voiceover' || item.role === 'reference_audio')
+      ? 'voiceover'
+      : generationSelections.some((item) => item.role === 'bgm')
+        ? 'bgm'
+        : 'auto',
     model: 'auto',
     segmentCount: 3,
     segmentDuration: 5,
-    hostAppearanceEnabled: selectedAssets.value.some((item) => item.role === 'host_image' || item.role === 'host_video'),
+    hostAppearanceEnabled: hostAppearanceEnabled.value && generationSelections.some((item) => item.role === 'host_image' || item.role === 'host_video'),
     configItems: [
       '资产中心复用',
       `${assets.length} 个素材`,
@@ -1092,48 +1180,23 @@ async function confirmAssetReusePlan() {
   }
 }
 
-function matchesCategory(asset: AssetItem, category: AssetReuseCategoryKey) {
+function inferFallbackRole(asset: AssetItem, fallback: QuickRenderAssetRole): QuickRenderAssetRole {
   const text = assetSearchText(asset)
-  if (category === 'vehicle') {
-    return isCarModelBundleAsset(asset)
-  }
-  if (category === 'copy') {
-    return ['TEXT', 'JSON'].includes(asset.assetType) && hasAny(text, ['script', 'copy', '文案', '口播', '爆款', 'douyin'])
-  }
-  if (category === 'storyboard') {
-    return asset.assetType === 'JSON' && hasAny(text, ['storyboard', '分镜', '镜头'])
-  }
-  if (category === 'avatar') {
-    return ['IMAGE', 'VIDEO'].includes(asset.assetType) && hasAny(text, ['avatar', '数字人', 'host', '主播'])
-  }
-  if (category === 'bgm') {
-    return asset.assetType === 'AUDIO'
-  }
-  if (category === 'video') {
-    return asset.assetType === 'VIDEO' && !hasAny(text, ['avatar', '数字人', 'host'])
-  }
-  return true
-}
-
-function inferDefaultRole(asset: AssetItem, category: AssetCategory): QuickRenderAssetRole {
-  const text = assetSearchText(asset)
-  if (category.key === 'vehicle') return 'car_model_bundle'
-  if (category.key === 'copy' && hasAny(text, ['benchmark', '爆款', 'douyin'])) return 'benchmark_json'
-  if (category.key === 'avatar' && asset.assetType === 'VIDEO') return 'host_video'
-  if (category.key === 'bgm' && hasAny(text, ['voice', '口播', 'tts'])) return 'voiceover'
-  if (category.key === 'video' && hasAny(text, ['reference', '参考', '对标'])) return 'reference_video'
-  return category.defaultRole
+  if ((fallback === 'benchmark_json' || fallback === 'voice_script') && hasAny(text, ['benchmark', '爆款', 'douyin'])) return 'benchmark_json'
+  if ((fallback === 'voiceover' || fallback === 'reference_audio') && hasAny(text, ['voice', '口播', 'tts'])) return 'voiceover'
+  if ((fallback === 'host_image' || fallback === 'host_video') && asset.assetType === 'VIDEO') return 'host_video'
+  return fallback
 }
 
 function isVisualAsset(asset: AssetItem) {
   return ['IMAGE', 'COVER'].includes(asset.assetType)
 }
 
-function mediaUrl(asset: AssetItem) {
-  return assetCoverPreviewUrl(asset)
-}
-
 function assetCoverPreviewUrl(asset: AssetItem) {
+  if (isCarModelBundleAsset(asset)) {
+    const bundleCover = carModelBundleCoverUrl(asset, assetRawTextById.value[asset.assetId], normalizePublicMediaUrl)
+    if (bundleCover) return bundleCover
+  }
   const metadata = parseMetadata(asset.metadataJson)
   const url = asset.thumbnailUrl
     || metadataText(metadata, 'thumbnailUrl')
@@ -1143,30 +1206,15 @@ function assetCoverPreviewUrl(asset: AssetItem) {
   return url ? normalizePublicMediaUrl(url) : ''
 }
 
-function carBundleTitle(asset: AssetItem) {
-  return assetWorkflowDisplayTitle(asset).replace(/^车型素材包[:：]\s*/, '') || asset.fileName.replace(/-?车型素材包\.json$/i, '')
-}
-
-function carBundleMeta(asset: AssetItem) {
-  const metadata = parseMetadata(asset.metadataJson)
-  const color = metadataText(metadata, 'color')
-  const groupMeta = assetWorkflowDisplayMeta(asset)
-  return [color, groupMeta || sourceLabel(asset), formatDate(asset.updatedAt || asset.createdAt)].filter(Boolean).join(' · ')
-}
-
 function carBundleImageCount(asset: AssetItem) {
+  const declaredCount = carModelBundleDeclaredImageCount(asset, assetRawTextById.value[asset.assetId])
+  if (declaredCount) return declaredCount
   const metadata = parseMetadata(asset.metadataJson)
   const ids = metadata?.componentAssetIds
   if (Array.isArray(ids)) {
     return ids.length
   }
   return numberMetadata(metadata, 'imageCount') || numberMetadata(metadata, 'componentCount') || 0
-}
-
-function carBundleCoverUrl(asset: AssetItem) {
-  const metadata = parseMetadata(asset.metadataJson)
-  const url = metadataText(metadata, 'coverUrl') || metadataText(metadata, 'thumbnailUrl') || metadataText(metadata, 'previewUrl') || asset.thumbnailUrl || ''
-  return url ? normalizePublicMediaUrl(url) : ''
 }
 
 function assetTypeLabel(type: AssetType) {
@@ -1179,18 +1227,6 @@ function assetTypeLabel(type: AssetType) {
     JSON: 'JSON',
   }
   return map[type] || type
-}
-
-function sourceLabel(asset: AssetItem) {
-  return asset.assetGroup || asset.sourceType || '素材'
-}
-
-function formatDate(value?: string | null) {
-  if (!value) return '暂无时间'
-  const date = new Date(value.includes('T') ? value : value.replace(' ', 'T'))
-  if (Number.isNaN(date.getTime())) return '暂无时间'
-  const pad = (n: number) => String(n).padStart(2, '0')
-  return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}`
 }
 
 function assetSearchText(asset: AssetItem) {
@@ -1243,19 +1279,12 @@ function numberMetadata(record: Record<string, unknown> | null, key: string) {
 }
 
 watch(
-  () => filters.scope,
-  () => {
-    void loadAssets()
-  },
-)
-
-watch(
   () => route.query.planDraftId,
   () => restoreAssetReusePendingPlanFromRoute(),
   { immediate: true },
 )
 
-onMounted(loadAssets)
+onMounted(restoreAssetReuseDraft)
 </script>
 
 <style scoped>
@@ -1430,6 +1459,7 @@ onMounted(loadAssets)
 .asset-stage-card,
 .plan-preview-card,
 .video-preview-card {
+  min-width: 0;
   border: 1px solid #dfe7f3;
   border-radius: 10px;
   background: #fff;
@@ -1470,6 +1500,365 @@ onMounted(loadAssets)
 
 .stage-title .link-action {
   margin-left: auto;
+}
+
+.workflow-overview-card {
+  display: grid;
+  gap: 14px;
+}
+
+.workflow-heading {
+  align-items: flex-start;
+  margin-bottom: 0;
+}
+
+.workflow-heading p {
+  margin: 6px 0 0;
+  color: #667085;
+  font-size: 13px;
+  font-weight: 650;
+  line-height: 1.6;
+}
+
+.reuse-workflow-strip {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 12px;
+  border: 1px solid #dfe7f3;
+  border-radius: 8px;
+  background: #fbfcff;
+  padding: 10px;
+}
+
+.reuse-workflow-strip span {
+  display: flex;
+  min-width: 0;
+  align-items: center;
+  gap: 8px;
+  border-radius: 7px;
+  background: #f1f5fb;
+  color: #475569;
+  padding: 10px 12px;
+  font-size: 13px;
+  font-weight: 900;
+}
+
+.reuse-workflow-strip span.active {
+  background: #eef4ff;
+  color: #1261ff;
+}
+
+.reuse-workflow-strip strong {
+  display: grid;
+  width: 24px;
+  height: 24px;
+  flex: 0 0 auto;
+  place-items: center;
+  border-radius: 999px;
+  background: #6b73ff;
+  color: #fff;
+  font-size: 13px;
+  line-height: 1;
+}
+
+.reuse-workflow-grid {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  gap: 16px;
+  align-items: start;
+}
+
+.reuse-workflow-module {
+  display: grid;
+  min-width: 0;
+  gap: 14px;
+}
+
+.workflow-module-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 14px;
+}
+
+.workflow-module-head h2 {
+  margin: 0;
+  color: #101828;
+  font-size: 18px;
+  font-weight: 900;
+  line-height: 1.25;
+}
+
+.workflow-module-head p {
+  margin: 6px 0 0;
+  color: #667085;
+  font-size: 13px;
+  font-weight: 650;
+  line-height: 1.55;
+}
+
+.workflow-badge {
+  display: inline-flex;
+  min-height: 24px;
+  flex: 0 0 auto;
+  align-items: center;
+  border-radius: 999px;
+  padding: 0 10px;
+  font-size: 12px;
+  font-weight: 900;
+}
+
+.workflow-badge.required {
+  background: #dcfce7;
+  color: #15803d;
+}
+
+.workflow-badge.core {
+  background: #e0f2fe;
+  color: #0369a1;
+}
+
+.workflow-status {
+  display: grid;
+  gap: 4px;
+  border: 1px solid #bbf7d0;
+  border-radius: 8px;
+  background: #f0fdf4;
+  color: #166534;
+  padding: 10px 12px;
+}
+
+.workflow-status.error {
+  border-color: #fecaca;
+  background: #fff1f2;
+  color: #b42318;
+}
+
+.workflow-status strong {
+  font-size: 13px;
+  font-weight: 900;
+}
+
+.workflow-status span {
+  font-size: 12.5px;
+  font-weight: 650;
+  line-height: 1.5;
+}
+
+.reuse-optional-group {
+  border: 1px solid #e3eaf5;
+  border-radius: 8px;
+  background: #fbfcff;
+}
+
+.reuse-optional-group + .reuse-optional-group {
+  margin-top: 0;
+}
+
+.reuse-optional-group summary {
+  display: grid;
+  grid-template-columns: minmax(150px, auto) minmax(0, 1fr) auto;
+  gap: 12px;
+  align-items: center;
+  min-height: 48px;
+  padding: 0 14px;
+  cursor: pointer;
+  list-style: none;
+}
+
+.reuse-optional-group summary::-webkit-details-marker {
+  display: none;
+}
+
+.reuse-optional-group summary::after {
+  display: inline-flex;
+  min-height: 24px;
+  align-items: center;
+  justify-content: center;
+  border-radius: 999px;
+  background: #eef4ff;
+  color: #1261ff;
+  padding: 0 10px;
+  content: '展开';
+  font-size: 12px;
+  font-weight: 900;
+}
+
+.reuse-optional-group[open] > summary::after {
+  content: '收起';
+}
+
+.reuse-optional-group summary span {
+  color: #101828;
+  font-size: 14px;
+  font-weight: 900;
+}
+
+.reuse-optional-group summary em {
+  display: inline-flex;
+  margin-left: 6px;
+  border-radius: 999px;
+  background: #f1f5f9;
+  color: #64748b;
+  padding: 2px 6px;
+  font-size: 11px;
+  font-style: normal;
+  font-weight: 900;
+}
+
+.reuse-optional-group summary small {
+  overflow: hidden;
+  color: #667085;
+  font-size: 12.5px;
+  font-weight: 650;
+  line-height: 1.5;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.reuse-optional-body {
+  display: grid;
+  gap: 12px;
+  border-top: 1px solid #e7edf7;
+  padding: 14px;
+}
+
+.reuse-nested-group {
+  background: #fff;
+}
+
+.module-selected-list {
+  display: grid;
+  gap: 8px;
+}
+
+.module-selected-list article {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  gap: 10px;
+  align-items: center;
+  border: 1px solid #e7edf7;
+  border-radius: 8px;
+  background: #fff;
+  padding: 9px 10px;
+}
+
+.module-selected-list span {
+  display: inline-flex;
+  min-height: 24px;
+  align-items: center;
+  border-radius: 999px;
+  background: #eef4ff;
+  color: #1261ff;
+  padding: 0 8px;
+  font-size: 12px;
+  font-weight: 900;
+}
+
+.module-selected-list strong {
+  overflow: hidden;
+  color: #101828;
+  font-size: 13px;
+  font-weight: 850;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.module-selected-list button,
+.workflow-mini-button {
+  min-height: 30px;
+  border: 1px solid #dbe5f5;
+  border-radius: 6px;
+  background: #fff;
+  color: #1261ff;
+  padding: 0 10px;
+  font-size: 12px;
+  font-weight: 850;
+  cursor: pointer;
+}
+
+.workflow-prompt-box {
+  display: grid;
+  gap: 10px;
+  border: 1px solid #e3eaf5;
+  border-radius: 8px;
+  background: #fbfcff;
+  padding: 12px;
+}
+
+.workflow-prompt-box > div {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.workflow-prompt-box strong {
+  color: #101828;
+  font-size: 14px;
+  font-weight: 900;
+}
+
+.workflow-prompt-box :deep(.el-textarea__inner) {
+  border-radius: 8px;
+  font-weight: 650;
+}
+
+.workflow-toggle-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.workflow-toggle-row > span {
+  color: #344054;
+  font-size: 13px;
+  font-weight: 900;
+}
+
+.workflow-toggle-row > div {
+  display: flex;
+  gap: 8px;
+}
+
+.workflow-toggle-row button {
+  min-height: 34px;
+  border: 1px solid #dbe5f5;
+  border-radius: 7px;
+  background: #fff;
+  color: #334155;
+  padding: 0 14px;
+  font-size: 13px;
+  font-weight: 850;
+  cursor: pointer;
+}
+
+.workflow-toggle-row button.active {
+  border-color: #1261ff;
+  background: #eef4ff;
+  color: #1261ff;
+}
+
+.workflow-static-setting {
+  display: grid;
+  gap: 4px;
+  border: 1px solid #e7edf7;
+  border-radius: 8px;
+  background: #fff;
+  padding: 10px 12px;
+}
+
+.workflow-static-setting strong {
+  color: #101828;
+  font-size: 13px;
+  font-weight: 900;
+}
+
+.workflow-static-setting span {
+  color: #667085;
+  font-size: 12.5px;
+  font-weight: 650;
 }
 
 .link-action,
@@ -2287,12 +2676,44 @@ onMounted(loadAssets)
     margin-left: 0;
   }
 
+  .reuse-workflow-grid,
   .asset-card-row,
   .asset-card-row--story,
   .asset-option-grid,
   .asset-material-grid,
+  .asset-material-grid--packages,
+  .compact-choice-row,
   .asset-preview-rail {
     grid-template-columns: 1fr;
+  }
+
+  .reuse-workflow-strip {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .workflow-module-head,
+  .workflow-prompt-box > div,
+  .workflow-toggle-row {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .workflow-toggle-row > div {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .reuse-optional-group summary {
+    grid-template-columns: minmax(0, 1fr) auto;
+    min-height: 58px;
+    padding: 9px 12px;
+  }
+
+  .reuse-optional-group summary small {
+    grid-column: 1 / -1;
+    overflow: visible;
+    text-overflow: clip;
+    white-space: normal;
   }
 
   .asset-filter-tools {
@@ -2302,6 +2723,72 @@ onMounted(loadAssets)
   .asset-filter-tools :deep(.el-input),
   .asset-filter-tools :deep(.el-select) {
     width: 100%;
+  }
+}
+
+@media (max-width: 640px) {
+  .asset-reuse-page {
+    width: calc(100% - 20px);
+    margin-top: 14px;
+  }
+
+  .asset-stage-card,
+  .plan-preview-card,
+  .video-preview-card {
+    padding: 14px;
+  }
+
+  .asset-reuse-head h1 {
+    font-size: 28px;
+  }
+
+  .reuse-workflow-strip {
+    gap: 8px;
+    padding: 8px;
+  }
+
+  .reuse-workflow-strip span {
+    align-items: flex-start;
+    padding: 8px;
+    font-size: 12px;
+    line-height: 1.35;
+  }
+
+  .workflow-module-head h2 {
+    font-size: 17px;
+  }
+
+  .module-selected-list article,
+  .reuse-shot-card,
+  .asset-stage-card--copy .reuse-choice-card,
+  .vehicle-bundle-card {
+    grid-template-columns: 1fr;
+  }
+
+  .module-selected-list button,
+  .workflow-mini-button,
+  .reuse-card-actions button {
+    width: 100%;
+  }
+
+  .reuse-shot-card .reuse-card-excerpt,
+  .reuse-shot-card .reuse-card-actions,
+  .reuse-shot-card small,
+  .asset-card-row--story .reuse-card-actions,
+  .asset-stage-card--copy .reuse-card-actions,
+  .asset-stage-card--copy .reuse-choice-card small {
+    grid-row: auto;
+    grid-column: auto;
+  }
+
+  .shot-thumb,
+  .vehicle-bundle-preview {
+    width: 100%;
+  }
+
+  .vehicle-bundle-body strong,
+  .vehicle-bundle-body small {
+    white-space: normal;
   }
 }
 </style>

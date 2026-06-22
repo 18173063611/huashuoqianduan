@@ -306,11 +306,43 @@ export function buildQuickRenderRequestFromPlanDraft(
 }
 
 function buildPlanAssetRoleBindings(draft: CarSalesPlanDraft): CarSalesAssetRoleBinding[] {
-  return draft.assets.flatMap((asset) =>
-    asset.role === 'car_model_bundle'
-      ? buildCarModelBundleAssetRoleBindings(asset, asset.textContent)
-      : [],
-  )
+  return dedupePlanAssetRoleBindings(draft.assets.flatMap((asset) => {
+    if (asset.role === 'car_model_bundle') {
+      return buildCarModelBundleAssetRoleBindings(asset, asset.textContent)
+    }
+    const binding = planAssetRoleBinding(asset)
+    return binding ? [binding] : []
+  }))
+}
+
+function planAssetRoleBinding(asset: CarSalesPlanDraftAsset): CarSalesAssetRoleBinding | null {
+  const url = asset.fileUrl || asset.thumbnailUrl || ''
+  if (!url && !asset.assetId) {
+    return null
+  }
+  return {
+    assetId: asset.assetId,
+    url: url || undefined,
+    assetType: String(asset.assetType || ''),
+    assetRole: asset.role,
+    label: roleLabel(asset.role) || asset.fileName,
+  }
+}
+
+function dedupePlanAssetRoleBindings(bindings: CarSalesAssetRoleBinding[]) {
+  const seen = new Set<string>()
+  return bindings.filter((binding) => {
+    const key = [
+      binding.assetId || '',
+      binding.url || '',
+      binding.assetRole || '',
+    ].join('|')
+    if (seen.has(key)) {
+      return false
+    }
+    seen.add(key)
+    return true
+  })
 }
 
 function planBindingImageUrls(bindings: CarSalesAssetRoleBinding[], sceneOnly: boolean) {
@@ -554,6 +586,25 @@ function audioPolicyLabel(policy: CarSalesPlanDraft['audioPolicy']) {
 
 function roleLabel(role: QuickRenderAssetRole) {
   const labels: Partial<Record<QuickRenderAssetRole, string>> = {
+    car_exterior_front: '车辆主图',
+    car_exterior_side: '车辆侧面',
+    car_exterior_rear: '车辆尾部',
+    car_exterior_45: '外观45度',
+    car_interior_dashboard: '内饰中控',
+    car_interior_front_seat: '前排内饰',
+    car_interior_back_seat: '后排内饰',
+    car_interior_steering: '方向盘/中控',
+    car_interior_trunk: '后备箱',
+    car_detail_sunroof: '天窗细节',
+    car_detail_light: '车灯细节',
+    car_detail_wheel: '轮毂细节',
+    car_detail_logo: '车标细节',
+    car_detail_seat_material: '座椅材质',
+    scene_showroom: '展厅场景',
+    scene_outdoor: '户外场景',
+    scene_road: '道路场景',
+    scene_night: '夜景/门店',
+    scene_material_bundle: '场景素材包',
     voice_script: '文案',
     storyboard_json: '分镜',
     benchmark_json: '爆款对标',
@@ -561,6 +612,8 @@ function roleLabel(role: QuickRenderAssetRole) {
     host_video: '数字人口播',
     bgm: '背景音乐',
     voiceover: '口播音频',
+    reference_audio: '参考音频',
+    subtitle: '字幕文件',
     material_video: '视频素材',
     reference_video: '参考视频',
     car_model_bundle: '车型素材包',
