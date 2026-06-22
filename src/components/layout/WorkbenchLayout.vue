@@ -736,8 +736,11 @@ watch(
 
 @media (max-width: 640px) {
   .app-topbar-actions {
+    width: 100%;
+    flex-wrap: wrap;
+    justify-content: flex-start;
     gap: 8px;
-    margin-left: 12px;
+    margin-left: 0;
   }
 
   .app-assets-nav-btn span,

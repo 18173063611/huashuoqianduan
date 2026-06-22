@@ -1642,3 +1642,119 @@ body :is(.admin-filter, .admin-users-filter, .activation-filter) .el-date-editor
     flex-basis: 198px;
   }
 }
+
+@media (max-width: 900px) {
+  .app-shell {
+    display: block;
+    min-width: 0;
+  }
+
+  .app-sidebar {
+    position: relative;
+    top: auto;
+    width: 100%;
+    height: auto;
+    min-height: 0;
+    flex-basis: auto;
+    border-right: 0;
+    border-bottom: 1px solid #e6ecf7;
+    padding: 14px 16px;
+    box-shadow: none;
+  }
+
+  .app-brand {
+    min-height: auto;
+    margin-bottom: 12px;
+    padding-bottom: 12px;
+  }
+
+  .app-brand small {
+    max-width: none;
+    white-space: normal;
+  }
+
+  .app-menu {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 8px;
+    overflow: visible;
+    padding-right: 0;
+  }
+
+  .app-menu-section {
+    min-width: 0;
+  }
+
+  .app-sidebar-user-wrap {
+    margin-top: 12px;
+  }
+
+  .app-main {
+    min-height: auto;
+  }
+
+  .app-topbar {
+    min-height: auto;
+    align-items: center;
+    justify-content: flex-start;
+    padding: 10px 16px;
+  }
+
+  .app-topbar-actions {
+    width: 100%;
+    flex-wrap: wrap;
+    justify-content: flex-start;
+    gap: 8px;
+    margin-left: 0;
+  }
+
+  .app-hero,
+  .app-project-toolbar,
+  .app-grid,
+  .app-project-current,
+  .script-workspace,
+  .app-page-stack,
+  .app-flow,
+  .app-acceptance,
+  .app-project-error {
+    width: calc(100% - 24px);
+  }
+}
+
+@media (max-width: 640px) {
+  .app-sidebar {
+    padding: 12px;
+  }
+
+  .app-brand {
+    gap: 10px;
+  }
+
+  .app-menu {
+    grid-template-columns: 1fr;
+  }
+
+  .app-topbar {
+    padding: 8px 12px;
+  }
+
+  .app-topbar-actions {
+    gap: 8px;
+    margin-left: 0;
+  }
+
+  .app-user-menu-name {
+    max-width: 80px;
+  }
+
+  .app-hero,
+  .app-project-toolbar,
+  .app-grid,
+  .app-project-current,
+  .script-workspace,
+  .app-page-stack,
+  .app-flow,
+  .app-acceptance,
+  .app-project-error {
+    width: calc(100% - 20px);
+  }
+}

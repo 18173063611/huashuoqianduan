@@ -541,7 +541,7 @@ const route = useRoute()
 const { isLoggedIn, requireAuth } = useAuthRequired()
 const carSalesPreferences = loadCarSalesPreferences()
 const RECENT_GENERATION_TASK_TYPES = new Set(['QUICK_RENDER', 'SEEDANCE_CAR_SALES_VIDEO'])
-const RECENT_GENERATION_LIMIT = 6
+const RECENT_GENERATION_LIMIT = 5
 const HIDDEN_RECENT_GENERATION_STATUSES = new Set(['FAILED', 'RETRYABLE', 'CANCELED'])
 
 const roleOptions: Array<{ value: QuickRenderAssetRole; label: string }> = [
@@ -6038,6 +6038,121 @@ onBeforeUnmount(stopAllTracking)
 
   .quick-bundle-select {
     grid-template-columns: 36px minmax(0, 1fr) auto;
+  }
+}
+
+@media (min-width: 901px) {
+  .quick-recent-list {
+    grid-template-columns: repeat(5, minmax(0, 1fr));
+  }
+}
+
+@media (max-width: 900px) {
+  .quick-render-page.quick-render-page--embedded {
+    gap: 16px;
+  }
+
+  .quick-compose-card {
+    border-radius: 14px;
+    padding: 14px;
+  }
+
+  .quick-compose-card .quick-source-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .quick-upload {
+    width: 100%;
+  }
+
+  .quick-control-bar {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .quick-control-field,
+  .quick-drawer-button,
+  .quick-generate-button {
+    width: 100%;
+    min-width: 0;
+  }
+
+  .quick-generate-button,
+  .quick-credit-line {
+    grid-column: 1 / -1;
+  }
+
+  .quick-credit-line {
+    justify-self: stretch;
+    text-align: left;
+  }
+
+  .quick-template-strip,
+  .quick-recent-list {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .quick-template-strip button {
+    min-width: 0;
+    height: auto;
+    min-height: 118px;
+    padding: 14px;
+  }
+
+  .quick-section-head {
+    flex-flow: row wrap;
+    align-items: center;
+  }
+
+  .quick-recent-toolbar {
+    margin-left: auto;
+  }
+
+  .quick-recent-main p {
+    display: -webkit-box;
+    overflow: hidden;
+    white-space: normal;
+    -webkit-box-orient: vertical;
+    -webkit-line-clamp: 2;
+  }
+}
+
+@media (max-width: 640px) {
+  .quick-compose-card .quick-source-grid,
+  .quick-template-strip,
+  .quick-recent-list {
+    grid-template-columns: 1fr;
+  }
+
+  .quick-control-bar {
+    grid-template-columns: 1fr;
+  }
+
+  .quick-template-strip button {
+    grid-template-columns: 42px minmax(0, 1fr);
+  }
+
+  .quick-bundle-select {
+    grid-template-columns: 36px minmax(0, 1fr);
+  }
+
+  .quick-bundle-select-action {
+    grid-column: 1 / -1;
+    width: 100%;
+  }
+
+  .quick-recent-side {
+    min-height: auto;
+    padding-top: 8px;
+  }
+
+  .quick-recent-buttons,
+  .quick-recent-buttons .app-secondary-button {
+    width: 100%;
+  }
+
+  .quick-recent-buttons .app-secondary-button {
+    justify-content: center;
   }
 }
 </style>

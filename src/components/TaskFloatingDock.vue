@@ -306,8 +306,7 @@ function togglePanel(panel: Exclude<ActivePanel, null>) {
 
 @media (max-width: 720px) {
   .task-dock-fab-stack {
-    right: max(12px, calc(100vw - 100dvw + 12px));
-    bottom: 12px;
+    display: none;
   }
 
   .task-dock-sheet,
