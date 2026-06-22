@@ -1848,10 +1848,10 @@ async function importSelectedRenderParameters() {
   })
   closeResultModal({ preserveRouteTaskQuery: true })
   await router.push({
-    name: 'render',
+    name: 'asset-reuse',
     query: { importTask: String(task.taskId) },
   })
-  ElMessage.success('已导入到视频制作，请检查参数后重新生成')
+  ElMessage.success('已导入到资产复用创作，请检查参数后重新生成')
 }
 
 function parseJsonObject(value: string | null | undefined) {

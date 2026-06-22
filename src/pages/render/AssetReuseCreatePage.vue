@@ -448,8 +448,12 @@ import {
   VideoPlay,
 } from '@element-plus/icons-vue'
 import { ElMessage } from 'element-plus'
-import { getAssetTextContent } from '../../services/assetApi'
+import { getAssetDetail, getAssetTextContent } from '../../services/assetApi'
 import { rememberSessionTaskId } from '../../services/sessionTaskStore'
+import {
+  consumePendingRenderTaskImport,
+  readRenderTaskSnapshot,
+} from '../../services/renderTaskImport'
 import {
   getPendingCarSalesPlanTask,
   newPendingCarSalesPlanTaskId,
@@ -477,6 +481,7 @@ import {
   planAssetFromAssetItem,
   prepareCarSalesAiPlanPreview,
   type AiPlanPreview,
+  type AiPlanStoryboardShot,
   type CarSalesPlanDraft,
 } from './carSalesPlanDraft'
 
@@ -495,6 +500,23 @@ interface StoredAssetReuseDraft {
   draftPrompt: string
   selectedCoverAssetId: number | null
   selectedAssets: SelectedAsset[]
+}
+
+interface ImportedRenderConfig {
+  aspectRatio?: CarSalesPlanDraft['aspectRatio']
+  subtitleMode?: CarSalesPlanDraft['subtitleMode']
+  subtitleLanguage?: string
+  nativeVoiceLanguage?: string
+  nativeVoiceStyle?: string
+  nativeSpeechStyle?: string
+  burnInSubtitle?: boolean
+  audioPolicy?: CarSalesPlanDraft['audioPolicy']
+  model?: string
+  segmentCount?: number
+  segmentDuration?: number
+  hostAppearanceEnabled?: boolean
+  headlineOverlay?: CarSalesPlanDraft['headlineOverlay']
+  subtitleOverlay?: CarSalesPlanDraft['subtitleOverlay']
 }
 
 const ASSET_REUSE_DRAFT_STORAGE_KEY = 'huashuo.assetReuseDraft.v1'
@@ -588,6 +610,9 @@ const planSubmitting = ref(false)
 const planPreviewError = ref('')
 const planPreview = ref<AiPlanPreview | null>(null)
 const assetReusePlanDraft = ref<CarSalesPlanDraft | null>(null)
+const importedRenderConfig = ref<ImportedRenderConfig>({})
+const importedScriptText = ref('')
+const importedStoryboard = ref<AiPlanStoryboardShot[]>([])
 const currentPendingPlanTaskId = ref('')
 const assetRawTextById = ref<Record<number, string>>({})
 const assetPreviewTextById = ref<Record<number, string>>({})
@@ -1001,6 +1026,187 @@ function restoreAssetReuseDraft() {
   }
 }
 
+async function restoreAssetReuseImportFromTask() {
+  const taskId = importTaskIdFromRoute()
+  if (!taskId) {
+    return false
+  }
+  const record = consumePendingRenderTaskImport(taskId) || readRenderTaskSnapshot(taskId)
+  const input = asRecord(record?.input)
+  if (!input) {
+    return false
+  }
+
+  const assetIds = collectImportedAssetIds(input)
+  const roleMap = asRecord(input.assetRoles) || {}
+  const textContents = asRecord(input.assetTextContents) || {}
+  const importedSelections: SelectedAsset[] = []
+  const importedRawText: Record<number, string> = {}
+  const failedAssetIds: number[] = []
+
+  for (const assetId of assetIds) {
+    try {
+      const asset = await getAssetDetail(assetId)
+      const role = normalizeImportedAssetRole(roleMap[String(assetId)])
+        || inferFallbackRole(asset, 'material')
+      const selection = { asset, role }
+      if (isAssetReuseGenerationSelection(selection)) {
+        importedSelections.push(selection)
+      }
+      const textContent = stringValue(textContents[String(assetId)])
+      if (textContent) {
+        importedRawText[assetId] = textContent
+      }
+    } catch {
+      failedAssetIds.push(assetId)
+    }
+  }
+
+  importedRenderConfig.value = buildImportedRenderConfig(input)
+  importedScriptText.value = stringValue(input.finalVoiceText)
+  importedStoryboard.value = normalizeImportedStoryboard(input.generatedStoryboard)
+  draftPrompt.value = importedPromptFromRequest(input)
+  hostAppearanceEnabled.value = importedRenderConfig.value.hostAppearanceEnabled
+    ?? importedSelections.some((item) => item.role === 'host_image' || item.role === 'host_video')
+
+  if (importedSelections.length) {
+    selectedAssets.value = importedSelections
+    assetRawTextById.value = { ...assetRawTextById.value, ...importedRawText }
+    assetPreviewTextById.value = { ...assetPreviewTextById.value, ...importedRawText }
+    const coverAssetId = normalizeImportedNumber(input.coverAssetId, 1, Number.MAX_SAFE_INTEGER)
+    selectedCoverAssetId.value = importedSelections.some((item) => item.asset.assetId === coverAssetId)
+      ? coverAssetId
+      : firstCoverCandidateId()
+    ElMessage.success('已导入任务参数到资产复用创作')
+  }
+  if (failedAssetIds.length) {
+    ElMessage.warning(`部分原任务资产无法读取：${failedAssetIds.join('、')}`)
+  }
+  clearImportTaskQuery()
+  return importedSelections.length > 0 || Boolean(importedScriptText.value || importedStoryboard.value.length)
+}
+
+function importTaskIdFromRoute() {
+  const raw = Array.isArray(route.query.importTask) ? route.query.importTask[0] : route.query.importTask
+  return normalizeImportedNumber(raw, 1, Number.MAX_SAFE_INTEGER)
+}
+
+function clearImportTaskQuery() {
+  if (route.query.importTask == null) return
+  const query = { ...route.query }
+  delete query.importTask
+  void router.replace({ name: 'asset-reuse', query })
+}
+
+function collectImportedAssetIds(input: Record<string, unknown>) {
+  const ids = new Set<number>()
+  const rawAssetIds = Array.isArray(input.assetIds) ? input.assetIds : []
+  rawAssetIds.forEach((item) => {
+    const id = normalizeImportedNumber(item, 1, Number.MAX_SAFE_INTEGER)
+    if (id) ids.add(id)
+  })
+  const bindings = Array.isArray(input.assetRoleBindings) ? input.assetRoleBindings : []
+  bindings.forEach((item) => {
+    const id = normalizeImportedNumber(asRecord(item)?.assetId, 1, Number.MAX_SAFE_INTEGER)
+    if (id) ids.add(id)
+  })
+  return Array.from(ids)
+}
+
+function buildImportedRenderConfig(input: Record<string, unknown>): ImportedRenderConfig {
+  return {
+    aspectRatio: normalizeImportedAspectRatio(input.aspectRatio),
+    subtitleMode: normalizeImportedSubtitleMode(input.subtitleMode),
+    subtitleLanguage: stringValue(input.subtitleLanguage) || undefined,
+    nativeVoiceLanguage: normalizeImportedVoiceLanguage(input.nativeVoiceLanguage) || undefined,
+    nativeVoiceStyle: stringValue(input.nativeVoiceStyle) || undefined,
+    nativeSpeechStyle: stringValue(input.nativeSpeechStyle) || undefined,
+    burnInSubtitle: typeof input.burnInSubtitle === 'boolean' ? input.burnInSubtitle : undefined,
+    audioPolicy: normalizeImportedAudioPolicy(input.audioPolicy),
+    model: stringValue(input.model) || undefined,
+    segmentCount: normalizeImportedNumber(input.segmentCount, 1, 12) || undefined,
+    segmentDuration: normalizeImportedNumber(input.segmentDuration, 1, 30) || undefined,
+    hostAppearanceEnabled: typeof input.hostAppearanceEnabled === 'boolean' ? input.hostAppearanceEnabled : undefined,
+    headlineOverlay: asRecord(input.headlineOverlay) as ImportedRenderConfig['headlineOverlay'],
+    subtitleOverlay: asRecord(input.subtitleOverlay) as ImportedRenderConfig['subtitleOverlay'],
+  }
+}
+
+function importedPromptFromRequest(input: Record<string, unknown>) {
+  const goal = stringValue(input.goalText)
+  if (goal && !goal.toLowerCase().includes('confirmed storyboard')) {
+    return goal.slice(0, 500)
+  }
+  const script = stringValue(input.finalVoiceText)
+  if (script) {
+    return `继续复用原任务口播、分镜和生成参数重新创作：${script.slice(0, 220)}`
+  }
+  return '继续复用原任务资产和生成参数重新创作汽车销售视频'
+}
+
+function normalizeImportedStoryboard(value: unknown): AiPlanStoryboardShot[] {
+  const rows = Array.isArray(value) ? value : []
+  return rows
+    .map((item, index) => {
+      const row = asRecord(item)
+      if (!row) return null
+      const visual = stringValue(row.visual)
+      const narration = stringValue(row.narration)
+      if (!visual && !narration) return null
+      return {
+        index: normalizeImportedNumber(row.index, 1, 100) || index + 1,
+        visual,
+        narration,
+        duration: normalizeImportedNumber(row.duration, 1, 60) || 5,
+      }
+    })
+    .filter((item): item is AiPlanStoryboardShot => Boolean(item))
+}
+
+function normalizeImportedAssetRole(value: unknown): QuickRenderAssetRole | '' {
+  const role = stringValue(value)
+  return SUPPORTED_ASSET_ROLES.has(role as QuickRenderAssetRole) ? role as QuickRenderAssetRole : ''
+}
+
+function normalizeImportedAspectRatio(value: unknown): CarSalesPlanDraft['aspectRatio'] | undefined {
+  const text = stringValue(value)
+  return text === '9:16' || text === '16:9' || text === 'auto' ? text : undefined
+}
+
+function normalizeImportedSubtitleMode(value: unknown): CarSalesPlanDraft['subtitleMode'] | undefined {
+  const text = stringValue(value)
+  return text === 'off' || text === 'auto' || text === 'upload' ? text : undefined
+}
+
+function normalizeImportedAudioPolicy(value: unknown): CarSalesPlanDraft['audioPolicy'] | undefined {
+  const text = stringValue(value)
+  return text === 'auto' || text === 'none' || text === 'voiceover' || text === 'bgm' ? text : undefined
+}
+
+function normalizeImportedVoiceLanguage(value: unknown): 'zh-CN' | 'en-US' | '' {
+  const text = stringValue(value).toLowerCase()
+  if (text.startsWith('en')) return 'en-US'
+  if (text.startsWith('zh') || text.includes('cn')) return 'zh-CN'
+  return ''
+}
+
+function normalizeImportedNumber(value: unknown, min: number, max: number) {
+  const parsed = typeof value === 'number' ? value : Number(String(value || '').trim())
+  if (!Number.isFinite(parsed)) return 0
+  const normalized = Math.trunc(parsed)
+  return normalized >= min && normalized <= max ? normalized : 0
+}
+
+function stringValue(value: unknown) {
+  return typeof value === 'string' ? value.trim() : ''
+}
+
+function asRecord(value: unknown): Record<string, unknown> | null {
+  return value && typeof value === 'object' && !Array.isArray(value)
+    ? value as Record<string, unknown>
+    : null
+}
+
 function selectedSummary(roles: QuickRenderAssetRole[], fallback: string) {
   const selected = selectedAssets.value.find((item) => roles.includes(item.role))
   return selected?.asset.fileName || fallback
@@ -1080,42 +1286,53 @@ async function buildAssetReusePlanDraft(): Promise<CarSalesPlanDraft> {
   const hasVehicle = assets.some((asset) => asset.role === 'car_model_bundle' || asset.role.startsWith('car_') || asset.role.startsWith('scene_'))
   const scriptAsset = assets.find((asset) => (asset.role === 'voice_script' || asset.role === 'benchmark_json') && asset.textContent)
   const storyboardAsset = assets.find((asset) => asset.role === 'storyboard_json' && asset.textContent)
+  const importedScript = importedScriptText.value.trim()
+  const importedStoryboardShots = importedStoryboard.value.filter((shot) => shot.visual || shot.narration)
   const prompt = draftPrompt.value.trim() || [
     '复用已选资产生成一条汽车销售视频',
     scriptAsset ? `参考文案：${scriptAsset.textContent?.slice(0, 400)}` : '',
     storyboardAsset ? `参考分镜：${storyboardAsset.textContent?.slice(0, 400)}` : '',
+    importedScript ? `参考口播：${importedScript.slice(0, 400)}` : '',
   ].filter(Boolean).join('\n')
-  const voiceLanguage = inferAssetReuseVoiceLanguage(prompt)
+  const voiceLanguage = normalizeImportedVoiceLanguage(importedRenderConfig.value.nativeVoiceLanguage)
+    || inferAssetReuseVoiceLanguage(prompt || importedScript)
+  const importedAudioPolicy = normalizeImportedAudioPolicy(importedRenderConfig.value.audioPolicy)
+  const inferredAudioPolicy = generationSelections.some((item) => item.role === 'voiceover' || item.role === 'reference_audio')
+    ? 'voiceover'
+    : generationSelections.some((item) => item.role === 'bgm')
+      ? 'bgm'
+      : 'auto'
 
   return {
     source: 'asset-reuse',
     title: '资产复用汽车销售方案',
     prompt,
-    script: scriptAsset?.textContent?.trim() || '',
+    script: scriptAsset?.textContent?.trim() || importedScript,
+    storyboard: importedStoryboardShots.length ? importedStoryboardShots : undefined,
     coverAssetId: selectedCoverAsset.value?.asset.assetId ?? null,
     coverUrl: selectedCoverAsset.value ? assetCoverPreviewUrl(selectedCoverAsset.value.asset) : previewVisualUrl.value,
     assets,
-    aspectRatio: '9:16',
-    subtitleMode: 'auto',
-    subtitleLanguage: voiceLanguage,
+    aspectRatio: importedRenderConfig.value.aspectRatio || '9:16',
+    subtitleMode: importedRenderConfig.value.subtitleMode || 'auto',
+    subtitleLanguage: importedRenderConfig.value.subtitleLanguage || voiceLanguage,
     nativeVoiceLanguage: voiceLanguage,
-    nativeVoiceStyle: 'natural_sales',
-    nativeSpeechStyle: 'balanced',
-    burnInSubtitle: true,
-    audioPolicy: generationSelections.some((item) => item.role === 'voiceover' || item.role === 'reference_audio')
-      ? 'voiceover'
-      : generationSelections.some((item) => item.role === 'bgm')
-        ? 'bgm'
-        : 'auto',
-    model: 'auto',
-    segmentCount: 3,
-    segmentDuration: 5,
-    hostAppearanceEnabled: hostAppearanceEnabled.value && generationSelections.some((item) => item.role === 'host_image' || item.role === 'host_video'),
+    nativeVoiceStyle: importedRenderConfig.value.nativeVoiceStyle || 'natural_sales',
+    nativeSpeechStyle: importedRenderConfig.value.nativeSpeechStyle || 'balanced',
+    burnInSubtitle: importedRenderConfig.value.burnInSubtitle ?? true,
+    audioPolicy: importedAudioPolicy || inferredAudioPolicy,
+    model: importedRenderConfig.value.model || 'auto',
+    segmentCount: importedRenderConfig.value.segmentCount || 3,
+    segmentDuration: importedRenderConfig.value.segmentDuration || 5,
+    hostAppearanceEnabled: importedRenderConfig.value.hostAppearanceEnabled ?? (hostAppearanceEnabled.value && generationSelections.some((item) => item.role === 'host_image' || item.role === 'host_video')),
+    headlineOverlay: importedRenderConfig.value.headlineOverlay,
+    subtitleOverlay: importedRenderConfig.value.subtitleOverlay,
     configItems: [
       '资产中心复用',
       `${assets.length} 个素材`,
       scriptAsset ? '已选文案资产' : '',
       storyboardAsset ? '已选分镜资产' : '',
+      importedScript && !scriptAsset ? '已导入任务口播' : '',
+      importedStoryboardShots.length > 0 && !storyboardAsset ? '已导入任务分镜' : '',
     ].filter(Boolean),
     warnings: hasVehicle ? [] : ['汽车销售生成至少需要 1 张车辆图片，请补充车辆素材后再确认生成。'],
   }
@@ -1284,7 +1501,12 @@ watch(
   { immediate: true },
 )
 
-onMounted(restoreAssetReuseDraft)
+onMounted(async () => {
+  const imported = await restoreAssetReuseImportFromTask()
+  if (!imported) {
+    restoreAssetReuseDraft()
+  }
+})
 </script>
 
 <style scoped>
