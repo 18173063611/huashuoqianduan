@@ -13,11 +13,20 @@
         <div class="car-advanced-body">
           <section class="car-advanced-section">
             <h3>数字人出镜</h3>
+            <label class="car-field">
+              <span>视频类型</span>
+              <select :value="settings.videoType" @change="patchVideoType(($event.target as HTMLSelectElement).value as CarSalesAdvancedSettings['videoType'])">
+                <option value="standard">常规销售视频</option>
+                <option value="digital_human">数字人口播</option>
+                <option value="product_showcase">车型展示</option>
+                <option value="silent_bgm">无口播 BGM</option>
+              </select>
+            </label>
             <div class="car-segmented">
-              <button type="button" :class="{ active: !settings.hostAppearanceEnabled }" @click="patch({ hostAppearanceEnabled: false })">
+              <button type="button" :class="{ active: !settings.hostAppearanceEnabled }" @click="patch({ hostAppearanceEnabled: false, videoType: settings.videoType === 'digital_human' ? 'standard' : settings.videoType })">
                 不使用
               </button>
-              <button type="button" :class="{ active: settings.hostAppearanceEnabled }" @click="patch({ hostAppearanceEnabled: true })">
+              <button type="button" :class="{ active: settings.hostAppearanceEnabled }" @click="patch({ hostAppearanceEnabled: true, videoType: 'digital_human' })">
                 使用数字人
               </button>
             </div>
@@ -119,10 +128,10 @@
                 <input
                   type="number"
                   min="36"
-                  max="132"
+                  max="120"
                   step="4"
                   :value="settings.headlineOverlay.fontSize"
-                  @input="patchOverlay('headlineOverlay', { fontSize: numberFromEvent($event, 72) })"
+                  @input="patchOverlay('headlineOverlay', { fontSize: numberFromEvent($event, 64) })"
                 />
               </label>
             </div>
@@ -162,6 +171,30 @@
             </div>
             <div class="car-grid-two">
               <label class="car-field">
+                <span>语气口吻</span>
+                <select :value="settings.tone" @change="patch({ tone: ($event.target as HTMLSelectElement).value as CarSalesAdvancedSettings['tone'] })">
+                  <option value="professional">专业讲解</option>
+                  <option value="promotional">促销转化</option>
+                  <option value="premium">高级克制</option>
+                  <option value="energetic">高能种草</option>
+                  <option value="warm">温暖陪伴</option>
+                  <option value="tech">科技理性</option>
+                </select>
+              </label>
+              <label class="car-field">
+                <span>BGM 风格</span>
+                <select :value="settings.bgmStyle" @change="patch({ bgmStyle: ($event.target as HTMLSelectElement).value as CarSalesAdvancedSettings['bgmStyle'] })">
+                  <option value="auto">智能匹配</option>
+                  <option value="none">不使用 BGM</option>
+                  <option value="upbeat">轻快节奏</option>
+                  <option value="premium">高级氛围</option>
+                  <option value="warm">温暖生活</option>
+                  <option value="tech">科技动感</option>
+                </select>
+              </label>
+            </div>
+            <div class="car-grid-two">
+              <label class="car-field">
                 <span>讲述节奏</span>
                 <select :value="settings.nativeSpeechStyle" @change="patch({ nativeSpeechStyle: ($event.target as HTMLSelectElement).value })">
                   <option value="balanced">均衡</option>
@@ -176,6 +209,44 @@
                   <option value="doubao-seedance-1-5-pro-251215">Seedance 1.5 Pro</option>
                   <option value="doubao-seedance-2-0-pro-250528">Seedance 2.0 Pro</option>
                 </select>
+              </label>
+            </div>
+          </section>
+
+          <section class="car-advanced-section">
+            <h3>封面与发布信息</h3>
+            <div class="car-check-grid">
+              <label class="car-check">
+                <input
+                  type="checkbox"
+                  :checked="settings.generateCover"
+                  @change="patch({ generateCover: ($event.target as HTMLInputElement).checked })"
+                />
+                <span>生成封面</span>
+              </label>
+              <label class="car-check">
+                <input
+                  type="checkbox"
+                  :checked="settings.generateTitle"
+                  @change="patch({ generateTitle: ($event.target as HTMLInputElement).checked })"
+                />
+                <span>生成标题</span>
+              </label>
+              <label class="car-check">
+                <input
+                  type="checkbox"
+                  :checked="settings.generateDescription"
+                  @change="patch({ generateDescription: ($event.target as HTMLInputElement).checked })"
+                />
+                <span>生成简介</span>
+              </label>
+              <label class="car-check">
+                <input
+                  type="checkbox"
+                  :checked="settings.generateTags"
+                  @change="patch({ generateTags: ($event.target as HTMLInputElement).checked })"
+                />
+                <span>生成标签</span>
               </label>
             </div>
           </section>
@@ -207,16 +278,23 @@ export interface CarSalesTextOverlaySettings {
 
 export interface CarSalesAdvancedSettings {
   hostAppearanceEnabled: boolean
+  videoType: 'standard' | 'digital_human' | 'product_showcase' | 'silent_bgm'
   subtitleMode: 'auto' | 'off' | 'upload'
   customSubtitle: string
   burnInSubtitle: boolean
   subtitleOverlay: CarSalesTextOverlaySettings
   headlineOverlay: CarSalesTextOverlaySettings
   audioPolicy: 'auto' | 'none' | 'voiceover' | 'bgm'
+  bgmStyle: 'auto' | 'none' | 'upbeat' | 'premium' | 'warm' | 'tech'
   videoStyle: 'realistic' | 'premium' | 'energetic' | 'family' | 'tech'
+  tone: 'professional' | 'promotional' | 'premium' | 'energetic' | 'warm' | 'tech'
   nativeVoiceStyle: string
   nativeSpeechStyle: string
   model: string
+  generateCover: boolean
+  generateTitle: boolean
+  generateDescription: boolean
+  generateTags: boolean
 }
 
 const props = defineProps<{
@@ -247,6 +325,20 @@ function patch(partial: Partial<CarSalesAdvancedSettings>) {
   emit('update:settings', {
     ...props.settings,
     ...partial,
+  })
+}
+
+function patchVideoType(videoType: CarSalesAdvancedSettings['videoType']) {
+  patch({
+    videoType,
+    hostAppearanceEnabled: videoType === 'digital_human'
+      ? true
+      : videoType === 'product_showcase' || videoType === 'silent_bgm'
+        ? false
+        : props.settings.hostAppearanceEnabled,
+    audioPolicy: videoType === 'silent_bgm' && props.settings.audioPolicy === 'auto'
+      ? 'bgm'
+      : props.settings.audioPolicy,
   })
 }
 
@@ -481,6 +573,12 @@ function numberFromEvent(event: Event, fallback: number) {
   font-weight: 700;
 }
 
+.car-check-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 10px;
+}
+
 .car-grid-two {
   display: grid;
   grid-template-columns: 1fr 1fr;
@@ -496,6 +594,7 @@ function numberFromEvent(event: Event, fallback: number) {
 
 @media (max-width: 560px) {
   .car-grid-two,
+  .car-check-grid,
   .car-segmented {
     grid-template-columns: 1fr;
   }

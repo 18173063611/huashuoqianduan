@@ -180,6 +180,30 @@ export interface QuickRenderRequest {
   hostAppearanceEnabled?: boolean
   subtitleOverlay?: QuickRenderTextOverlayRequest
   headlineOverlay?: QuickRenderTextOverlayRequest
+  creationMode?: string
+  chainType?: 'ai-smart' | 'benchmark' | 'asset-reuse' | string
+  videoType?: 'standard' | 'digital_human' | 'product_showcase' | 'silent_bgm' | string
+  hasDigitalHuman?: boolean
+  digitalHumanId?: string
+  voiceId?: string
+  tone?: string
+  language?: string
+  duration?: number
+  enableSubtitle?: boolean
+  subtitleStyle?: string
+  enableBigText?: boolean
+  bigTextStyle?: string
+  enableBgm?: boolean
+  bgmStyle?: string
+  generateCover?: boolean
+  generateTitle?: boolean
+  generateDescription?: boolean
+  generateTags?: boolean
+  benchmarkVideoId?: string
+  uploadedVideoId?: string
+  reuseAssetIds?: number[]
+  vehicleId?: string
+  vehicleName?: string
 }
 
 export interface QuickRenderGeneratedStoryboardShot {

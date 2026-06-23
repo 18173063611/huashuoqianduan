@@ -73,6 +73,30 @@ export interface CarSalesPlanDraft {
   hostAppearanceEnabled?: boolean
   headlineOverlay?: QuickRenderRequest['headlineOverlay']
   subtitleOverlay?: QuickRenderRequest['subtitleOverlay']
+  creationMode?: string
+  chainType?: string
+  videoType?: 'standard' | 'digital_human' | 'product_showcase' | 'silent_bgm' | string
+  hasDigitalHuman?: boolean
+  digitalHumanId?: string
+  voiceId?: string
+  tone?: string
+  language?: string
+  duration?: number
+  enableSubtitle?: boolean
+  subtitleStyle?: string
+  enableBigText?: boolean
+  bigTextStyle?: string
+  enableBgm?: boolean
+  bgmStyle?: string
+  generateCover?: boolean
+  generateTitle?: boolean
+  generateDescription?: boolean
+  generateTags?: boolean
+  benchmarkVideoId?: string
+  uploadedVideoId?: string
+  reuseAssetIds?: number[]
+  vehicleId?: string
+  vehicleName?: string
   configItems?: string[]
   warnings?: string[]
 }
@@ -302,7 +326,57 @@ export function buildQuickRenderRequestFromPlanDraft(
     hostAppearanceEnabled: Boolean(draft.hostAppearanceEnabled),
     subtitleOverlay: draft.subtitleOverlay,
     headlineOverlay: draft.headlineOverlay,
+    ...buildPlanDraftAdvancedRequestFields(draft),
   }
+}
+
+function buildPlanDraftAdvancedRequestFields(draft: CarSalesPlanDraft): Partial<QuickRenderRequest> {
+  const hostAsset = draft.assets.find((asset) => asset.role === 'host_image' || asset.role === 'host_video')
+  const voiceAsset = draft.assets.find((asset) => asset.role === 'voiceover' || asset.role === 'reference_audio')
+  const vehicleAsset = draft.assets.find((asset) => asset.role === 'car_model_bundle' || asset.role.startsWith('car_'))
+  const hasHeadline = Boolean(draft.headlineOverlay?.enabled && draft.headlineOverlay.text?.trim())
+  const duration = draft.duration || draft.segmentCount * draft.segmentDuration
+  const videoType = draft.videoType || (draft.hostAppearanceEnabled ? 'digital_human' : draft.audioPolicy === 'bgm' ? 'silent_bgm' : 'standard')
+  const bgmStyle = draft.bgmStyle || 'auto'
+  return {
+    creationMode: draft.creationMode || sourceLabel(draft.source),
+    chainType: draft.chainType || draft.source,
+    videoType,
+    hasDigitalHuman: draft.hasDigitalHuman ?? Boolean(draft.hostAppearanceEnabled),
+    digitalHumanId: draft.digitalHumanId || (hostAsset ? String(hostAsset.assetId) : undefined),
+    voiceId: draft.voiceId || (voiceAsset ? String(voiceAsset.assetId) : undefined),
+    tone: draft.tone || 'professional',
+    language: draft.language || draft.nativeVoiceLanguage || 'zh-CN',
+    duration,
+    enableSubtitle: draft.enableSubtitle ?? draft.subtitleMode !== 'off',
+    subtitleStyle: draft.subtitleStyle || overlayStyleLabel(draft.subtitleOverlay),
+    enableBigText: draft.enableBigText ?? hasHeadline,
+    bigTextStyle: draft.bigTextStyle || (hasHeadline ? overlayStyleLabel(draft.headlineOverlay) : undefined),
+    enableBgm: draft.enableBgm ?? (bgmStyle !== 'none' && (
+      draft.audioPolicy === 'bgm' ||
+      draft.audioPolicy === 'auto' ||
+      draft.assets.some((asset) => asset.role === 'bgm')
+    )),
+    bgmStyle,
+    generateCover: draft.generateCover ?? true,
+    generateTitle: draft.generateTitle ?? true,
+    generateDescription: draft.generateDescription ?? true,
+    generateTags: draft.generateTags ?? true,
+    benchmarkVideoId: draft.benchmarkVideoId,
+    uploadedVideoId: draft.uploadedVideoId,
+    reuseAssetIds: draft.reuseAssetIds || (draft.source === 'asset-reuse' ? draft.assets.map((asset) => asset.assetId) : undefined),
+    vehicleId: draft.vehicleId || (vehicleAsset ? String(vehicleAsset.assetId) : undefined),
+    vehicleName: draft.vehicleName || vehicleAsset?.fileName,
+  }
+}
+
+function overlayStyleLabel(overlay: QuickRenderRequest['headlineOverlay'] | QuickRenderRequest['subtitleOverlay']) {
+  if (!overlay) return undefined
+  const parts = [
+    overlay.position || '',
+    overlay.fontSize ? `${overlay.fontSize}px` : '',
+  ].filter(Boolean)
+  return parts.length ? parts.join('/') : undefined
 }
 
 function buildPlanAssetRoleBindings(draft: CarSalesPlanDraft): CarSalesAssetRoleBinding[] {
@@ -408,6 +482,7 @@ function buildPlanSourceText(draft: CarSalesPlanDraft) {
     draft.referenceUrl ? `参考链接：${draft.referenceUrl}` : '',
     draft.assets.length ? `已选素材：${draft.assets.map((item) => `${item.fileName}(${roleLabel(item.role)})`).join('；')}` : '',
     `生成参数：${draft.segmentCount * draft.segmentDuration} 秒，${draft.segmentCount} 段，比例 ${draft.aspectRatio}`,
+    `高级参数：${advancedPlanLabelText(draft)}`,
     draft.nativeVoiceLanguage === 'en-US'
       ? 'Voice language: English voiceover only. Return natural English narration and avoid Chinese copy.'
       : '',
@@ -549,12 +624,22 @@ function buildPlanConfigItems(draft: CarSalesPlanDraft) {
     draft.nativeVoiceLanguage === 'en-US' ? '英文讲述' : '中文讲述',
     `字幕 ${subtitleModeLabel(draft.subtitleMode)}`,
     `音频 ${audioPolicyLabel(draft.audioPolicy)}`,
+    `类型 ${videoTypeLabel(draft.videoType || (draft.hostAppearanceEnabled ? 'digital_human' : 'standard'))}`,
+    `语气 ${toneLabel(draft.tone || 'professional')}`,
+    `BGM ${bgmStyleLabel(draft.bgmStyle || 'auto')}`,
   ]
   if (draft.source === 'benchmark') items.push('爆款结构复用')
   if (draft.source === 'asset-reuse') items.push('资产复用')
   if (draft.hostAppearanceEnabled) items.push('数字人出镜')
   if (draft.headlineOverlay?.enabled) items.push('大字报')
   if (draft.model !== 'auto') items.push(`模型 ${draft.model}`)
+  const publishItems = [
+    draft.generateCover ?? true ? '封面' : '',
+    draft.generateTitle ?? true ? '标题' : '',
+    draft.generateDescription ?? true ? '简介' : '',
+    draft.generateTags ?? true ? '标签' : '',
+  ].filter(Boolean)
+  if (publishItems.length) items.push(`发布物料 ${publishItems.join('/')}`)
   return [...items, ...(draft.configItems || [])]
 }
 
@@ -563,6 +648,23 @@ function rewriteStyleBySource(source: CarSalesPlanSource, language?: string) {
   if (source === 'benchmark') return `${languagePrefix}爆款汽车销售短视频`
   if (source === 'asset-reuse') return `${languagePrefix}资产复用汽车销售短视频`
   return `${languagePrefix}汽车销售短视频`
+}
+
+function advancedPlanLabelText(draft: CarSalesPlanDraft) {
+  const publishItems = [
+    draft.generateCover ?? true ? '封面' : '',
+    draft.generateTitle ?? true ? '标题' : '',
+    draft.generateDescription ?? true ? '简介' : '',
+    draft.generateTags ?? true ? '标签' : '',
+  ].filter(Boolean)
+  return [
+    `视频类型 ${videoTypeLabel(draft.videoType || (draft.hostAppearanceEnabled ? 'digital_human' : 'standard'))}`,
+    `语气 ${toneLabel(draft.tone || 'professional')}`,
+    `BGM ${bgmStyleLabel(draft.bgmStyle || 'auto')}`,
+    draft.hostAppearanceEnabled ? '数字人出镜' : '无数字人出镜',
+    draft.headlineOverlay?.enabled && draft.headlineOverlay.text ? `大字报 ${draft.headlineOverlay.text}` : '',
+    publishItems.length ? `发布物料 ${publishItems.join('、')}` : '',
+  ].filter(Boolean).join('；')
 }
 
 function sourceLabel(source: CarSalesPlanSource) {
@@ -582,6 +684,40 @@ function audioPolicyLabel(policy: CarSalesPlanDraft['audioPolicy']) {
   if (policy === 'bgm') return '仅BGM'
   if (policy === 'voiceover') return '口播优先'
   return '智能匹配'
+}
+
+function videoTypeLabel(type: string) {
+  const labels: Record<string, string> = {
+    standard: '常规销售视频',
+    digital_human: '数字人口播',
+    product_showcase: '车型展示',
+    silent_bgm: '无口播 BGM',
+  }
+  return labels[type] || type || '常规销售视频'
+}
+
+function toneLabel(tone: string) {
+  const labels: Record<string, string> = {
+    professional: '专业讲解',
+    promotional: '促销转化',
+    premium: '高级克制',
+    energetic: '高能种草',
+    warm: '温暖陪伴',
+    tech: '科技理性',
+  }
+  return labels[tone] || tone || '专业讲解'
+}
+
+function bgmStyleLabel(style: string) {
+  const labels: Record<string, string> = {
+    auto: '智能匹配',
+    none: '不使用 BGM',
+    upbeat: '轻快节奏',
+    premium: '高级氛围',
+    warm: '温暖生活',
+    tech: '科技动感',
+  }
+  return labels[style] || style || '智能匹配'
 }
 
 function roleLabel(role: QuickRenderAssetRole) {

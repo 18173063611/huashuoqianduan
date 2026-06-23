@@ -517,6 +517,30 @@ interface ImportedRenderConfig {
   hostAppearanceEnabled?: boolean
   headlineOverlay?: CarSalesPlanDraft['headlineOverlay']
   subtitleOverlay?: CarSalesPlanDraft['subtitleOverlay']
+  creationMode?: string
+  chainType?: string
+  videoType?: string
+  hasDigitalHuman?: boolean
+  digitalHumanId?: string
+  voiceId?: string
+  tone?: string
+  language?: string
+  duration?: number
+  enableSubtitle?: boolean
+  subtitleStyle?: string
+  enableBigText?: boolean
+  bigTextStyle?: string
+  enableBgm?: boolean
+  bgmStyle?: string
+  generateCover?: boolean
+  generateTitle?: boolean
+  generateDescription?: boolean
+  generateTags?: boolean
+  benchmarkVideoId?: string
+  uploadedVideoId?: string
+  reuseAssetIds?: number[]
+  vehicleId?: string
+  vehicleName?: string
 }
 
 const ASSET_REUSE_DRAFT_STORAGE_KEY = 'huashuo.assetReuseDraft.v1'
@@ -1129,6 +1153,34 @@ function buildImportedRenderConfig(input: Record<string, unknown>): ImportedRend
     hostAppearanceEnabled: typeof input.hostAppearanceEnabled === 'boolean' ? input.hostAppearanceEnabled : undefined,
     headlineOverlay: asRecord(input.headlineOverlay) as ImportedRenderConfig['headlineOverlay'],
     subtitleOverlay: asRecord(input.subtitleOverlay) as ImportedRenderConfig['subtitleOverlay'],
+    creationMode: stringValue(input.creationMode) || undefined,
+    chainType: stringValue(input.chainType) || undefined,
+    videoType: stringValue(input.videoType) || undefined,
+    hasDigitalHuman: typeof input.hasDigitalHuman === 'boolean' ? input.hasDigitalHuman : undefined,
+    digitalHumanId: stringValue(input.digitalHumanId) || undefined,
+    voiceId: stringValue(input.voiceId) || undefined,
+    tone: stringValue(input.tone) || undefined,
+    language: stringValue(input.language) || undefined,
+    duration: normalizeImportedNumber(input.duration, 1, 300) || undefined,
+    enableSubtitle: typeof input.enableSubtitle === 'boolean' ? input.enableSubtitle : undefined,
+    subtitleStyle: stringValue(input.subtitleStyle) || undefined,
+    enableBigText: typeof input.enableBigText === 'boolean' ? input.enableBigText : undefined,
+    bigTextStyle: stringValue(input.bigTextStyle) || undefined,
+    enableBgm: typeof input.enableBgm === 'boolean' ? input.enableBgm : undefined,
+    bgmStyle: stringValue(input.bgmStyle) || undefined,
+    generateCover: typeof input.generateCover === 'boolean' ? input.generateCover : undefined,
+    generateTitle: typeof input.generateTitle === 'boolean' ? input.generateTitle : undefined,
+    generateDescription: typeof input.generateDescription === 'boolean' ? input.generateDescription : undefined,
+    generateTags: typeof input.generateTags === 'boolean' ? input.generateTags : undefined,
+    benchmarkVideoId: stringValue(input.benchmarkVideoId) || undefined,
+    uploadedVideoId: stringValue(input.uploadedVideoId) || undefined,
+    reuseAssetIds: Array.isArray(input.reuseAssetIds)
+      ? input.reuseAssetIds
+        .map((item) => normalizeImportedNumber(item, 1, Number.MAX_SAFE_INTEGER))
+        .filter((item) => item > 0)
+      : undefined,
+    vehicleId: stringValue(input.vehicleId) || undefined,
+    vehicleName: stringValue(input.vehicleName) || undefined,
   }
 }
 
@@ -1321,11 +1373,35 @@ async function buildAssetReusePlanDraft(): Promise<CarSalesPlanDraft> {
     burnInSubtitle: importedRenderConfig.value.burnInSubtitle ?? true,
     audioPolicy: importedAudioPolicy || inferredAudioPolicy,
     model: importedRenderConfig.value.model || 'auto',
-    segmentCount: importedRenderConfig.value.segmentCount || 3,
+    segmentCount: importedRenderConfig.value.segmentCount || 6,
     segmentDuration: importedRenderConfig.value.segmentDuration || 5,
     hostAppearanceEnabled: importedRenderConfig.value.hostAppearanceEnabled ?? (hostAppearanceEnabled.value && generationSelections.some((item) => item.role === 'host_image' || item.role === 'host_video')),
     headlineOverlay: importedRenderConfig.value.headlineOverlay,
     subtitleOverlay: importedRenderConfig.value.subtitleOverlay,
+    creationMode: importedRenderConfig.value.creationMode || '资产复用创作',
+    chainType: importedRenderConfig.value.chainType || 'asset-reuse',
+    videoType: importedRenderConfig.value.videoType || ((importedRenderConfig.value.hostAppearanceEnabled ?? hostAppearanceEnabled.value) ? 'digital_human' : inferredAudioPolicy === 'bgm' ? 'silent_bgm' : 'standard'),
+    hasDigitalHuman: importedRenderConfig.value.hasDigitalHuman ?? (importedRenderConfig.value.hostAppearanceEnabled ?? hostAppearanceEnabled.value),
+    digitalHumanId: importedRenderConfig.value.digitalHumanId || selectedHost.value?.asset.assetId.toString(),
+    voiceId: importedRenderConfig.value.voiceId || selectedVoice.value?.asset.assetId.toString(),
+    tone: importedRenderConfig.value.tone || 'professional',
+    language: importedRenderConfig.value.language || voiceLanguage,
+    duration: importedRenderConfig.value.duration || (importedRenderConfig.value.segmentCount || 6) * (importedRenderConfig.value.segmentDuration || 5),
+    enableSubtitle: importedRenderConfig.value.enableSubtitle ?? (importedRenderConfig.value.subtitleMode || 'auto') !== 'off',
+    subtitleStyle: importedRenderConfig.value.subtitleStyle,
+    enableBigText: importedRenderConfig.value.enableBigText ?? Boolean(importedRenderConfig.value.headlineOverlay?.enabled && importedRenderConfig.value.headlineOverlay.text),
+    bigTextStyle: importedRenderConfig.value.bigTextStyle,
+    enableBgm: importedRenderConfig.value.enableBgm ?? ((importedRenderConfig.value.bgmStyle || 'auto') !== 'none' && (importedAudioPolicy === 'bgm' || inferredAudioPolicy === 'bgm' || generationSelections.some((item) => item.role === 'bgm'))),
+    bgmStyle: importedRenderConfig.value.bgmStyle || 'auto',
+    generateCover: importedRenderConfig.value.generateCover ?? true,
+    generateTitle: importedRenderConfig.value.generateTitle ?? true,
+    generateDescription: importedRenderConfig.value.generateDescription ?? true,
+    generateTags: importedRenderConfig.value.generateTags ?? true,
+    benchmarkVideoId: importedRenderConfig.value.benchmarkVideoId,
+    uploadedVideoId: importedRenderConfig.value.uploadedVideoId,
+    reuseAssetIds: importedRenderConfig.value.reuseAssetIds || assets.map((asset) => asset.assetId),
+    vehicleId: importedRenderConfig.value.vehicleId || assets.find((asset) => asset.role === 'car_model_bundle' || asset.role.startsWith('car_'))?.assetId.toString(),
+    vehicleName: importedRenderConfig.value.vehicleName || assets.find((asset) => asset.role === 'car_model_bundle' || asset.role.startsWith('car_'))?.fileName,
     configItems: [
       '资产中心复用',
       `${assets.length} 个素材`,

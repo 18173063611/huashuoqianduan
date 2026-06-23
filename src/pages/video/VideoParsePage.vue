@@ -181,13 +181,35 @@
               <span><em><el-icon><Timer /></el-icon>预计耗时</em><strong>1-2 分钟</strong></span>
               <span><em><el-icon><PictureRounded /></el-icon>已关联车辆图片</em><strong>{{ benchmarkDraftAssets.length }} 张</strong></span>
             </div>
+            <div class="benchmark-param-grid">
+              <label>
+                <span>视频比例</span>
+                <select v-model="benchmarkAspectRatio">
+                  <option value="9:16">9:16 竖版</option>
+                  <option value="16:9">16:9 横版</option>
+                  <option value="auto">智能适配</option>
+                </select>
+              </label>
+              <label>
+                <span>目标时长</span>
+                <select v-model.number="benchmarkTargetDuration">
+                  <option :value="15">15 秒</option>
+                  <option :value="30">30 秒</option>
+                  <option :value="45">45 秒</option>
+                </select>
+              </label>
+            </div>
             <button class="primary-button" type="button" :disabled="planPreviewLoading || planSubmitting" @click="prepareBenchmarkPlanPreview">
               <el-icon><MagicStick /></el-icon>
               <span>{{ planPreviewLoading ? '方案生成中...' : planSubmitting ? '提交中...' : '确认生成' }}</span>
             </button>
-            <button type="button" class="secondary-button" @click="benchmarkAssetDrawerOpen = true">
+            <button type="button" class="secondary-button" @click="openBenchmarkAssetDrawer('vehicle')">
               <el-icon><PictureRounded /></el-icon>
               <span>从资产中心选择车辆图片</span>
+            </button>
+            <button type="button" class="secondary-button" @click="benchmarkAdvancedDrawerOpen = true">
+              <el-icon><MagicStick /></el-icon>
+              <span>高级参数</span>
             </button>
           </aside>
         </div>
@@ -341,7 +363,7 @@
                 <span class="vehicle-thumb vehicle-thumb--three"></span>
                 <span class="vehicle-thumb vehicle-thumb--four"></span>
               </div>
-              <button type="button" class="secondary-button" @click="benchmarkAssetDrawerOpen = true">
+              <button type="button" class="secondary-button" @click="openBenchmarkAssetDrawer('vehicle')">
                 从资产中心选择
               </button>
             </article>
@@ -391,7 +413,26 @@
               <strong>车辆素材</strong>
               <span>{{ benchmarkDraftAssets.length ? `已选 ${benchmarkDraftAssets.length} 个` : '生成汽车销售视频至少需要 1 张车图' }}</span>
             </div>
-            <button type="button" class="secondary-button" @click="benchmarkAssetDrawerOpen = true">选择车图/素材</button>
+            <button type="button" class="secondary-button" @click="openBenchmarkAssetDrawer('vehicle')">选择车图/素材</button>
+          </div>
+          <div class="benchmark-param-grid benchmark-param-grid--wide">
+            <label>
+              <span>视频比例</span>
+              <select v-model="benchmarkAspectRatio">
+                <option value="9:16">9:16 竖版</option>
+                <option value="16:9">16:9 横版</option>
+                <option value="auto">智能适配</option>
+              </select>
+            </label>
+            <label>
+              <span>目标时长</span>
+              <select v-model.number="benchmarkTargetDuration">
+                <option :value="15">15 秒</option>
+                <option :value="30">30 秒</option>
+                <option :value="45">45 秒</option>
+              </select>
+            </label>
+            <button type="button" class="secondary-button" @click="benchmarkAdvancedDrawerOpen = true">高级参数</button>
           </div>
           <div v-if="benchmarkDraftAssets.length" class="benchmark-selected-assets">
             <span v-for="asset in benchmarkDraftAssets" :key="asset.assetId">
@@ -823,8 +864,20 @@
     />
     <CarSalesAssetSelectDrawer
       v-model="benchmarkAssetDrawerOpen"
-      initial-category="vehicle"
+      :initial-category="benchmarkAssetDrawerInitialCategory"
       @select="handleBenchmarkAssetSelect"
+    />
+    <CarSalesAdvancedDrawer
+      v-model="benchmarkAdvancedDrawerOpen"
+      :settings="benchmarkAdvancedSettings"
+      :selected-avatar-name="benchmarkSelectedHostAsset?.fileName || ''"
+      :selected-avatar-preview-url="benchmarkSelectedHostPreviewUrl"
+      :has-host-material="Boolean(benchmarkSelectedHostAsset)"
+      @update:settings="benchmarkAdvancedSettings = $event"
+      @reset="resetBenchmarkAdvancedSettings"
+      @select-avatar="openBenchmarkAssetDrawer('avatar')"
+      @select-host-asset="openBenchmarkAssetDrawer('avatar')"
+      @clear-avatar="clearBenchmarkHostAsset"
     />
   </div>
 </template>
@@ -883,7 +936,12 @@ import {
   VideoPlay,
 } from '@element-plus/icons-vue'
 import AiPlanPreviewDrawer from '../render/AiPlanPreviewDrawer.vue'
+import CarSalesAdvancedDrawer, {
+  type CarSalesAdvancedSettings,
+  type CarSalesTextOverlaySettings,
+} from '../render/CarSalesAdvancedDrawer.vue'
 import CarSalesAssetSelectDrawer, {
+  type CarSalesAssetCategoryKey,
   type CarSalesAssetSelectPayload,
 } from '../render/CarSalesAssetSelectDrawer.vue'
 import {
@@ -1031,6 +1089,11 @@ const planPreview = ref<AiPlanPreview | null>(null)
 const benchmarkPlanDraft = ref<CarSalesPlanDraft | null>(null)
 const currentPendingPlanTaskId = ref('')
 const benchmarkAssetDrawerOpen = ref(false)
+const benchmarkAssetDrawerInitialCategory = ref<CarSalesAssetCategoryKey>('vehicle')
+const benchmarkAdvancedDrawerOpen = ref(false)
+const benchmarkAdvancedSettings = ref<CarSalesAdvancedSettings>(createDefaultBenchmarkAdvancedSettings())
+const benchmarkAspectRatio = ref<'9:16' | '16:9' | 'auto'>('9:16')
+const benchmarkTargetDuration = ref<15 | 30 | 45>(30)
 const benchmarkDraftAssets = ref<CarSalesPlanDraftAsset[]>([])
 const parseAbort = ref<AbortController | null>(null)
 const parseCanceling = ref(false)
@@ -1073,6 +1136,63 @@ const downloadProgressText = computed(() => {
 })
 
 const sourcePanelTitle = computed(() => (inputMode.value === 'upload' ? '1. 上传对标视频' : '1. 输入对标视频链接'))
+const benchmarkSelectedHostAsset = computed(() =>
+  benchmarkDraftAssets.value.find((asset) => asset.role === 'host_image' || asset.role === 'host_video') || null,
+)
+const benchmarkSelectedHostPreviewUrl = computed(() => {
+  const asset = benchmarkSelectedHostAsset.value
+  return asset ? normalizePublicMediaUrl(asset.thumbnailUrl || asset.fileUrl || '') : ''
+})
+
+function createDefaultBenchmarkAdvancedSettings(): CarSalesAdvancedSettings {
+  return {
+    hostAppearanceEnabled: false,
+    videoType: 'standard',
+    subtitleMode: 'auto',
+    customSubtitle: '',
+    burnInSubtitle: true,
+    subtitleOverlay: {
+      enabled: true,
+      text: '',
+      fontFamily: 'Microsoft YaHei',
+      fontSize: 36,
+      textColor: '#ffffff',
+      outlineColor: '#111827',
+      position: 'bottom',
+    },
+    headlineOverlay: {
+      enabled: false,
+      text: '',
+      fontFamily: 'Microsoft YaHei',
+      fontSize: 64,
+      textColor: '#ffffff',
+      outlineColor: '#111827',
+      position: 'top',
+    },
+    audioPolicy: 'auto',
+    bgmStyle: 'auto',
+    videoStyle: 'realistic',
+    tone: 'professional',
+    nativeVoiceStyle: 'natural_sales',
+    nativeSpeechStyle: 'balanced',
+    model: 'auto',
+    generateCover: true,
+    generateTitle: true,
+    generateDescription: true,
+    generateTags: true,
+  }
+}
+
+function resetBenchmarkAdvancedSettings() {
+  benchmarkAdvancedSettings.value = createDefaultBenchmarkAdvancedSettings()
+}
+
+function openBenchmarkAssetDrawer(category: CarSalesAssetCategoryKey) {
+  if (!requireAuth('登录后可从资产中心选择素材')) return
+  benchmarkAssetDrawerInitialCategory.value = category
+  benchmarkAssetDrawerOpen.value = true
+}
+
 watch(videoUrl, (value) => {
   if (inputMode.value !== 'link') {
     return
@@ -2037,6 +2157,7 @@ function restoreBenchmarkPendingPlanFromRoute() {
   if (!task || task.source !== 'benchmark' || !task.draft) return
   currentPendingPlanTaskId.value = task.id
   benchmarkPlanDraft.value = task.draft
+  applyBenchmarkDraftSettings(task.draft)
   planPreview.value = task.plan
   planPreviewError.value = ''
   planPreviewLoading.value = false
@@ -2045,10 +2166,19 @@ function restoreBenchmarkPendingPlanFromRoute() {
 
 function buildBenchmarkPlanDraft(): CarSalesPlanDraft {
   const parse = douyinParse.value
-  const durationSeconds = Math.max(12, Math.round(parse?.durationSeconds || 20))
-  const segmentCount = Math.max(1, Math.min(4, Math.ceil(durationSeconds / 8)))
-  const segmentDuration = Math.max(4, Math.round(durationSeconds / segmentCount))
+  const durationSeconds = benchmarkTargetDuration.value || Math.max(30, Math.min(60, Math.round(parse?.durationSeconds || 30)))
+  const segmentCount = Math.max(3, Math.min(8, Math.ceil(durationSeconds / 6)))
+  const segmentDuration = Math.max(4, Math.min(8, Math.round(durationSeconds / segmentCount)))
   const script = rewrittenText.value.trim() || sourceText.value.trim()
+  const settings = benchmarkAdvancedSettings.value
+  const subtitleMode = settings.subtitleMode
+  const hostAsset = benchmarkSelectedHostAsset.value
+  const voiceAsset = benchmarkDraftAssets.value.find((asset) => asset.role === 'voiceover' || asset.role === 'reference_audio')
+  const vehicleAsset = benchmarkDraftAssets.value.find((asset) => asset.role === 'car_model_bundle' || asset.role.startsWith('car_'))
+  const hasHeadline = Boolean(settings.headlineOverlay.enabled && settings.headlineOverlay.text.trim())
+  const parseTaskId = (parse as { taskId?: number | string } | null)?.taskId
+  const referenceVideoId = parseTaskId ? String(parseTaskId) : videoUrl.value.trim()
+  const uploadedVideoId = localVideoFilePath.value || undefined
   const prompt = [
     '基于爆款结构生成一条汽车销售视频',
     parse?.title ? `参考标题：${parse.title}` : '',
@@ -2064,27 +2194,110 @@ function buildBenchmarkPlanDraft(): CarSalesPlanDraft {
     coverUrl: videoCoverUrl.value,
     script,
     assets: [...benchmarkDraftAssets.value],
-    aspectRatio: '9:16',
-    subtitleMode: 'auto',
-    subtitleLanguage: 'zh-CN',
+    aspectRatio: benchmarkAspectRatio.value,
+    subtitleMode,
+    subtitleLanguage: rewriteTargetLanguage.value === '英文' ? 'en-US' : 'zh-CN',
     nativeVoiceLanguage: rewriteTargetLanguage.value === '英文' ? 'en-US' : 'zh-CN',
-    nativeVoiceStyle: 'natural_sales',
-    nativeSpeechStyle: 'balanced',
-    burnInSubtitle: true,
-    audioPolicy: 'auto',
-    model: 'auto',
+    nativeVoiceStyle: settings.nativeVoiceStyle,
+    nativeSpeechStyle: settings.nativeSpeechStyle,
+    burnInSubtitle: subtitleMode !== 'off' && settings.burnInSubtitle,
+    customSubtitle: subtitleMode === 'upload' ? settings.customSubtitle.trim() : undefined,
+    audioPolicy: settings.audioPolicy,
+    model: settings.model,
     segmentCount,
     segmentDuration,
+    hostAppearanceEnabled: settings.hostAppearanceEnabled,
+    subtitleOverlay: settings.subtitleOverlay,
+    headlineOverlay: settings.headlineOverlay,
+    creationMode: '爆款对标创作',
+    chainType: 'benchmark',
+    videoType: settings.videoType,
+    hasDigitalHuman: settings.hostAppearanceEnabled,
+    digitalHumanId: hostAsset ? String(hostAsset.assetId) : undefined,
+    voiceId: voiceAsset ? String(voiceAsset.assetId) : undefined,
+    tone: settings.tone,
+    language: rewriteTargetLanguage.value === '英文' ? 'en-US' : 'zh-CN',
+    duration: durationSeconds,
+    enableSubtitle: subtitleMode !== 'off',
+    subtitleStyle: `${settings.subtitleOverlay.position}/${settings.subtitleOverlay.fontSize}px`,
+    enableBigText: hasHeadline,
+    bigTextStyle: hasHeadline ? `${settings.headlineOverlay.position}/${settings.headlineOverlay.fontSize}px` : undefined,
+    enableBgm: settings.bgmStyle !== 'none' && (settings.audioPolicy === 'bgm' || settings.audioPolicy === 'auto' || benchmarkDraftAssets.value.some((asset) => asset.role === 'bgm')),
+    bgmStyle: settings.bgmStyle,
+    generateCover: settings.generateCover,
+    generateTitle: settings.generateTitle,
+    generateDescription: settings.generateDescription,
+    generateTags: settings.generateTags,
+    benchmarkVideoId: referenceVideoId || undefined,
+    uploadedVideoId,
+    vehicleId: vehicleAsset ? String(vehicleAsset.assetId) : undefined,
+    vehicleName: vehicleAsset?.fileName,
     configItems: [
       selectedPlatform.value === 'auto' ? '平台自动识别' : `平台 ${selectedPlatform.value}`,
       '爆款文案复用',
       '爆款节奏拆解',
-    ],
+      `比例 ${benchmarkAspectRatio.value}`,
+      `${durationSeconds} 秒`,
+      settings.hostAppearanceEnabled ? '数字人出镜' : '',
+      hasHeadline ? '大字报' : '',
+    ].filter(Boolean),
     warnings: [
       ...(script ? [] : ['当前没有解析/改写文案，方案会使用本地爆款结构兜底。']),
       ...(benchmarkDraftAssets.value.length ? [] : ['汽车销售生成至少需要 1 张车辆图片，请在确认生成前补充车辆素材。']),
     ],
   }
+}
+
+function applyBenchmarkDraftSettings(draft: CarSalesPlanDraft) {
+  benchmarkAspectRatio.value = draft.aspectRatio
+  const duration = draft.duration || draft.segmentCount * draft.segmentDuration
+  benchmarkTargetDuration.value = duration <= 15 ? 15 : duration <= 30 ? 30 : 45
+  benchmarkAdvancedSettings.value = {
+    ...benchmarkAdvancedSettings.value,
+    hostAppearanceEnabled: Boolean(draft.hostAppearanceEnabled),
+    videoType: (draft.videoType as CarSalesAdvancedSettings['videoType']) || (draft.hostAppearanceEnabled ? 'digital_human' : 'standard'),
+    subtitleMode: draft.subtitleMode,
+    customSubtitle: draft.customSubtitle || '',
+    burnInSubtitle: draft.burnInSubtitle,
+    subtitleOverlay: normalizeBenchmarkOverlay(draft.subtitleOverlay, benchmarkAdvancedSettings.value.subtitleOverlay),
+    headlineOverlay: normalizeBenchmarkOverlay(draft.headlineOverlay, benchmarkAdvancedSettings.value.headlineOverlay),
+    audioPolicy: draft.audioPolicy,
+    bgmStyle: (draft.bgmStyle as CarSalesAdvancedSettings['bgmStyle']) || 'auto',
+    tone: (draft.tone as CarSalesAdvancedSettings['tone']) || 'professional',
+    nativeVoiceStyle: draft.nativeVoiceStyle || 'natural_sales',
+    nativeSpeechStyle: draft.nativeSpeechStyle || 'balanced',
+    model: draft.model || 'auto',
+    generateCover: draft.generateCover ?? true,
+    generateTitle: draft.generateTitle ?? true,
+    generateDescription: draft.generateDescription ?? true,
+    generateTags: draft.generateTags ?? true,
+  }
+  benchmarkDraftAssets.value = draft.assets || []
+}
+
+function normalizeBenchmarkOverlay(
+  overlay: CarSalesPlanDraft['subtitleOverlay'],
+  fallback: CarSalesTextOverlaySettings,
+): CarSalesTextOverlaySettings {
+  if (!overlay) return { ...fallback }
+  return {
+    enabled: overlay.enabled ?? fallback.enabled,
+    text: overlay.text ?? fallback.text,
+    fontFamily: overlay.fontFamily ?? fallback.fontFamily,
+    fontSize: overlay.fontSize ?? fallback.fontSize,
+    textColor: overlay.textColor ?? fallback.textColor,
+    outlineColor: overlay.outlineColor ?? fallback.outlineColor,
+    position: normalizeBenchmarkOverlayPosition(overlay.position, fallback.position),
+  }
+}
+
+function normalizeBenchmarkOverlayPosition(
+  position: string | undefined,
+  fallback: CarSalesTextOverlaySettings['position'],
+): CarSalesTextOverlaySettings['position'] {
+  return position === 'top' || position === 'middle' || position === 'bottom'
+    ? position
+    : fallback
 }
 
 function handleBenchmarkAssetSelect(payload: CarSalesAssetSelectPayload) {
@@ -2093,12 +2306,32 @@ function handleBenchmarkAssetSelect(payload: CarSalesAssetSelectPayload) {
     ...benchmarkDraftAssets.value.filter((item) => item.assetId !== next.assetId),
     next,
   ]
+  if (payload.role === 'host_image' || payload.role === 'host_video') {
+    benchmarkAdvancedSettings.value = {
+      ...benchmarkAdvancedSettings.value,
+      hostAppearanceEnabled: true,
+      videoType: 'digital_human',
+    }
+  }
   benchmarkAssetDrawerOpen.value = false
   applyMessage.value = `已加入素材：${payload.asset.fileName}`
 }
 
 function removeBenchmarkDraftAsset(assetId: number) {
+  const removed = benchmarkDraftAssets.value.find((item) => item.assetId === assetId)
   benchmarkDraftAssets.value = benchmarkDraftAssets.value.filter((item) => item.assetId !== assetId)
+  if (removed && (removed.role === 'host_image' || removed.role === 'host_video')) {
+    clearBenchmarkHostAsset()
+  }
+}
+
+function clearBenchmarkHostAsset() {
+  benchmarkDraftAssets.value = benchmarkDraftAssets.value.filter((item) => item.role !== 'host_image' && item.role !== 'host_video')
+  benchmarkAdvancedSettings.value = {
+    ...benchmarkAdvancedSettings.value,
+    hostAppearanceEnabled: false,
+    videoType: 'standard',
+  }
 }
 
 function updatePlanScript(value: string) {
@@ -3925,6 +4158,37 @@ function applyScript() {
   font-size: 17px;
   font-weight: 900;
   white-space: nowrap;
+}
+
+.benchmark-param-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 10px;
+}
+
+.benchmark-param-grid--wide {
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr) auto;
+  align-items: end;
+}
+
+.benchmark-param-grid label {
+  display: grid;
+  min-width: 0;
+  gap: 6px;
+  color: #475467;
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.benchmark-param-grid select {
+  width: 100%;
+  min-height: 38px;
+  border: 1px solid #dfe7f3;
+  border-radius: 7px;
+  background: #fff;
+  color: #101828;
+  padding: 0 10px;
+  outline: none;
 }
 
 .benchmark-ready-card .primary-button,

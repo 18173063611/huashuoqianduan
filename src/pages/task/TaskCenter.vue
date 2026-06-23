@@ -2924,7 +2924,7 @@ section.app-card.app-page-stack {
   height: 100%;
   max-height: none;
   border-radius: 0;
-  object-fit: cover;
+  object-fit: contain;
 }
 
 .task-video-cover {

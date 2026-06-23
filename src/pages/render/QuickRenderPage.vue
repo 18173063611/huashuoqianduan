@@ -740,6 +740,7 @@ let narrationLocalizationPromise: Promise<string> | null = null
 function createDefaultAdvancedSettings(preferences: CarSalesGenerationPreferences = carSalesPreferences): CarSalesAdvancedSettings {
   return {
     hostAppearanceEnabled: false,
+    videoType: 'standard',
     subtitleMode: preferences.subtitleMode,
     customSubtitle: '',
     burnInSubtitle: preferences.burnInSubtitle,
@@ -756,16 +757,22 @@ function createDefaultAdvancedSettings(preferences: CarSalesGenerationPreference
       enabled: false,
       text: '',
       fontFamily: 'Microsoft YaHei',
-      fontSize: 72,
+      fontSize: 64,
       textColor: '#ffffff',
       outlineColor: '#111827',
       position: 'top',
     },
     audioPolicy: preferences.audioPolicy,
+    bgmStyle: 'auto',
     videoStyle: preferences.videoStyle,
+    tone: 'professional',
     nativeVoiceStyle: preferences.nativeVoiceStyle,
     nativeSpeechStyle: preferences.nativeSpeechStyle,
     model: preferences.model,
+    generateCover: true,
+    generateTitle: true,
+    generateDescription: true,
+    generateTags: true,
   }
 }
 
@@ -823,6 +830,9 @@ const imageCount = computed(() => materials.value.filter((item) => item.asset.as
 const videoCount = computed(() => materials.value.filter((item) => item.asset.assetType === 'VIDEO').length)
 const hasBgmMaterial = computed(() => materials.value.some((item) => item.role === 'bgm'))
 const selectedBgmMaterial = computed(() => materials.value.find((item) => item.role === 'bgm') || null)
+const selectedVoiceMaterial = computed(() =>
+  materials.value.find((item) => item.role === 'voiceover' || item.role === 'reference_audio') || null,
+)
 const selectedHostMaterial = computed(() =>
   materials.value.find((item) => item.role === 'host_image' || item.role === 'host_video') || null,
 )
@@ -868,8 +878,9 @@ const audioPolicy = computed<'auto' | 'none' | 'voiceover' | 'bgm'>(() => advanc
 const segmentCount = computed(() => {
   if (inferredRoute.value === 'digital_human' || inferredRoute.value === 'general_video') return 1
   if (inferredRoute.value === 'material_mix') return Math.max(1, Math.min(4, videoCount.value || 1))
-  const durationBasedCount = targetDuration.value <= 10 ? 2 : targetDuration.value <= 15 ? 3 : 4
-  return Math.max(2, Math.min(4, imageCount.value || durationBasedCount))
+  const durationBasedCount = targetDuration.value <= 10 ? 2 : targetDuration.value <= 15 ? 3 : targetDuration.value <= 20 ? 5 : 6
+  const referenceRichCount = targetDuration.value >= 30 && imageCount.value >= 8 ? 8 : durationBasedCount
+  return Math.max(2, Math.min(8, referenceRichCount))
 })
 const segmentDuration = computed(() => Math.max(4, Math.round(targetDuration.value / Math.max(1, segmentCount.value))))
 const totalDuration = computed(() => targetDuration.value)
@@ -955,6 +966,7 @@ const advancedSummaryLabel = computed(() => {
   const enabled: string[] = []
   if (advancedSettings.value.hostAppearanceEnabled) enabled.push('数字人')
   if (advancedSettings.value.headlineOverlay.enabled && advancedSettings.value.headlineOverlay.text.trim()) enabled.push('大字报')
+  if (advancedSettings.value.videoType !== 'standard') enabled.push(videoTypeLabel(advancedSettings.value.videoType))
   if (advancedSettings.value.audioPolicy === 'none') enabled.push('静音')
   if (advancedSettings.value.model !== 'auto') enabled.push('指定模型')
   return enabled.length ? enabled.join(' / ') : '默认'
@@ -963,15 +975,19 @@ const advancedSummaryLabel = computed(() => {
 const advancedSummaryHint = computed(() => {
   const style = videoStyleLabel(advancedSettings.value.videoStyle)
   const subtitle = subtitleLabel.value
+  const tone = toneLabel(advancedSettings.value.tone)
   const host = advancedSettings.value.hostAppearanceEnabled
     ? selectedAvatar.value?.avatarName || (hasHostMaterial.value ? '已选数字人素材' : '')
     : ''
-  return host ? `${style}，字幕：${subtitle}，数字人：${host}` : `${style}，字幕：${subtitle}`
+  return host ? `${style}，${tone}，字幕：${subtitle}，数字人：${host}` : `${style}，${tone}，字幕：${subtitle}`
 })
 
 const advancedPromptText = computed(() => {
   const parts: string[] = []
+  parts.push(`视频类型：${videoTypeLabel(advancedSettings.value.videoType)}`)
   parts.push(`视频风格：${videoStyleLabel(advancedSettings.value.videoStyle)}`)
+  parts.push(`语气口吻：${toneLabel(advancedSettings.value.tone)}`)
+  parts.push(`BGM风格：${bgmStyleLabel(advancedSettings.value.bgmStyle)}`)
   if (advancedSettings.value.hostAppearanceEnabled) {
     parts.push('允许销售顾问/数字人自然出镜')
   } else {
@@ -979,6 +995,15 @@ const advancedPromptText = computed(() => {
   }
   if (advancedSettings.value.headlineOverlay.enabled && advancedSettings.value.headlineOverlay.text.trim()) {
     parts.push(`大字报文案：${advancedSettings.value.headlineOverlay.text.trim()}`)
+  }
+  const publishItems = [
+    advancedSettings.value.generateCover ? '封面' : '',
+    advancedSettings.value.generateTitle ? '标题' : '',
+    advancedSettings.value.generateDescription ? '简介' : '',
+    advancedSettings.value.generateTags ? '标签' : '',
+  ].filter(Boolean)
+  if (publishItems.length) {
+    parts.push(`发布物料：生成${publishItems.join('、')}`)
   }
   return parts.join('；')
 })
@@ -1931,6 +1956,7 @@ async function handleClassifiedAssetSelect(payload: CarSalesAssetSelectPayload) 
       advancedSettings.value = {
         ...advancedSettings.value,
         hostAppearanceEnabled: true,
+        videoType: 'digital_human',
       }
     }
   } catch (error) {
@@ -1943,6 +1969,7 @@ async function handleAvatarSelected(avatar: AvatarItem) {
   advancedSettings.value = {
     ...advancedSettings.value,
     hostAppearanceEnabled: true,
+    videoType: 'digital_human',
   }
   if (!avatar.assetId) {
     errorMessage.value = '该数字人缺少资产 ID，无法加入本次生成'
@@ -1966,6 +1993,7 @@ function clearSelectedAvatar() {
   advancedSettings.value = {
     ...advancedSettings.value,
     hostAppearanceEnabled: false,
+    videoType: 'standard',
   }
 }
 
@@ -2141,6 +2169,40 @@ function videoStyleLabel(style: CarSalesAdvancedSettings['videoStyle']) {
     tech: '科技智能',
   }
   return labels[style] || '真实销售'
+}
+
+function videoTypeLabel(type: CarSalesAdvancedSettings['videoType']) {
+  const labels: Record<CarSalesAdvancedSettings['videoType'], string> = {
+    standard: '常规销售视频',
+    digital_human: '数字人口播',
+    product_showcase: '车型展示',
+    silent_bgm: '无口播 BGM',
+  }
+  return labels[type] || '常规销售视频'
+}
+
+function toneLabel(tone: CarSalesAdvancedSettings['tone']) {
+  const labels: Record<CarSalesAdvancedSettings['tone'], string> = {
+    professional: '专业讲解',
+    promotional: '促销转化',
+    premium: '高级克制',
+    energetic: '高能种草',
+    warm: '温暖陪伴',
+    tech: '科技理性',
+  }
+  return labels[tone] || '专业讲解'
+}
+
+function bgmStyleLabel(style: CarSalesAdvancedSettings['bgmStyle']) {
+  const labels: Record<CarSalesAdvancedSettings['bgmStyle'], string> = {
+    auto: '智能匹配',
+    none: '不使用 BGM',
+    upbeat: '轻快节奏',
+    premium: '高级氛围',
+    warm: '温暖生活',
+    tech: '科技动感',
+  }
+  return labels[style] || '智能匹配'
 }
 
 function buildGoalTextForRequest() {
@@ -2346,10 +2408,44 @@ function storyboardForRequest() {
   }))
 }
 
+function buildQuickAdvancedRequestFields(): Partial<QuickRenderRequest> {
+  const headline = advancedSettings.value.headlineOverlay
+  const hasHeadline = Boolean(headline.enabled && headline.text.trim())
+  const selectedHostId = selectedAvatar.value?.avatarId || selectedHostMaterial.value?.asset.assetId || null
+  return {
+    creationMode: 'AI智能创作',
+    chainType: 'ai-smart',
+    videoType: advancedSettings.value.videoType,
+    hasDigitalHuman: advancedSettings.value.hostAppearanceEnabled,
+    digitalHumanId: selectedHostId ? String(selectedHostId) : undefined,
+    voiceId: selectedVoiceMaterial.value?.asset.assetId ? String(selectedVoiceMaterial.value.asset.assetId) : undefined,
+    tone: advancedSettings.value.tone,
+    language: voiceLanguage.value,
+    duration: totalDuration.value,
+    enableSubtitle: subtitleMode.value !== 'off',
+    subtitleStyle: `${advancedSettings.value.subtitleOverlay.position}/${advancedSettings.value.subtitleOverlay.fontSize}px`,
+    enableBigText: hasHeadline,
+    bigTextStyle: hasHeadline ? `${headline.position}/${headline.fontSize}px` : undefined,
+    enableBgm: advancedSettings.value.bgmStyle !== 'none' && (
+      audioPolicy.value === 'bgm' ||
+      audioPolicy.value === 'auto' ||
+      Boolean(selectedBgmMaterial.value)
+    ),
+    bgmStyle: advancedSettings.value.bgmStyle,
+    generateCover: advancedSettings.value.generateCover,
+    generateTitle: advancedSettings.value.generateTitle,
+    generateDescription: advancedSettings.value.generateDescription,
+    generateTags: advancedSettings.value.generateTags,
+    vehicleId: carModelBundleMaterial.value?.asset.assetId ? String(carModelBundleMaterial.value.asset.assetId) : undefined,
+    vehicleName: carModelBundleMaterial.value?.asset.fileName || undefined,
+  }
+}
+
 function buildQuickRenderPayload(finalVoiceTextForRequest: string, baseRequest?: QuickRenderRequest | null): QuickRenderRequest {
   if (baseRequest) {
     return {
       ...baseRequest,
+      ...buildQuickAdvancedRequestFields(),
       finalVoiceText: finalVoiceTextForRequest || undefined,
       strictVoiceText: Boolean(finalVoiceTextForRequest),
       generatedStoryboard: storyboardForRequest(),
@@ -2399,6 +2495,7 @@ function buildQuickRenderPayload(finalVoiceTextForRequest: string, baseRequest?:
     hostAppearanceEnabled: advancedSettings.value.hostAppearanceEnabled,
     subtitleOverlay: overlayForRequest(advancedSettings.value.subtitleOverlay),
     headlineOverlay: overlayForRequest(advancedSettings.value.headlineOverlay),
+    ...buildQuickAdvancedRequestFields(),
   }
 }
 
@@ -2572,7 +2669,10 @@ function planConfigItems() {
     voiceLanguageLabel.value,
     `字幕 ${subtitleLabel.value}`,
     `音频 ${audioDecisionLabel.value}`,
+    `类型 ${videoTypeLabel(advancedSettings.value.videoType)}`,
     `风格 ${videoStyleLabel(advancedSettings.value.videoStyle)}`,
+    `语气 ${toneLabel(advancedSettings.value.tone)}`,
+    `BGM ${bgmStyleLabel(advancedSettings.value.bgmStyle)}`,
   ]
   if (advancedSettings.value.hostAppearanceEnabled) items.push('数字人出镜')
   if (selectedAvatar.value?.avatarName) {
@@ -2585,6 +2685,15 @@ function planConfigItems() {
   }
   if (advancedSettings.value.model !== 'auto') {
     items.push(`模型 ${advancedSettings.value.model}`)
+  }
+  const publishItems = [
+    advancedSettings.value.generateCover ? '封面' : '',
+    advancedSettings.value.generateTitle ? '标题' : '',
+    advancedSettings.value.generateDescription ? '简介' : '',
+    advancedSettings.value.generateTags ? '标签' : '',
+  ].filter(Boolean)
+  if (publishItems.length) {
+    items.push(`发布物料 ${publishItems.join('/')}`)
   }
   return items
 }
@@ -4491,7 +4600,7 @@ onBeforeUnmount(stopAllTracking)
   width: 100%;
   height: 100%;
   background: #101828;
-  object-fit: cover;
+  object-fit: contain;
 }
 
 .quick-generation-main,

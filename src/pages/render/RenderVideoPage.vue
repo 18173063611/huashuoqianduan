@@ -1185,7 +1185,7 @@
                         </div>
                         <div class="render-form-field">
                           <label>字号</label>
-                          <input v-model.number="carHeadlineFontSize" type="number" min="48" max="156" step="4" :disabled="busy" />
+                          <input v-model.number="carHeadlineFontSize" type="number" min="48" max="120" step="4" :disabled="busy" />
                         </div>
                       </div>
                       <div class="render-color-grid" aria-label="大字报颜色设置">
@@ -2338,7 +2338,7 @@ const carHeadlineEnabled = ref(false)
 const carHeadlineText = ref('')
 const carHeadlineFontFamily = ref('Microsoft YaHei')
 const carHeadlinePosition = ref<CarHeadlinePosition>('top')
-const carHeadlineFontSize = ref(92)
+const carHeadlineFontSize = ref(64)
 const carHeadlineTextColor = ref('#ffffff')
 const carHeadlineOutlineColor = ref('#111111')
 const carBgmUrl = ref('')
@@ -5858,7 +5858,7 @@ const carHeadlinePreviewText = computed(() =>
 const carHeadlinePreviewStyle = computed(() => ({
   color: carHeadlineTextColor.value,
   fontFamily: carHeadlineFontFamily.value,
-  fontSize: `${Math.max(24, Math.min(58, Math.round((Number(carHeadlineFontSize.value) || 92) * 0.56)))}px`,
+  fontSize: `${Math.max(24, Math.min(58, Math.round((Number(carHeadlineFontSize.value) || 64) * 0.56)))}px`,
   WebkitTextStroke: `2px ${carHeadlineOutlineColor.value}`,
   textShadow: `0 2px 0 ${carHeadlineOutlineColor.value}, 0 -2px 0 ${carHeadlineOutlineColor.value}, 2px 0 0 ${carHeadlineOutlineColor.value}, -2px 0 0 ${carHeadlineOutlineColor.value}`,
 }))
@@ -5960,7 +5960,7 @@ function buildCarHeadlineOverlayForRequest() {
     enabled: true,
     text,
     fontFamily: carHeadlineFontFamily.value,
-    fontSize: Math.max(48, Math.min(156, Number(carHeadlineFontSize.value) || 92)),
+    fontSize: Math.max(48, Math.min(120, Number(carHeadlineFontSize.value) || 64)),
     textColor: carHeadlineTextColor.value,
     outlineColor: carHeadlineOutlineColor.value,
     position: carHeadlinePosition.value,
