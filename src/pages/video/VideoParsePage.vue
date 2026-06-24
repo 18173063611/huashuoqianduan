@@ -193,11 +193,12 @@
               <label>
                 <span>目标时长</span>
                 <select v-model.number="benchmarkTargetDuration">
-                  <option :value="15">15 秒</option>
-                  <option :value="30">30 秒</option>
-                  <option :value="45">45 秒</option>
+                  <option v-for="duration in benchmarkDurationOptions" :key="duration" :value="duration">
+                    {{ duration }} 秒
+                  </option>
                 </select>
               </label>
+              <p v-if="benchmarkDurationNotice" class="info-text">{{ benchmarkDurationNotice }}</p>
             </div>
             <button class="primary-button" type="button" :disabled="planPreviewLoading || planSubmitting" @click="prepareBenchmarkPlanPreview">
               <el-icon><MagicStick /></el-icon>
@@ -292,7 +293,7 @@
               </div>
             </div>
             <div v-else class="benchmark-empty-block">
-              解析完成后从真实文案中拆分分镜结构。
+              未识别到参考视频的真实镜头结构，请重新解析或更换参考视频。
             </div>
             <div v-if="benchmarkKeywordTags.length" class="style-tags">
               <span v-for="tag in benchmarkKeywordTags.slice(0, 5)" :key="`style-${tag}`">{{ tag }}</span>
@@ -427,11 +428,12 @@
             <label>
               <span>目标时长</span>
               <select v-model.number="benchmarkTargetDuration">
-                <option :value="15">15 秒</option>
-                <option :value="30">30 秒</option>
-                <option :value="45">45 秒</option>
+                <option v-for="duration in benchmarkDurationOptions" :key="duration" :value="duration">
+                  {{ duration }} 秒
+                </option>
               </select>
             </label>
+            <p v-if="benchmarkDurationNotice" class="info-text">{{ benchmarkDurationNotice }}</p>
             <button type="button" class="secondary-button" @click="benchmarkAdvancedDrawerOpen = true">高级参数</button>
           </div>
           <div v-if="benchmarkDraftAssets.length" class="benchmark-selected-assets">
@@ -949,7 +951,9 @@ import {
   ensureCarSalesPlanDraftAsset,
   planAssetFromAssetItem,
   prepareCarSalesAiPlanPreview,
+  syncStoryboardNarrationWithScript,
   type AiPlanPreview,
+  type AiPlanStoryboardShot,
   type CarSalesPlanDraft,
   type CarSalesPlanDraftAsset,
 } from '../render/carSalesPlanDraft'
@@ -1093,7 +1097,7 @@ const benchmarkAssetDrawerInitialCategory = ref<CarSalesAssetCategoryKey>('vehic
 const benchmarkAdvancedDrawerOpen = ref(false)
 const benchmarkAdvancedSettings = ref<CarSalesAdvancedSettings>(createDefaultBenchmarkAdvancedSettings())
 const benchmarkAspectRatio = ref<'9:16' | '16:9' | 'auto'>('9:16')
-const benchmarkTargetDuration = ref<15 | 30 | 45>(30)
+const benchmarkTargetDuration = ref<number>(30)
 const benchmarkDraftAssets = ref<CarSalesPlanDraftAsset[]>([])
 const parseAbort = ref<AbortController | null>(null)
 const parseCanceling = ref(false)
@@ -1142,6 +1146,27 @@ const benchmarkSelectedHostAsset = computed(() =>
 const benchmarkSelectedHostPreviewUrl = computed(() => {
   const asset = benchmarkSelectedHostAsset.value
   return asset ? normalizePublicMediaUrl(asset.thumbnailUrl || asset.fileUrl || '') : ''
+})
+const referenceVideoDurationSeconds = computed(() =>
+  normalizeBenchmarkDurationSeconds(douyinParse.value?.durationSeconds || 0),
+)
+const benchmarkDurationOptions = computed(() => {
+  const options = new Set([15, 30, 45])
+  if (referenceVideoDurationSeconds.value > 0) {
+    options.add(referenceVideoDurationSeconds.value)
+  }
+  if (benchmarkTargetDuration.value > 0) {
+    options.add(normalizeBenchmarkDurationSeconds(benchmarkTargetDuration.value))
+  }
+  return Array.from(options).sort((a, b) => a - b)
+})
+const benchmarkDurationNotice = computed(() => {
+  const referenceDuration = referenceVideoDurationSeconds.value
+  if (!referenceDuration) return ''
+  if (benchmarkTargetDuration.value === referenceDuration) {
+    return `已按参考视频时长 ${referenceDuration} 秒生成，可调整`
+  }
+  return `参考视频时长 ${referenceDuration} 秒；当前已调整为 ${benchmarkTargetDuration.value} 秒`
 })
 
 function createDefaultBenchmarkAdvancedSettings(): CarSalesAdvancedSettings {
@@ -1299,19 +1324,205 @@ const benchmarkKeywordTags = computed(() => {
     .map((item) => item.label)
     .slice(0, 6)
 })
+const benchmarkReferenceStoryboard = computed<AiPlanStoryboardShot[]>(() =>
+  buildBenchmarkReferenceStoryboard(
+    douyinParse.value,
+    rewrittenText.value.trim() || sourceText.value.trim(),
+    selectedBenchmarkDurationSeconds(),
+  ),
+)
 const benchmarkShotStructure = computed(() => {
-  const text = rewrittenText.value.trim() || sourceText.value.trim()
-  if (!text) return []
-  const units = splitBenchmarkScriptUnits(text).slice(0, 6)
-  if (!units.length) return []
-  const totalSeconds = douyinParse.value?.durationSeconds || 0
-  const perShotDuration = totalSeconds > 0 ? Math.max(1, Math.round((totalSeconds / units.length) * 10) / 10) : 0
-  return units.map((unit, index) => ({
-    index: index + 1,
-    title: compactBenchmarkShotTitle(unit),
-    durationLabel: perShotDuration ? `${perShotDuration}s` : '',
+  return benchmarkReferenceStoryboard.value.map((shot) => ({
+    index: shot.index,
+    title: compactBenchmarkShotTitle(shot.visual),
+    durationLabel: shot.duration ? `${shot.duration}s` : '',
   }))
 })
+
+interface BenchmarkRawShot {
+  visual: string
+  duration?: number
+  start?: number
+  end?: number
+}
+
+function selectedBenchmarkDurationSeconds() {
+  return normalizeBenchmarkDurationSeconds(benchmarkTargetDuration.value)
+    || referenceVideoDurationSeconds.value
+    || 30
+}
+
+function normalizeBenchmarkDurationSeconds(value: number | null | undefined) {
+  const duration = Number(value)
+  if (!Number.isFinite(duration) || duration <= 0) return 0
+  return Math.max(1, Math.min(180, Math.round(duration)))
+}
+
+function buildBenchmarkReferenceStoryboard(
+  parse: DouyinVideoParseResponse | null,
+  script: string,
+  durationSeconds: number,
+): AiPlanStoryboardShot[] {
+  const targetDuration = normalizeBenchmarkDurationSeconds(durationSeconds) || 30
+  const scriptUnits = splitBenchmarkScriptUnits(script)
+  const rawShots = extractBenchmarkReferenceShots(parse)
+  if (rawShots.length < 2) {
+    return []
+  }
+  const baseShots = rawShots.slice(0, 8).map((shot, index) => ({
+      index: index + 1,
+      visual: normalizeBenchmarkVisualText(shot.visual, index, targetDuration),
+      narration: scriptUnits[index] || scriptUnits[scriptUnits.length - 1] || '',
+      duration: normalizeBenchmarkShotDuration(shot, targetDuration, rawShots.length),
+    }))
+  return normalizeBenchmarkStoryboardDurationTotal(baseShots, targetDuration)
+}
+
+function extractBenchmarkReferenceShots(parse: DouyinVideoParseResponse | null) {
+  const structuredShots = parse?.referenceStructure
+    ?.map((shot): BenchmarkRawShot | null => {
+      const duration = readFiniteBenchmarkNumber(shot.durationSec)
+      const start = readFiniteBenchmarkNumber(shot.startSec)
+      const end = readFiniteBenchmarkNumber(shot.endSec)
+      if (!duration && !(start != null && end != null && end > start)) return null
+      return {
+        visual: shot.visualSummary
+          || shot.sceneType
+          || '保持参考视频对应镜头结构、景别、运镜和节奏，只替换为所选车型素材',
+        duration: duration ?? undefined,
+        start: start ?? undefined,
+        end: end ?? undefined,
+      }
+    })
+    .filter((shot): shot is BenchmarkRawShot => Boolean(shot)) || []
+  if (structuredShots.length >= 2) {
+    return structuredShots
+  }
+  return extractBenchmarkRawShots(parse?.rawData)
+}
+
+function extractBenchmarkRawShots(rawData: unknown) {
+  const groups: BenchmarkRawShot[][] = []
+  collectBenchmarkRawShotGroups(rawData, '', groups, 0)
+  return groups
+    .filter((group) => group.length >= 2)
+    .sort((a, b) => b.length - a.length)[0] || []
+}
+
+function collectBenchmarkRawShotGroups(
+  value: unknown,
+  path: string,
+  groups: BenchmarkRawShot[][],
+  depth: number,
+) {
+  if (!value || depth > 6) return
+  if (Array.isArray(value)) {
+    if (isBenchmarkStructurePath(path)) {
+      const shots = value
+        .map((item) => rawBenchmarkShotFromRecord(item))
+        .filter((shot): shot is BenchmarkRawShot => Boolean(shot))
+      if (shots.length >= 2) {
+        groups.push(shots)
+      }
+    }
+    value.forEach((item, index) => collectBenchmarkRawShotGroups(item, `${path}/${index}`, groups, depth + 1))
+    return
+  }
+  if (typeof value === 'object') {
+    Object.entries(value as Record<string, unknown>).forEach(([key, child]) => {
+      collectBenchmarkRawShotGroups(child, `${path}/${key}`, groups, depth + 1)
+    })
+  }
+}
+
+function isBenchmarkStructurePath(path: string) {
+  return /(referenceStructure|scene|shot|segment|storyboard|clip|镜头|分镜|片段)/i.test(path)
+}
+
+function rawBenchmarkShotFromRecord(value: unknown): BenchmarkRawShot | null {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return null
+  const record = value as Record<string, unknown>
+  const visual = readBenchmarkText(record, [
+    'visual',
+    'visualPrompt',
+    'prompt',
+    'description',
+    'shot',
+    'scene',
+    'title',
+    'label',
+  ])
+  const start = readBenchmarkNumber(record, ['start', 'startTime', 'startSeconds', 'begin', 'from'])
+  const end = readBenchmarkNumber(record, ['end', 'endTime', 'endSeconds', 'to'])
+  const duration = readBenchmarkNumber(record, ['duration', 'durationSeconds', 'estDurationSec', 'durationSec'])
+  if (!duration && !(start != null && end != null && end > start)) return null
+  return {
+    visual: visual || '保持参考视频对应镜头结构、景别、运镜和节奏，只替换为所选车型素材',
+    duration: duration ?? undefined,
+    start: start ?? undefined,
+    end: end ?? undefined,
+  }
+}
+
+function readBenchmarkText(record: Record<string, unknown>, keys: string[]) {
+  for (const key of keys) {
+    const value = record[key]
+    if (typeof value === 'string' && value.trim()) {
+      return value.trim()
+    }
+  }
+  return ''
+}
+
+function readBenchmarkNumber(record: Record<string, unknown>, keys: string[]) {
+  for (const key of keys) {
+    const value = readFiniteBenchmarkNumber(record[key])
+    if (value != null) {
+      return value
+    }
+  }
+  return null
+}
+
+function readFiniteBenchmarkNumber(value: unknown) {
+  const numberValue = Number(value)
+  return Number.isFinite(numberValue) && numberValue > 0 ? numberValue : null
+}
+
+function normalizeBenchmarkVisualText(value: string, index: number, durationSeconds: number) {
+  const clean = value.trim()
+  if (clean) {
+    return `参考视频第 ${index + 1} 段结构：${clean}。保持原镜头顺序、景别、运镜和节奏，只替换为所选车型素材。`
+  }
+  return `参考视频第 ${index + 1} 段结构：按 ${durationSeconds} 秒参考视频的原镜头顺序、景别、运镜和节奏执行，只替换为所选车型素材。`
+}
+
+function normalizeBenchmarkShotDuration(shot: BenchmarkRawShot, targetDuration: number, total: number) {
+  if (shot.duration && shot.duration > 0) return Math.max(1, Math.round(shot.duration))
+  if (shot.start != null && shot.end != null && shot.end > shot.start) {
+    return Math.max(1, Math.round(shot.end - shot.start))
+  }
+  return Math.max(1, Math.round(targetDuration / Math.max(1, total)))
+}
+
+function normalizeBenchmarkStoryboardDurationTotal(storyboard: AiPlanStoryboardShot[], targetDuration: number) {
+  if (!storyboard.length) return storyboard
+  const normalized = storyboard.map((shot) => ({
+    ...shot,
+    duration: Math.max(1, Math.round(shot.duration || targetDuration / storyboard.length)),
+  }))
+  const total = normalized.reduce((sum, shot) => sum + shot.duration, 0)
+  if (total === targetDuration || total <= 0) return normalized
+  let remaining = targetDuration
+  return normalized.map((shot, index) => {
+    const isLast = index === normalized.length - 1
+    const duration = isLast
+      ? Math.max(1, remaining)
+      : Math.max(1, Math.round((shot.duration / total) * targetDuration))
+    remaining -= duration
+    return { ...shot, duration }
+  })
+}
 
 const insightItems = computed(() => {
   const p = douyinParse.value
@@ -1778,6 +1989,10 @@ async function runParseVideo(
         parseError.value = `${friendlyMessage}${payload.traceId ? `（traceId：${payload.traceId}）` : ''}`
         if (payload.data?.parseResult) {
           douyinParse.value = payload.data.parseResult
+          const parsedDuration = normalizeBenchmarkDurationSeconds(payload.data.parseResult.durationSeconds)
+          if (parsedDuration) {
+            benchmarkTargetDuration.value = parsedDuration
+          }
         }
       },
     })
@@ -1932,6 +2147,10 @@ function applyParseTaskOutput(
   if (output.parseResult) {
     douyinParse.value = output.parseResult
     coverImageFailed.value = false
+    const parsedDuration = normalizeBenchmarkDurationSeconds(output.parseResult.durationSeconds)
+    if (parsedDuration) {
+      benchmarkTargetDuration.value = parsedDuration
+    }
   }
   if (output.transcriptResult) {
     sourceText.value = output.transcriptResult.originalText || ''
@@ -2117,6 +2336,13 @@ async function copyRewrittenText() {
 async function prepareBenchmarkPlanPreview() {
   if (!requireAuth('登录后可生成爆款对标视频')) return
   if (planPreviewLoading.value || planSubmitting.value) return
+  if (!hasBenchmarkReferenceStructure()) {
+    const message = benchmarkReferenceStructureRequiredMessage()
+    planPreviewError.value = message
+    applyMessage.value = message
+    planPreviewOpen.value = false
+    return
+  }
 
   const draft = buildBenchmarkPlanDraft()
   benchmarkPlanDraft.value = draft
@@ -2131,6 +2357,14 @@ async function prepareBenchmarkPlanPreview() {
   } finally {
     planPreviewLoading.value = false
   }
+}
+
+function hasBenchmarkReferenceStructure() {
+  return benchmarkReferenceStoryboard.value.length >= 2
+}
+
+function benchmarkReferenceStructureRequiredMessage() {
+  return '未识别到参考视频的真实镜头结构，请重新解析或更换参考视频后再生成；也可以改用 AI智能创作。'
 }
 
 function persistBenchmarkPendingPlanTask() {
@@ -2166,8 +2400,12 @@ function restoreBenchmarkPendingPlanFromRoute() {
 
 function buildBenchmarkPlanDraft(): CarSalesPlanDraft {
   const parse = douyinParse.value
-  const durationSeconds = benchmarkTargetDuration.value || Math.max(30, Math.min(60, Math.round(parse?.durationSeconds || 30)))
-  const segmentCount = Math.max(3, Math.min(8, Math.ceil(durationSeconds / 6)))
+  const durationSeconds = selectedBenchmarkDurationSeconds()
+  const storyboard = benchmarkReferenceStoryboard.value
+  if (storyboard.length < 2) {
+    throw new Error(benchmarkReferenceStructureRequiredMessage())
+  }
+  const segmentCount = storyboard.length
   const segmentDuration = Math.max(4, Math.min(8, Math.round(durationSeconds / segmentCount)))
   const script = rewrittenText.value.trim() || sourceText.value.trim()
   const settings = benchmarkAdvancedSettings.value
@@ -2183,7 +2421,8 @@ function buildBenchmarkPlanDraft(): CarSalesPlanDraft {
     '基于爆款结构生成一条汽车销售视频',
     parse?.title ? `参考标题：${parse.title}` : '',
     videoUrl.value.trim() ? `参考链接：${videoUrl.value.trim()}` : '',
-    script ? `参考文案：${script.slice(0, 500)}` : '',
+    `参考视频时长：${durationSeconds} 秒`,
+    '文案只作为口播内容；分镜只控制镜头结构，ASR/文案不得改写镜头顺序。',
   ].filter(Boolean).join('\n')
 
   return {
@@ -2193,6 +2432,7 @@ function buildBenchmarkPlanDraft(): CarSalesPlanDraft {
     referenceUrl: videoUrl.value.trim(),
     coverUrl: videoCoverUrl.value,
     script,
+    storyboard,
     assets: [...benchmarkDraftAssets.value],
     aspectRatio: benchmarkAspectRatio.value,
     subtitleMode,
@@ -2214,6 +2454,8 @@ function buildBenchmarkPlanDraft(): CarSalesPlanDraft {
     videoType: settings.videoType,
     hasDigitalHuman: settings.hostAppearanceEnabled,
     digitalHumanId: hostAsset ? String(hostAsset.assetId) : undefined,
+    avatarUrl: hostAsset?.fileUrl || hostAsset?.thumbnailUrl || undefined,
+    hostImageUrl: hostAsset?.fileUrl || hostAsset?.thumbnailUrl || undefined,
     voiceId: voiceAsset ? String(voiceAsset.assetId) : undefined,
     tone: settings.tone,
     language: rewriteTargetLanguage.value === '英文' ? 'en-US' : 'zh-CN',
@@ -2234,15 +2476,17 @@ function buildBenchmarkPlanDraft(): CarSalesPlanDraft {
     vehicleName: vehicleAsset?.fileName,
     configItems: [
       selectedPlatform.value === 'auto' ? '平台自动识别' : `平台 ${selectedPlatform.value}`,
-      '爆款文案复用',
-      '爆款节奏拆解',
+      '文案/分镜分离',
+      '爆款结构锁定',
       `比例 ${benchmarkAspectRatio.value}`,
       `${durationSeconds} 秒`,
+      benchmarkDurationNotice.value,
       settings.hostAppearanceEnabled ? '数字人出镜' : '',
       hasHeadline ? '大字报' : '',
     ].filter(Boolean),
     warnings: [
-      ...(script ? [] : ['当前没有解析/改写文案，方案会使用本地爆款结构兜底。']),
+      ...(script ? [] : ['当前没有解析/改写文案，请补充口播文案后再提交。']),
+      ...(benchmarkDurationNotice.value ? [benchmarkDurationNotice.value] : []),
       ...(benchmarkDraftAssets.value.length ? [] : ['汽车销售生成至少需要 1 张车辆图片，请在确认生成前补充车辆素材。']),
     ],
   }
@@ -2251,7 +2495,7 @@ function buildBenchmarkPlanDraft(): CarSalesPlanDraft {
 function applyBenchmarkDraftSettings(draft: CarSalesPlanDraft) {
   benchmarkAspectRatio.value = draft.aspectRatio
   const duration = draft.duration || draft.segmentCount * draft.segmentDuration
-  benchmarkTargetDuration.value = duration <= 15 ? 15 : duration <= 30 ? 30 : 45
+  benchmarkTargetDuration.value = normalizeBenchmarkDurationSeconds(duration) || 30
   benchmarkAdvancedSettings.value = {
     ...benchmarkAdvancedSettings.value,
     hostAppearanceEnabled: Boolean(draft.hostAppearanceEnabled),
@@ -2336,29 +2580,48 @@ function clearBenchmarkHostAsset() {
 
 function updatePlanScript(value: string) {
   if (!planPreview.value) return
+  const script = value
   planPreview.value = {
     ...planPreview.value,
-    script: value,
+    script,
+    storyboard: syncStoryboardNarrationWithScript(
+      planPreview.value.storyboard,
+      script,
+      benchmarkPlanDraft.value?.prompt || '',
+    ),
   }
   persistBenchmarkPendingPlanTask()
 }
 
 function updatePlanStoryboardShot(index: number, field: 'visual' | 'narration', value: string) {
   if (!planPreview.value) return
+  const storyboard = planPreview.value.storyboard.map((shot) =>
+    shot.index === index
+      ? { ...shot, [field]: value.trim() }
+      : shot,
+  )
   planPreview.value = {
     ...planPreview.value,
-    storyboard: planPreview.value.storyboard.map((shot) =>
-      shot.index === index
-        ? { ...shot, [field]: value.trim() }
-        : shot,
-    ),
+    script: field === 'narration' ? storyboardNarrationScript(storyboard) : planPreview.value.script,
+    storyboard,
   }
   persistBenchmarkPendingPlanTask()
+}
+
+function storyboardNarrationScript(storyboard: AiPlanStoryboardShot[]) {
+  return storyboard
+    .map((shot) => shot.narration.trim())
+    .filter(Boolean)
+    .join('\n')
 }
 
 async function confirmBenchmarkPlan() {
   if (!requireAuth('登录后可生成爆款对标视频')) return
   if (!benchmarkPlanDraft.value || !planPreview.value || planSubmitting.value) return
+  if (!benchmarkPlanDraft.value.storyboard?.length) {
+    planPreviewError.value = benchmarkReferenceStructureRequiredMessage()
+    return
+  }
   if (!benchmarkPlanDraft.value.assets.some((asset) => asset.role === 'car_model_bundle' || asset.role.startsWith('car_') || asset.role.startsWith('scene_'))) {
     planPreviewError.value = '汽车销售生成至少需要 1 张车辆图片。请返回页面选择车图/车辆素材后再提交。'
     return

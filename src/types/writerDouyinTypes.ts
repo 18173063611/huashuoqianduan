@@ -7,6 +7,23 @@ export interface DouyinAuthorInfo {
   avatarUrl: string
 }
 
+export interface ReferenceStructureShot {
+  index?: number
+  startSec?: number
+  endSec?: number
+  durationSec?: number
+  visualSummary?: string
+  cameraMotion?: string
+  sceneType?: string
+  keyframeUrl?: string
+  asrTextSpan?: string
+  ocrText?: string
+  hasSpeech?: boolean
+  audioEnergy?: number
+  source?: string
+  confidence?: number
+}
+
 export interface DouyinVideoParseResponse {
   videoId: string
   playUrl: string
@@ -17,6 +34,7 @@ export interface DouyinVideoParseResponse {
   sourceEndpoint: string
   requestId: string
   rawData: unknown
+  referenceStructure?: ReferenceStructureShot[]
 }
 
 export interface ShareVideoDownloadRequest {

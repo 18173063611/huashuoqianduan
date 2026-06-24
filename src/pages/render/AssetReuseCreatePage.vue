@@ -478,6 +478,7 @@ import {
 } from './carModelBundle'
 import {
   buildQuickRenderRequestFromPlanDraft,
+  parseStoryboardAssetTextToPlanShots,
   planAssetFromAssetItem,
   prepareCarSalesAiPlanPreview,
   type AiPlanPreview,
@@ -522,6 +523,8 @@ interface ImportedRenderConfig {
   videoType?: string
   hasDigitalHuman?: boolean
   digitalHumanId?: string
+  avatarUrl?: string
+  hostImageUrl?: string
   voiceId?: string
   tone?: string
   language?: string
@@ -683,9 +686,17 @@ const vehicleAssetSummary = computed(() => {
 const hasReusableVehicle = computed(() =>
   Boolean(selectedCarBundle.value || selectedVehicleImageSelections.value.length || selectedSceneSelections.value.length),
 )
-const hasCoreContent = computed(() => Boolean(selectedStoryboard.value || selectedBenchmark.value || draftPrompt.value.trim()))
+const hasCoreContent = computed(() => Boolean(
+  selectedStoryboard.value
+  || selectedBenchmark.value
+  || draftPrompt.value.trim()
+  || importedScriptText.value.trim()
+  || importedStoryboard.value.length,
+))
 const hasAudioOrHost = computed(() => Boolean(selectedHost.value || selectedVoice.value || selectedBgm.value))
-const canPreparePlan = computed(() => hasReusableVehicle.value && !planPreviewLoading.value && !planSubmitting.value)
+const canPreparePlan = computed(() =>
+  hasReusableVehicle.value && hasCoreContent.value && !planPreviewLoading.value && !planSubmitting.value,
+)
 const selectedCarBundleUrl = computed(() => selectedAssetUrl(selectedCarBundle.value))
 const selectedCarBundleName = computed(() => selectedCarBundle.value?.asset.fileName || '')
 const selectedCarBundleImageCountText = computed(() => {
@@ -1158,6 +1169,8 @@ function buildImportedRenderConfig(input: Record<string, unknown>): ImportedRend
     videoType: stringValue(input.videoType) || undefined,
     hasDigitalHuman: typeof input.hasDigitalHuman === 'boolean' ? input.hasDigitalHuman : undefined,
     digitalHumanId: stringValue(input.digitalHumanId) || undefined,
+    avatarUrl: stringValue(input.avatarUrl) || undefined,
+    hostImageUrl: stringValue(input.hostImageUrl) || undefined,
     voiceId: stringValue(input.voiceId) || undefined,
     tone: stringValue(input.tone) || undefined,
     language: stringValue(input.language) || undefined,
@@ -1232,7 +1245,16 @@ function normalizeImportedSubtitleMode(value: unknown): CarSalesPlanDraft['subti
 
 function normalizeImportedAudioPolicy(value: unknown): CarSalesPlanDraft['audioPolicy'] | undefined {
   const text = stringValue(value)
-  return text === 'auto' || text === 'none' || text === 'voiceover' || text === 'bgm' ? text : undefined
+  return text === 'auto'
+    || text === 'none'
+    || text === 'voiceover'
+    || text === 'bgm'
+    || text === 'EXTERNAL_AUDIO'
+    || text === 'VIDEO_NATIVE_AUDIO'
+    || text === 'external_audio'
+    || text === 'video_native_audio'
+    ? text
+    : undefined
 }
 
 function normalizeImportedVoiceLanguage(value: unknown): 'zh-CN' | 'en-US' | '' {
@@ -1271,7 +1293,11 @@ function isAssetReuseGenerationSelection(item: SelectedAsset) {
 async function prepareAssetReusePlanPreview() {
   if (!requireAuth('登录后可生成资产复用视频')) return
   if (!canPreparePlan.value) {
-    planPreviewError.value = hasReusableVehicle.value ? '' : '请先选择车型素材包或车辆素材。'
+    planPreviewError.value = !hasReusableVehicle.value
+      ? '请先选择车型素材包或车辆素材。'
+      : !hasCoreContent.value
+        ? '请先选择可复用文案/分镜，或填写本次生成目标。'
+        : ''
     if (planPreviewError.value) {
       ElMessage.warning(planPreviewError.value)
     }
@@ -1340,10 +1366,21 @@ async function buildAssetReusePlanDraft(): Promise<CarSalesPlanDraft> {
   const storyboardAsset = assets.find((asset) => asset.role === 'storyboard_json' && asset.textContent)
   const importedScript = importedScriptText.value.trim()
   const importedStoryboardShots = importedStoryboard.value.filter((shot) => shot.visual || shot.narration)
+  const selectedStoryboardShots = storyboardAsset
+    ? parseStoryboardAssetTextToPlanShots(
+      storyboardAsset.textContent,
+      importedRenderConfig.value.segmentDuration || 5,
+      24,
+    )
+    : []
+  if (storyboardAsset && !selectedStoryboardShots.length) {
+    throw new Error('已选择的分镜资产无法解析为结构化镜头，请重新选择分镜资产或重新生成分镜后再使用资产复用。')
+  }
+  const storyboardShots = selectedStoryboardShots.length ? selectedStoryboardShots : importedStoryboardShots
   const prompt = draftPrompt.value.trim() || [
     '复用已选资产生成一条汽车销售视频',
     scriptAsset ? `参考文案：${scriptAsset.textContent?.slice(0, 400)}` : '',
-    storyboardAsset ? `参考分镜：${storyboardAsset.textContent?.slice(0, 400)}` : '',
+    storyboardShots.length ? `已锁定结构化分镜：${storyboardShots.length} 个镜头` : '',
     importedScript ? `参考口播：${importedScript.slice(0, 400)}` : '',
   ].filter(Boolean).join('\n')
   const voiceLanguage = normalizeImportedVoiceLanguage(importedRenderConfig.value.nativeVoiceLanguage)
@@ -1360,7 +1397,7 @@ async function buildAssetReusePlanDraft(): Promise<CarSalesPlanDraft> {
     title: '资产复用汽车销售方案',
     prompt,
     script: scriptAsset?.textContent?.trim() || importedScript,
-    storyboard: importedStoryboardShots.length ? importedStoryboardShots : undefined,
+    storyboard: storyboardShots.length ? storyboardShots : undefined,
     coverAssetId: selectedCoverAsset.value?.asset.assetId ?? null,
     coverUrl: selectedCoverAsset.value ? assetCoverPreviewUrl(selectedCoverAsset.value.asset) : previewVisualUrl.value,
     assets,
@@ -1383,6 +1420,8 @@ async function buildAssetReusePlanDraft(): Promise<CarSalesPlanDraft> {
     videoType: importedRenderConfig.value.videoType || ((importedRenderConfig.value.hostAppearanceEnabled ?? hostAppearanceEnabled.value) ? 'digital_human' : inferredAudioPolicy === 'bgm' ? 'silent_bgm' : 'standard'),
     hasDigitalHuman: importedRenderConfig.value.hasDigitalHuman ?? (importedRenderConfig.value.hostAppearanceEnabled ?? hostAppearanceEnabled.value),
     digitalHumanId: importedRenderConfig.value.digitalHumanId || selectedHost.value?.asset.assetId.toString(),
+    avatarUrl: importedRenderConfig.value.avatarUrl || importedRenderConfig.value.hostImageUrl || selectedHostUrl.value || undefined,
+    hostImageUrl: importedRenderConfig.value.hostImageUrl || importedRenderConfig.value.avatarUrl || selectedHostUrl.value || undefined,
     voiceId: importedRenderConfig.value.voiceId || selectedVoice.value?.asset.assetId.toString(),
     tone: importedRenderConfig.value.tone || 'professional',
     language: importedRenderConfig.value.language || voiceLanguage,

@@ -23,7 +23,15 @@ export type CarSalesPreferenceAspectRatio = '9:16' | '16:9' | 'auto'
 export type CarSalesPreferenceDuration = 10 | 15 | 20 | 30
 export type CarSalesPreferenceLanguage = 'zh-CN' | 'en-US'
 export type CarSalesPreferenceSubtitleMode = 'auto' | 'off' | 'upload'
-export type CarSalesPreferenceAudioPolicy = 'auto' | 'none' | 'voiceover' | 'bgm'
+export type CarSalesPreferenceAudioPolicy =
+  | 'auto'
+  | 'none'
+  | 'voiceover'
+  | 'bgm'
+  | 'EXTERNAL_AUDIO'
+  | 'VIDEO_NATIVE_AUDIO'
+  | 'external_audio'
+  | 'video_native_audio'
 export type CarSalesPreferenceVideoStyle = 'realistic' | 'premium' | 'energetic' | 'family' | 'tech'
 
 export interface CarSalesGenerationPreferences {
@@ -185,7 +193,7 @@ export function loadCarSalesPreferences(): CarSalesGenerationPreferences {
     voiceLanguage: literalIn(raw.voiceLanguage, ['zh-CN', 'en-US'] as const, defaultCarSalesPreferences.voiceLanguage),
     subtitleMode: literalIn(raw.subtitleMode, ['auto', 'off', 'upload'] as const, defaultCarSalesPreferences.subtitleMode),
     burnInSubtitle: typeof raw.burnInSubtitle === 'boolean' ? raw.burnInSubtitle : defaultCarSalesPreferences.burnInSubtitle,
-    audioPolicy: literalIn(raw.audioPolicy, ['auto', 'none', 'voiceover', 'bgm'] as const, defaultCarSalesPreferences.audioPolicy),
+    audioPolicy: literalIn(raw.audioPolicy, ['auto', 'none', 'voiceover', 'bgm', 'EXTERNAL_AUDIO', 'VIDEO_NATIVE_AUDIO', 'external_audio', 'video_native_audio'] as const, defaultCarSalesPreferences.audioPolicy),
     videoStyle: literalIn(raw.videoStyle, ['realistic', 'premium', 'energetic', 'family', 'tech'] as const, defaultCarSalesPreferences.videoStyle),
     nativeVoiceStyle: typeof raw.nativeVoiceStyle === 'string' && raw.nativeVoiceStyle ? raw.nativeVoiceStyle : defaultCarSalesPreferences.nativeVoiceStyle,
     nativeSpeechStyle: typeof raw.nativeSpeechStyle === 'string' && raw.nativeSpeechStyle ? raw.nativeSpeechStyle : defaultCarSalesPreferences.nativeSpeechStyle,

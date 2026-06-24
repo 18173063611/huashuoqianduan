@@ -66,7 +66,7 @@ export interface CarSalesPlanDraft {
   nativeSpeechStyle?: string
   burnInSubtitle: boolean
   customSubtitle?: string
-  audioPolicy: 'auto' | 'none' | 'voiceover' | 'bgm'
+  audioPolicy: QuickRenderRequest['audioPolicy']
   model: string
   segmentCount: number
   segmentDuration: number
@@ -78,6 +78,8 @@ export interface CarSalesPlanDraft {
   videoType?: 'standard' | 'digital_human' | 'product_showcase' | 'silent_bgm' | string
   hasDigitalHuman?: boolean
   digitalHumanId?: string
+  avatarUrl?: string
+  hostImageUrl?: string
   voiceId?: string
   tone?: string
   language?: string
@@ -218,6 +220,7 @@ export async function prepareCarSalesAiPlanPreview(draft: CarSalesPlanDraft): Pr
     storyboardFallback = true
     storyboard = buildFallbackStoryboard(script, draft)
   }
+  storyboard = bindStoryboardNarrationToScript(storyboard, script, draft)
 
   return {
     script,
@@ -228,7 +231,7 @@ export async function prepareCarSalesAiPlanPreview(draft: CarSalesPlanDraft): Pr
     balance: estimate?.balance ?? null,
     enoughBalance: estimate?.enoughBalance ?? null,
     estimatedDuration: estimatedRenderDurationLabel(draft),
-    totalDuration: draft.segmentCount * draft.segmentDuration,
+    totalDuration: draft.duration || draft.segmentCount * draft.segmentDuration,
     segmentCount: draft.segmentCount,
     materialCount: draft.assets.length,
     vehicleMaterialCount: vehicleMaterialCount(draft),
@@ -282,6 +285,11 @@ export function buildQuickRenderRequestFromPlanDraft(
   plan: AiPlanPreview,
 ): QuickRenderRequest {
   const script = plan.script.trim()
+  const storyboard = syncStoryboardNarrationWithScript(plan.storyboard, script, draft.prompt)
+  const narrationText = storyboard
+    .map((shot) => sanitizePlanScript(shot.narration || '', draft.prompt))
+    .filter(Boolean)
+    .join('\n')
   const assetRoleBindings = buildPlanAssetRoleBindings(draft)
   const vehicleImageUrls = planBindingImageUrls(assetRoleBindings, false)
   const sceneImageUrls = planBindingImageUrls(assetRoleBindings, true)
@@ -309,13 +317,13 @@ export function buildQuickRenderRequestFromPlanDraft(
     nativeSpeechStyle: draft.nativeSpeechStyle || 'balanced',
     burnInSubtitle: draft.subtitleMode !== 'off' && draft.burnInSubtitle,
     customSubtitle: draft.subtitleMode === 'upload' ? draft.customSubtitle || undefined : undefined,
-    finalVoiceText: script || undefined,
-    strictVoiceText: Boolean(script),
+    finalVoiceText: narrationText || script || undefined,
+    strictVoiceText: Boolean(narrationText || script),
     audioPolicy: draft.audioPolicy,
     model: draft.model,
     segmentCount: draft.segmentCount,
     segmentDuration: draft.segmentDuration,
-    generatedStoryboard: plan.storyboard.map((shot) => ({
+    generatedStoryboard: storyboard.map((shot) => ({
       index: shot.index,
       visual: shot.visual,
       narration: shot.narration,
@@ -338,12 +346,15 @@ function buildPlanDraftAdvancedRequestFields(draft: CarSalesPlanDraft): Partial<
   const duration = draft.duration || draft.segmentCount * draft.segmentDuration
   const videoType = draft.videoType || (draft.hostAppearanceEnabled ? 'digital_human' : draft.audioPolicy === 'bgm' ? 'silent_bgm' : 'standard')
   const bgmStyle = draft.bgmStyle || 'auto'
+  const hostImageUrl = draft.hostImageUrl || draft.avatarUrl || hostAsset?.fileUrl || hostAsset?.thumbnailUrl
   return {
     creationMode: draft.creationMode || sourceLabel(draft.source),
     chainType: draft.chainType || draft.source,
     videoType,
     hasDigitalHuman: draft.hasDigitalHuman ?? Boolean(draft.hostAppearanceEnabled),
     digitalHumanId: draft.digitalHumanId || (hostAsset ? String(hostAsset.assetId) : undefined),
+    avatarUrl: hostImageUrl || undefined,
+    hostImageUrl: hostImageUrl || undefined,
     voiceId: draft.voiceId || (voiceAsset ? String(voiceAsset.assetId) : undefined),
     tone: draft.tone || 'professional',
     language: draft.language || draft.nativeVoiceLanguage || 'zh-CN',
@@ -475,13 +486,14 @@ function metadataText(record: Record<string, unknown> | null, key: string) {
 }
 
 function buildPlanSourceText(draft: CarSalesPlanDraft) {
+  const totalDuration = draft.duration || draft.segmentCount * draft.segmentDuration
   return [
     sourceLabel(draft.source),
     draft.title ? `标题：${draft.title}` : '',
     draft.prompt ? `用户需求：${draft.prompt}` : '',
     draft.referenceUrl ? `参考链接：${draft.referenceUrl}` : '',
     draft.assets.length ? `已选素材：${draft.assets.map((item) => `${item.fileName}(${roleLabel(item.role)})`).join('；')}` : '',
-    `生成参数：${draft.segmentCount * draft.segmentDuration} 秒，${draft.segmentCount} 段，比例 ${draft.aspectRatio}`,
+    `生成参数：${totalDuration} 秒，${draft.segmentCount} 段，比例 ${draft.aspectRatio}`,
     `高级参数：${advancedPlanLabelText(draft)}`,
     draft.nativeVoiceLanguage === 'en-US'
       ? 'Voice language: English voiceover only. Return natural English narration and avoid Chinese copy.'
@@ -582,6 +594,191 @@ function buildFallbackStoryboard(script: string, draft: CarSalesPlanDraft): AiPl
   }))
 }
 
+export function syncStoryboardNarrationWithScript(
+  storyboard: AiPlanStoryboardShot[],
+  script: string,
+  userPrompt?: string,
+) {
+  if (!storyboard.length) return storyboard
+  const scriptUnits = splitPlanScriptUnits(script, storyboard.length)
+  if (!scriptUnits.length) {
+    return storyboard
+  }
+  return storyboard.map((shot, index) => ({
+    ...shot,
+    narration: sanitizePlanScript(scriptUnits[index] || shot.narration || '', userPrompt),
+  }))
+}
+
+function bindStoryboardNarrationToScript(
+  storyboard: AiPlanStoryboardShot[],
+  script: string,
+  draft: CarSalesPlanDraft,
+) {
+  if (!storyboard.length) return storyboard
+  return storyboard.map((shot, index) => ({
+    ...shot,
+    narration: sanitizePlanScript(
+      shot.narration || splitPlanScriptUnits(script, storyboard.length)[index] || draft.title || '',
+      draft.prompt,
+    ),
+  }))
+}
+
+function splitPlanScriptUnits(script: string, targetCount: number) {
+  const clean = sanitizePlanScript(script || '')
+  if (!clean) return []
+  const lines = clean
+    .split(/\n+/)
+    .map((line) => line.trim())
+    .filter(Boolean)
+  if (lines.length >= targetCount) {
+    return fitPlanScriptUnitsToCount(lines, targetCount)
+  }
+  const clauses = clean
+    .split(/(?<=[。！？!?\.])\s*/u)
+    .map((line) => line.trim())
+    .filter(Boolean)
+  if (clauses.length >= targetCount) {
+    return fitPlanScriptUnitsToCount(clauses, targetCount)
+  }
+  return lines.length ? lines : clauses
+}
+
+function fitPlanScriptUnitsToCount(units: string[], targetCount: number) {
+  const count = Math.max(1, targetCount)
+  if (units.length <= count) return units
+  const result: string[] = []
+  for (let index = 0; index < count; index += 1) {
+    const start = Math.floor((index * units.length) / count)
+    const end = Math.floor(((index + 1) * units.length) / count)
+    result.push(units.slice(start, Math.max(start + 1, end)).join(''))
+  }
+  return result
+}
+
+export function parseStoryboardAssetTextToPlanShots(
+  raw: string | undefined,
+  fallbackDuration = 5,
+  maxShots = 24,
+): AiPlanStoryboardShot[] {
+  const parsed = parseJsonSafely(raw || '')
+  const rows = storyboardRowsFromUnknown(parsed)
+  return rows
+    .slice(0, Math.max(1, maxShots))
+    .map((item, index): AiPlanStoryboardShot | null => {
+      const row = asPlainRecord(item)
+      if (!row) return null
+      const visual = firstStringField(row, [
+        'visual',
+        'visualPrompt',
+        'prompt',
+        'description',
+        'scene',
+        'shot',
+        'camera',
+        'composition',
+        'content',
+        '画面',
+        '镜头',
+        '分镜',
+      ])
+      const narration = firstStringField(row, [
+        'narration',
+        'voiceText',
+        'voice',
+        'script',
+        'line',
+        'text',
+        'subtitle',
+        'copy',
+        '台词',
+        '口播',
+        '文案',
+        '字幕',
+      ])
+      if (!visual && !narration) return null
+      const order = numberField(row, ['index', 'order', 'segmentIndex', 'shotIndex', '序号']) || index + 1
+      const duration = numberField(row, [
+        'duration',
+        'durationSec',
+        'durationSeconds',
+        'estDurationSec',
+        'seconds',
+        '时长',
+      ]) || fallbackDuration
+      return {
+        index: Math.max(1, Math.round(order)),
+        visual: visual || narration || '车辆销售画面',
+        narration: sanitizePlanScript(narration || ''),
+        duration: Math.max(1, Math.round(duration)),
+      }
+    })
+    .filter((item): item is AiPlanStoryboardShot => Boolean(item))
+}
+
+function parseJsonSafely(raw: string) {
+  const text = raw.trim()
+  if (!text) return null
+  try {
+    return JSON.parse(text)
+  } catch {
+    return null
+  }
+}
+
+function storyboardRowsFromUnknown(value: unknown, depth = 0): unknown[] {
+  if (depth > 5) return []
+  if (Array.isArray(value)) return value
+  const record = asPlainRecord(value)
+  if (!record) return []
+  for (const key of [
+    'generatedStoryboard',
+    'storyboard',
+    'scripts',
+    'shots',
+    'scenes',
+    'segments',
+    'items',
+    'list',
+  ]) {
+    const rows = storyboardRowsFromUnknown(record[key], depth + 1)
+    if (rows.length) return rows
+  }
+  for (const key of ['result', 'data', 'parseResult', 'storyboardResult', 'output', 'payload']) {
+    const rows = storyboardRowsFromUnknown(record[key], depth + 1)
+    if (rows.length) return rows
+  }
+  return []
+}
+
+function asPlainRecord(value: unknown): Record<string, unknown> | null {
+  return value && typeof value === 'object' && !Array.isArray(value)
+    ? value as Record<string, unknown>
+    : null
+}
+
+function firstStringField(record: Record<string, unknown>, keys: string[]) {
+  for (const key of keys) {
+    const value = record[key]
+    if (typeof value === 'string' && value.trim()) return value.trim()
+    if (typeof value === 'number' || typeof value === 'boolean') return String(value)
+  }
+  return ''
+}
+
+function numberField(record: Record<string, unknown>, keys: string[]) {
+  for (const key of keys) {
+    const value = record[key]
+    if (typeof value === 'number' && Number.isFinite(value)) return value
+    if (typeof value === 'string') {
+      const parsed = Number(value.replace(/[^\d.]/g, ''))
+      if (Number.isFinite(parsed) && parsed > 0) return parsed
+    }
+  }
+  return 0
+}
+
 function normalizeStoryboardShots(shots: StoryboardShotItem[] | undefined, draft: CarSalesPlanDraft) {
   return (shots || []).slice(0, draft.segmentCount).map((shot, index) => ({
     index: shot.index || index + 1,
@@ -598,7 +795,7 @@ async function fetchPlanBillingEstimate(draft: CarSalesPlanDraft, warnings: stri
       modelCode: draft.model === 'auto' ? undefined : draft.model,
       imageCount: vehicleMaterialCount(draft),
       segmentCount: draft.segmentCount,
-      durationSeconds: draft.segmentCount * draft.segmentDuration,
+      durationSeconds: draft.duration || draft.segmentCount * draft.segmentDuration,
     })
   } catch (error) {
     warnings.push(`积分估算失败，暂按 20 积分展示：${errorMessageFrom(error)}`)
@@ -611,15 +808,17 @@ function vehicleMaterialCount(draft: CarSalesPlanDraft) {
 }
 
 function estimatedRenderDurationLabel(draft: CarSalesPlanDraft) {
+  const totalDuration = draft.duration || draft.segmentCount * draft.segmentDuration
   if (draft.hostAppearanceEnabled) return '3-8 分钟'
-  if (draft.segmentCount >= 4 || draft.segmentCount * draft.segmentDuration >= 20) return '2-5 分钟'
+  if (draft.segmentCount >= 4 || totalDuration >= 20) return '2-5 分钟'
   return '1-2 分钟'
 }
 
 function buildPlanConfigItems(draft: CarSalesPlanDraft) {
+  const totalDuration = draft.duration || draft.segmentCount * draft.segmentDuration
   const items = [
     `比例 ${draft.aspectRatio}`,
-    `${draft.segmentCount * draft.segmentDuration} 秒`,
+    `${totalDuration} 秒`,
     `${draft.segmentCount} 段`,
     draft.nativeVoiceLanguage === 'en-US' ? '英文讲述' : '中文讲述',
     `字幕 ${subtitleModeLabel(draft.subtitleMode)}`,

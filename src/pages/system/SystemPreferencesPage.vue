@@ -266,6 +266,10 @@ const audioPolicyLabel = computed(() => {
     none: '关闭音频',
     bgm: '仅背景音乐',
     voiceover: '优先口播',
+    EXTERNAL_AUDIO: '外部音频',
+    VIDEO_NATIVE_AUDIO: '音视频同步',
+    external_audio: '外部音频',
+    video_native_audio: '音视频同步',
   }
   return map[preferences.value.audioPolicy] || preferences.value.audioPolicy
 })

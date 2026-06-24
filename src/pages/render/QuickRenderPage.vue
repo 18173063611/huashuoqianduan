@@ -440,7 +440,6 @@ import type { AvatarItem } from '../../types/avatarTypes'
 import type { TaskItem } from '../../types/taskTypes'
 import type { TemplateItem } from '../../types/templateTypes'
 import type {
-  CarSalesAssetRoleBinding,
   CarSalesAiPlanShot,
   DigitalHumanTaskDetailResponse,
   QuickRenderAssetRole,
@@ -453,7 +452,15 @@ import type { DouyinRewriteWriterVO } from '../../types/writerDouyinTypes'
 import { taskTypeLabel } from '../../utils/taskDisplay'
 import { formatFriendlyDateTime } from '../../utils/timeFormat'
 import AiPlanPreviewDrawer from './AiPlanPreviewDrawer.vue'
-import { sanitizePlanScript, type AiPlanPreview, type AiPlanStoryboardShot } from './carSalesPlanDraft'
+import {
+  buildQuickRenderRequestFromPlanDraft,
+  sanitizePlanScript,
+  syncStoryboardNarrationWithScript,
+  type AiPlanPreview,
+  type AiPlanStoryboardShot,
+  type CarSalesPlanDraft,
+  type CarSalesPlanDraftAsset,
+} from './carSalesPlanDraft'
 import AssetPicker from './AssetPicker.vue'
 import AvatarSelectDrawer from './AvatarSelectDrawer.vue'
 import CarSalesPromptBox from './car-sales/components/CarSalesPromptBox.vue'
@@ -469,7 +476,6 @@ import CarSalesAssetSelectDrawer, {
   type CarSalesAssetSelectPayload,
 } from './CarSalesAssetSelectDrawer.vue'
 import {
-  buildCarModelBundleAssetRoleBindings,
   carModelBundleCoverUrl,
   carModelBundleDeclaredImageCount,
   carModelBundleImageUrls,
@@ -874,7 +880,7 @@ const voiceLanguageOptions = [
 const voiceLanguageLabel = computed(
   () => voiceLanguageOptions.find((item) => item.value === voiceLanguage.value)?.label || '中文讲述',
 )
-const audioPolicy = computed<'auto' | 'none' | 'voiceover' | 'bgm'>(() => advancedSettings.value.audioPolicy)
+const audioPolicy = computed<QuickRenderRequest['audioPolicy']>(() => advancedSettings.value.audioPolicy)
 const segmentCount = computed(() => {
   if (inferredRoute.value === 'digital_human' || inferredRoute.value === 'general_video') return 1
   if (inferredRoute.value === 'material_mix') return Math.max(1, Math.min(4, videoCount.value || 1))
@@ -2205,18 +2211,6 @@ function bgmStyleLabel(style: CarSalesAdvancedSettings['bgmStyle']) {
   return labels[style] || '智能匹配'
 }
 
-function buildGoalTextForRequest() {
-  const storyboardSummary = planPreview.value?.storyboard
-    .map((shot) => shot.visual.trim())
-    .filter(Boolean)
-    .join('; ')
-  const parts = [
-    planPreview.value?.configItems.length ? `confirmed config: ${planPreview.value.configItems.join('; ')}` : '',
-    storyboardSummary ? `confirmed storyboard: ${storyboardSummary}` : '',
-  ].filter(Boolean)
-  return parts.length ? parts.join('\n') : undefined
-}
-
 function appendTemplatePromptToGoalText(template: SellingPointTemplate) {
   const prompt = template.prompt.trim()
   if (!prompt) return
@@ -2372,24 +2366,39 @@ async function prepareAiPlanPreview() {
 
 function updatePlanScript(value: string) {
   if (!planPreview.value) return
+  const script = normalizeNarrationText(value)
   planPreview.value = {
     ...planPreview.value,
-    script: normalizeNarrationText(value),
+    script,
+    storyboard: syncStoryboardNarrationWithScript(
+      planPreview.value.storyboard,
+      script,
+      userGoalTextForGeneration(),
+    ),
   }
   persistCurrentPendingPlanTask()
 }
 
 function updatePlanStoryboardShot(index: number, field: 'visual' | 'narration', value: string) {
   if (!planPreview.value) return
+  const storyboard = planPreview.value.storyboard.map((shot) =>
+    shot.index === index
+      ? { ...shot, [field]: value.trim() }
+      : shot,
+  )
   planPreview.value = {
     ...planPreview.value,
-    storyboard: planPreview.value.storyboard.map((shot) =>
-      shot.index === index
-        ? { ...shot, [field]: value.trim() }
-        : shot,
-    ),
+    script: field === 'narration' ? storyboardNarrationScript(storyboard) : planPreview.value.script,
+    storyboard,
   }
   persistCurrentPendingPlanTask()
+}
+
+function storyboardNarrationScript(storyboard: AiPlanStoryboardShot[]) {
+  return storyboard
+    .map((shot) => normalizeNarrationText(shot.narration || ''))
+    .filter(Boolean)
+    .join('\n')
 }
 
 function confirmAiPlanAndSubmit() {
@@ -2412,12 +2421,15 @@ function buildQuickAdvancedRequestFields(): Partial<QuickRenderRequest> {
   const headline = advancedSettings.value.headlineOverlay
   const hasHeadline = Boolean(headline.enabled && headline.text.trim())
   const selectedHostId = selectedAvatar.value?.avatarId || selectedHostMaterial.value?.asset.assetId || null
+  const hostImageUrl = selectedHostImageUrlForRequest()
   return {
     creationMode: 'AI智能创作',
     chainType: 'ai-smart',
     videoType: advancedSettings.value.videoType,
     hasDigitalHuman: advancedSettings.value.hostAppearanceEnabled,
     digitalHumanId: selectedHostId ? String(selectedHostId) : undefined,
+    avatarUrl: hostImageUrl || undefined,
+    hostImageUrl: hostImageUrl || undefined,
     voiceId: selectedVoiceMaterial.value?.asset.assetId ? String(selectedVoiceMaterial.value.asset.assetId) : undefined,
     tone: advancedSettings.value.tone,
     language: voiceLanguage.value,
@@ -2441,38 +2453,23 @@ function buildQuickAdvancedRequestFields(): Partial<QuickRenderRequest> {
   }
 }
 
-function buildQuickRenderPayload(finalVoiceTextForRequest: string, baseRequest?: QuickRenderRequest | null): QuickRenderRequest {
-  if (baseRequest) {
-    return {
-      ...baseRequest,
-      ...buildQuickAdvancedRequestFields(),
-      finalVoiceText: finalVoiceTextForRequest || undefined,
-      strictVoiceText: Boolean(finalVoiceTextForRequest),
-      generatedStoryboard: storyboardForRequest(),
-      goalText: buildGoalTextForRequest(),
-    }
-  }
+function selectedHostImageUrlForRequest() {
+  const raw = selectedAvatar.value?.previewUrl
+    || selectedHostMaterial.value?.asset.fileUrl
+    || selectedHostMaterial.value?.asset.thumbnailUrl
+    || ''
+  return raw ? resolveMediaUrl(raw) : ''
+}
 
-  const bundleBindings = selectedCarBundleAssetRoleBindings()
-  const bundleVehicleImageUrls = bindingImageUrls(bundleBindings, false)
-  const bundleSceneImageUrls = bindingImageUrls(bundleBindings, true)
-  const bundleCoverUrl = carModelBundleMaterial.value
-    ? carModelBundleCoverUrl(carModelBundleMaterial.value.asset, carModelBundleMaterial.value.textContent, resolveMediaUrl)
-    : ''
-
+function buildAiSmartPlanDraft(finalVoiceTextForRequest: string, plan: AiPlanPreview): CarSalesPlanDraft {
+  const advancedFields = buildQuickAdvancedRequestFields()
   return {
-    intent: 'car_sales',
-    assetIds: materials.value.map((item) => item.asset.assetId),
-    assetRoles: Object.fromEntries(materials.value.map((item) => [String(item.asset.assetId), item.role])),
-    assetTextContents: Object.fromEntries(
-      materials.value
-        .filter((item) => item.textContent && item.textContent.trim())
-        .map((item) => [String(item.asset.assetId), item.textContent || '']),
-    ),
-    imageUrls: bundleVehicleImageUrls.length ? bundleVehicleImageUrls : undefined,
-    sceneImageUrls: bundleSceneImageUrls.length ? bundleSceneImageUrls : undefined,
-    assetRoleBindings: bundleBindings.length ? bundleBindings : undefined,
-    coverUrl: bundleCoverUrl || undefined,
+    source: 'ai-smart',
+    prompt: buildPlanSourceText(),
+    title: carBundleMaterialForPlanName() || 'AI智能创作汽车销售方案',
+    script: finalVoiceTextForRequest || plan.script,
+    storyboard: storyboardForRequest() || plan.storyboard,
+    assets: quickPlanDraftAssets(),
     aspectRatio: aspectRatio.value,
     subtitleMode: subtitleMode.value,
     subtitleLanguage: subtitleLanguage.value,
@@ -2483,20 +2480,47 @@ function buildQuickRenderPayload(finalVoiceTextForRequest: string, baseRequest?:
     customSubtitle: subtitleMode.value === 'upload'
       ? customSubtitleText.value || uploadedSubtitleText.value || undefined
       : undefined,
-    finalVoiceText: finalVoiceTextForRequest || undefined,
-    strictVoiceText: Boolean(finalVoiceTextForRequest),
     audioPolicy: audioPolicy.value,
     model: advancedSettings.value.model,
     segmentCount: segmentCount.value,
     segmentDuration: segmentDuration.value,
-    generatedStoryboard: storyboardForRequest(),
-    goalText: buildGoalTextForRequest(),
-    outputPurpose: 'car_sales_video',
     hostAppearanceEnabled: advancedSettings.value.hostAppearanceEnabled,
     subtitleOverlay: overlayForRequest(advancedSettings.value.subtitleOverlay),
     headlineOverlay: overlayForRequest(advancedSettings.value.headlineOverlay),
-    ...buildQuickAdvancedRequestFields(),
+    ...advancedFields,
   }
+}
+
+function quickPlanDraftAssets(): CarSalesPlanDraftAsset[] {
+  return materials.value.map((item) => ({
+    assetId: item.asset.assetId,
+    fileName: item.asset.fileName,
+    assetType: item.asset.assetType,
+    mimeType: item.asset.mimeType,
+    fileUrl: resolveMediaUrl(item.asset.fileUrl),
+    thumbnailUrl: item.asset.thumbnailUrl ? resolveMediaUrl(item.asset.thumbnailUrl) : null,
+    metadataJson: item.asset.metadataJson,
+    role: item.role,
+    textContent: item.textContent,
+  }))
+}
+
+function buildQuickRenderPayload(finalVoiceTextForRequest: string, baseRequest?: QuickRenderRequest | null): QuickRenderRequest {
+  if (!planPreview.value) {
+    throw new Error('请先生成并确认文案与分镜；如果生成失败，请重新生成，或从资产中心选择可用文案/分镜。')
+  }
+  const plan: AiPlanPreview = {
+    ...planPreview.value,
+    script: finalVoiceTextForRequest || planPreview.value.script,
+    storyboard: storyboardForRequest() || planPreview.value.storyboard,
+    totalDuration: totalDuration.value,
+    segmentCount: segmentCount.value,
+  }
+  const unifiedRequest = buildQuickRenderRequestFromPlanDraft(
+    buildAiSmartPlanDraft(finalVoiceTextForRequest, plan),
+    plan,
+  )
+  return baseRequest ? { ...baseRequest, ...unifiedRequest } : unifiedRequest
 }
 
 function persistCurrentPendingPlanTask() {
@@ -2922,6 +2946,11 @@ async function submitQuickRender() {
     }
     return
   }
+  if (!isAiPlanPreviewReadyForSubmit()) {
+    errorMessage.value = '请先生成并确认文案与分镜；如果生成失败，请重新生成，或从资产中心选择可用文案/分镜。'
+    planPreviewOpen.value = true
+    return
+  }
   errorMessage.value = ''
   result.value = null
   currentTaskId.value = null
@@ -2939,9 +2968,8 @@ async function submitQuickRender() {
   busy.value = true
   stopRenderTracking()
 
-  const payload = buildQuickRenderPayload(finalVoiceTextForRequest, restoredPlanRequest.value)
-
   try {
+    const payload = buildQuickRenderPayload(finalVoiceTextForRequest, restoredPlanRequest.value)
     const submitted = await quickRenderVideo(payload, newVideoIdempotencyKey())
     clearCurrentPendingPlanTask()
     if (submitted.task?.taskId) {
@@ -2960,6 +2988,15 @@ async function submitQuickRender() {
     errorMessage.value = error instanceof Error ? error.message : '一键成片提交失败'
     void loadRecentGenerations(true)
   }
+}
+
+function isAiPlanPreviewReadyForSubmit() {
+  const plan = planPreview.value
+  return Boolean(
+    plan
+    && plan.script.trim()
+    && plan.storyboard.some((shot) => shot.visual?.trim() || shot.narration?.trim()),
+  )
 }
 
 function startQuickRenderTracking(taskId: number) {
@@ -3575,26 +3612,6 @@ function carBundleMaterialImages(item: QuickMaterial) {
 
 function carBundleMaterialImageCount(item: QuickMaterial) {
   return carModelBundleDeclaredImageCount(item.asset, item.textContent) || carBundleMaterialImages(item).length
-}
-
-function selectedCarBundleAssetRoleBindings(): CarSalesAssetRoleBinding[] {
-  const bundle = carModelBundleMaterial.value
-  if (!bundle) {
-    return []
-  }
-  return buildCarModelBundleAssetRoleBindings(bundle.asset, bundle.textContent, resolveMediaUrl)
-}
-
-function bindingImageUrls(bindings: CarSalesAssetRoleBinding[], sceneOnly: boolean) {
-  const urls = bindings
-    .filter((binding) => {
-      const role = String(binding.assetRole || '').toLowerCase()
-      const isScene = role.startsWith('scene_')
-      return sceneOnly ? isScene : !isScene
-    })
-    .map((binding) => binding.url)
-    .filter((url): url is string => typeof url === 'string' && url.length > 0)
-  return Array.from(new Set(urls))
 }
 
 function firstText(...values: Array<string | null | undefined>) {

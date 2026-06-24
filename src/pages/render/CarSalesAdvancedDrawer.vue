@@ -284,7 +284,7 @@ export interface CarSalesAdvancedSettings {
   burnInSubtitle: boolean
   subtitleOverlay: CarSalesTextOverlaySettings
   headlineOverlay: CarSalesTextOverlaySettings
-  audioPolicy: 'auto' | 'none' | 'voiceover' | 'bgm'
+  audioPolicy: 'auto' | 'none' | 'voiceover' | 'bgm' | 'EXTERNAL_AUDIO' | 'VIDEO_NATIVE_AUDIO' | 'external_audio' | 'video_native_audio'
   bgmStyle: 'auto' | 'none' | 'upbeat' | 'premium' | 'warm' | 'tech'
   videoStyle: 'realistic' | 'premium' | 'energetic' | 'family' | 'tech'
   tone: 'professional' | 'promotional' | 'premium' | 'energetic' | 'warm' | 'tech'

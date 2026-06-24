@@ -146,6 +146,37 @@ export type QuickRenderAssetRole =
   | 'reference_video'
   | 'material'
 
+export type QuickRenderAudioPolicy =
+  | 'auto'
+  | 'none'
+  | 'voiceover'
+  | 'bgm'
+  | 'EXTERNAL_AUDIO'
+  | 'VIDEO_NATIVE_AUDIO'
+  | 'external_audio'
+  | 'video_native_audio'
+
+export type CarSalesAudioMode =
+  | 'none'
+  | 'post_mix'
+  | 'reference'
+  | 'model_native'
+  | 'auto_tts'
+  | 'EXTERNAL_AUDIO'
+  | 'VIDEO_NATIVE_AUDIO'
+  | 'external_audio'
+  | 'video_native_audio'
+
+export type CarSalesVoicePolicy =
+  | 'user_audio'
+  | 'model_native'
+  | 'auto_tts'
+  | 'none'
+  | 'EXTERNAL_AUDIO'
+  | 'VIDEO_NATIVE_AUDIO'
+  | 'external_audio'
+  | 'video_native_audio'
+
 export interface QuickRenderRequest {
   intent: QuickRenderIntent
   assetIds: number[]
@@ -166,7 +197,7 @@ export interface QuickRenderRequest {
   customSubtitle?: string
   finalVoiceText?: string
   strictVoiceText?: boolean
-  audioPolicy: 'auto' | 'none' | 'voiceover' | 'bgm'
+  audioPolicy: QuickRenderAudioPolicy
   model: string
   segmentCount?: number
   segmentDuration?: number
@@ -185,6 +216,8 @@ export interface QuickRenderRequest {
   videoType?: 'standard' | 'digital_human' | 'product_showcase' | 'silent_bgm' | string
   hasDigitalHuman?: boolean
   digitalHumanId?: string
+  avatarUrl?: string
+  hostImageUrl?: string
   voiceId?: string
   tone?: string
   language?: string
@@ -384,9 +417,9 @@ export interface CarSalesVideoRequest {
   subtitleOverlay?: CarSalesTextOverlayRequest
   headlineOverlay?: CarSalesTextOverlayRequest
   audioUrl?: string
-  audioMode?: 'none' | 'post_mix' | 'reference' | 'model_native' | 'auto_tts'
+  audioMode?: CarSalesAudioMode
   bgmUrl?: string
-  voicePolicy?: 'user_audio' | 'model_native' | 'auto_tts' | 'none'
+  voicePolicy?: CarSalesVoicePolicy
   voiceTextSource?: 'auto' | 'benchmark' | 'manual'
   finalVoiceText?: string
   strictVoiceText?: boolean

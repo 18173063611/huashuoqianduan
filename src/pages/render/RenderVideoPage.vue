@@ -6561,6 +6561,14 @@ function isCarAudioMode(value: string): value is CarAudioMode {
   return ['none', 'post_mix', 'reference', 'model_native', 'auto_tts'].includes(value)
 }
 
+function normalizeImportedCarAudioMode(value: string | null | undefined): CarAudioMode | null {
+  const normalized = String(value || '').trim().toLowerCase()
+  if (!normalized) return null
+  if (normalized === 'video_native_audio' || normalized === 'video_native' || normalized === 'native') return 'model_native'
+  if (normalized === 'external_audio' || normalized === 'external' || normalized === 'tts') return 'auto_tts'
+  return isCarAudioMode(normalized) ? normalized : null
+}
+
 function isCarVoiceTextSource(value: string): value is CarVoiceTextSource {
   return ['auto', 'benchmark', 'manual'].includes(value)
 }
@@ -7100,15 +7108,17 @@ async function applyCarSalesTaskImport(input: Record<string, unknown>) {
 
   carAudioUrl.value = firstImportText(input, ['audioUrl', 'generatedVoiceUrl']) || carAudioUrl.value
   const audioMode = firstImportText(input, ['audioMode'])
-  if (audioMode && isCarAudioMode(audioMode)) {
-    carAudioMode.value = audioMode
+  const importedAudioMode = normalizeImportedCarAudioMode(audioMode)
+  if (importedAudioMode) {
+    carAudioMode.value = importedAudioMode
   }
   const voicePolicy = firstImportText(input, ['voicePolicy'])
-  if (!audioMode && voicePolicy === 'model_native') {
+  const importedVoicePolicy = normalizeImportedCarAudioMode(voicePolicy)
+  if (!importedAudioMode && importedVoicePolicy === 'model_native') {
     carAudioMode.value = 'model_native'
-  } else if (!audioMode && voicePolicy === 'auto_tts') {
+  } else if (!importedAudioMode && importedVoicePolicy === 'auto_tts') {
     carAudioMode.value = 'auto_tts'
-  } else if (!audioMode && voicePolicy === 'none') {
+  } else if (!importedAudioMode && voicePolicy === 'none') {
     carAudioMode.value = 'none'
   }
   carBgmUrl.value = firstImportText(input, ['bgmUrl']) || carBgmUrl.value

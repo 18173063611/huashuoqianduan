@@ -1,0 +1,14 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64">
+  <defs>
+    <linearGradient id="huashuo-logo-gradient" x1="12" y1="8" x2="54" y2="56" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#24c6ff" />
+      <stop offset="0.48" stop-color="#2563eb" />
+      <stop offset="1" stop-color="#8b5cf6" />
+    </linearGradient>
+  </defs>
+  <rect x="6" y="6" width="52" height="52" rx="14" fill="url(#huashuo-logo-gradient)" />
+  <path
+    fill="#0f172a"
+    d="M36.5 39V25H18.5v14zm1.75-11.375 6.25-3.125v15l-6.25-3.125v4.375c0 .48-.395.875-.875.875h-19.75a.878.878 0 0 1-.875-.875v-17.5c0-.48.395-.875.875-.875h19.75c.48 0 .875.395.875.875zm0 2.329v4.092l4.5 2.25v-8.592zM20.25 27h6v2h-6z"
+  />
+</svg>
