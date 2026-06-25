@@ -428,9 +428,13 @@ import {
   type CarSalesGenerationPreferences,
 } from '../../services/systemWorkspaceStore'
 import {
+  getLatestPendingCarSalesPlanTask,
   getPendingCarSalesPlanTask,
+  isPendingCarSalesRenderTaskTerminal,
   newPendingCarSalesPlanTaskId,
-  removePendingCarSalesPlanTask,
+  patchPendingCarSalesPlanTask,
+  type PendingCarSalesPlanTask,
+  type PendingCarSalesRenderTaskKind,
   upsertPendingCarSalesPlanTask,
 } from '../../services/carSalesPlanTaskStore'
 import { useAuthRequired } from '../../composables/useAuthRequired'
@@ -2527,6 +2531,7 @@ function persistCurrentPendingPlanTask() {
   if (!planPreview.value) return
   const id = currentPendingPlanTaskId.value || newPendingCarSalesPlanTaskId('ai-smart')
   currentPendingPlanTaskId.value = id
+  const existing = getPendingCarSalesPlanTask(id)
   const request = buildQuickRenderPayload(planPreview.value.script, restoredPlanRequest.value)
   restoredPlanRequest.value = request
   upsertPendingCarSalesPlanTask({
@@ -2538,15 +2543,14 @@ function persistCurrentPendingPlanTask() {
     aspectRatio: aspectRatio.value,
     plan: planPreview.value,
     request,
+    activeTaskId: existing?.activeTaskId ?? null,
+    activeTaskKind: existing?.activeTaskKind ?? null,
+    activeTaskStatus: existing?.activeTaskStatus,
+    activeTaskProgress: existing?.activeTaskProgress ?? null,
+    activeTaskSubmittedAt: existing?.activeTaskSubmittedAt,
+    activeTaskResultUrl: existing?.activeTaskResultUrl,
+    activeTaskErrorMessage: existing?.activeTaskErrorMessage,
   })
-}
-
-function clearCurrentPendingPlanTask() {
-  if (currentPendingPlanTaskId.value) {
-    removePendingCarSalesPlanTask(currentPendingPlanTaskId.value)
-  }
-  currentPendingPlanTaskId.value = ''
-  restoredPlanRequest.value = null
 }
 
 function restorePendingPlanFromRoute() {
@@ -2554,6 +2558,17 @@ function restorePendingPlanFromRoute() {
   if (!planDraftId) return
   const task = getPendingCarSalesPlanTask(planDraftId)
   if (!task || task.source !== 'ai-smart') return
+  applyPendingAiSmartPlanTask(task, true)
+}
+
+function restoreLatestPendingPlanTask() {
+  if (typeof route.query.planDraftId === 'string' || planPreview.value || planPreviewLoading.value) return
+  const task = getLatestPendingCarSalesPlanTask('ai-smart')
+  if (!task) return
+  applyPendingAiSmartPlanTask(task, true)
+}
+
+function applyPendingAiSmartPlanTask(task: PendingCarSalesPlanTask, openPreview: boolean) {
   currentPendingPlanTaskId.value = task.id
   restoredPlanRequest.value = task.request || null
   aspectRatio.value = task.aspectRatio
@@ -2563,7 +2578,50 @@ function restorePendingPlanFromRoute() {
   planPreview.value = task.plan
   planPreviewError.value = ''
   planPreviewLoading.value = false
-  planPreviewOpen.value = true
+  planPreviewOpen.value = openPreview
+  resumePendingAiSmartRenderTask(task)
+}
+
+function patchCurrentPendingRenderTask(patch: Partial<PendingCarSalesPlanTask>) {
+  if (!currentPendingPlanTaskId.value) return
+  patchPendingCarSalesPlanTask(currentPendingPlanTaskId.value, patch)
+}
+
+function markCurrentPendingRenderTask(
+  taskId: number,
+  kind: PendingCarSalesRenderTaskKind,
+  status = 'QUEUED',
+  progress: number | null = 0,
+) {
+  patchCurrentPendingRenderTask({
+    activeTaskId: taskId,
+    activeTaskKind: kind,
+    activeTaskStatus: status,
+    activeTaskProgress: progress,
+    activeTaskSubmittedAt: new Date().toISOString(),
+    activeTaskErrorMessage: '',
+  })
+}
+
+function resumePendingAiSmartRenderTask(task: PendingCarSalesPlanTask) {
+  if (
+    !task.activeTaskId ||
+    !task.activeTaskKind ||
+    isPendingCarSalesRenderTaskTerminal(task.activeTaskStatus)
+  ) {
+    return
+  }
+  currentTaskId.value = task.activeTaskId
+  taskStatus.value = task.activeTaskStatus || 'QUEUED'
+  taskProgress.value = task.activeTaskProgress ?? 0
+  busy.value = true
+  if (task.activeTaskKind === 'quick_render') {
+    startQuickRenderTracking(task.activeTaskId)
+  } else if (task.activeTaskKind === 'digital_human') {
+    startDigitalHumanPoll(task.activeTaskId)
+  } else {
+    startTaskTracking(task.activeTaskId)
+  }
 }
 
 function buildPlanSourceText() {
@@ -2970,13 +3028,20 @@ async function submitQuickRender() {
 
   try {
     const payload = buildQuickRenderPayload(finalVoiceTextForRequest, restoredPlanRequest.value)
+    persistCurrentPendingPlanTask()
     const submitted = await quickRenderVideo(payload, newVideoIdempotencyKey())
-    clearCurrentPendingPlanTask()
     if (submitted.task?.taskId) {
+      markCurrentPendingRenderTask(submitted.task.taskId, 'quick_render', String(submitted.task.status || 'QUEUED'), submitted.task.progress ?? 0)
       startQuickRenderTracking(submitted.task.taskId)
       return
     }
     if (submitted.digitalHumanTask?.taskId) {
+      markCurrentPendingRenderTask(
+        submitted.digitalHumanTask.taskId,
+        'digital_human',
+        submitted.digitalHumanTask.status || 'QUEUED',
+        0,
+      )
       startDigitalHumanPoll(submitted.digitalHumanTask.taskId)
       return
     }
@@ -3006,24 +3071,47 @@ function startQuickRenderTracking(taskId: number) {
       taskStatus.value = String(message.status)
       taskProgress.value = message.progress
       errorMessage.value = message.errorMessage || ''
+      patchCurrentPendingRenderTask({
+        activeTaskStatus: taskStatus.value,
+        activeTaskProgress: taskProgress.value,
+        activeTaskErrorMessage: errorMessage.value,
+      })
     },
     onResult(taskResult) {
       const quick = taskResult.result
       taskStatus.value = 'QUICK_RENDER_DONE'
       taskProgress.value = taskResult.progress ?? 100
+      patchCurrentPendingRenderTask({
+        activeTaskStatus: taskStatus.value,
+        activeTaskProgress: taskProgress.value,
+        activeTaskErrorMessage: '',
+      })
       if (quick.outputAsset?.fileUrl) {
         result.value = outputAssetToVideoResult(quick.outputAsset)
         busy.value = false
+        patchCurrentPendingRenderTask({
+          activeTaskStatus: 'SUCCESS',
+          activeTaskProgress: 100,
+          activeTaskResultUrl: quick.outputAsset.fileUrl,
+          activeTaskErrorMessage: '',
+        })
         void loadRecentGenerations(true)
         return
       }
       if (quick.task?.taskId) {
         rememberRenderTask(quick.task.taskId)
+        markCurrentPendingRenderTask(quick.task.taskId, 'video', String(quick.task.status || 'QUEUED'), quick.task.progress ?? 0)
         startTaskTracking(quick.task.taskId)
         return
       }
       if (quick.digitalHumanTask?.taskId) {
         rememberRenderTask(quick.digitalHumanTask.taskId)
+        markCurrentPendingRenderTask(
+          quick.digitalHumanTask.taskId,
+          'digital_human',
+          quick.digitalHumanTask.status || 'QUEUED',
+          0,
+        )
         startDigitalHumanPoll(quick.digitalHumanTask.taskId)
         return
       }
@@ -3036,11 +3124,21 @@ function startQuickRenderTracking(taskId: number) {
       taskStatus.value = String(message.status)
       taskProgress.value = message.progress
       busy.value = false
+      patchCurrentPendingRenderTask({
+        activeTaskStatus: taskStatus.value,
+        activeTaskProgress: taskProgress.value,
+        activeTaskErrorMessage: errorMessage.value,
+      })
       void loadRecentGenerations(true)
     },
     onError(error) {
       errorMessage.value = error.message
       busy.value = false
+      patchCurrentPendingRenderTask({
+        activeTaskStatus: 'FAILED',
+        activeTaskProgress: taskProgress.value,
+        activeTaskErrorMessage: errorMessage.value,
+      })
       void loadRecentGenerations(true)
     },
   })
@@ -3071,12 +3169,23 @@ function startTaskTracking(taskId: number) {
       taskStatus.value = String(message.status)
       taskProgress.value = message.progress
       errorMessage.value = message.errorMessage || ''
+      patchCurrentPendingRenderTask({
+        activeTaskStatus: taskStatus.value,
+        activeTaskProgress: taskProgress.value,
+        activeTaskErrorMessage: errorMessage.value,
+      })
     },
     onResult(taskResult) {
       taskStatus.value = String(taskResult.status)
       taskProgress.value = taskResult.progress ?? 100
       result.value = taskResult.result
       busy.value = false
+      patchCurrentPendingRenderTask({
+        activeTaskStatus: taskStatus.value,
+        activeTaskProgress: taskProgress.value,
+        activeTaskResultUrl: taskResult.result.videoUrl,
+        activeTaskErrorMessage: taskResult.result.errorMessage || '',
+      })
       void loadRecentGenerations(true)
     },
     onFailure(message) {
@@ -3084,11 +3193,21 @@ function startTaskTracking(taskId: number) {
       taskStatus.value = String(message.status)
       taskProgress.value = message.progress
       busy.value = false
+      patchCurrentPendingRenderTask({
+        activeTaskStatus: taskStatus.value,
+        activeTaskProgress: taskProgress.value,
+        activeTaskErrorMessage: errorMessage.value,
+      })
       void loadRecentGenerations(true)
     },
     onError(error) {
       errorMessage.value = error.message
       busy.value = false
+      patchCurrentPendingRenderTask({
+        activeTaskStatus: 'FAILED',
+        activeTaskProgress: taskProgress.value,
+        activeTaskErrorMessage: errorMessage.value,
+      })
       void loadRecentGenerations(true)
     },
   })
@@ -3109,6 +3228,12 @@ async function pollDigitalHumanOnce(taskId: number) {
     taskStatus.value = detail.status
     taskProgress.value = detail.progress
     errorMessage.value = detail.errorMessage || ''
+    patchCurrentPendingRenderTask({
+      activeTaskStatus: detail.status,
+      activeTaskProgress: detail.progress,
+      activeTaskResultUrl: detail.videoUrl || undefined,
+      activeTaskErrorMessage: errorMessage.value,
+    })
     if (['SUCCESS', 'FAILED', 'RETRYABLE', 'CANCELED'].includes(detail.status)) {
       stopDigitalHumanPoll()
       busy.value = false
@@ -3706,6 +3831,7 @@ onMounted(() => {
   void loadTemplateMatchCandidates()
   void consumeAssetReuseDraft()
   void applyPreferredAvatar()
+  restoreLatestPendingPlanTask()
 })
 
 onBeforeUnmount(stopAllTracking)

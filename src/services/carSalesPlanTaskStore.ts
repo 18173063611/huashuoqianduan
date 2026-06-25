@@ -4,6 +4,8 @@ import type { QuickRenderRequest } from '../types/videoTypes'
 const KEY = 'huashuo_pending_car_sales_plan_tasks'
 const MAX = 20
 
+export type PendingCarSalesRenderTaskKind = 'quick_render' | 'video' | 'digital_human'
+
 export interface PendingCarSalesPlanTask {
   id: string
   source: CarSalesPlanSource
@@ -16,6 +18,13 @@ export interface PendingCarSalesPlanTask {
   plan: AiPlanPreview
   request?: QuickRenderRequest
   draft?: CarSalesPlanDraft
+  activeTaskId?: number | null
+  activeTaskKind?: PendingCarSalesRenderTaskKind | null
+  activeTaskStatus?: string
+  activeTaskProgress?: number | null
+  activeTaskSubmittedAt?: string
+  activeTaskResultUrl?: string
+  activeTaskErrorMessage?: string
 }
 
 function safeParse(raw: string | null): PendingCarSalesPlanTask[] {
@@ -50,6 +59,32 @@ export function getPendingCarSalesPlanTask(id: string | null | undefined): Pendi
   const target = String(id || '').trim()
   if (!target) return null
   return listPendingCarSalesPlanTasks().find((item) => item.id === target) || null
+}
+
+export function getLatestPendingCarSalesPlanTask(source: CarSalesPlanSource): PendingCarSalesPlanTask | null {
+  return listPendingCarSalesPlanTasks()
+    .filter((item) => item.source === source)
+    .sort((left, right) => Date.parse(right.updatedAt || '') - Date.parse(left.updatedAt || ''))[0] || null
+}
+
+export function patchPendingCarSalesPlanTask(
+  id: string | null | undefined,
+  patch: Partial<Omit<PendingCarSalesPlanTask, 'id' | 'createdAt' | 'updatedAt'>>,
+) {
+  const existing = getPendingCarSalesPlanTask(id)
+  if (!existing) return
+  upsertPendingCarSalesPlanTask({
+    ...existing,
+    ...patch,
+    id: existing.id,
+    createdAt: existing.createdAt,
+  })
+}
+
+export function isPendingCarSalesRenderTaskTerminal(status: string | null | undefined) {
+  return ['SUCCESS', 'SUCCEEDED', 'FAILED', 'RETRYABLE', 'CANCELED', 'CANCELLED'].includes(
+    String(status || '').trim().toUpperCase(),
+  )
 }
 
 export function upsertPendingCarSalesPlanTask(task: Omit<PendingCarSalesPlanTask, 'createdAt' | 'updatedAt'> & Partial<Pick<PendingCarSalesPlanTask, 'createdAt' | 'updatedAt'>>) {

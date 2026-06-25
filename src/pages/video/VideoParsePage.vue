@@ -885,7 +885,7 @@
 </template>
 
 <script setup lang="ts">
-import { computed, onBeforeUnmount, ref, watch } from 'vue'
+import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { downloadShareVideo, rewriteDouyinCopywriting, startDouyinParseWithTranscript } from '../../services/writerDouyinApi'
 import { API_BASE_URL, API_ORIGIN } from '../../services/request'
@@ -911,9 +911,12 @@ import {
 } from '../../stores/videoParseLocalUploadState'
 import { rememberSessionTaskId } from '../../services/sessionTaskStore'
 import {
+  getLatestPendingCarSalesPlanTask,
   getPendingCarSalesPlanTask,
   newPendingCarSalesPlanTaskId,
-  removePendingCarSalesPlanTask,
+  patchPendingCarSalesPlanTask,
+  type PendingCarSalesPlanTask,
+  type PendingCarSalesRenderTaskKind,
   upsertPendingCarSalesPlanTask,
 } from '../../services/carSalesPlanTaskStore'
 import { cancelTask } from '../../services/taskApi'
@@ -1241,6 +1244,10 @@ watch(
   () => restoreBenchmarkPendingPlanFromRoute(),
   { immediate: true },
 )
+
+onMounted(() => {
+  restoreLatestBenchmarkPendingPlanTask()
+})
 
 onBeforeUnmount(() => {
   parseAbort.value?.abort()
@@ -2373,6 +2380,7 @@ function persistBenchmarkPendingPlanTask() {
   if (!benchmarkPlanDraft.value || !planPreview.value) return
   const id = currentPendingPlanTaskId.value || newPendingCarSalesPlanTaskId('benchmark')
   currentPendingPlanTaskId.value = id
+  const existing = getPendingCarSalesPlanTask(id)
   upsertPendingCarSalesPlanTask({
     id,
     source: 'benchmark',
@@ -2383,6 +2391,13 @@ function persistBenchmarkPendingPlanTask() {
     plan: planPreview.value,
     draft: benchmarkPlanDraft.value,
     request: buildQuickRenderRequestFromPlanDraft(benchmarkPlanDraft.value, planPreview.value),
+    activeTaskId: existing?.activeTaskId ?? null,
+    activeTaskKind: existing?.activeTaskKind ?? null,
+    activeTaskStatus: existing?.activeTaskStatus,
+    activeTaskProgress: existing?.activeTaskProgress ?? null,
+    activeTaskSubmittedAt: existing?.activeTaskSubmittedAt,
+    activeTaskResultUrl: existing?.activeTaskResultUrl,
+    activeTaskErrorMessage: existing?.activeTaskErrorMessage,
   })
 }
 
@@ -2391,13 +2406,46 @@ function restoreBenchmarkPendingPlanFromRoute() {
   if (!planDraftId) return
   const task = getPendingCarSalesPlanTask(planDraftId)
   if (!task || task.source !== 'benchmark' || !task.draft) return
+  applyBenchmarkPendingPlanTask(task, true)
+}
+
+function restoreLatestBenchmarkPendingPlanTask() {
+  if (typeof route.query.planDraftId === 'string' || planPreview.value || planPreviewLoading.value) return
+  const task = getLatestPendingCarSalesPlanTask('benchmark')
+  if (!task || !task.draft) return
+  applyBenchmarkPendingPlanTask(task, true)
+}
+
+function applyBenchmarkPendingPlanTask(task: PendingCarSalesPlanTask, openPreview: boolean) {
+  if (!task.draft) return
   currentPendingPlanTaskId.value = task.id
   benchmarkPlanDraft.value = task.draft
   applyBenchmarkDraftSettings(task.draft)
   planPreview.value = task.plan
   planPreviewError.value = ''
   planPreviewLoading.value = false
-  planPreviewOpen.value = true
+  planPreviewOpen.value = openPreview
+}
+
+function patchBenchmarkPendingRenderTask(patch: Partial<PendingCarSalesPlanTask>) {
+  if (!currentPendingPlanTaskId.value) return
+  patchPendingCarSalesPlanTask(currentPendingPlanTaskId.value, patch)
+}
+
+function markBenchmarkPendingRenderTask(
+  taskId: number,
+  kind: PendingCarSalesRenderTaskKind,
+  status = 'QUEUED',
+  progress: number | null = 0,
+) {
+  patchBenchmarkPendingRenderTask({
+    activeTaskId: taskId,
+    activeTaskKind: kind,
+    activeTaskStatus: status,
+    activeTaskProgress: progress,
+    activeTaskSubmittedAt: new Date().toISOString(),
+    activeTaskErrorMessage: '',
+  })
 }
 
 function buildBenchmarkPlanDraft(): CarSalesPlanDraft {
@@ -2634,11 +2682,15 @@ async function confirmBenchmarkPlan() {
     const draftWithAsset = await ensureCarSalesPlanDraftAsset(benchmarkPlanDraft.value, planPreview.value)
     benchmarkPlanDraft.value = draftWithAsset
     const payload = buildQuickRenderRequestFromPlanDraft(draftWithAsset, planPreview.value)
+    persistBenchmarkPendingPlanTask()
     const submitted = await quickRenderVideo(payload, newVideoIdempotencyKey())
     const taskId = submitted.task?.taskId || submitted.digitalHumanTask?.taskId || null
-    removePendingCarSalesPlanTask(currentPendingPlanTaskId.value)
-    currentPendingPlanTaskId.value = ''
     if (taskId) {
+      if (submitted.task?.taskId) {
+        markBenchmarkPendingRenderTask(submitted.task.taskId, 'quick_render', String(submitted.task.status || 'QUEUED'), submitted.task.progress ?? 0)
+      } else {
+        markBenchmarkPendingRenderTask(taskId, 'digital_human', submitted.digitalHumanTask?.status || 'QUEUED', 0)
+      }
       rememberSessionTaskId(taskId)
       applyMessage.value = '已提交爆款对标生成任务'
       planPreviewOpen.value = false

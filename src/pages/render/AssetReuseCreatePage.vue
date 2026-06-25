@@ -455,9 +455,12 @@ import {
   readRenderTaskSnapshot,
 } from '../../services/renderTaskImport'
 import {
+  getLatestPendingCarSalesPlanTask,
   getPendingCarSalesPlanTask,
   newPendingCarSalesPlanTaskId,
-  removePendingCarSalesPlanTask,
+  patchPendingCarSalesPlanTask,
+  type PendingCarSalesPlanTask,
+  type PendingCarSalesRenderTaskKind,
   upsertPendingCarSalesPlanTask,
 } from '../../services/carSalesPlanTaskStore'
 import { newVideoIdempotencyKey, quickRenderVideo } from '../../services/videoApi'
@@ -1329,6 +1332,7 @@ function persistAssetReusePendingPlanTask() {
   if (!assetReusePlanDraft.value || !planPreview.value) return
   const id = currentPendingPlanTaskId.value || newPendingCarSalesPlanTaskId('asset-reuse')
   currentPendingPlanTaskId.value = id
+  const existing = getPendingCarSalesPlanTask(id)
   upsertPendingCarSalesPlanTask({
     id,
     source: 'asset-reuse',
@@ -1339,6 +1343,13 @@ function persistAssetReusePendingPlanTask() {
     plan: planPreview.value,
     draft: assetReusePlanDraft.value,
     request: buildQuickRenderRequestFromPlanDraft(assetReusePlanDraft.value, planPreview.value),
+    activeTaskId: existing?.activeTaskId ?? null,
+    activeTaskKind: existing?.activeTaskKind ?? null,
+    activeTaskStatus: existing?.activeTaskStatus,
+    activeTaskProgress: existing?.activeTaskProgress ?? null,
+    activeTaskSubmittedAt: existing?.activeTaskSubmittedAt,
+    activeTaskResultUrl: existing?.activeTaskResultUrl,
+    activeTaskErrorMessage: existing?.activeTaskErrorMessage,
   })
 }
 
@@ -1347,12 +1358,46 @@ function restoreAssetReusePendingPlanFromRoute() {
   if (!planDraftId) return
   const task = getPendingCarSalesPlanTask(planDraftId)
   if (!task || task.source !== 'asset-reuse' || !task.draft) return
+  applyAssetReusePendingPlanTask(task, true)
+}
+
+function restoreLatestAssetReusePendingPlanTask() {
+  if (typeof route.query.planDraftId === 'string' || planPreview.value || planPreviewLoading.value) return false
+  const task = getLatestPendingCarSalesPlanTask('asset-reuse')
+  if (!task || !task.draft) return false
+  applyAssetReusePendingPlanTask(task, true)
+  return true
+}
+
+function applyAssetReusePendingPlanTask(task: PendingCarSalesPlanTask, openPreview: boolean) {
+  if (!task.draft) return
   currentPendingPlanTaskId.value = task.id
   assetReusePlanDraft.value = task.draft
   planPreview.value = task.plan
   planPreviewError.value = ''
   planPreviewLoading.value = false
-  planPreviewOpen.value = true
+  planPreviewOpen.value = openPreview
+}
+
+function patchAssetReusePendingRenderTask(patch: Partial<PendingCarSalesPlanTask>) {
+  if (!currentPendingPlanTaskId.value) return
+  patchPendingCarSalesPlanTask(currentPendingPlanTaskId.value, patch)
+}
+
+function markAssetReusePendingRenderTask(
+  taskId: number,
+  kind: PendingCarSalesRenderTaskKind,
+  status = 'QUEUED',
+  progress: number | null = 0,
+) {
+  patchAssetReusePendingRenderTask({
+    activeTaskId: taskId,
+    activeTaskKind: kind,
+    activeTaskStatus: status,
+    activeTaskProgress: progress,
+    activeTaskSubmittedAt: new Date().toISOString(),
+    activeTaskErrorMessage: '',
+  })
 }
 
 async function buildAssetReusePlanDraft(): Promise<CarSalesPlanDraft> {
@@ -1500,11 +1545,15 @@ async function confirmAssetReusePlan() {
   planPreviewError.value = ''
   try {
     const payload = buildQuickRenderRequestFromPlanDraft(assetReusePlanDraft.value, planPreview.value)
+    persistAssetReusePendingPlanTask()
     const submitted = await quickRenderVideo(payload, newVideoIdempotencyKey())
     const taskId = submitted.task?.taskId || submitted.digitalHumanTask?.taskId || null
-    removePendingCarSalesPlanTask(currentPendingPlanTaskId.value)
-    currentPendingPlanTaskId.value = ''
     if (taskId) {
+      if (submitted.task?.taskId) {
+        markAssetReusePendingRenderTask(submitted.task.taskId, 'quick_render', String(submitted.task.status || 'QUEUED'), submitted.task.progress ?? 0)
+      } else {
+        markAssetReusePendingRenderTask(taskId, 'digital_human', submitted.digitalHumanTask?.status || 'QUEUED', 0)
+      }
       rememberSessionTaskId(taskId)
       ElMessage.success('已提交资产复用生成任务')
       planPreviewOpen.value = false
@@ -1625,7 +1674,7 @@ watch(
 
 onMounted(async () => {
   const imported = await restoreAssetReuseImportFromTask()
-  if (!imported) {
+  if (!imported && !restoreLatestAssetReusePendingPlanTask()) {
     restoreAssetReuseDraft()
   }
 })
