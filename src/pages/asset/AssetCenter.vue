@@ -163,6 +163,16 @@
           <option :value="UNGROUPED_GROUP_KEY">未分组</option>
           <option v-for="group in assetGroupOptions" :key="group" :value="group">{{ group }}</option>
         </select>
+        <select
+          v-if="activeCategory === 'materials' && listScope !== 'private'"
+          v-model="selectedPublicAssetProvider"
+          class="asset-type-select"
+          :disabled="loading"
+        >
+          <option value="all">全部公共来源</option>
+          <option value="developer">官方资产</option>
+          <option value="user">用户公共</option>
+        </select>
         <select v-if="activeCategory === 'materials'" v-model="sortKey" class="asset-type-select" :disabled="loading">
           <option value="createdAtDesc">按时间（新到旧）</option>
           <option value="createdAtAsc">按时间（旧到新）</option>
@@ -192,7 +202,7 @@
           class="asset-search"
           type="search"
           :disabled="loading"
-          :placeholder="activeCategory === 'materials' ? '搜索文件名...' : '搜索音色名称或 voice_type...'"
+          :placeholder="activeCategory === 'materials' ? '搜索资产名、车型、风格、数字人或整合包...' : '搜索音色名称或 voice_type...'"
         />
         <input
           ref="materialUploadInputRef"
@@ -374,7 +384,17 @@
           </p>
           <div class="asset-row-tags">
             <span class="asset-group-pill asset-business-pill">{{ assetBusinessLabel(asset) }}</span>
+            <span class="asset-group-pill" :class="publicAssetProviderPillClass(asset)">
+              {{ publicAssetProviderLabel(asset) }}
+            </span>
             <span v-if="asset.assetGroup" class="asset-group-pill">{{ asset.assetGroup }}</span>
+            <span
+              v-for="badge in developerAssetFeatureBadges(asset)"
+              :key="badge"
+              class="asset-group-pill asset-developer-feature-pill"
+            >
+              {{ badge }}
+            </span>
           </div>
           <div class="asset-row-preview">
             <template v-if="isImage(asset)">
@@ -831,11 +851,15 @@ import {
   assetWorkflowDisplayMeta as assetWorkflowDisplayMetaShared,
   assetWorkflowDisplayTitle as assetWorkflowDisplayTitleShared,
   isBenchmarkAsset as isBenchmarkAssetShared,
+  isAssetIntegrationPackageAsset as isAssetIntegrationPackageAssetShared,
   isCarModelBundleAsset as isCarModelBundleAssetShared,
   isSceneMaterialBundleAsset as isSceneMaterialBundleAssetShared,
   isStoryboardAsset as isStoryboardAssetShared,
   matchesAssetWorkflowStage,
   normalizedAssetRole as normalizedAssetRoleShared,
+  developerAssetFeatureBadges,
+  publicAssetProviderKind,
+  publicAssetProviderLabel,
   sourceTypeLabel as sourceTypeLabelShared,
   SCENE_MATERIAL_BUNDLE_GROUP,
 } from '../../utils/assetWorkflow'
@@ -951,6 +975,7 @@ const KNOWN_SOURCE_TYPES = [
   'IMAGE_TO_VIDEO_SEEDANCE_1_5',
   'IMAGE_TO_VIDEO_SEEDANCE_2_0',
   'IMAGE_TO_VIDEO_SEEDANCE_2_0_FAST',
+  'ASSET_REUSE_PACKAGE',
 ] as const
 
 const UNGROUPED_GROUP_KEY = '__ungrouped'
@@ -1071,9 +1096,9 @@ const BUSINESS_VIEW_OPTIONS = [
   },
   {
     key: 'template',
-    label: '模板库',
-    hint: '文案、分镜、BGM',
-    subtitle: '文案模板、分镜模板、数字人模板和背景音乐模板',
+    label: '模板/整合包',
+    hint: '一键套用、参数包',
+    subtitle: '文案模板、分镜模板、数字人模板和资产整合包',
   },
 ] as const
 
@@ -1087,6 +1112,7 @@ const ASSET_GROUP_PRESETS = [
   '口播文案',
   '数字人素材',
   '成片视频',
+  '资产整合包',
 ] as const
 
 const assets = ref<AssetItem[]>([])
@@ -1101,6 +1127,7 @@ const jumpHint = ref('')
 const selectedType = ref<'' | AssetType>('')
 const selectedSourceType = ref<string>('')
 const selectedAssetGroup = ref<string>('')
+const selectedPublicAssetProvider = ref<'all' | 'developer' | 'user'>('all')
 const selectedWorkflowStage = ref<WorkflowStageKey>('')
 const selectedBusinessView = ref<BusinessViewKey>('image')
 const sortKey = ref<AssetListSort>('createdAtDesc')
@@ -1455,7 +1482,7 @@ watch(
   },
 )
 
-watch([activeCategory, listScope, voiceListScope, selectedBusinessView, selectedType, selectedSourceType, selectedAssetGroup, selectedWorkflowStage, sortKey], () => {
+watch([activeCategory, listScope, voiceListScope, selectedBusinessView, selectedType, selectedSourceType, selectedAssetGroup, selectedPublicAssetProvider, selectedWorkflowStage, sortKey], () => {
   scheduleReload()
 })
 
@@ -1507,6 +1534,7 @@ function currentAssetQueryKey() {
     selectedType: selectedType.value,
     selectedSourceType: selectedSourceType.value,
     selectedAssetGroup: selectedAssetGroup.value,
+    selectedPublicAssetProvider: selectedPublicAssetProvider.value,
     selectedWorkflowStage: selectedWorkflowStage.value,
     sortKey: sortKey.value,
     keyword: keyword.value.trim(),
@@ -1559,7 +1587,7 @@ async function loadAssets(options?: { append?: boolean }) {
       pageSize: ASSET_PAGE_SIZE,
     })
     if (seq !== assetLoadSeq) return
-    const filteredRows = rows.filter(matchesWorkflowStage).filter(matchesBusinessView)
+    const filteredRows = rows.filter(matchesPublicAssetProvider).filter(matchesWorkflowStage).filter(matchesBusinessView)
     if (append) {
       const existingIds = new Set(assets.value.map((asset) => asset.assetId))
       assets.value = [...assets.value, ...filteredRows.filter((asset) => !existingIds.has(asset.assetId))]
@@ -1959,6 +1987,7 @@ function selectBusinessView(view: BusinessViewKey) {
   selectedType.value = ''
   selectedSourceType.value = ''
   selectedAssetGroup.value = ''
+  selectedPublicAssetProvider.value = 'all'
   selectedWorkflowStage.value = ''
   keyword.value = ''
 }
@@ -2107,6 +2136,16 @@ function matchesBusinessView(asset: AssetItem) {
   }
 }
 
+function matchesPublicAssetProvider(asset: AssetItem) {
+  if (selectedPublicAssetProvider.value === 'all' || listScope.value === 'private') {
+    return true
+  }
+  if (!isPublicAsset(asset)) {
+    return false
+  }
+  return publicAssetProviderKind(asset) === selectedPublicAssetProvider.value
+}
+
 function assetBusinessLabel(asset: AssetItem) {
   if (selectedBusinessView.value === 'image' && isBusinessImageAsset(asset)) return businessViewLabel('image')
   if (selectedBusinessView.value === 'video' && isBusinessVideoAsset(asset)) return businessViewLabel('video')
@@ -2123,6 +2162,15 @@ function assetBusinessLabel(asset: AssetItem) {
   if (isBusinessVideoAsset(asset)) return '视频素材'
   if (isBusinessImageAsset(asset)) return '图片素材'
   return '素材资产'
+}
+
+function publicAssetProviderPillClass(asset: AssetItem) {
+  const kind = publicAssetProviderKind(asset)
+  return {
+    'asset-developer-pill': kind === 'developer',
+    'asset-user-public-pill': kind === 'user',
+    'asset-private-pill': kind === 'private',
+  }
 }
 
 function businessViewLabel(key: BusinessViewKey) {
@@ -2197,10 +2245,14 @@ function isTemplateLibraryAsset(asset: AssetItem) {
   const text = assetBusinessIdentityText(asset)
   const metadata = parseJsonObject(asset.metadataJson)
   return Boolean(
-    metadata?.publicTemplate ||
+    isAssetIntegrationPackageAssetShared(asset) ||
+      metadata?.publicTemplate ||
       metadata?.templateRole ||
       metadata?.templateType ||
       includesAnyBusinessToken(text, [
+        'asset_integration_package',
+        'asset_reuse_package',
+        '资产整合包',
         'template',
         '_template',
         'copywriting_template',
@@ -3873,6 +3925,30 @@ async function playVoiceSample(voice: VoicePresetItem) {
   border-color: #bbf7d0;
   background: #ecfdf3;
   color: #027a48;
+}
+
+.asset-developer-pill {
+  border-color: #bbf7d0;
+  background: #ecfdf3;
+  color: #15803d;
+}
+
+.asset-user-public-pill {
+  border-color: #fde68a;
+  background: #fffbeb;
+  color: #92400e;
+}
+
+.asset-private-pill {
+  border-color: #e5e7eb;
+  background: #f8fafc;
+  color: #64748b;
+}
+
+.asset-developer-feature-pill {
+  border-color: #d8b4fe;
+  background: #faf5ff;
+  color: #7e22ce;
 }
 
 .asset-row-actions {

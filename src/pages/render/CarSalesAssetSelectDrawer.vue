@@ -37,6 +37,11 @@
                 <option value="global">公共素材</option>
                 <option value="all">全部素材</option>
               </select>
+              <select v-if="scope !== 'private'" v-model="publicProvider" :disabled="loading" aria-label="公共来源">
+                <option value="all">全部公共来源</option>
+                <option value="developer">官方资产</option>
+                <option value="user">用户公共</option>
+              </select>
               <button type="button" class="car-asset-button" :disabled="loading" @click="loadAssets">
                 {{ loading ? '加载中...' : '搜索' }}
               </button>
@@ -49,7 +54,12 @@
               当前分类暂无匹配资产。
             </div>
             <div v-else class="car-asset-grid">
-              <article v-for="asset in filteredAssets" :key="asset.assetId" class="car-asset-card">
+              <article
+                v-for="asset in filteredAssets"
+                :key="asset.assetId"
+                class="car-asset-card"
+                :class="{ 'car-asset-card--match': isCurrentCarMatchedAsset(asset) }"
+              >
                 <div
                   class="car-asset-preview"
                   :class="{ 'car-asset-preview--bundle': assetPreviewImages(asset).length > 0 }"
@@ -81,6 +91,21 @@
                 <div class="car-asset-info">
                   <strong>{{ assetPreviewTitle(asset) }}</strong>
                   <p>{{ assetPreviewMeta(asset) }}</p>
+                  <div class="car-asset-tags">
+                    <small class="car-asset-provider-tag" :class="assetProviderTagClass(asset)">
+                      {{ publicAssetProviderLabel(asset) }}
+                    </small>
+                    <small
+                      v-for="badge in developerAssetFeatureBadges(asset)"
+                      :key="badge"
+                      class="car-asset-feature-tag"
+                    >
+                      {{ badge }}
+                    </small>
+                  </div>
+                  <small v-if="currentCarMatchLabel(asset)" class="car-asset-match-tag">
+                    {{ currentCarMatchLabel(asset) }}
+                  </small>
                 </div>
                 <label v-if="!isLockedCategory || activeCategory.roles.length > 1" class="car-asset-role">
                   <span>加入为</span>
@@ -108,6 +133,11 @@ import { getAssetTextContent, getAssets, type AssetListScope } from '../../servi
 import { API_ORIGIN } from '../../services/request'
 import type { AssetItem, AssetType } from '../../types/assetTypes'
 import type { QuickRenderAssetRole } from '../../types/videoTypes'
+import {
+  developerAssetFeatureBadges,
+  publicAssetProviderKind,
+  publicAssetProviderLabel,
+} from '../../utils/assetWorkflow'
 
 export type CarSalesAssetCategoryKey =
   | 'vehicle'
@@ -151,6 +181,8 @@ const props = defineProps<{
   modelValue: boolean
   initialCategory?: CarSalesAssetCategoryKey
   lockedCategory?: CarSalesAssetCategoryKey | null
+  currentCarModelAssetId?: number | string | null
+  currentCarModelName?: string | null
 }>()
 
 const emit = defineEmits<{
@@ -268,6 +300,7 @@ const activeCategoryKey = ref<CarSalesAssetCategoryKey>(props.initialCategory ||
 const assets = ref<AssetItem[]>([])
 const keyword = ref('')
 const scope = ref<AssetListScope>('all')
+const publicProvider = ref<'all' | 'developer' | 'user'>('all')
 const loading = ref(false)
 const errorMessage = ref('')
 const selectedRoleByAssetId = ref<Record<number, QuickRenderAssetRole>>({})
@@ -294,7 +327,7 @@ const drawerDescription = computed(() =>
 )
 
 const filteredAssets = computed(() =>
-  sortAssets(assets.value.filter((asset) => assetMatchesCategory(asset, activeCategory.value))),
+  sortAssets(assets.value.filter(assetMatchesPublicProvider).filter((asset) => assetMatchesCategory(asset, activeCategory.value))),
 )
 
 watch(
@@ -376,6 +409,16 @@ function setCategory(key: CarSalesAssetCategoryKey) {
   syncScopeForCategory(key)
   keyword.value = ''
   void loadAssets()
+}
+
+function assetMatchesPublicProvider(asset: AssetItem) {
+  if (publicProvider.value === 'all' || scope.value === 'private') {
+    return true
+  }
+  if (String(asset.visibility || '').toUpperCase() !== 'PUBLIC') {
+    return false
+  }
+  return publicAssetProviderKind(asset) === publicProvider.value
 }
 
 function selectAsset(asset: AssetItem) {
@@ -733,7 +776,134 @@ function dedupeAssets(list: AssetItem[]) {
 }
 
 function sortAssets(list: AssetItem[]) {
-  return [...list].sort((a, b) => Date.parse(b.createdAt || '') - Date.parse(a.createdAt || '') || b.assetId - a.assetId)
+  const currentId = normalizeAssetIdKey(props.currentCarModelAssetId)
+  const currentName = normalizeMatchText(props.currentCarModelName || '')
+  return [...list].sort((a, b) =>
+    currentCarMatchScore(b, currentId, currentName) - currentCarMatchScore(a, currentId, currentName) ||
+    Date.parse(b.createdAt || '') - Date.parse(a.createdAt || '') ||
+    b.assetId - a.assetId,
+  )
+}
+
+function currentCarMatchScore(asset: AssetItem, currentId: string, currentName: string) {
+  if (!isCurrentCarMatchedAsset(asset, currentId, currentName)) {
+    return 0
+  }
+  const role = roleForAsset(asset, activeCategory.value)
+  const contentBonus = role === 'voice_script' || role === 'storyboard_json' || role === 'benchmark_json' ? 20 : 0
+  return 1000 + contentBonus
+}
+
+function isCurrentCarMatchedAsset(asset: AssetItem, currentId = normalizeAssetIdKey(props.currentCarModelAssetId), currentName = normalizeMatchText(props.currentCarModelName || '')) {
+  if (!currentId && !currentName) {
+    return false
+  }
+  const metadata = parseMetadata(asset.metadataJson)
+  if (currentId && currentCarMetadataIds(asset, metadata).has(currentId)) {
+    return true
+  }
+  if (!currentName) {
+    return false
+  }
+  const metadataNames = [
+    metadataTextFromRecord(metadata, 'carModelName'),
+    metadataTextFromRecord(metadata, 'sourceCarModelName'),
+    metadataTextFromRecord(metadata, 'vehicleName'),
+    metadataTextFromRecord(metadata, 'brandModel'),
+    metadataTextFromRecord(metadata, 'modelName'),
+  ].map(normalizeMatchText).filter(Boolean)
+  return metadataNames.some((name) => name === currentName)
+}
+
+function currentCarMatchLabel(asset: AssetItem) {
+  if (!isCurrentCarMatchedAsset(asset)) {
+    return ''
+  }
+  const metadata = parseMetadata(asset.metadataJson)
+  const hostMode = metadataTextFromRecord(metadata, 'hostMode') || metadataTextFromRecord(metadata, 'digitalHumanMode')
+  if (hostMode === 'digital_human' || hostMode === 'with_digital_human') {
+    return '匹配当前车型 · 数字人版'
+  }
+  if (hostMode === 'no_digital_human' || hostMode === 'vehicle_only') {
+    return '匹配当前车型 · 无数字人版'
+  }
+  return '匹配当前车型'
+}
+
+function assetProviderTagClass(asset: AssetItem) {
+  const kind = publicAssetProviderKind(asset)
+  return {
+    'car-asset-provider-tag--developer': kind === 'developer',
+    'car-asset-provider-tag--user': kind === 'user',
+    'car-asset-provider-tag--private': kind === 'private',
+  }
+}
+
+function currentCarMetadataIds(asset: AssetItem, metadata: Record<string, unknown> | null) {
+  const ids = new Set<string>()
+  const keys = [
+    'carModelId',
+    'sourceCarModelId',
+    'sourceCarBundleAssetId',
+    'carModelAssetId',
+    'carBundleAssetId',
+    'vehicleId',
+    'bundleAssetId',
+    'modelAssetId',
+  ]
+  for (const key of keys) {
+    addAssetIdKey(ids, metadata?.[key])
+  }
+  addAssetIdKey(ids, metadata?.carModelIds)
+  addAssetIdKey(ids, metadata?.sourceCarBundleAssetIds)
+  addAssetIdKey(ids, metadata?.sourceAssetIds)
+  addContentPairIdKeys(ids, metadataTextFromRecord(metadata, 'contentPairId'))
+  addContentPairIdKeys(ids, `${asset.fileName || ''} ${asset.metadataJson || ''}`)
+  return ids
+}
+
+function addAssetIdKey(target: Set<string>, value: unknown) {
+  if (Array.isArray(value)) {
+    value.forEach((item) => addAssetIdKey(target, item))
+    return
+  }
+  const normalized = normalizeAssetIdKey(value)
+  if (normalized) {
+    target.add(normalized)
+  }
+}
+
+function addContentPairIdKeys(target: Set<string>, value: string) {
+  if (!value) {
+    return
+  }
+  const matches = value.matchAll(/car_model_bundle:(\d+)/gi)
+  for (const match of matches) {
+    addAssetIdKey(target, match[1])
+  }
+}
+
+function normalizeAssetIdKey(value: unknown) {
+  if (typeof value === 'number' && Number.isFinite(value)) {
+    return String(Math.trunc(value))
+  }
+  const text = String(value ?? '').trim()
+  if (!text) {
+    return ''
+  }
+  if (/^\d+$/.test(text)) {
+    return text
+  }
+  const pair = text.match(/car_model_bundle:(\d+)/i)
+  return pair?.[1] || ''
+}
+
+function normalizeMatchText(value: string | null | undefined) {
+  return String(value || '')
+    .trim()
+    .toLowerCase()
+    .replace(/\s+/g, '')
+    .replace(/[·._-]+/g, '')
 }
 
 function assetPreviewImageUrl(asset: AssetItem) {
@@ -968,6 +1138,11 @@ function formatDate(value: string | null | undefined) {
   padding: 10px;
 }
 
+.car-asset-card--match {
+  border-color: #86efac;
+  background: #f0fdf4;
+}
+
 .car-asset-preview {
   display: grid;
   aspect-ratio: 4 / 3;
@@ -1048,6 +1223,69 @@ function formatDate(value: string | null | undefined) {
   color: var(--hs-text-muted);
   font-size: 12px;
   line-height: 1.5;
+}
+
+.car-asset-tags {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 5px;
+}
+
+.car-asset-provider-tag,
+.car-asset-feature-tag {
+  width: fit-content;
+  max-width: 100%;
+  overflow: hidden;
+  border: 1px solid #e5e7eb;
+  border-radius: 999px;
+  background: #f8fafc;
+  color: #64748b;
+  padding: 2px 8px;
+  font-size: 11.5px;
+  font-weight: 850;
+  line-height: 1.3;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.car-asset-provider-tag--developer {
+  border-color: #bbf7d0;
+  background: #ecfdf3;
+  color: #15803d;
+}
+
+.car-asset-provider-tag--user {
+  border-color: #fde68a;
+  background: #fffbeb;
+  color: #92400e;
+}
+
+.car-asset-provider-tag--private {
+  border-color: #e5e7eb;
+  background: #f8fafc;
+  color: #64748b;
+}
+
+.car-asset-feature-tag {
+  border-color: #d8b4fe;
+  background: #faf5ff;
+  color: #7e22ce;
+}
+
+.car-asset-match-tag {
+  width: fit-content;
+  max-width: 100%;
+  overflow: hidden;
+  border: 1px solid #86efac;
+  border-radius: 999px;
+  background: #dcfce7;
+  color: #166534;
+  padding: 2px 8px;
+  font-size: 11.5px;
+  font-weight: 850;
+  line-height: 1.3;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .car-asset-role {

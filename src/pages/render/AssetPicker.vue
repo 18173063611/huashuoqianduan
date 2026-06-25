@@ -86,7 +86,10 @@
               <article
                 v-if="richJsonMode"
                 class="asset-picker-item asset-picker-item-rich"
-                :class="{ active: selectedAssetId === asset.assetId }"
+                :class="{
+                  active: selectedAssetId === asset.assetId,
+                  'asset-picker-item-match': isCurrentCarMatchedAsset(asset),
+                }"
                 role="button"
                 tabindex="0"
                 @click="highlightAsset(asset)"
@@ -106,6 +109,19 @@
                     <strong>{{ assetPreview(asset).title }}</strong>
                     <small>{{ assetPreview(asset).subtitle }}</small>
                     <span v-if="assetRoleLabel(asset)" class="asset-picker-role-tag">{{ assetRoleLabel(asset) }}</span>
+                    <span class="asset-picker-provider-tag" :class="assetProviderTagClass(asset)">
+                      {{ publicAssetProviderLabel(asset) }}
+                    </span>
+                    <span v-if="currentCarMatchLabel(asset)" class="asset-picker-match-tag">
+                      {{ currentCarMatchLabel(asset) }}
+                    </span>
+                    <span
+                      v-for="badge in developerAssetFeatureBadges(asset)"
+                      :key="badge"
+                      class="asset-picker-feature-tag"
+                    >
+                      {{ badge }}
+                    </span>
                   </span>
                 </div>
 
@@ -137,7 +153,10 @@
               <button
                 v-else
                 class="asset-picker-item"
-                :class="{ active: selectedAssetId === asset.assetId }"
+                :class="{
+                  active: selectedAssetId === asset.assetId,
+                  'asset-picker-item-match': isCurrentCarMatchedAsset(asset),
+                }"
                 type="button"
                 :disabled="busy"
                 @click="highlightAsset(asset)"
@@ -158,6 +177,19 @@
                   <strong>{{ asset.fileName }}</strong>
                   <small>{{ assetListSubtitle(asset) }}</small>
                   <span v-if="assetRoleLabel(asset)" class="asset-picker-role-tag">{{ assetRoleLabel(asset) }}</span>
+                  <span class="asset-picker-provider-tag" :class="assetProviderTagClass(asset)">
+                    {{ publicAssetProviderLabel(asset) }}
+                  </span>
+                  <span v-if="currentCarMatchLabel(asset)" class="asset-picker-match-tag">
+                    {{ currentCarMatchLabel(asset) }}
+                  </span>
+                  <span
+                    v-for="badge in developerAssetFeatureBadges(asset)"
+                    :key="badge"
+                    class="asset-picker-feature-tag"
+                  >
+                    {{ badge }}
+                  </span>
                   <span class="asset-picker-date">产出时间：{{ formatDateTime(asset.createdAt) }}</span>
                 </span>
               </button>
@@ -200,11 +232,14 @@ import {
   assetWorkflowDisplayMeta,
   assetWorkflowDisplayTitle,
   assetWorkflowPreviewLabel,
+  developerAssetFeatureBadges,
   isBenchmarkAsset,
   isStoryboardAsset,
   matchesAssetWorkflowStage,
   normalizeAssetRole as normalizeWorkflowAssetRole,
   normalizedAssetRole as normalizedWorkflowAssetRole,
+  publicAssetProviderKind,
+  publicAssetProviderLabel,
   roleDisplayLabel as workflowRoleDisplayLabel,
   sourceTypeLabel as workflowSourceTypeLabel,
   type AssetWorkflowStageKey,
@@ -230,6 +265,9 @@ const props = defineProps<{
   roleOptions?: AssetRoleOption[]
   workflowStage?: AssetWorkflowStageKey
   showVideoPreview?: boolean
+  currentCarModelAssetId?: number | string | null
+  currentCarModelName?: string | null
+  initialScope?: PickerScope
 }>()
 
 const emit = defineEmits<{
@@ -245,7 +283,7 @@ const selectedAssetId = ref<number | null>(null)
 const selectedAssetName = ref('')
 const selectedAssetUrl = ref('')
 const selectedRoleFilter = ref('all')
-const selectedScope = ref<PickerScope>('private')
+const selectedScope = ref<PickerScope>(props.initialScope || 'private')
 const modalOpen = ref(false)
 const previewByAssetId = ref<Record<number, AssetPickerPreview>>({})
 const previewLoading = ref(false)
@@ -319,6 +357,8 @@ const selectedLabel = computed(() => {
   }
   return ''
 })
+const currentCarModelIdKey = computed(() => normalizeAssetIdKey(props.currentCarModelAssetId))
+const currentCarModelNameKey = computed(() => normalizeMatchText(props.currentCarModelName || ''))
 const allowedAssetRoles = computed(() =>
   (props.assetRoles || []).map(normalizeAssetRole).filter(Boolean),
 )
@@ -345,7 +385,7 @@ const filteredAssets = computed(() => {
   const allowed = allowedAssetRoles.value
   const selected = selectedRoleFilter.value === 'all' ? '' : normalizeAssetRole(selectedRoleFilter.value)
   const workflowStage = activeWorkflowStage.value
-  return assets.value.filter((asset) => {
+  const rows = assets.value.filter((asset) => {
     if (workflowStage && !matchesActiveWorkflowStage(asset)) {
       return false
     }
@@ -359,6 +399,7 @@ const filteredAssets = computed(() => {
     }
     return true
   })
+  return sortAssetsForCurrentCar(rows)
 })
 const activeAsset = computed(() =>
   filteredAssets.value.find((asset) => asset.assetId === selectedAssetId.value) || null,
@@ -417,6 +458,7 @@ const ASSET_ROLE_LABELS: Record<string, string> = {
   voice_script: '口播文案',
   storyboard_json: '分镜',
   benchmark_json: '爆款对标',
+  asset_integration_package: '资产整合包',
   material_video: '视频素材',
   host_video: '数字人视频',
   reference_video: '参考视频',
@@ -547,6 +589,32 @@ function requestAssetTypes(): Array<AssetType | ''> {
 
 function sortAssetsByCreatedAtDesc(items: AssetItem[]) {
   return [...items].sort((a, b) => createdAtMillis(b) - createdAtMillis(a) || b.assetId - a.assetId)
+}
+
+function sortAssetsForCurrentCar(items: AssetItem[]) {
+  const currentId = currentCarModelIdKey.value
+  const currentName = currentCarModelNameKey.value
+  if (!currentId && !currentName) {
+    return sortAssetsByCreatedAtDesc(items)
+  }
+  return [...items].sort((a, b) =>
+    currentCarMatchScore(b) - currentCarMatchScore(a) ||
+    createdAtMillis(b) - createdAtMillis(a) ||
+    b.assetId - a.assetId,
+  )
+}
+
+function currentCarMatchScore(asset: AssetItem) {
+  if (!isCurrentCarMatchedAsset(asset)) {
+    return 0
+  }
+  const role = assetNormalizedRole(asset)
+  const contentBonus = role === 'asset_integration_package'
+    ? 40
+    : role === 'voice_script' || role === 'storyboard_json' || role === 'benchmark_json'
+      ? 20
+      : 0
+  return 1000 + contentBonus
 }
 
 function createdAtMillis(asset: AssetItem) {
@@ -727,6 +795,122 @@ function assetMatchesSceneRoleKeyword(asset: AssetItem, role: string) {
   return false
 }
 
+function isCurrentCarMatchedAsset(asset: AssetItem) {
+  const currentId = currentCarModelIdKey.value
+  const currentName = currentCarModelNameKey.value
+  if (!currentId && !currentName) {
+    return false
+  }
+  const metadata = parseObject(asset.metadataJson)
+  if (currentId && currentCarMetadataIds(asset, metadata).has(currentId)) {
+    return true
+  }
+  if (!currentName) {
+    return false
+  }
+  const metadataNames = [
+    textAt(metadata, 'carModelName'),
+    textAt(metadata, 'sourceCarModelName'),
+    textAt(metadata, 'vehicleName'),
+    textAt(metadata, 'brandModel'),
+    textAt(metadata, 'modelName'),
+  ].map(normalizeMatchText).filter(Boolean)
+  return metadataNames.some((name) => name === currentName)
+}
+
+function currentCarMatchLabel(asset: AssetItem) {
+  if (!isCurrentCarMatchedAsset(asset)) {
+    return ''
+  }
+  const metadata = parseObject(asset.metadataJson)
+  const hostMode = textAt(metadata, 'hostMode') || textAt(metadata, 'digitalHumanMode')
+  if (hostMode === 'digital_human' || hostMode === 'with_digital_human') {
+    return '匹配当前车型 · 数字人版'
+  }
+  if (hostMode === 'no_digital_human' || hostMode === 'vehicle_only') {
+    return '匹配当前车型 · 无数字人版'
+  }
+  return '匹配当前车型'
+}
+
+function assetProviderTagClass(asset: AssetItem) {
+  const kind = publicAssetProviderKind(asset)
+  return {
+    'asset-picker-provider-tag--developer': kind === 'developer',
+    'asset-picker-provider-tag--user': kind === 'user',
+    'asset-picker-provider-tag--private': kind === 'private',
+  }
+}
+
+function currentCarMetadataIds(asset: AssetItem, metadata: Record<string, unknown> | null) {
+  const ids = new Set<string>()
+  const keys = [
+    'carModelId',
+    'sourceCarModelId',
+    'sourceCarBundleAssetId',
+    'carModelAssetId',
+    'carBundleAssetId',
+    'vehicleId',
+    'bundleAssetId',
+    'modelAssetId',
+  ]
+  for (const key of keys) {
+    addAssetIdKey(ids, metadata?.[key])
+  }
+  addAssetIdKey(ids, metadata?.carModelIds)
+  addAssetIdKey(ids, metadata?.sourceCarBundleAssetIds)
+  addAssetIdKey(ids, metadata?.sourceAssetIds)
+  addContentPairIdKeys(ids, textAt(metadata, 'contentPairId'))
+  const raw = `${asset.fileName || ''} ${asset.metadataJson || ''}`
+  addContentPairIdKeys(ids, raw)
+  return ids
+}
+
+function addAssetIdKey(target: Set<string>, value: unknown) {
+  if (Array.isArray(value)) {
+    value.forEach((item) => addAssetIdKey(target, item))
+    return
+  }
+  const normalized = normalizeAssetIdKey(value)
+  if (normalized) {
+    target.add(normalized)
+  }
+}
+
+function addContentPairIdKeys(target: Set<string>, value: string) {
+  if (!value) {
+    return
+  }
+  const matches = value.matchAll(/car_model_bundle:(\d+)/gi)
+  for (const match of matches) {
+    addAssetIdKey(target, match[1])
+  }
+}
+
+function normalizeAssetIdKey(value: unknown) {
+  if (typeof value === 'number' && Number.isFinite(value)) {
+    return String(Math.trunc(value))
+  }
+  const text = String(value ?? '').trim()
+  if (!text) {
+    return ''
+  }
+  const direct = text.match(/^\d+$/)
+  if (direct) {
+    return text
+  }
+  const pair = text.match(/car_model_bundle:(\d+)/i)
+  return pair?.[1] || ''
+}
+
+function normalizeMatchText(value: string | null | undefined) {
+  return String(value || '')
+    .trim()
+    .toLowerCase()
+    .replace(/\s+/g, '')
+    .replace(/[·._-]+/g, '')
+}
+
 function assetIcon(asset: AssetItem) {
   if (asset.assetType === 'AUDIO') return '音'
   if (asset.assetType === 'VIDEO') return '视'
@@ -830,6 +1014,59 @@ function buildJsonPreview(asset: AssetItem, text: string): AssetPickerPreview {
     }
   }
   const meta = parseObject(asset.metadataJson)
+  const normalizedRole = assetNormalizedRole(asset)
+  if (
+    normalizedRole === 'asset_integration_package' ||
+    textAt(parsed, 'contentKind') === 'asset_reuse_package' ||
+    textAt(parsed, 'logicalAssetType') === 'asset_integration_package'
+  ) {
+    const renderConfig = objectAt(parsed, 'renderConfig') || objectAt(parsed, 'input') || parsed
+    const storyboard = firstArrayAt(parsed, ['generatedStoryboard', 'storyboard', 'shots', 'scenes'])
+    const assetIds = arrayAt(parsed, 'assetIds')
+    const bindings = arrayAt(parsed, 'assetRoleBindings')
+    const title = firstText(
+      assetWorkflowDisplayTitle(asset),
+      textAt(parsed, 'title'),
+      textAt(meta, 'title'),
+      textAt(parsed, 'packageName'),
+      asset.fileName,
+    )
+    const duration = firstText(textAt(renderConfig, 'duration'), textAt(meta, 'durationSeconds'))
+    const style = firstText(textAt(meta, 'videoStyle'), textAt(parsed, 'videoStyle'), textAt(parsed, 'style'), '汽车销售')
+    const hostMode = firstText(textAt(meta, 'hostMode'), textAt(parsed, 'hostMode'), textAt(parsed, 'digitalHumanMode'))
+    const hostLabel = hostMode === 'digital_human' || hostMode === 'with_digital_human'
+      ? '数字人版'
+      : hostMode === 'no_digital_human' || hostMode === 'vehicle_only'
+        ? '无数字人版'
+        : ''
+    const previewText = ellipsis(firstText(
+      textAt(parsed, 'previewText'),
+      textAt(parsed, 'finalVoiceText'),
+      textAt(parsed, 'script'),
+      textAt(parsed, 'description'),
+      storyboardPreviewText(storyboard),
+      '点击后会导入车型素材、文案、分镜和高级生成参数。',
+    ), 220)
+    return {
+      title,
+      subtitle: [
+        sourceTypeLabel(asset.sourceType),
+        style,
+        hostLabel,
+        durationLabel(duration),
+        storyboard.length ? `${storyboard.length} 镜头` : '',
+        assetIds.length || bindings.length ? `${assetIds.length || bindings.length} 个资产引用` : '',
+      ].filter(Boolean).join(' · '),
+      detail: ellipsis(firstText(
+        textAt(parsed, 'description'),
+        previewText,
+        '点击后会导入车型素材、文案、分镜和高级生成参数。',
+      ), 130),
+      coverUrl: resolveUrl(firstText(textAt(parsed, 'coverUrl'), textAt(meta, 'coverUrl'))),
+      previewLabel: '整合包预览',
+      previewText,
+    }
+  }
   const parseResult = objectAt(parsed, 'parseResult')
   const transcriptResult = objectAt(parsed, 'transcriptResult')
   const author = objectAt(parseResult, 'author')
@@ -855,7 +1092,6 @@ function buildJsonPreview(asset: AssetItem, text: string): AssetPickerPreview {
   )
   const authorName = firstText(textAt(author, 'nickname'), textAt(author, 'uniqueId'))
   const coverUrl = resolveUrl(firstText(textAt(parseResult, 'coverUrl'), textAt(meta, 'coverUrl'), textAt(parsed, 'coverUrl')))
-  const normalizedRole = assetNormalizedRole(asset)
   const storyboardLike = isStoryboardAsset(asset) || normalizedRole === 'storyboard_json'
 
   if (storyboardLike || shots.length > 0) {
@@ -938,6 +1174,7 @@ function buildPlainTextPreview(asset: AssetItem, text: string): AssetPickerPrevi
 }
 
 function rolePreviewLabel(role: string) {
+  if (role === 'asset_integration_package') return '整合包预览'
   if (role === 'benchmark_json') return '口播预览'
   if (role === 'voice_script') return '口播预览'
   if (role === 'storyboard_json') return '分镜预览'
@@ -1224,7 +1461,7 @@ function durationLabel(value: string) {
 function selectAsset(asset: AssetItem) {
   const url = resolveUrl(asset.fileUrl)
   selectedAssetId.value = asset.assetId
-  selectedAssetName.value = asset.fileName
+  selectedAssetName.value = assetWorkflowDisplayTitle(asset) || asset.fileName
   selectedAssetUrl.value = url
   emit('select', { asset, url })
   closePicker()
@@ -1612,6 +1849,17 @@ function formatFileSize(size: number) {
   background: #faf9ff;
 }
 
+.asset-picker-item-match {
+  border-color: #86efac;
+  background: #f0fdf4;
+}
+
+.asset-picker-item-match:hover:not(:disabled),
+.asset-picker-item-match.active {
+  border-color: #4ade80;
+  background: #ecfdf5;
+}
+
 .asset-picker-item.active {
   box-shadow: inset 0 0 0 1px #d8d2ff;
 }
@@ -1694,7 +1942,9 @@ function formatFileSize(size: number) {
   font-size: 12px;
 }
 
-.asset-picker-role-tag {
+.asset-picker-role-tag,
+.asset-picker-provider-tag,
+.asset-picker-feature-tag {
   display: inline-flex;
   width: fit-content;
   max-width: 100%;
@@ -1704,6 +1954,48 @@ function formatFileSize(size: number) {
   border-radius: 999px;
   background: #eff6ff;
   color: #1d4ed8;
+  padding: 2px 8px;
+  font-size: 11.5px;
+  font-weight: 900;
+  line-height: 1.3;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.asset-picker-provider-tag--developer {
+  border-color: #bbf7d0;
+  background: #ecfdf3;
+  color: #15803d;
+}
+
+.asset-picker-provider-tag--user {
+  border-color: #fde68a;
+  background: #fffbeb;
+  color: #92400e;
+}
+
+.asset-picker-provider-tag--private {
+  border-color: #e5e7eb;
+  background: #f8fafc;
+  color: #64748b;
+}
+
+.asset-picker-feature-tag {
+  border-color: #d8b4fe;
+  background: #faf5ff;
+  color: #7e22ce;
+}
+
+.asset-picker-match-tag {
+  display: inline-flex;
+  width: fit-content;
+  max-width: 100%;
+  margin-top: 5px;
+  overflow: hidden;
+  border: 1px solid #86efac;
+  border-radius: 999px;
+  background: #dcfce7;
+  color: #166534;
   padding: 2px 8px;
   font-size: 11.5px;
   font-weight: 900;

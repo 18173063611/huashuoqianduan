@@ -46,6 +46,7 @@ const ROLE_LABELS: Record<string, string> = {
   voice_script: '口播文案',
   storyboard_json: '分镜',
   benchmark_json: '爆款对标',
+  asset_integration_package: '资产整合包',
   material_video: '视频素材',
   host_video: '数字人视频',
   reference_video: '参考视频',
@@ -103,6 +104,12 @@ const ROLE_ALIASES: Record<string, string> = {
   car_bundle: 'car_model_bundle',
   model_bundle: 'car_model_bundle',
   car_model: 'car_model_bundle',
+  asset_package: 'asset_integration_package',
+  asset_reuse_package: 'asset_integration_package',
+  reuse_package: 'asset_integration_package',
+  reuse_preset: 'asset_integration_package',
+  preset_package: 'asset_integration_package',
+  integration_package: 'asset_integration_package',
   voice: 'voiceover',
   voice_over: 'voiceover',
   tts: 'voiceover',
@@ -126,6 +133,9 @@ const SOURCE_TYPE_LABELS: Record<string, string> = {
   DOUYIN_REWRITE: '爆款文案改写',
   DOUYIN_TRANSCRIPT: '爆款口播转写',
   TTS_GENERATE: '声音生成',
+  CAR_MODEL_BUNDLE: '车型配套资产',
+  CAR_MODEL_CONTENT: '车型配套资产',
+  ASSET_REUSE_PACKAGE: '资产整合包',
   VOICE_SAMPLE: '声音试音',
   AVATAR_GENERATE: '数字人形象',
   DIGITAL_HUMAN_GENERATE: '数字人视频',
@@ -154,6 +164,63 @@ export function roleDisplayLabel(role: string | null | undefined) {
 export function sourceTypeLabel(sourceType: string | null | undefined) {
   const key = String(sourceType || '').trim().toUpperCase()
   return SOURCE_TYPE_LABELS[key] || key || '未知来源'
+}
+
+export type PublicAssetProviderKind = 'developer' | 'user' | 'private'
+
+export function publicAssetProviderKind(asset: AssetItem | null | undefined): PublicAssetProviderKind {
+  if (!asset || String(asset.visibility || '').trim().toUpperCase() !== 'PUBLIC') {
+    return 'private'
+  }
+  const metadata = parseJsonObject(asset.metadataJson)
+  const provider = firstNonEmptyText(
+    stringField(metadata, 'publicAssetProvider'),
+    stringField(metadata, 'providerType'),
+    stringField(metadata, 'uploadedByType'),
+    stringField(metadata, 'assetProvider'),
+  ).toLowerCase()
+  const publicKind = firstNonEmptyText(
+    stringField(metadata, 'publicAssetKind'),
+    stringField(metadata, 'libraryKind'),
+  ).toLowerCase()
+  if (
+    provider === 'developer' ||
+    provider === 'official' ||
+    provider === 'system' ||
+    publicKind === 'developer_public' ||
+    publicKind === 'official' ||
+    metadata?.developerAsset === true ||
+    metadata?.officialAsset === true
+  ) {
+    return 'developer'
+  }
+  return 'user'
+}
+
+export function publicAssetProviderLabel(asset: AssetItem | null | undefined) {
+  const kind = publicAssetProviderKind(asset)
+  if (kind === 'developer') return '官方资产'
+  if (kind === 'user') return '用户公共'
+  return '私有资产'
+}
+
+export function developerAssetFeatureBadges(asset: AssetItem | null | undefined) {
+  if (publicAssetProviderKind(asset) !== 'developer') {
+    return []
+  }
+  const metadata = parseJsonObject(asset?.metadataJson)
+  return uniqueNonEmpty([
+    carModelHostModeLabel(metadata),
+    firstNonEmptyText(
+      stringField(metadata, 'videoStyle'),
+      stringField(metadata, 'templateStyle'),
+      stringField(metadata, 'style'),
+    ),
+    durationBadge(numberField(metadata, 'durationSeconds')),
+    shotCountBadge(numberField(metadata, 'shotCount')),
+    aspectRatioBadge(stringField(metadata, 'aspectRatio')),
+    languageBadge(stringField(metadata, 'language')),
+  ])
 }
 
 export function normalizedAssetRole(asset: AssetItem | null | undefined) {
@@ -321,6 +388,15 @@ export function assetWorkflowDisplayTitle(asset: AssetItem | null | undefined) {
   if (isSceneReferenceImageAsset(asset)) {
     return `场景图：${generatedAssetSourceLabel(asset) || asset.fileName}`
   }
+  if (isCarModelScriptAsset(asset)) {
+    return `车型文案：${libraryAssetDisplayName(asset, '文案') || carModelContentName(asset) || asset.fileName}`
+  }
+  if (isCarModelStoryboardAsset(asset)) {
+    return `车型分镜：${libraryAssetDisplayName(asset, '分镜') || carModelContentName(asset) || asset.fileName}`
+  }
+  if (isAssetIntegrationPackageAsset(asset)) {
+    return `资产整合包：${libraryAssetDisplayName(asset, '整合包') || carModelContentName(asset) || generatedAssetSourceLabel(asset) || asset.fileName}`
+  }
   if (isStoryboardAsset(asset)) {
     return `分镜：${generatedAssetSourceLabel(asset) || asset.fileName}`
   }
@@ -359,6 +435,42 @@ export function assetWorkflowDisplayMeta(asset: AssetItem | null | undefined) {
       sourceTypeLabel(asset.sourceType),
     ].filter(Boolean).join(' · ')
   }
+  if (isCarModelScriptAsset(asset) || isCarModelStoryboardAsset(asset)) {
+    const metadata = parseJsonObject(asset.metadataJson)
+    return [
+      publicAssetProviderLabel(asset),
+      '车型配套资产',
+      isCarModelScriptAsset(asset) ? '文案' : '分镜',
+      carModelHostModeLabel(metadata),
+      firstNonEmptyText(
+        stringField(metadata, 'videoStyle'),
+        stringField(metadata, 'templateStyle'),
+        stringField(metadata, 'style'),
+      ),
+      durationBadge(numberField(metadata, 'durationSeconds')),
+      asset.assetType,
+      sourceTypeLabel(asset.sourceType),
+      formatFileSize(asset.fileSize),
+    ].filter(Boolean).join(' · ')
+  }
+  if (isAssetIntegrationPackageAsset(asset)) {
+    const metadata = parseJsonObject(asset.metadataJson)
+    return [
+      publicAssetProviderLabel(asset),
+      '资产整合包',
+      carModelHostModeLabel(metadata),
+      firstNonEmptyText(
+        stringField(metadata, 'videoStyle'),
+        stringField(metadata, 'templateStyle'),
+        stringField(metadata, 'style'),
+      ),
+      durationBadge(numberField(metadata, 'durationSeconds')),
+      shotCountBadge(numberField(metadata, 'shotCount')),
+      asset.assetType,
+      sourceTypeLabel(asset.sourceType),
+      formatFileSize(asset.fileSize),
+    ].filter(Boolean).join(' · ')
+  }
   if (isBenchmarkAsset(asset) || isStoryboardAsset(asset)) {
     const sourceLabel = generatedAssetSourceLabel(asset)
     return [
@@ -379,9 +491,129 @@ export function assetWorkflowPreviewLabel(asset: AssetItem | null | undefined) {
   if (isCarModelBundleAsset(asset)) return '车型素材包'
   if (isSceneMaterialBundleAsset(asset)) return '场景素材包'
   if (isSceneReferenceImageAsset(asset)) return '场景图'
+  if (isCarModelScriptAsset(asset)) return '文案预览'
+  if (isCarModelStoryboardAsset(asset)) return '分镜摘要'
+  if (isAssetIntegrationPackageAsset(asset)) return '整合包预览'
   if (isStoryboardAsset(asset)) return '分镜摘要'
   if (isBenchmarkAsset(asset)) return '口播文案'
   return ''
+}
+
+function isCarModelScriptAsset(asset: AssetItem | null | undefined) {
+  if (!asset) {
+    return false
+  }
+  const metadata = parseJsonObject(asset.metadataJson)
+  return stringField(metadata, 'logicalAssetType') === 'script_asset' ||
+    stringField(metadata, 'assetType') === 'script_asset'
+}
+
+function isCarModelStoryboardAsset(asset: AssetItem | null | undefined) {
+  if (!asset) {
+    return false
+  }
+  const metadata = parseJsonObject(asset.metadataJson)
+  return stringField(metadata, 'logicalAssetType') === 'storyboard_asset' ||
+    stringField(metadata, 'assetType') === 'storyboard_asset'
+}
+
+export function isAssetIntegrationPackageAsset(asset: AssetItem | null | undefined) {
+  if (!asset) {
+    return false
+  }
+  const metadata = parseJsonObject(asset.metadataJson)
+  const role = normalizedAssetRole(asset)
+  return role === 'asset_integration_package' ||
+    stringField(metadata, 'logicalAssetType') === 'asset_integration_package' ||
+    stringField(metadata, 'assetType') === 'asset_integration_package' ||
+    stringField(metadata, 'contentKind') === 'asset_reuse_package' ||
+    String(asset.sourceType || '').trim().toUpperCase() === 'ASSET_REUSE_PACKAGE' ||
+    asset.fileName.includes('资产整合包')
+}
+
+function libraryAssetDisplayName(asset: AssetItem, assetKindLabel: string) {
+  const metadata = parseJsonObject(asset.metadataJson)
+  const explicitName = firstNonEmptyText(
+    stringField(metadata, 'displayName'),
+    stringField(metadata, 'assetDisplayName'),
+    stringField(metadata, 'assetName'),
+    stringField(metadata, 'packageName'),
+    stringField(metadata, 'title'),
+    stringField(metadata, 'name'),
+  )
+  if (explicitName) {
+    return explicitName
+  }
+  const style = firstNonEmptyText(
+    stringField(metadata, 'videoStyle'),
+    stringField(metadata, 'templateStyle'),
+    stringField(metadata, 'style'),
+  )
+  const parts = uniqueNonEmpty([
+    carModelContentName(asset),
+    assetKindLabel,
+    carModelHostModeLabel(metadata),
+    durationBadge(numberField(metadata, 'durationSeconds')),
+    shotCountBadge(numberField(metadata, 'shotCount')),
+    aspectRatioBadge(stringField(metadata, 'aspectRatio')),
+    style,
+    languageBadge(stringField(metadata, 'language')),
+  ])
+  return parts.join('｜')
+}
+
+function carModelContentName(asset: AssetItem) {
+  const metadata = parseJsonObject(asset.metadataJson)
+  return firstNonEmptyText(
+    stringField(metadata, 'carModelName'),
+    stringField(metadata, 'sourceCarModelName'),
+    stringField(metadata, 'vehicleName'),
+    stringField(metadata, 'brandModel'),
+    generatedAssetSourceLabel(asset),
+  )
+}
+
+function carModelHostModeLabel(metadata: Record<string, unknown> | null) {
+  const hostMode = firstNonEmptyText(
+    stringField(metadata, 'hostMode'),
+    stringField(metadata, 'digitalHumanMode'),
+  )
+  if (hostMode === 'digital_human' || hostMode === 'with_digital_human') return '数字人版'
+  if (hostMode === 'no_digital_human' || hostMode === 'vehicle_only') return '无数字人版'
+  return ''
+}
+
+function durationBadge(seconds: number) {
+  return seconds > 0 ? `${seconds}秒` : ''
+}
+
+function shotCountBadge(count: number) {
+  return count > 0 ? `${count}镜头` : ''
+}
+
+function aspectRatioBadge(value: string) {
+  return value ? `${value}画幅` : ''
+}
+
+function languageBadge(value: string) {
+  if (!value) return ''
+  const normalized = value.toLowerCase()
+  if (normalized === 'zh-cn' || normalized === 'zh') return '中文'
+  if (normalized === 'en-us' || normalized === 'en') return '英文'
+  return value
+}
+
+function uniqueNonEmpty(values: string[]) {
+  const seen = new Set<string>()
+  const result: string[] = []
+  for (const value of values) {
+    const text = String(value || '').trim()
+    if (text && !seen.has(text)) {
+      seen.add(text)
+      result.push(text)
+    }
+  }
+  return result
 }
 
 export function generatedAssetSourceLabel(asset: AssetItem | null | undefined) {
@@ -414,6 +646,7 @@ function inferAssetRole(asset: AssetItem, metadata: Record<string, unknown> | nu
   if (group === GROUP_STORYBOARD) return 'storyboard_json'
   if (group === CAR_MODEL_BUNDLE_GROUP) return 'car_model_bundle'
   if (group === SCENE_MATERIAL_BUNDLE_GROUP && assetType === 'JSON') return 'scene_material_bundle'
+  if (sourceType === 'ASSET_REUSE_PACKAGE' || bundleType === 'asset_reuse_package') return 'asset_integration_package'
 
   if (assetType === 'IMAGE') {
     if (group === SCENE_MATERIAL_BUNDLE_GROUP || from.includes('scene_material') || bundleType === 'scene_material') {
@@ -458,6 +691,7 @@ function inferAssetRole(asset: AssetItem, metadata: Record<string, unknown> | nu
   if (assetType === 'JSON') {
     if (bundleType === 'car_model') return 'car_model_bundle'
     if (bundleType === 'scene_material') return 'scene_material_bundle'
+    if (name.includes('asset_integration_package') || name.includes('asset_reuse_package') || name.includes('资产整合包')) return 'asset_integration_package'
     if (hasStoryboardTextSignal(name)) return 'storyboard_json'
     if (hasBenchmarkTextSignal(name)) return 'benchmark_json'
     if (['STORYBOARD_GENERATE', 'VIDEO_SCRIPT_ANALYZE', 'VIDEO_SCRIPT_URL_ANALYZE'].includes(sourceType)) return 'storyboard_json'

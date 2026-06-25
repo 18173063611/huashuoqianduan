@@ -40,7 +40,7 @@
           <el-input v-model="filters.sourceType" clearable placeholder="sourceType" />
         </el-form-item>
         <el-form-item label="关键词">
-          <el-input v-model="filters.keyword" clearable placeholder="文件名" />
+          <el-input v-model="filters.keyword" clearable placeholder="文件名/车型/分组/风格/元数据" />
         </el-form-item>
         <el-form-item>
           <el-button type="primary" :icon="Search" @click="handleSearch">查询</el-button>

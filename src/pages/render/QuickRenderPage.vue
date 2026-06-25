@@ -82,6 +82,8 @@
             asset-type="JSON"
             :selected-url="quickPickedJsonUrl"
             :role-options="quickJsonRoleOptions"
+            :current-car-model-asset-id="currentCarModelAssetId"
+            :current-car-model-name="currentCarModelName"
             placeholder="搜索分镜、对标文案..."
             @select="handleAssetCenterSelect"
           />
@@ -90,6 +92,8 @@
             asset-type="TEXT"
             :selected-url="quickPickedTextUrl"
             :role-options="quickTextRoleOptions"
+            :current-car-model-asset-id="currentCarModelAssetId"
+            :current-car-model-name="currentCarModelName"
             placeholder="搜索口播文案、字幕文本..."
             @select="handleAssetCenterSelect"
           />
@@ -407,6 +411,8 @@
       v-model="assetSelectDrawerOpen"
       :initial-category="assetSelectInitialCategory"
       :locked-category="assetSelectLockedCategory"
+      :current-car-model-asset-id="currentCarModelAssetId"
+      :current-car-model-name="currentCarModelName"
       @select="handleClassifiedAssetSelect"
     />
   </div>
@@ -827,6 +833,10 @@ const vehicleMaterialCount = computed(() =>
   materials.value.filter((item) => item.role === 'car_model_bundle' || item.role.startsWith('car_')).length,
 )
 const carModelBundleMaterial = computed(() => materials.value.find((item) => item.role === 'car_model_bundle') || null)
+const currentCarModelAssetId = computed(() => carModelBundleMaterial.value?.asset.assetId || null)
+const currentCarModelName = computed(() =>
+  carModelBundleMaterial.value ? carBundleMaterialTitle(carModelBundleMaterial.value) : '',
+)
 const hasCarModelBundle = computed(() => Boolean(carModelBundleMaterial.value))
 const carBundleScriptContext = computed(() => buildCarBundleScriptContext(carModelBundleMaterial.value))
 const hasVehicleInput = computed(() => hasCarModelBundle.value || vehicleMaterialCount.value > 0)

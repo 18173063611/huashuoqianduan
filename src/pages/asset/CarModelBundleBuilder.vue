@@ -39,7 +39,7 @@
           <button class="app-secondary-button" type="button" @click="assetPickerRole = null">收起</button>
         </header>
         <div class="car-bundle-asset-tools">
-          <input v-model.trim="assetKeyword" type="search" placeholder="搜索文件名、分组或来源..." />
+          <input v-model.trim="assetKeyword" type="search" placeholder="搜索资产名、车型、分组、来源或角色..." />
           <button class="app-secondary-button" type="button" :disabled="assetLoading" @click="loadImageAssets">
             {{ assetLoading ? '加载中...' : '刷新图片' }}
           </button>

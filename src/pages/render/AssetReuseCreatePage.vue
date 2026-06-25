@@ -46,6 +46,38 @@
 
       <div class="asset-reuse-shell">
         <main class="asset-stage-list">
+          <section class="asset-stage-card asset-package-card">
+            <div class="workflow-module-head">
+              <div>
+                <h2>资产整合包</h2>
+                <p>可一键导入车型素材、文案、分镜、数字人、音频和高级生成参数；导入后仍走资产复用创作链路。</p>
+              </div>
+              <span class="workflow-badge core">可选</span>
+            </div>
+            <AssetPicker
+              title="资产整合包"
+              asset-type="JSON"
+              :selected-url="selectedIntegrationPackageUrl"
+              :selected-name="selectedIntegrationPackageName"
+              :source-types="['ASSET_REUSE_PACKAGE', 'CAR_MODEL_CONTENT', 'MANUAL_CREATED', 'USER_UPLOAD']"
+              :asset-roles="['asset_integration_package']"
+              :role-options="ASSET_INTEGRATION_PACKAGE_ROLE_OPTIONS"
+              :current-car-model-asset-id="selectedCarBundle?.asset.assetId || null"
+              :current-car-model-name="selectedCarBundleName"
+              initial-scope="global"
+              source-hint="优先选择官方/公共资产整合包；匹配当前车型的包会排在前面，选择后自动填入资产复用参数。"
+              placeholder="搜索车型、风格、数字人版或 30 秒整合包..."
+              @select="handleAssetIntegrationPackageSelect"
+            />
+            <div v-if="selectedIntegrationPackage" class="workflow-status package-status">
+              <strong>已导入资产整合包</strong>
+              <span>{{ selectedIntegrationPackageName }} · 已预填文案、分镜和可用生成参数</span>
+              <button type="button" class="workflow-mini-button" @click="selectedIntegrationPackage = null">
+                取消整合包标识
+              </button>
+            </div>
+          </section>
+
           <section class="asset-stage-card workflow-overview-card">
             <div class="stage-title workflow-heading">
               <span>1</span>
@@ -161,6 +193,8 @@
                 asset-type="JSON"
                 :selected-url="selectedStoryboardUrl"
                 :selected-name="selectedStoryboardName"
+                :current-car-model-asset-id="selectedCarBundle?.asset.assetId || null"
+                :current-car-model-name="selectedCarBundleName"
                 :source-types="['STORYBOARD_GENERATE', 'VIDEO_SCRIPT_ANALYZE', 'VIDEO_SCRIPT_URL_ANALYZE', 'USER_UPLOAD']"
                 :asset-roles="['storyboard_json']"
                 :role-options="CAR_STORYBOARD_ROLE_OPTIONS"
@@ -175,6 +209,8 @@
                 :asset-types="['JSON', 'TEXT']"
                 :selected-url="selectedBenchmarkUrl"
                 :selected-name="selectedBenchmarkName"
+                :current-car-model-asset-id="selectedCarBundle?.asset.assetId || null"
+                :current-car-model-name="selectedCarBundleName"
                 :source-types="['DOUYIN_BENCHMARK', 'DOUYIN_PARSE_TRANSCRIPT', 'DOUYIN_REWRITE', 'DOUYIN_TRANSCRIPT', 'USER_UPLOAD']"
                 :asset-roles="['benchmark_json', 'voice_script']"
                 :role-options="CAR_BENCHMARK_ROLE_OPTIONS"
@@ -579,6 +615,7 @@ const roleOptions: Array<{ value: QuickRenderAssetRole; label: string }> = [
 ]
 
 const CAR_MODEL_BUNDLE_ROLE_OPTIONS = [{ value: 'car_model_bundle', label: '车型素材包' }]
+const ASSET_INTEGRATION_PACKAGE_ROLE_OPTIONS = [{ value: 'asset_integration_package', label: '资产整合包' }]
 const CAR_STORYBOARD_ROLE_OPTIONS = [{ value: 'storyboard_json', label: '分镜' }]
 const CAR_BENCHMARK_ROLE_OPTIONS = [
   { value: 'benchmark_json', label: '爆款对标' },
@@ -642,6 +679,7 @@ const router = useRouter()
 const route = useRoute()
 const { requireAuth } = useAuthRequired()
 const selectedAssets = ref<SelectedAsset[]>([])
+const selectedIntegrationPackage = ref<AssetItem | null>(null)
 const selectedCoverAssetId = ref<number | null>(null)
 const draftPrompt = ref('')
 const hostAppearanceEnabled = ref(false)
@@ -734,6 +772,12 @@ const selectedVoiceUrl = computed(() => selectedAssetUrl(selectedVoice.value))
 const selectedVoiceName = computed(() => selectedVoice.value?.asset.fileName || '')
 const selectedBgmUrl = computed(() => selectedAssetUrl(selectedBgm.value))
 const selectedBgmName = computed(() => selectedBgm.value?.asset.fileName || '')
+const selectedIntegrationPackageUrl = computed(() =>
+  selectedIntegrationPackage.value
+    ? assetCoverPreviewUrl(selectedIntegrationPackage.value) || normalizePublicMediaUrl(selectedIntegrationPackage.value.fileUrl || '')
+    : '',
+)
+const selectedIntegrationPackageName = computed(() => selectedIntegrationPackage.value?.fileName || '')
 
 function addSelectedAsset(asset: AssetItem, role: QuickRenderAssetRole, replaceRoles = singletonRolesFor(role)) {
   if (!ASSET_REUSE_GENERATION_ROLES.has(role)) {
@@ -755,6 +799,7 @@ function removeSelected(assetId: number) {
 
 function clearSelectedAssets() {
   selectedAssets.value = []
+  selectedIntegrationPackage.value = null
   selectedCoverAssetId.value = null
   hostAppearanceEnabled.value = false
   carBundleLoadError.value = ''
@@ -836,6 +881,27 @@ async function handleCarBundleAssetSelect(payload: AssetPickerPayload) {
     ElMessage.success('已载入车型素材包')
   } catch (unknownError) {
     carBundleLoadError.value = unknownError instanceof Error ? unknownError.message : '车型素材包读取失败'
+  }
+}
+
+async function handleAssetIntegrationPackageSelect(payload: AssetPickerPayload) {
+  selectedIntegrationPackage.value = payload.asset
+  try {
+    const text = await cacheAssetText(payload.asset)
+    const payloadRecord = parseJsonRecord(text) || {}
+    const metadata = parseMetadata(payload.asset.metadataJson) || {}
+    const input = assetIntegrationPackageInput(payloadRecord, metadata)
+    if (!input) {
+      ElMessage.warning('该资产整合包缺少可导入参数')
+      return
+    }
+    const imported = await applyImportedAssetReuseInput(input, '已导入资产整合包参数')
+    if (!imported) {
+      ElMessage.warning('整合包未包含可用资产、文案或分镜')
+    }
+  } catch (unknownError) {
+    const message = unknownError instanceof Error ? unknownError.message : '资产整合包导入失败'
+    ElMessage.error(message)
   }
 }
 
@@ -1091,8 +1157,13 @@ async function restoreAssetReuseImportFromTask() {
     return false
   }
 
+  const imported = await applyImportedAssetReuseInput(input, '已导入任务参数到资产复用创作')
+  clearImportTaskQuery()
+  return imported
+}
+
+async function applyImportedAssetReuseInput(input: Record<string, unknown>, successMessage: string) {
   const assetIds = collectImportedAssetIds(input)
-  const roleMap = asRecord(input.assetRoles) || {}
   const textContents = asRecord(input.assetTextContents) || {}
   const importedSelections: SelectedAsset[] = []
   const importedRawText: Record<number, string> = {}
@@ -1101,7 +1172,7 @@ async function restoreAssetReuseImportFromTask() {
   for (const assetId of assetIds) {
     try {
       const asset = await getAssetDetail(assetId)
-      const role = normalizeImportedAssetRole(roleMap[String(assetId)])
+      const role = importedAssetRoleForId(input, assetId)
         || inferFallbackRole(asset, 'material')
       const selection = { asset, role }
       if (isAssetReuseGenerationSelection(selection)) {
@@ -1117,8 +1188,8 @@ async function restoreAssetReuseImportFromTask() {
   }
 
   importedRenderConfig.value = buildImportedRenderConfig(input)
-  importedScriptText.value = stringValue(input.finalVoiceText)
-  importedStoryboard.value = normalizeImportedStoryboard(input.generatedStoryboard)
+  importedScriptText.value = firstRecordText(input, ['finalVoiceText', 'voiceText', 'scriptText', 'script', 'copywriting'])
+  importedStoryboard.value = normalizeImportedStoryboard(firstRecordArray(input, ['generatedStoryboard', 'storyboard', 'shots', 'scenes', 'segments']))
   draftPrompt.value = importedPromptFromRequest(input)
   hostAppearanceEnabled.value = importedRenderConfig.value.hostAppearanceEnabled
     ?? importedSelections.some((item) => item.role === 'host_image' || item.role === 'host_video')
@@ -1131,13 +1202,16 @@ async function restoreAssetReuseImportFromTask() {
     selectedCoverAssetId.value = importedSelections.some((item) => item.asset.assetId === coverAssetId)
       ? coverAssetId
       : firstCoverCandidateId()
-    ElMessage.success('已导入任务参数到资产复用创作')
+    ElMessage.success(successMessage)
   }
   if (failedAssetIds.length) {
     ElMessage.warning(`部分原任务资产无法读取：${failedAssetIds.join('、')}`)
   }
-  clearImportTaskQuery()
-  return importedSelections.length > 0 || Boolean(importedScriptText.value || importedStoryboard.value.length)
+  const importedAny = importedSelections.length > 0 || Boolean(importedScriptText.value || importedStoryboard.value.length)
+  if (importedAny && importedSelections.length === 0) {
+    ElMessage.success(successMessage)
+  }
+  return importedAny
 }
 
 function importTaskIdFromRoute() {
@@ -1154,17 +1228,193 @@ function clearImportTaskQuery() {
 
 function collectImportedAssetIds(input: Record<string, unknown>) {
   const ids = new Set<number>()
-  const rawAssetIds = Array.isArray(input.assetIds) ? input.assetIds : []
-  rawAssetIds.forEach((item) => {
-    const id = normalizeImportedNumber(item, 1, Number.MAX_SAFE_INTEGER)
-    if (id) ids.add(id)
+  const idKeys = ['assetIds', 'reuseAssetIds', 'selectedAssetIds', 'componentAssetIds', 'sourceAssetIds']
+  idKeys.forEach((key) => {
+    const rawAssetIds = Array.isArray(input[key]) ? input[key] as unknown[] : []
+    rawAssetIds.forEach((item) => {
+      const id = normalizeImportedNumber(item, 1, Number.MAX_SAFE_INTEGER)
+      if (id) ids.add(id)
+    })
   })
   const bindings = Array.isArray(input.assetRoleBindings) ? input.assetRoleBindings : []
   bindings.forEach((item) => {
     const id = normalizeImportedNumber(asRecord(item)?.assetId, 1, Number.MAX_SAFE_INTEGER)
     if (id) ids.add(id)
   })
+  const assetRefs = [
+    ...(Array.isArray(input.assets) ? input.assets : []),
+    ...(Array.isArray(input.assetReferences) ? input.assetReferences : []),
+    ...(Array.isArray(input.selectedAssets) ? input.selectedAssets : []),
+  ]
+  assetRefs.forEach((item) => {
+    const row = asRecord(item)
+    const nestedAsset = asRecord(row?.asset)
+    const id = normalizeImportedNumber(row?.assetId ?? row?.id ?? nestedAsset?.assetId, 1, Number.MAX_SAFE_INTEGER)
+    if (id) ids.add(id)
+  })
   return Array.from(ids)
+}
+
+function assetIntegrationPackageInput(
+  payload: Record<string, unknown>,
+  metadata: Record<string, unknown>,
+): Record<string, unknown> | null {
+  const records = [
+    metadata,
+    payload,
+    asRecord(payload.assetReusePackage),
+    asRecord(payload.reusePackage),
+    asRecord(payload.packageConfig),
+    asRecord(payload.preset),
+    asRecord(payload.input),
+    asRecord(payload.request),
+    asRecord(payload.renderConfig),
+    asRecord(payload.generationConfig),
+    asRecord(payload.advancedParams),
+  ].filter((item): item is Record<string, unknown> => Boolean(item))
+  if (!records.length) {
+    return null
+  }
+  const merged: Record<string, unknown> = Object.assign({}, ...records)
+  const assetIds = firstRecordArrayFromRecords(records, ['assetIds', 'reuseAssetIds', 'selectedAssetIds', 'sourceAssetIds'])
+  if (assetIds.length) {
+    merged.assetIds = assetIds
+  }
+  const roleBindings = firstRecordArrayFromRecords(records, ['assetRoleBindings', 'assetBindings'])
+  if (roleBindings.length) {
+    merged.assetRoleBindings = roleBindings
+  }
+  const selectedAssets = firstRecordArrayFromRecords(records, ['selectedAssets', 'assets', 'assetReferences'])
+  if (selectedAssets.length) {
+    merged.selectedAssets = selectedAssets
+  }
+  const roleMap = firstRecordObjectFromRecords(records, ['assetRoles', 'roles'])
+  if (roleMap) {
+    merged.assetRoles = roleMap
+  }
+  const textContents = firstRecordObjectFromRecords(records, ['assetTextContents', 'textContents'])
+  if (textContents) {
+    merged.assetTextContents = textContents
+  }
+  const script = firstRecordTextFromRecords(records, ['finalVoiceText', 'voiceText', 'scriptText', 'script', 'copywriting'])
+  if (script) {
+    merged.finalVoiceText = script
+  }
+  const storyboard = firstRecordArrayFromRecords(records, ['generatedStoryboard', 'storyboard', 'shots', 'scenes', 'segments'])
+  if (storyboard.length) {
+    merged.generatedStoryboard = storyboard
+  }
+  const prompt = firstRecordTextFromRecords(records, ['goalText', 'draftPrompt', 'prompt', 'description'])
+  if (prompt) {
+    merged.goalText = prompt
+  }
+  if (!merged.duration && metadata.durationSeconds) {
+    merged.duration = metadata.durationSeconds
+  }
+  if (!merged.segmentCount && metadata.shotCount) {
+    merged.segmentCount = metadata.shotCount
+  }
+  if (!merged.vehicleId && metadata.carModelId) {
+    merged.vehicleId = metadata.carModelId
+  }
+  if (!merged.vehicleName) {
+    merged.vehicleName = firstRecordTextFromRecords(records, ['carModelName', 'sourceCarModelName', 'vehicleName', 'brandModel'])
+  }
+  const useful = collectImportedAssetIds(merged).length > 0 ||
+    Boolean(firstRecordText(merged, ['finalVoiceText', 'goalText'])) ||
+    firstRecordArray(merged, ['generatedStoryboard']).length > 0
+  return useful ? merged : null
+}
+
+function parseJsonRecord(value: string | null | undefined): Record<string, unknown> | null {
+  if (!value) return null
+  try {
+    const parsed = JSON.parse(value) as unknown
+    return asRecord(parsed)
+  } catch {
+    return null
+  }
+}
+
+function firstRecordText(record: Record<string, unknown>, keys: string[]) {
+  return firstRecordTextFromRecords([record], keys)
+}
+
+function firstRecordArray(record: Record<string, unknown>, keys: string[]) {
+  return firstRecordArrayFromRecords([record], keys)
+}
+
+function firstRecordTextFromRecords(records: Record<string, unknown>[], keys: string[]) {
+  for (const record of records) {
+    for (const key of keys) {
+      const value = textValue(record[key])
+      if (value) {
+        return value
+      }
+    }
+  }
+  return ''
+}
+
+function firstRecordArrayFromRecords(records: Record<string, unknown>[], keys: string[]) {
+  for (const record of records) {
+    for (const key of keys) {
+      const value = record[key]
+      if (Array.isArray(value) && value.length) {
+        return value
+      }
+    }
+  }
+  return []
+}
+
+function firstRecordObjectFromRecords(records: Record<string, unknown>[], keys: string[]) {
+  for (const record of records) {
+    for (const key of keys) {
+      const value = asRecord(record[key])
+      if (value) {
+        return value
+      }
+    }
+  }
+  return null
+}
+
+function importedAssetRoleForId(input: Record<string, unknown>, assetId: number): QuickRenderAssetRole | '' {
+  const roleMap = asRecord(input.assetRoles) || {}
+  const directRole = normalizeImportedAssetRole(roleMap[String(assetId)])
+  if (directRole) {
+    return directRole
+  }
+  const bindings = Array.isArray(input.assetRoleBindings) ? input.assetRoleBindings : []
+  for (const item of bindings) {
+    const row = asRecord(item)
+    if (normalizeImportedNumber(row?.assetId, 1, Number.MAX_SAFE_INTEGER) !== assetId) {
+      continue
+    }
+    const role = normalizeImportedAssetRole(row?.role ?? row?.assetRole)
+    if (role) {
+      return role
+    }
+  }
+  const assetRefs = [
+    ...(Array.isArray(input.assets) ? input.assets : []),
+    ...(Array.isArray(input.assetReferences) ? input.assetReferences : []),
+    ...(Array.isArray(input.selectedAssets) ? input.selectedAssets : []),
+  ]
+  for (const item of assetRefs) {
+    const row = asRecord(item)
+    const nestedAsset = asRecord(row?.asset)
+    const id = normalizeImportedNumber(row?.assetId ?? row?.id ?? nestedAsset?.assetId, 1, Number.MAX_SAFE_INTEGER)
+    if (id !== assetId) {
+      continue
+    }
+    const role = normalizeImportedAssetRole(row?.role ?? row?.assetRole)
+    if (role) {
+      return role
+    }
+  }
+  return ''
 }
 
 function buildImportedRenderConfig(input: Record<string, unknown>): ImportedRenderConfig {
@@ -1248,8 +1498,7 @@ function normalizeImportedStoryboard(value: unknown): AiPlanStoryboardShot[] {
 }
 
 function normalizeImportedAssetRole(value: unknown): QuickRenderAssetRole | '' {
-  const role = stringValue(value)
-  return SUPPORTED_ASSET_ROLES.has(role as QuickRenderAssetRole) ? role as QuickRenderAssetRole : ''
+  return supportedRole(textValue(value))
 }
 
 function normalizeImportedAspectRatio(value: unknown): CarSalesPlanDraft['aspectRatio'] | undefined {
@@ -1297,6 +1546,12 @@ function normalizeImportedNumber(value: unknown, min: number, max: number) {
 
 function stringValue(value: unknown) {
   return typeof value === 'string' ? value.trim() : ''
+}
+
+function textValue(value: unknown) {
+  if (typeof value === 'string') return value.trim()
+  if (typeof value === 'number' && Number.isFinite(value)) return String(value)
+  return ''
 }
 
 function asRecord(value: unknown): Record<string, unknown> | null {
@@ -1941,6 +2196,13 @@ onMounted(async () => {
   padding: 18px;
 }
 
+.asset-package-card {
+  display: grid;
+  gap: 14px;
+  border-color: #c7d7fe;
+  background: linear-gradient(180deg, #f8fbff 0%, #fff 68%);
+}
+
 .stage-title {
   display: flex;
   align-items: center;
@@ -2103,6 +2365,24 @@ onMounted(async () => {
   border-color: #fecaca;
   background: #fff1f2;
   color: #b42318;
+}
+
+.workflow-status.package-status {
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+  border-color: #bfdbfe;
+  background: #eff6ff;
+  color: #1d4ed8;
+}
+
+.workflow-status.package-status span {
+  grid-column: 1;
+}
+
+.workflow-status.package-status .workflow-mini-button {
+  grid-row: 1 / span 2;
+  grid-column: 2;
+  align-self: center;
 }
 
 .workflow-status strong {
