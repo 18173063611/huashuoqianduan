@@ -490,6 +490,7 @@ import {
 } from './carModelBundle'
 import {
   buildQuickRenderRequestFromPlanDraft,
+  ensureCarSalesPlanDraftAsset,
   parseStoryboardAssetTextToPlanShots,
   planAssetFromAssetItem,
   prepareCarSalesAiPlanPreview,
@@ -1619,7 +1620,9 @@ async function confirmAssetReusePlan() {
   planSubmitting.value = true
   planPreviewError.value = ''
   try {
-    const payload = buildQuickRenderRequestFromPlanDraft(assetReusePlanDraft.value, planPreview.value)
+    const draftWithAsset = await ensureCarSalesPlanDraftAsset(assetReusePlanDraft.value, planPreview.value)
+    assetReusePlanDraft.value = draftWithAsset
+    const payload = buildQuickRenderRequestFromPlanDraft(draftWithAsset, planPreview.value)
     persistAssetReusePendingPlanTask()
     const submitted = await quickRenderVideo(payload, newVideoIdempotencyKey())
     const taskId = submitted.task?.taskId || submitted.digitalHumanTask?.taskId || null

@@ -264,41 +264,89 @@ export async function prepareCarSalesAiPlanPreview(draft: CarSalesPlanDraft): Pr
 }
 
 export async function ensureCarSalesPlanDraftAsset(draft: CarSalesPlanDraft, plan: AiPlanPreview): Promise<CarSalesPlanDraft> {
-  const planAssetRole: QuickRenderAssetRole = draft.source === 'benchmark' ? 'benchmark_json' : 'storyboard_json'
-  if (draft.assets.some((asset) => asset.role === planAssetRole)) {
-    return draft
+  const createdAt = new Date().toISOString()
+  const createdAssets: CarSalesPlanDraftAsset[] = []
+  const sourcePrefix = draft.source === 'benchmark'
+    ? 'benchmark'
+    : draft.source === 'asset-reuse'
+      ? 'asset-reuse'
+      : 'ai-smart'
+  const baseMetadata = {
+    from: 'car_sales_plan_draft',
+    source: draft.source,
+    chainType: draft.source,
+    sourceUrl: draft.referenceUrl || undefined,
+    coverUrl: draft.coverUrl || undefined,
+    title: draft.title || undefined,
+    createdBy: 'unified_car_sales_plan',
+    createdAt,
+  }
+  const script = plan.script.trim()
+  if (script) {
+    const scriptAsset = await uploadMaterialAsset(
+      new File([script], `${sourcePrefix}-voice-script-${Date.now()}.txt`, { type: 'text/plain' }),
+      {
+        metadataJson: JSON.stringify({
+          ...baseMetadata,
+          assetRole: 'voice_script',
+          assetGroup: '口播文案',
+          contentKind: 'voice_script',
+        }),
+      },
+    )
+    createdAssets.push(planAssetFromAssetItem(scriptAsset, 'voice_script', script))
   }
 
-  const content = JSON.stringify({
+  const storyboardContent = JSON.stringify({
     source: draft.source,
     title: draft.title,
     referenceUrl: draft.referenceUrl,
     coverUrl: draft.coverUrl,
-    script: plan.script,
+    script,
     storyboard: plan.storyboard,
     configItems: plan.configItems,
-    createdAt: new Date().toISOString(),
+    createdAt,
   }, null, 2)
-  const fileName = `${draft.source === 'benchmark' ? 'benchmark' : 'car-sales'}-plan-${Date.now()}.json`
-  const file = new File([content], fileName, { type: 'application/json' })
-  const asset = await uploadMaterialAsset(file, {
-    metadataJson: JSON.stringify({
-      from: 'car_sales_plan_draft',
-      assetRole: draft.source === 'benchmark' ? 'benchmark_json' : 'storyboard_json',
-      assetGroup: draft.source === 'benchmark' ? 'benchmark_template' : 'storyboard_template',
-      source: draft.source,
-      sourceUrl: draft.referenceUrl || undefined,
-      coverUrl: draft.coverUrl || undefined,
-      title: draft.title || undefined,
-      createdBy: 'unified_car_sales_plan',
-    }),
-  })
+  if (plan.storyboard.length) {
+    const storyboardAsset = await uploadMaterialAsset(
+      new File([storyboardContent], `${sourcePrefix}-storyboard-${Date.now()}.json`, { type: 'application/json' }),
+      {
+        metadataJson: JSON.stringify({
+          ...baseMetadata,
+          assetRole: 'storyboard_json',
+          assetGroup: '分镜脚本',
+          contentKind: 'storyboard',
+          shotCount: plan.storyboard.length,
+        }),
+      },
+    )
+    createdAssets.push(planAssetFromAssetItem(storyboardAsset, 'storyboard_json', storyboardContent))
+  }
 
+  if (draft.source === 'benchmark') {
+    const benchmarkAsset = await uploadMaterialAsset(
+      new File([storyboardContent], `${sourcePrefix}-benchmark-plan-${Date.now()}.json`, { type: 'application/json' }),
+      {
+        metadataJson: JSON.stringify({
+          ...baseMetadata,
+          assetRole: 'benchmark_json',
+          assetGroup: '爆款对标',
+          contentKind: 'benchmark_plan',
+          shotCount: plan.storyboard.length,
+        }),
+      },
+    )
+    createdAssets.push(planAssetFromAssetItem(benchmarkAsset, 'benchmark_json', storyboardContent))
+  }
+
+  if (!createdAssets.length) {
+    return draft
+  }
   return {
     ...draft,
     assets: [
+      ...createdAssets,
       ...draft.assets,
-      planAssetFromAssetItem(asset, planAssetRole, content),
     ],
   }
 }

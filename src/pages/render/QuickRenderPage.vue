@@ -466,6 +466,7 @@ import { formatFriendlyDateTime } from '../../utils/timeFormat'
 import AiPlanPreviewDrawer from './AiPlanPreviewDrawer.vue'
 import {
   buildQuickRenderRequestFromPlanDraft,
+  ensureCarSalesPlanDraftAsset,
   sanitizePlanScript,
   syncStoryboardNarrationWithScript,
   type AiPlanPreview,
@@ -2537,6 +2538,25 @@ function buildQuickRenderPayload(finalVoiceTextForRequest: string, baseRequest?:
   return baseRequest ? { ...baseRequest, ...unifiedRequest } : unifiedRequest
 }
 
+async function buildQuickRenderPayloadForSubmit(
+  finalVoiceTextForRequest: string,
+  baseRequest?: QuickRenderRequest | null,
+): Promise<QuickRenderRequest> {
+  if (!planPreview.value) {
+    throw new Error('Plan preview is required before submit')
+  }
+  const plan: AiPlanPreview = {
+    ...planPreview.value,
+    script: finalVoiceTextForRequest || planPreview.value.script,
+    storyboard: storyboardForRequest() || planPreview.value.storyboard,
+    totalDuration: totalDuration.value,
+    segmentCount: segmentCount.value,
+  }
+  const draftWithAssets = await ensureCarSalesPlanDraftAsset(buildAiSmartPlanDraft(finalVoiceTextForRequest, plan), plan)
+  const unifiedRequest = buildQuickRenderRequestFromPlanDraft(draftWithAssets, plan)
+  return baseRequest ? { ...baseRequest, ...unifiedRequest } : unifiedRequest
+}
+
 function persistCurrentPendingPlanTask() {
   if (!planPreview.value) return
   const id = currentPendingPlanTaskId.value || newPendingCarSalesPlanTaskId('ai-smart')
@@ -3130,7 +3150,7 @@ async function submitQuickRender() {
   stopRenderTracking()
 
   try {
-    const payload = buildQuickRenderPayload(finalVoiceTextForRequest, restoredPlanRequest.value)
+    const payload = await buildQuickRenderPayloadForSubmit(finalVoiceTextForRequest, restoredPlanRequest.value)
     persistCurrentPendingPlanTask()
     const submitted = await quickRenderVideo(payload, newVideoIdempotencyKey())
     if (submitted.task?.taskId) {
