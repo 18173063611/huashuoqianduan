@@ -205,9 +205,8 @@
               <label class="car-field">
                 <span>生成模型</span>
                 <select :value="settings.model" @change="patch({ model: ($event.target as HTMLSelectElement).value })">
-                  <option value="auto">自动</option>
-                  <option value="doubao-seedance-1-5-pro-251215">Seedance 1.5 Pro</option>
                   <option value="doubao-seedance-2-0-pro-250528">Seedance 2.0 Pro</option>
+                  <option value="doubao-seedance-1-5-pro-251215">Seedance 1.5 Pro</option>
                 </select>
               </label>
             </div>

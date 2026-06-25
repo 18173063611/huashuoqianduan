@@ -2139,8 +2139,8 @@ const seedanceModelOptions: Array<{
   tip?: string
   maxDuration: number
 }> = [
-  { value: 'doubao-seedance-1-5-pro-251215', label: 'seedance1.5', maxDuration: 12 },
   { value: SEEDANCE_2_MODEL, label: 'seedance2.0', tip: '不支持上传人脸', maxDuration: 15 },
+  { value: 'doubao-seedance-1-5-pro-251215', label: 'seedance1.5', maxDuration: 12 },
 ]
 
 const mainTabs: Array<{ key: MainTab; label: string }> = [
@@ -2261,7 +2261,7 @@ function setProductionMode(mode: RenderProductionMode) {
   void router.replace({ name: 'render', query })
 }
 
-const selectedModel = ref<SeedanceModelValue>('doubao-seedance-1-5-pro-251215')
+const selectedModel = ref<SeedanceModelValue>(SEEDANCE_2_MODEL)
 const modelDropdownOpen = ref(false)
 const modelDropdownRef = ref<HTMLElement | null>(null)
 
@@ -2488,7 +2488,9 @@ const renderTaskStatusText = computed(() => {
 })
 
 const selectedSeedanceModel = computed(
-  () => seedanceModelOptions.find((o) => o.value === selectedModel.value) ?? seedanceModelOptions[0],
+  () => seedanceModelOptions.find((o) => o.value === selectedModel.value)
+    ?? seedanceModelOptions.find((o) => o.value === SEEDANCE_2_MODEL)
+    ?? seedanceModelOptions[0],
 )
 
 // seedance1.5 支持 [4, 12]，seedance2.0 支持 [4, 15]，参照图（lite i2v）支持 [2, 12]

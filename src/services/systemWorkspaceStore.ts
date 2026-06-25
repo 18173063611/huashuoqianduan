@@ -54,6 +54,7 @@ const FAVORITES_KEY = 'huashuo_system_favorites'
 const RECENT_TOOLS_KEY = 'huashuo_system_recent_tools'
 const CAR_SALES_PREFERENCES_KEY = 'huashuo_car_sales_preferences'
 const MAX_RECENT_TOOLS = 12
+const DEFAULT_CAR_SALES_MODEL = 'doubao-seedance-2-0-pro-250528'
 
 export const defaultCarSalesPreferences: CarSalesGenerationPreferences = {
   aspectRatio: '9:16',
@@ -65,7 +66,7 @@ export const defaultCarSalesPreferences: CarSalesGenerationPreferences = {
   videoStyle: 'realistic',
   nativeVoiceStyle: 'natural_sales',
   nativeSpeechStyle: 'balanced',
-  model: 'auto',
+  model: DEFAULT_CAR_SALES_MODEL,
   preferredSellingPointIds: [],
   preferredAvatarId: null,
   preferredVoiceId: null,
@@ -197,7 +198,9 @@ export function loadCarSalesPreferences(): CarSalesGenerationPreferences {
     videoStyle: literalIn(raw.videoStyle, ['realistic', 'premium', 'energetic', 'family', 'tech'] as const, defaultCarSalesPreferences.videoStyle),
     nativeVoiceStyle: typeof raw.nativeVoiceStyle === 'string' && raw.nativeVoiceStyle ? raw.nativeVoiceStyle : defaultCarSalesPreferences.nativeVoiceStyle,
     nativeSpeechStyle: typeof raw.nativeSpeechStyle === 'string' && raw.nativeSpeechStyle ? raw.nativeSpeechStyle : defaultCarSalesPreferences.nativeSpeechStyle,
-    model: typeof raw.model === 'string' && raw.model ? raw.model : defaultCarSalesPreferences.model,
+    model: typeof raw.model === 'string' && raw.model && raw.model !== 'auto'
+      ? raw.model
+      : defaultCarSalesPreferences.model,
     preferredSellingPointIds,
     preferredAvatarId: numberOrNull(raw.preferredAvatarId),
     preferredVoiceId: numberOrNull(raw.preferredVoiceId),

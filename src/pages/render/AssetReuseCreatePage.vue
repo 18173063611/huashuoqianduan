@@ -486,6 +486,8 @@ import {
   type CarSalesPlanDraft,
 } from './carSalesPlanDraft'
 
+const DEFAULT_CAR_SALES_MODEL = 'doubao-seedance-2-0-pro-250528'
+
 interface SelectedAsset {
   asset: AssetItem
   role: QuickRenderAssetRole
@@ -1158,7 +1160,7 @@ function buildImportedRenderConfig(input: Record<string, unknown>): ImportedRend
     nativeSpeechStyle: stringValue(input.nativeSpeechStyle) || undefined,
     burnInSubtitle: typeof input.burnInSubtitle === 'boolean' ? input.burnInSubtitle : undefined,
     audioPolicy: normalizeImportedAudioPolicy(input.audioPolicy),
-    model: stringValue(input.model) || undefined,
+    model: normalizeImportedModel(input.model),
     segmentCount: normalizeImportedNumber(input.segmentCount, 1, 12) || undefined,
     segmentDuration: normalizeImportedNumber(input.segmentDuration, 1, 30) || undefined,
     hostAppearanceEnabled: typeof input.hostAppearanceEnabled === 'boolean' ? input.hostAppearanceEnabled : undefined,
@@ -1255,6 +1257,11 @@ function normalizeImportedAudioPolicy(value: unknown): CarSalesPlanDraft['audioP
     || text === 'video_native_audio'
     ? text
     : undefined
+}
+
+function normalizeImportedModel(value: unknown) {
+  const text = stringValue(value)
+  return !text || text === 'auto' ? DEFAULT_CAR_SALES_MODEL : text
 }
 
 function normalizeImportedVoiceLanguage(value: unknown): 'zh-CN' | 'en-US' | '' {
@@ -1409,7 +1416,7 @@ async function buildAssetReusePlanDraft(): Promise<CarSalesPlanDraft> {
     nativeSpeechStyle: importedRenderConfig.value.nativeSpeechStyle || 'balanced',
     burnInSubtitle: importedRenderConfig.value.burnInSubtitle ?? true,
     audioPolicy: importedAudioPolicy || inferredAudioPolicy,
-    model: importedRenderConfig.value.model || 'auto',
+    model: importedRenderConfig.value.model || DEFAULT_CAR_SALES_MODEL,
     segmentCount: importedRenderConfig.value.segmentCount || 6,
     segmentDuration: importedRenderConfig.value.segmentDuration || 5,
     hostAppearanceEnabled: importedRenderConfig.value.hostAppearanceEnabled ?? (hostAppearanceEnabled.value && generationSelections.some((item) => item.role === 'host_image' || item.role === 'host_video')),

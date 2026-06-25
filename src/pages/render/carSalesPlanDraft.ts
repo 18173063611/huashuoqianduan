@@ -12,6 +12,20 @@ import {
 
 export type CarSalesPlanSource = 'ai-smart' | 'benchmark' | 'asset-reuse'
 
+const MAX_GENERATION_SEGMENTS = 12
+const DEFAULT_MODEL_MAX_SEGMENT_DURATION = 15
+const DEFAULT_MODEL_SEGMENT_DURATION = 5
+const DEFAULT_CAR_SALES_MODEL = 'doubao-seedance-2-0-pro-250528'
+const SEEDANCE_1_5_MODEL = 'doubao-seedance-1-5-pro-251215'
+const SEEDANCE_2_MODEL = 'ep-20260512233524-85r4g'
+const SEEDANCE_2_PRO_MODEL = 'doubao-seedance-2-0-pro-250528'
+
+const MODEL_MAX_SEGMENT_DURATIONS: Record<string, number> = {
+  [SEEDANCE_1_5_MODEL]: 12,
+  [SEEDANCE_2_MODEL]: 15,
+  [SEEDANCE_2_PRO_MODEL]: 15,
+}
+
 export interface AiPlanStoryboardShot {
   index: number
   visual: string
@@ -205,6 +219,10 @@ export async function prepareCarSalesAiPlanPreview(draft: CarSalesPlanDraft): Pr
     }
   }
 
+  const punctuationRewrite = await rewriteUnpunctuatedPlanScript(script, draft, warnings)
+  script = punctuationRewrite.script
+  scriptVersionId = punctuationRewrite.scriptVersionId || scriptVersionId
+
   let storyboard = draft.storyboard?.length ? draft.storyboard : []
   if (!storyboard.length && !shouldUseLocalPlanOnly && scriptVersionId) {
     try {
@@ -221,6 +239,11 @@ export async function prepareCarSalesAiPlanPreview(draft: CarSalesPlanDraft): Pr
     storyboard = buildFallbackStoryboard(script, draft)
   }
   storyboard = bindStoryboardNarrationToScript(storyboard, script, draft)
+  storyboard = normalizeStoryboardForModelLimits(storyboard, draft, warnings)
+  const effectiveSegmentCount = storyboard.length || draft.segmentCount
+  const effectiveTotalDuration = storyboardDurationTotal(storyboard)
+    || draft.duration
+    || draft.segmentCount * draft.segmentDuration
 
   return {
     script,
@@ -231,8 +254,8 @@ export async function prepareCarSalesAiPlanPreview(draft: CarSalesPlanDraft): Pr
     balance: estimate?.balance ?? null,
     enoughBalance: estimate?.enoughBalance ?? null,
     estimatedDuration: estimatedRenderDurationLabel(draft),
-    totalDuration: draft.duration || draft.segmentCount * draft.segmentDuration,
-    segmentCount: draft.segmentCount,
+    totalDuration: effectiveTotalDuration,
+    segmentCount: effectiveSegmentCount,
     materialCount: draft.assets.length,
     vehicleMaterialCount: vehicleMaterialCount(draft),
     configItems: buildPlanConfigItems(draft),
@@ -285,7 +308,18 @@ export function buildQuickRenderRequestFromPlanDraft(
   plan: AiPlanPreview,
 ): QuickRenderRequest {
   const script = plan.script.trim()
-  const storyboard = syncStoryboardNarrationWithScript(plan.storyboard, script, draft.prompt)
+  const model = normalizePlanModel(draft.model)
+  const effectiveDraft = { ...draft, model }
+  const normalizedPlanStoryboard = normalizeStoryboardForModelLimits(plan.storyboard, effectiveDraft)
+  const storyboard = syncStoryboardNarrationWithScript(normalizedPlanStoryboard, script, draft.prompt)
+  const segmentCount = storyboard.length || draft.segmentCount
+  const totalDuration = storyboardDurationTotal(storyboard)
+    || draft.duration
+    || draft.segmentCount * draft.segmentDuration
+  const segmentDuration = normalizePlanSegmentDuration(
+    Math.round(totalDuration / Math.max(1, segmentCount)) || draft.segmentDuration,
+    model,
+  )
   const narrationText = storyboard
     .map((shot) => sanitizePlanScript(shot.narration || '', draft.prompt))
     .filter(Boolean)
@@ -320,9 +354,9 @@ export function buildQuickRenderRequestFromPlanDraft(
     finalVoiceText: narrationText || script || undefined,
     strictVoiceText: Boolean(narrationText || script),
     audioPolicy: draft.audioPolicy,
-    model: draft.model,
-    segmentCount: draft.segmentCount,
-    segmentDuration: draft.segmentDuration,
+    model,
+    segmentCount,
+    segmentDuration,
     generatedStoryboard: storyboard.map((shot) => ({
       index: shot.index,
       visual: shot.visual,
@@ -645,6 +679,192 @@ function splitPlanScriptUnits(script: string, targetCount: number) {
   return lines.length ? lines : clauses
 }
 
+async function rewriteUnpunctuatedPlanScript(
+  script: string,
+  draft: CarSalesPlanDraft,
+  warnings: string[],
+): Promise<{ script: string; scriptVersionId: number | null }> {
+  const clean = sanitizePlanScript(script, draft.prompt)
+  if (!needsPunctuationRewrite(clean)) {
+    return { script: clean, scriptVersionId: null }
+  }
+  try {
+    const rewritten = await rewriteScript({
+      sourceText: clean,
+      style: punctuationRewriteStyle(draft),
+      targetLength: Math.min(1200, Math.max(clean.length + 80, draft.segmentCount * 120)),
+    })
+    const next = sanitizePlanScript(rewritten.rewrittenText || '', draft.prompt)
+    if (isPunctuationRewriteUsable(clean, next)) {
+      warnings.push('检测到口播文案缺少自然标点，已调用文案改写能力补充分句和停顿，避免分镜口播被硬切。')
+      return { script: next, scriptVersionId: rewritten.scriptVersionId || null }
+    }
+  } catch (error) {
+    warnings.push(`口播文案缺少标点，但自动优化失败：${errorMessageFrom(error)}。请在预览中手动补充标点后再生成。`)
+  }
+  return { script: clean, scriptVersionId: null }
+}
+
+function punctuationRewriteStyle(draft: CarSalesPlanDraft) {
+  const language = draft.nativeVoiceLanguage === 'en-US' ? 'English' : 'Chinese'
+  return [
+    'punctuation-only',
+    language,
+    'Only add punctuation, short line breaks, and natural speech pauses.',
+    'Do not rewrite meaning, selling points, vehicle facts, or sentence order.',
+  ].join('; ')
+}
+
+function needsPunctuationRewrite(script: string) {
+  const normalized = script.trim().replace(/\s+/g, ' ')
+  const compact = normalized.replace(/\s+/g, '')
+  if (compact.length < 36) return false
+  const punctuationMatches = compact.match(/[，。！？；：,.!?;:]/gu) || []
+  if (punctuationMatches.length >= Math.max(2, Math.floor(compact.length / 80))) return false
+  return /[\u4E00-\u9FFF]/u.test(compact) || normalized.split(/\s+/).length >= 14
+}
+
+function isPunctuationRewriteUsable(original: string, rewritten: string) {
+  const text = rewritten.trim()
+  if (!text) return false
+  const originalKey = original.replace(/\s+/g, '')
+  const rewrittenKey = text.replace(/\s+/g, '').replace(/[，。！？；：,.!?;:]/gu, '')
+  if (rewrittenKey.length < originalKey.length * 0.72) return false
+  const punctuationMatches = text.match(/[，。！？；：,.!?;:]/gu) || []
+  return punctuationMatches.length > 0 && text.length <= original.length * 1.45 + 80
+}
+
+export function maxStoryboardSegmentDurationForModel(model?: string) {
+  const key = (model || '').trim()
+  if (!key || key === 'auto') return DEFAULT_MODEL_MAX_SEGMENT_DURATION
+  if (MODEL_MAX_SEGMENT_DURATIONS[key]) return MODEL_MAX_SEGMENT_DURATIONS[key]
+  return /seedance[-_]?2|2-0|85r4g/i.test(key) ? 15 : 12
+}
+
+function normalizePlanModel(model?: string) {
+  const key = (model || '').trim()
+  return !key || key === 'auto' ? DEFAULT_CAR_SALES_MODEL : key
+}
+
+function normalizePlanSegmentDuration(value: number, model?: string) {
+  const max = maxStoryboardSegmentDurationForModel(model)
+  if (!Number.isFinite(value) || value <= 0) return Math.min(DEFAULT_MODEL_SEGMENT_DURATION, max)
+  return Math.max(4, Math.min(max, Math.round(value)))
+}
+
+function storyboardDurationTotal(storyboard: AiPlanStoryboardShot[]) {
+  return storyboard.reduce((sum, shot) => sum + Math.max(1, Math.round(shot.duration || 0)), 0)
+}
+
+function normalizeStoryboardForModelLimits(
+  storyboard: AiPlanStoryboardShot[],
+  draft: CarSalesPlanDraft,
+  warnings?: string[],
+) {
+  if (!storyboard.length) return storyboard
+  const maxDuration = maxStoryboardSegmentDurationForModel(draft.model)
+  const expanded: AiPlanStoryboardShot[] = []
+  let splitCount = 0
+  storyboard.forEach((shot) => {
+    const duration = Math.max(1, Math.round(shot.duration || draft.segmentDuration || DEFAULT_MODEL_SEGMENT_DURATION))
+    if (duration <= maxDuration) {
+      expanded.push({ ...shot, duration })
+      return
+    }
+    const parts = splitOversizedStoryboardShot(shot, duration, maxDuration)
+    splitCount += parts.length - 1
+    expanded.push(...parts)
+  })
+
+  const normalized = compactStoryboardForGeneration(expanded, maxDuration, draft)
+    .slice(0, MAX_GENERATION_SEGMENTS)
+    .map((shot, index) => ({ ...shot, index: index + 1 }))
+
+  if (warnings && splitCount > 0) {
+    warnings.push(`检测到 ${splitCount} 个超出单模型时长上限的分镜片段，已按 ${maxDuration} 秒上限拆成连续子镜头并保留原顺序。`)
+  }
+  if (warnings && compactStoryboardDurationTotal(expanded) > compactStoryboardDurationTotal(normalized)) {
+    warnings.push(`分镜片段超过系统一次生成的 ${MAX_GENERATION_SEGMENTS} 段上限，已优先保留前 ${MAX_GENERATION_SEGMENTS} 个连续镜头；如需完整复刻，请缩短参考视频或拆成多条任务。`)
+  }
+  return normalized
+}
+
+function splitOversizedStoryboardShot(
+  shot: AiPlanStoryboardShot,
+  duration: number,
+  maxDuration: number,
+) {
+  const durations = splitDurationEvenly(duration, maxDuration)
+  const narrationUnits = splitPlanScriptUnits(shot.narration || '', durations.length)
+  return durations.map((partDuration, index) => ({
+    ...shot,
+    visual: [
+      shot.visual,
+      `连续子镜头 ${index + 1}/${durations.length}：保持原镜头主体、景别、运镜和节奏，只承接该长镜头的第 ${index + 1} 段。`,
+    ].filter(Boolean).join('\n'),
+    narration: sanitizePlanScript(narrationUnits[index] || shot.narration || ''),
+    duration: partDuration,
+  }))
+}
+
+function splitDurationEvenly(duration: number, maxDuration: number) {
+  const total = Math.max(1, Math.round(duration))
+  const max = Math.max(4, Math.round(maxDuration))
+  const count = Math.max(1, Math.ceil(total / max))
+  const base = Math.floor(total / count)
+  let remainder = total - base * count
+  return Array.from({ length: count }).map(() => {
+    const value = base + (remainder > 0 ? 1 : 0)
+    remainder -= remainder > 0 ? 1 : 0
+    return Math.max(1, Math.min(max, value))
+  })
+}
+
+function compactStoryboardForGeneration(
+  storyboard: AiPlanStoryboardShot[],
+  maxDuration: number,
+  draft: CarSalesPlanDraft,
+) {
+  if (!storyboard.length) return storyboard
+  const groups: AiPlanStoryboardShot[][] = []
+  let current: AiPlanStoryboardShot[] = []
+  let currentDuration = 0
+  storyboard.forEach((shot) => {
+    const duration = Math.max(1, Math.round(shot.duration || draft.segmentDuration || DEFAULT_MODEL_SEGMENT_DURATION))
+    if (current.length && currentDuration + duration > maxDuration) {
+      groups.push(current)
+      current = []
+      currentDuration = 0
+    }
+    current.push({ ...shot, duration })
+    currentDuration += duration
+  })
+  if (current.length) groups.push(current)
+  return groups.map((group, index) => mergeStoryboardGroup(group, index, maxDuration))
+}
+
+function mergeStoryboardGroup(
+  group: AiPlanStoryboardShot[],
+  index: number,
+  maxDuration: number,
+): AiPlanStoryboardShot {
+  if (group.length === 1) return { ...group[0], index: index + 1 }
+  const range = `${group[0].index}-${group[group.length - 1].index}`
+  return {
+    index: index + 1,
+    visual: [
+      `连续生成段落，合并原分镜 ${range}，总时长约 ${compactStoryboardDurationTotal(group)} 秒；保持同一车辆、场景、光线和运动方向一致。`,
+      ...group.map((shot, childIndex) => `${childIndex + 1}. ${shot.visual}`),
+    ].join('\n'),
+    narration: group.map((shot) => shot.narration.trim()).filter(Boolean).join('\n'),
+    duration: Math.min(maxDuration, compactStoryboardDurationTotal(group)),
+  }
+}
+
+function compactStoryboardDurationTotal(storyboard: AiPlanStoryboardShot[]) {
+  return storyboard.reduce((sum, shot) => sum + Math.max(1, Math.round(shot.duration || 0)), 0)
+}
+
 function fitPlanScriptUnitsToCount(units: string[], targetCount: number) {
   const count = Math.max(1, targetCount)
   if (units.length <= count) return units
@@ -790,9 +1010,10 @@ function normalizeStoryboardShots(shots: StoryboardShotItem[] | undefined, draft
 
 async function fetchPlanBillingEstimate(draft: CarSalesPlanDraft, warnings: string[]) {
   try {
+    const model = normalizePlanModel(draft.model)
     return await getBillingEstimate({
       taskType: 'SEEDANCE_CAR_SALES_VIDEO',
-      modelCode: draft.model === 'auto' ? undefined : draft.model,
+      modelCode: model,
       imageCount: vehicleMaterialCount(draft),
       segmentCount: draft.segmentCount,
       durationSeconds: draft.duration || draft.segmentCount * draft.segmentDuration,
