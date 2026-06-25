@@ -23,6 +23,21 @@
 
           <p v-if="error" class="ai-plan-error">{{ error }}</p>
 
+          <section v-if="activeTaskId" class="ai-plan-task-state">
+            <div>
+              <span>任务 ID</span>
+              <strong>#{{ activeTaskId }}</strong>
+            </div>
+            <div>
+              <span>生成状态</span>
+              <strong>{{ activeTaskStatus || 'QUEUED' }}</strong>
+            </div>
+            <div>
+              <span>生成进度</span>
+              <strong>{{ activeTaskProgress == null ? '-' : `${activeTaskProgress}%` }}</strong>
+            </div>
+          </section>
+
           <template v-if="plan">
             <div class="ai-plan-workspace">
               <section class="ai-plan-card ai-plan-script-card">
@@ -135,10 +150,29 @@
             重新生成方案
           </button>
           <button
+            v-if="activeTaskRunning"
+            type="button"
+            class="app-secondary-button ai-plan-danger-button"
+            :disabled="loading || cancelLoading"
+            @click="$emit('cancel-generation')"
+          >
+            {{ cancelLoading ? '取消中...' : '取消生成' }}
+          </button>
+          <button
+            v-if="activeTaskId && !activeTaskRunning"
             type="button"
             class="app-primary-button"
-            :disabled="loading || !plan || plan.enoughBalance === false"
-            @click="$emit('confirm')"
+            :disabled="loading || regenerateLoading || !plan || plan.enoughBalance === false"
+            @click="$emit('regenerate')"
+          >
+            {{ regenerateLoading ? '提交中...' : '再生成一条' }}
+          </button>
+          <button
+            v-if="!activeTaskId || activeTaskRunning"
+            type="button"
+            class="app-primary-button"
+            :disabled="loading || activeTaskRunning || !plan || plan.enoughBalance === false"
+            @click="emitPrimaryAction"
           >
             确认生成（{{ plan?.estimatedCredits ?? 0 }} 积分）
           </button>
@@ -158,18 +192,33 @@ const props = defineProps<{
   error: string
   plan: AiPlanPreview | null
   aspectRatio?: '9:16' | '16:9' | 'auto'
+  activeTaskId?: number | null
+  activeTaskStatus?: string
+  activeTaskProgress?: number | null
+  cancelLoading?: boolean
+  regenerateLoading?: boolean
 }>()
 
 const previewAspectRatio = computed(() => props.aspectRatio === '16:9' ? '16:9' : '9:16')
+const activeTaskRunning = computed(() => {
+  if (!props.activeTaskId) return false
+  return ['QUEUED', 'RUNNING'].includes(String(props.activeTaskStatus || 'QUEUED').toUpperCase())
+})
 
-defineEmits<{
+const emit = defineEmits<{
   'update:modelValue': [value: boolean]
   'update-script': [value: string]
   'update-storyboard-shot': [index: number, field: 'visual' | 'narration', value: string]
   refresh: []
   confirm: []
+  regenerate: []
+  'cancel-generation': []
   back: []
 }>()
+
+function emitPrimaryAction() {
+  emit('confirm')
+}
 </script>
 
 <style scoped>
@@ -573,6 +622,43 @@ defineEmits<{
   color: #d92d20;
 }
 
+.ai-plan-task-state {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 10px;
+  border: 1px solid #d9ddff;
+  border-radius: 8px;
+  background: #f5f7ff;
+  padding: 12px;
+}
+
+.ai-plan-task-state div {
+  display: grid;
+  min-width: 0;
+  gap: 4px;
+}
+
+.ai-plan-task-state span {
+  color: #667085;
+  font-size: 12px;
+  font-weight: 800;
+}
+
+.ai-plan-task-state strong {
+  overflow: hidden;
+  color: #101828;
+  font-size: 14px;
+  font-weight: 900;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.ai-plan-danger-button {
+  border-color: #fecaca;
+  background: #fff7f7;
+  color: #b42318;
+}
+
 .ai-plan-warning,
 .ai-plan-warning-list {
   border: 1px solid #fedf89;
@@ -653,6 +739,7 @@ defineEmits<{
   }
 
   .ai-plan-metrics,
+  .ai-plan-task-state,
   .ai-plan-storyboard article {
     grid-template-columns: 1fr;
   }

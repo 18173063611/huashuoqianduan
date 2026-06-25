@@ -384,10 +384,17 @@
       :error="planPreviewError"
       :plan="planPreview"
       :aspect-ratio="aspectRatio"
+      :active-task-id="currentTaskId"
+      :active-task-status="taskStatus"
+      :active-task-progress="taskProgress"
+      :cancel-loading="cancelingRenderTask"
+      :regenerate-loading="regeneratingRenderTask"
       @update-script="updatePlanScript"
       @update-storyboard-shot="updatePlanStoryboardShot"
       @refresh="prepareAiPlanPreview"
       @confirm="confirmAiPlanAndSubmit"
+      @regenerate="regenerateCurrentAiPlanVideo"
+      @cancel-generation="cancelCurrentRenderTask"
       @back="planPreviewOpen = false"
     />
     <AvatarSelectDrawer
@@ -420,7 +427,7 @@ import {
   newVideoIdempotencyKey,
   quickRenderVideo,
 } from '../../services/videoApi'
-import { getTaskDetail, listTasks } from '../../services/taskApi'
+import { cancelTask, getTaskDetail, listTasks } from '../../services/taskApi'
 import { trackTaskResult } from '../../services/taskRealtime'
 import { getSessionTaskIds, rememberSessionTaskId } from '../../services/sessionTaskStore'
 import {
@@ -433,6 +440,7 @@ import {
   isPendingCarSalesRenderTaskTerminal,
   newPendingCarSalesPlanTaskId,
   patchPendingCarSalesPlanTask,
+  removePendingCarSalesPlanTask,
   type PendingCarSalesPlanTask,
   type PendingCarSalesRenderTaskKind,
   upsertPendingCarSalesPlanTask,
@@ -727,6 +735,8 @@ const goalText = ref('')
 const targetDuration = ref<10 | 15 | 20 | 30>(carSalesPreferences.duration)
 const uploading = ref(false)
 const busy = ref(false)
+const cancelingRenderTask = ref(false)
+const regeneratingRenderTask = ref(false)
 const errorMessage = ref('')
 const taskStatus = ref('')
 const taskProgress = ref<number | null>(null)
@@ -2579,6 +2589,11 @@ function applyPendingAiSmartPlanTask(task: PendingCarSalesPlanTask, openPreview:
   planPreviewError.value = ''
   planPreviewLoading.value = false
   planPreviewOpen.value = openPreview
+  if (task.activeTaskId) {
+    currentTaskId.value = task.activeTaskId
+    taskStatus.value = task.activeTaskStatus || ''
+    taskProgress.value = task.activeTaskProgress ?? null
+  }
   resumePendingAiSmartRenderTask(task)
 }
 
@@ -2622,6 +2637,94 @@ function resumePendingAiSmartRenderTask(task: PendingCarSalesPlanTask) {
   } else {
     startTaskTracking(task.activeTaskId)
   }
+}
+
+function isCancelableRenderStatus(status: string | null | undefined) {
+  return ['QUEUED', 'RUNNING'].includes(String(status || '').trim().toUpperCase())
+}
+
+async function cancelCurrentRenderTask() {
+  const taskId = currentTaskId.value
+  if (!taskId || cancelingRenderTask.value || !isCancelableRenderStatus(taskStatus.value || 'QUEUED')) return
+  cancelingRenderTask.value = true
+  errorMessage.value = ''
+  planPreviewError.value = ''
+  try {
+    await cancelTask(taskId)
+    stopRenderTracking()
+    busy.value = false
+    taskStatus.value = 'CANCELED'
+    taskProgress.value = 100
+    patchCurrentPendingRenderTask({
+      activeTaskStatus: 'CANCELED',
+      activeTaskProgress: 100,
+      activeTaskErrorMessage: '',
+    })
+    void loadRecentGenerations(true)
+  } catch (error) {
+    const message = error instanceof Error ? error.message : '取消生成失败'
+    errorMessage.value = message
+    planPreviewError.value = message
+  } finally {
+    cancelingRenderTask.value = false
+  }
+}
+
+function regenerateCurrentAiPlanVideo() {
+  startNewAiSmartVideo()
+}
+
+function startNewAiSmartVideo() {
+  stopRenderTracking()
+  stopDigitalHumanPoll()
+  stopNarrationTracking?.()
+  stopNarrationTracking = null
+  if (currentPendingPlanTaskId.value) {
+    removePendingCarSalesPlanTask(currentPendingPlanTaskId.value)
+  }
+  materials.value = []
+  selectedSellingPointIds.value = [...carSalesPreferences.preferredSellingPointIds]
+  advancedSettings.value = createDefaultAdvancedSettings()
+  selectedAvatar.value = null
+  planPreviewOpen.value = false
+  planPreviewLoading.value = false
+  planPreviewError.value = ''
+  planPreview.value = null
+  currentPendingPlanTaskId.value = ''
+  restoredPlanRequest.value = null
+  templateCandidates.value = []
+  templateAssetCandidates.value = []
+  templateMatchLoading.value = false
+  templateMatchError.value = ''
+  templatePromptInjections.value = {}
+  quickPickedImageUrl.value = ''
+  quickPickedSceneImageUrl.value = ''
+  quickPickedCarBundleUrl.value = ''
+  quickPickedAudioUrl.value = ''
+  quickPickedJsonUrl.value = ''
+  quickPickedTextUrl.value = ''
+  quickPickedVideoUrl.value = ''
+  aspectRatio.value = carSalesPreferences.aspectRatio
+  subtitleLanguage.value = carSalesPreferences.voiceLanguage
+  voiceLanguage.value = carSalesPreferences.voiceLanguage
+  goalText.value = ''
+  targetDuration.value = carSalesPreferences.duration
+  submitAttempted.value = false
+  busy.value = false
+  cancelingRenderTask.value = false
+  regeneratingRenderTask.value = false
+  errorMessage.value = ''
+  taskStatus.value = ''
+  taskProgress.value = null
+  result.value = null
+  currentTaskId.value = null
+  finalNarrationText.value = ''
+  narrationEdited.value = false
+  narrationError.value = ''
+  narrationLocalizationLoading.value = false
+  narrationTaskProgress.value = null
+  narrationResolvedKey.value = ''
+  narrationLocalizationPromise = null
 }
 
 function buildPlanSourceText() {

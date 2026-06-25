@@ -415,11 +415,18 @@
       :error="planPreviewError"
       :plan="planPreview"
       :aspect-ratio="assetReusePlanDraft?.aspectRatio"
+      :active-task-id="activeRenderTaskId"
+      :active-task-status="activeRenderTaskStatus"
+      :active-task-progress="activeRenderTaskProgress"
+      :cancel-loading="cancelingRenderTask"
+      :regenerate-loading="planSubmitting"
       @update-script="updatePlanScript"
       @update-storyboard-shot="updatePlanStoryboardShot"
       @back="planPreviewOpen = false"
       @refresh="prepareAssetReusePlanPreview"
       @confirm="confirmAssetReusePlan"
+      @regenerate="regenerateAssetReuseVideo"
+      @cancel-generation="cancelAssetReuseRenderTask"
     />
     <el-dialog v-model="assetPreviewDialog.open" :title="assetPreviewDialog.title" width="720px">
       <div v-if="assetPreviewDialog.loading" class="asset-text-preview-state">正在加载预览...</div>
@@ -459,11 +466,13 @@ import {
   getPendingCarSalesPlanTask,
   newPendingCarSalesPlanTaskId,
   patchPendingCarSalesPlanTask,
+  removePendingCarSalesPlanTask,
   type PendingCarSalesPlanTask,
   type PendingCarSalesRenderTaskKind,
   upsertPendingCarSalesPlanTask,
 } from '../../services/carSalesPlanTaskStore'
 import { newVideoIdempotencyKey, quickRenderVideo } from '../../services/videoApi'
+import { cancelTask } from '../../services/taskApi'
 import { useAuthRequired } from '../../composables/useAuthRequired'
 import type { AssetItem, AssetType } from '../../types/assetTypes'
 import type { QuickRenderAssetRole } from '../../types/videoTypes'
@@ -639,6 +648,10 @@ const carBundleLoadError = ref('')
 const planPreviewOpen = ref(false)
 const planPreviewLoading = ref(false)
 const planSubmitting = ref(false)
+const cancelingRenderTask = ref(false)
+const activeRenderTaskId = ref<number | null>(null)
+const activeRenderTaskStatus = ref('')
+const activeRenderTaskProgress = ref<number | null>(null)
 const planPreviewError = ref('')
 const planPreview = ref<AiPlanPreview | null>(null)
 const assetReusePlanDraft = ref<CarSalesPlanDraft | null>(null)
@@ -1377,6 +1390,9 @@ function applyAssetReusePendingPlanTask(task: PendingCarSalesPlanTask, openPrevi
   planPreviewError.value = ''
   planPreviewLoading.value = false
   planPreviewOpen.value = openPreview
+  activeRenderTaskId.value = task.activeTaskId ?? null
+  activeRenderTaskStatus.value = task.activeTaskStatus || ''
+  activeRenderTaskProgress.value = task.activeTaskProgress ?? null
 }
 
 function patchAssetReusePendingRenderTask(patch: Partial<PendingCarSalesPlanTask>) {
@@ -1390,6 +1406,9 @@ function markAssetReusePendingRenderTask(
   status = 'QUEUED',
   progress: number | null = 0,
 ) {
+  activeRenderTaskId.value = taskId
+  activeRenderTaskStatus.value = status
+  activeRenderTaskProgress.value = progress
   patchAssetReusePendingRenderTask({
     activeTaskId: taskId,
     activeTaskKind: kind,
@@ -1398,6 +1417,62 @@ function markAssetReusePendingRenderTask(
     activeTaskSubmittedAt: new Date().toISOString(),
     activeTaskErrorMessage: '',
   })
+}
+
+function isCancelableRenderStatus(status: string | null | undefined) {
+  return ['QUEUED', 'RUNNING'].includes(String(status || '').trim().toUpperCase())
+}
+
+async function cancelAssetReuseRenderTask() {
+  const taskId = activeRenderTaskId.value
+  if (!taskId || cancelingRenderTask.value || !isCancelableRenderStatus(activeRenderTaskStatus.value || 'QUEUED')) return
+  cancelingRenderTask.value = true
+  planPreviewError.value = ''
+  try {
+    await cancelTask(taskId)
+    activeRenderTaskStatus.value = 'CANCELED'
+    activeRenderTaskProgress.value = 100
+    patchAssetReusePendingRenderTask({
+      activeTaskStatus: 'CANCELED',
+      activeTaskProgress: 100,
+      activeTaskErrorMessage: '',
+    })
+    ElMessage.success('已取消生成任务')
+  } catch (error) {
+    planPreviewError.value = error instanceof Error ? error.message : '取消生成失败'
+  } finally {
+    cancelingRenderTask.value = false
+  }
+}
+
+function regenerateAssetReuseVideo() {
+  startNewAssetReuseVideo()
+}
+
+function startNewAssetReuseVideo() {
+  if (currentPendingPlanTaskId.value) {
+    removePendingCarSalesPlanTask(currentPendingPlanTaskId.value)
+  }
+  selectedAssets.value = []
+  selectedCoverAssetId.value = null
+  draftPrompt.value = ''
+  hostAppearanceEnabled.value = false
+  carBundleLoadError.value = ''
+  planPreviewOpen.value = false
+  planPreviewLoading.value = false
+  planSubmitting.value = false
+  cancelingRenderTask.value = false
+  activeRenderTaskId.value = null
+  activeRenderTaskStatus.value = ''
+  activeRenderTaskProgress.value = null
+  planPreviewError.value = ''
+  planPreview.value = null
+  assetReusePlanDraft.value = null
+  importedRenderConfig.value = {}
+  importedScriptText.value = ''
+  importedStoryboard.value = []
+  currentPendingPlanTaskId.value = ''
+  clearImportTaskQuery()
 }
 
 async function buildAssetReusePlanDraft(): Promise<CarSalesPlanDraft> {

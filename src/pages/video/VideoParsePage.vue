@@ -858,11 +858,18 @@
       :error="planPreviewError"
       :plan="planPreview"
       :aspect-ratio="benchmarkPlanDraft?.aspectRatio"
+      :active-task-id="activeRenderTaskId"
+      :active-task-status="activeRenderTaskStatus"
+      :active-task-progress="activeRenderTaskProgress"
+      :cancel-loading="cancelingRenderTask"
+      :regenerate-loading="planSubmitting"
       @update-script="updatePlanScript"
       @update-storyboard-shot="updatePlanStoryboardShot"
       @back="planPreviewOpen = false"
       @refresh="prepareBenchmarkPlanPreview"
       @confirm="confirmBenchmarkPlan"
+      @regenerate="regenerateBenchmarkVideo"
+      @cancel-generation="cancelBenchmarkRenderTask"
     />
     <CarSalesAssetSelectDrawer
       v-model="benchmarkAssetDrawerOpen"
@@ -915,6 +922,7 @@ import {
   getPendingCarSalesPlanTask,
   newPendingCarSalesPlanTaskId,
   patchPendingCarSalesPlanTask,
+  removePendingCarSalesPlanTask,
   type PendingCarSalesPlanTask,
   type PendingCarSalesRenderTaskKind,
   upsertPendingCarSalesPlanTask,
@@ -1093,6 +1101,10 @@ const applyMessage = ref('')
 const planPreviewOpen = ref(false)
 const planPreviewLoading = ref(false)
 const planSubmitting = ref(false)
+const cancelingRenderTask = ref(false)
+const activeRenderTaskId = ref<number | null>(null)
+const activeRenderTaskStatus = ref('')
+const activeRenderTaskProgress = ref<number | null>(null)
 const planPreviewError = ref('')
 const planPreview = ref<AiPlanPreview | null>(null)
 const benchmarkPlanDraft = ref<CarSalesPlanDraft | null>(null)
@@ -2425,6 +2437,9 @@ function applyBenchmarkPendingPlanTask(task: PendingCarSalesPlanTask, openPrevie
   planPreviewError.value = ''
   planPreviewLoading.value = false
   planPreviewOpen.value = openPreview
+  activeRenderTaskId.value = task.activeTaskId ?? null
+  activeRenderTaskStatus.value = task.activeTaskStatus || ''
+  activeRenderTaskProgress.value = task.activeTaskProgress ?? null
 }
 
 function patchBenchmarkPendingRenderTask(patch: Partial<PendingCarSalesPlanTask>) {
@@ -2438,6 +2453,9 @@ function markBenchmarkPendingRenderTask(
   status = 'QUEUED',
   progress: number | null = 0,
 ) {
+  activeRenderTaskId.value = taskId
+  activeRenderTaskStatus.value = status
+  activeRenderTaskProgress.value = progress
   patchBenchmarkPendingRenderTask({
     activeTaskId: taskId,
     activeTaskKind: kind,
@@ -2446,6 +2464,78 @@ function markBenchmarkPendingRenderTask(
     activeTaskSubmittedAt: new Date().toISOString(),
     activeTaskErrorMessage: '',
   })
+}
+
+function isCancelableRenderStatus(status: string | null | undefined) {
+  return ['QUEUED', 'RUNNING'].includes(String(status || '').trim().toUpperCase())
+}
+
+async function cancelBenchmarkRenderTask() {
+  const taskId = activeRenderTaskId.value
+  if (!taskId || cancelingRenderTask.value || !isCancelableRenderStatus(activeRenderTaskStatus.value || 'QUEUED')) return
+  cancelingRenderTask.value = true
+  planPreviewError.value = ''
+  try {
+    await cancelTask(taskId)
+    activeRenderTaskStatus.value = 'CANCELED'
+    activeRenderTaskProgress.value = 100
+    patchBenchmarkPendingRenderTask({
+      activeTaskStatus: 'CANCELED',
+      activeTaskProgress: 100,
+      activeTaskErrorMessage: '',
+    })
+    applyMessage.value = '已取消生成任务'
+  } catch (error) {
+    planPreviewError.value = error instanceof Error ? error.message : '取消生成失败'
+  } finally {
+    cancelingRenderTask.value = false
+  }
+}
+
+function regenerateBenchmarkVideo() {
+  startNewBenchmarkVideo()
+}
+
+function startNewBenchmarkVideo() {
+  parseAbort.value?.abort()
+  stopParseTask()
+  stopRewriteTask()
+  if (currentPendingPlanTaskId.value) {
+    removePendingCarSalesPlanTask(currentPendingPlanTaskId.value)
+  }
+  videoUrl.value = ''
+  selectedPlatform.value = 'auto'
+  inputMode.value = 'link'
+  rewriteStyle.value = ''
+  rewriteTargetLanguage.value = '中文'
+  rewriteTab.value = 'ai'
+  resetParseWorkflowState()
+  resetVideoParseLocalUpload({ abort: true })
+  resetDownloadProgress()
+  clearVideoParseLocalUploadNotice()
+  downloading.value = false
+  downloadError.value = ''
+  downloadMessage.value = ''
+  downloadStatusText.value = ''
+  downloadReceivedBytes.value = 0
+  downloadTotalBytes.value = null
+  downloadProgressPercent.value = null
+  platformAutoHint.value = ''
+  planPreviewOpen.value = false
+  planPreviewLoading.value = false
+  planSubmitting.value = false
+  cancelingRenderTask.value = false
+  activeRenderTaskId.value = null
+  activeRenderTaskStatus.value = ''
+  activeRenderTaskProgress.value = null
+  planPreviewError.value = ''
+  planPreview.value = null
+  benchmarkPlanDraft.value = null
+  currentPendingPlanTaskId.value = ''
+  benchmarkAdvancedSettings.value = createDefaultBenchmarkAdvancedSettings()
+  benchmarkAspectRatio.value = '9:16'
+  benchmarkTargetDuration.value = 30
+  benchmarkDraftAssets.value = []
 }
 
 function buildBenchmarkPlanDraft(): CarSalesPlanDraft {
