@@ -301,10 +301,9 @@
                         asset-type="AUDIO"
                         :selected-url="selectedBgmUrl"
                         :selected-name="selectedBgmName"
-                        :source-types="['USER_UPLOAD']"
                         :asset-roles="['bgm']"
                         :role-options="CAR_BGM_AUDIO_ROLE_OPTIONS"
-                        source-hint="BGM 只作为背景音乐，不参与口播、字幕或口型生成"
+                        source-hint="可选择用户上传或开发者公共 BGM；只作为背景音乐，不参与口播、字幕或口型生成"
                         placeholder="搜索 BGM 音频资产..."
                         @select="handleBgmAssetSelect"
                       />
