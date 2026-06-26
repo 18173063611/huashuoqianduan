@@ -162,11 +162,18 @@
               <label class="car-field">
                 <span>口播风格</span>
                 <select :value="settings.nativeVoiceStyle" @change="patch({ nativeVoiceStyle: ($event.target as HTMLSelectElement).value })">
-                  <option value="natural_sales">自然销售</option>
-                  <option value="warm_female">温暖女声</option>
-                  <option value="steady_male">稳重男声</option>
-                  <option value="energetic">热情促销</option>
+                  <optgroup label="女声">
+                    <option v-for="item in femaleVoiceStyleOptions" :key="item.value" :value="item.value">
+                      {{ item.label }}
+                    </option>
+                  </optgroup>
+                  <optgroup label="男声">
+                    <option v-for="item in maleVoiceStyleOptions" :key="item.value" :value="item.value">
+                      {{ item.label }}
+                    </option>
+                  </optgroup>
                 </select>
+                <small>{{ selectedVoiceStyleHint }}</small>
               </label>
             </div>
             <div class="car-grid-two">
@@ -197,10 +204,11 @@
               <label class="car-field">
                 <span>讲述节奏</span>
                 <select :value="settings.nativeSpeechStyle" @change="patch({ nativeSpeechStyle: ($event.target as HTMLSelectElement).value })">
-                  <option value="balanced">均衡</option>
-                  <option value="fast">偏快</option>
-                  <option value="calm">舒缓</option>
+                  <option v-for="item in speechStyleOptions" :key="item.value" :value="item.value">
+                    {{ item.label }}
+                  </option>
                 </select>
+                <small>{{ selectedSpeechStyleHint }}</small>
               </label>
               <label class="car-field">
                 <span>生成模型</span>
@@ -262,6 +270,12 @@
 
 <script setup lang="ts">
 import { computed } from 'vue'
+import {
+  CAR_NATIVE_SPEECH_STYLE_OPTIONS,
+  CAR_NATIVE_VOICE_STYLE_OPTIONS,
+  normalizeCarNativeSpeechStyle,
+  normalizeCarNativeVoiceStyle,
+} from '../../constants/carSalesVoiceStyles'
 
 export type OverlayPosition = 'top' | 'middle' | 'bottom'
 
@@ -314,6 +328,17 @@ const emit = defineEmits<{
 }>()
 
 const hostMaterialLabel = computed(() => props.hasHostMaterial ? '已选择数字人素材' : '尚未选择数字人')
+const femaleVoiceStyleOptions = computed(() => CAR_NATIVE_VOICE_STYLE_OPTIONS.filter((item) => item.gender === 'female'))
+const maleVoiceStyleOptions = computed(() => CAR_NATIVE_VOICE_STYLE_OPTIONS.filter((item) => item.gender === 'male'))
+const speechStyleOptions = computed(() => CAR_NATIVE_SPEECH_STYLE_OPTIONS)
+const selectedVoiceStyleHint = computed(() => {
+  const value = normalizeCarNativeVoiceStyle(props.settings.nativeVoiceStyle)
+  return CAR_NATIVE_VOICE_STYLE_OPTIONS.find((item) => item.value === value)?.hint || ''
+})
+const selectedSpeechStyleHint = computed(() => {
+  const value = normalizeCarNativeSpeechStyle(props.settings.nativeSpeechStyle)
+  return CAR_NATIVE_SPEECH_STYLE_OPTIONS.find((item) => item.value === value)?.hint || ''
+})
 const selectedAvatarHint = computed(() => {
   if (props.selectedAvatarName) return '已回填数字人形象，并加入素材列表'
   if (props.hasHostMaterial) return '已从资产中心选择数字人图片或口播视频'
@@ -541,6 +566,13 @@ function numberFromEvent(event: Event, fallback: number) {
   color: var(--hs-text);
   font-size: 13px;
   font-weight: 700;
+}
+
+.car-field small {
+  color: var(--hs-text-muted);
+  font-size: 12px;
+  font-weight: 500;
+  line-height: 1.45;
 }
 
 .car-field select,

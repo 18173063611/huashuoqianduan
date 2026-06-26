@@ -135,6 +135,8 @@ import type { AssetItem, AssetType } from '../../types/assetTypes'
 import type { QuickRenderAssetRole } from '../../types/videoTypes'
 import {
   developerAssetFeatureBadges,
+  normalizeAssetRole as normalizeWorkflowAssetRole,
+  normalizedAssetRole as normalizedWorkflowAssetRole,
   publicAssetProviderKind,
   publicAssetProviderLabel,
 } from '../../utils/assetWorkflow'
@@ -194,13 +196,17 @@ const vehicleRoles: RoleOption[] = [
   { value: 'car_exterior_front', label: '车头外观' },
   { value: 'car_exterior_side', label: '车侧外观' },
   { value: 'car_exterior_rear', label: '车尾外观' },
+  { value: 'car_exterior_45', label: '45度外观' },
   { value: 'car_interior_dashboard', label: '内饰中控' },
   { value: 'car_interior_front_seat', label: '前排座椅' },
   { value: 'car_interior_back_seat', label: '后排座椅' },
+  { value: 'car_interior_steering', label: '方向盘' },
+  { value: 'car_interior_trunk', label: '后备箱' },
   { value: 'car_detail_sunroof', label: '天窗细节' },
   { value: 'car_detail_light', label: '车灯细节' },
   { value: 'car_detail_wheel', label: '轮毂细节' },
   { value: 'car_detail_logo', label: '车标细节' },
+  { value: 'car_detail_seat_material', label: '座椅材质' },
 ]
 
 const sceneRoles: RoleOption[] = [
@@ -444,13 +450,17 @@ function seedDefaultRoles() {
 }
 
 function roleForAsset(asset: AssetItem, category: AssetCategory): QuickRenderAssetRole {
-  const inferred = normalizeRole(
+  const candidates = [
     metadataText(asset, 'assetRole') ||
-    metadataText(asset, 'role') ||
+      metadataText(asset, 'role'),
+    normalizedWorkflowAssetRole(asset) ||
     inferRoleFromAsset(asset),
-  )
-  if (inferred && category.roles.some((role) => role.value === inferred)) {
-    return inferred
+  ]
+  for (const candidate of candidates) {
+    const inferred = normalizeRole(candidate)
+    if (inferred && category.roles.some((role) => role.value === inferred)) {
+      return inferred
+    }
   }
   return category.defaultRole
 }
@@ -472,16 +482,23 @@ function inferRoleFromAsset(asset: AssetItem) {
   const name = `${asset.fileName || ''} ${asset.sourceType || ''} ${asset.metadataJson || ''}`.toLowerCase()
   if (isCarBundle(asset)) return 'car_model_bundle'
   if (name.includes('avatar') || name.includes('host') || name.includes('数字人') || name.includes('主播')) return 'host_image'
-  if (name.includes('showroom') || name.includes('展厅')) return 'scene_showroom'
-  if (name.includes('road') || name.includes('道路')) return 'scene_road'
-  if (name.includes('night') || name.includes('夜景') || name.includes('门店')) return 'scene_night'
-  if (name.includes('scene') || name.includes('场景') || name.includes('city') || name.includes('户外')) return 'scene_outdoor'
-  if (name.includes('side') || name.includes('侧')) return 'car_exterior_side'
-  if (name.includes('rear') || name.includes('尾')) return 'car_exterior_rear'
-  if (name.includes('interior') || name.includes('内饰') || name.includes('dashboard')) return 'car_interior_dashboard'
-  if (name.includes('wheel') || name.includes('轮')) return 'car_detail_wheel'
+  if (name.includes('side') || name.includes('侧面') || name.includes('车侧')) return 'car_exterior_side'
+  if (name.includes('rear') || name.includes('back') || name.includes('尾部') || name.includes('车尾') || name.includes('背面')) return 'car_exterior_rear'
+  if (name.includes('45')) return 'car_exterior_45'
+  if (name.includes('dashboard') || name.includes('interior') || name.includes('内饰') || name.includes('中控') || name.includes('仪表')) return 'car_interior_dashboard'
+  if (name.includes('front_seat') || name.includes('前排')) return 'car_interior_front_seat'
+  if (name.includes('back_seat') || name.includes('rear_seat') || name.includes('后排')) return 'car_interior_back_seat'
+  if (name.includes('steering') || name.includes('方向盘')) return 'car_interior_steering'
+  if (name.includes('trunk') || name.includes('后备箱')) return 'car_interior_trunk'
+  if (name.includes('sunroof') || name.includes('panoramic_roof') || name.includes('天窗') || name.includes('全景天幕')) return 'car_detail_sunroof'
+  if (name.includes('wheel') || name.includes('轮毂') || name.includes('轮胎')) return 'car_detail_wheel'
+  if (name.includes('logo') || name.includes('车标') || name.includes('标识')) return 'car_detail_logo'
   if (name.includes('light') || name.includes('灯')) return 'car_detail_light'
-  if (name.includes('logo') || name.includes('标')) return 'car_detail_logo'
+  if (name.includes('seat') || name.includes('座椅') || name.includes('材质')) return 'car_detail_seat_material'
+  if (name.includes('showroom') || name.includes('展厅') || name.includes('门店')) return 'scene_showroom'
+  if (name.includes('road') || name.includes('highway') || name.includes('山路') || name.includes('公路') || name.includes('道路')) return 'scene_road'
+  if (name.includes('night') || name.includes('夜景')) return 'scene_night'
+  if (name.includes('scene') || name.includes('场景') || name.includes('city') || name.includes('户外')) return 'scene_outdoor'
   if (asset.assetType === 'AUDIO') {
     if (name.includes('bgm') || name.includes('music') || name.includes('背景')) return 'bgm'
     if (name.includes('ref') || name.includes('reference')) return 'reference_audio'
@@ -501,29 +518,12 @@ function inferRoleFromAsset(asset: AssetItem) {
     if (name.includes('subtitle') || name.includes('字幕')) return 'subtitle'
     return 'voice_script'
   }
+  if (name.includes('front') || name.includes('car') || name.includes('车头') || name.includes('正面') || name.includes('外观')) return 'car_exterior_front'
   return 'car_exterior_front'
 }
 
 function normalizeRole(value: string | null | undefined): QuickRenderAssetRole | '' {
-  const normalized = String(value || '').trim().toLowerCase().replace(/[\s-]+/g, '_')
-  const aliases: Record<string, QuickRenderAssetRole> = {
-    voice: 'voiceover',
-    voice_over: 'voiceover',
-    tts: 'voiceover',
-    music: 'bgm',
-    background_music: 'bgm',
-    storyboard: 'storyboard_json',
-    benchmark: 'benchmark_json',
-    script: 'voice_script',
-    subtitle_text: 'subtitle',
-    car_bundle: 'car_model_bundle',
-    model_bundle: 'car_model_bundle',
-    host: 'host_image',
-    avatar: 'host_image',
-    digital_human: 'host_image',
-    reference: 'reference_video',
-  }
-  const role = aliases[normalized] || normalized
+  const role = normalizeWorkflowAssetRole(value)
   return categories.some((category) => category.roles.some((option) => option.value === role))
     ? role as QuickRenderAssetRole
     : ''

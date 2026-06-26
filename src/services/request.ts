@@ -124,6 +124,13 @@ function timeoutMessage(url: string, timeoutMs: number) {
   return `请求超时（${seconds}秒）：${url}\n请稍后重试；若持续出现，请检查后端接口耗时、网关超时或浏览器 Network/CORS 报错。`
 }
 
+function isAbortError(error: unknown) {
+  return (
+    (typeof DOMException !== 'undefined' && error instanceof DOMException && error.name === 'AbortError') ||
+    (error instanceof Error && error.name === 'AbortError')
+  )
+}
+
 export async function request<T>(path: string, init?: AuthRequestInit): Promise<T> {
   const apiPath = normalizeApiPath(path)
   const url = `${API_BASE_URL}${apiPath}`
@@ -170,8 +177,11 @@ export async function request<T>(path: string, init?: AuthRequestInit): Promise<
     })
     text = await response.text()
   } catch (error) {
-    if (timedOut || (error instanceof DOMException && error.name === 'AbortError')) {
+    if (timedOut) {
       throw new Error(timeoutMessage(url, effectiveTimeoutMs))
+    }
+    if (isAbortError(error)) {
+      throw error
     }
     const pageProtocol = typeof window !== 'undefined' ? window.location.protocol : ''
     const mixedContentHint =

@@ -508,6 +508,11 @@ import {
 } from '../../services/carSalesPlanTaskStore'
 import { newVideoIdempotencyKey, quickRenderVideo } from '../../services/videoApi'
 import { cancelTask } from '../../services/taskApi'
+import { loadCarSalesPreferences } from '../../services/systemWorkspaceStore'
+import {
+  normalizeCarNativeSpeechStyle,
+  normalizeCarNativeVoiceStyle,
+} from '../../constants/carSalesVoiceStyles'
 import { useAuthRequired } from '../../composables/useAuthRequired'
 import type { AssetItem, AssetType } from '../../types/assetTypes'
 import type { QuickRenderAssetRole } from '../../types/videoTypes'
@@ -535,6 +540,7 @@ import {
 } from './carSalesPlanDraft'
 
 const DEFAULT_CAR_SALES_MODEL = 'doubao-seedance-2-0-pro-250528'
+const carSalesPreferences = loadCarSalesPreferences()
 
 interface SelectedAsset {
   asset: AssetItem
@@ -560,6 +566,7 @@ interface ImportedRenderConfig {
   nativeVoiceLanguage?: string
   nativeVoiceStyle?: string
   nativeSpeechStyle?: string
+  autoTtsVoiceId?: number | null
   burnInSubtitle?: boolean
   audioPolicy?: CarSalesPlanDraft['audioPolicy']
   model?: string
@@ -634,9 +641,13 @@ const CAR_IMAGE_ROLE_OPTIONS = [
   { value: 'car_interior_dashboard', label: '内饰中控' },
   { value: 'car_interior_front_seat', label: '内饰前排' },
   { value: 'car_interior_back_seat', label: '内饰后排' },
+  { value: 'car_interior_steering', label: '方向盘/中控' },
+  { value: 'car_interior_trunk', label: '后备箱' },
+  { value: 'car_detail_sunroof', label: '天窗细节' },
   { value: 'car_detail_light', label: '车灯细节' },
   { value: 'car_detail_wheel', label: '轮毂细节' },
   { value: 'car_detail_logo', label: '车标细节' },
+  { value: 'car_detail_seat_material', label: '座椅材质' },
 ]
 const CAR_SCENE_REFERENCE_ROLES: QuickRenderAssetRole[] = [
   'scene_showroom',
@@ -656,14 +667,57 @@ const ROLE_LABEL_OPTIONS: Array<{ value: QuickRenderAssetRole; label: string }> 
   ...CAR_IMAGE_ROLE_OPTIONS.map((item) => ({ value: item.value as QuickRenderAssetRole, label: item.label })),
   ...CAR_SCENE_IMAGE_ROLE_OPTIONS.map((item) => ({ value: item.value as QuickRenderAssetRole, label: item.label })),
   ...CAR_VOICE_AUDIO_ROLE_OPTIONS.map((item) => ({ value: item.value as QuickRenderAssetRole, label: item.label })),
-  { value: 'car_interior_steering', label: '方向盘/中控' },
-  { value: 'car_interior_trunk', label: '后备箱' },
-  { value: 'car_detail_sunroof', label: '天窗细节' },
-  { value: 'car_detail_seat_material', label: '座椅材质' },
   { value: 'scene_material_bundle', label: '场景素材包' },
   { value: 'subtitle', label: '字幕文件' },
 ]
 const SUPPORTED_ASSET_ROLES = new Set(ROLE_LABEL_OPTIONS.map((item) => item.value))
+const ASSET_ROLE_ALIASES: Record<string, QuickRenderAssetRole> = {
+  front: 'car_exterior_front',
+  exterior_front: 'car_exterior_front',
+  car_front: 'car_exterior_front',
+  side: 'car_exterior_side',
+  exterior_side: 'car_exterior_side',
+  rear: 'car_exterior_rear',
+  back: 'car_exterior_rear',
+  exterior_rear: 'car_exterior_rear',
+  '45': 'car_exterior_45',
+  '45_degree': 'car_exterior_45',
+  car_exterior_45_degree: 'car_exterior_45',
+  dashboard: 'car_interior_dashboard',
+  interior: 'car_interior_dashboard',
+  interior_dashboard: 'car_interior_dashboard',
+  front_seat: 'car_interior_front_seat',
+  back_seat: 'car_interior_back_seat',
+  rear_seat: 'car_interior_back_seat',
+  steering: 'car_interior_steering',
+  steering_wheel: 'car_interior_steering',
+  instrument: 'car_interior_dashboard',
+  dashboard_wheel: 'car_interior_dashboard',
+  trunk: 'car_interior_trunk',
+  boot: 'car_interior_trunk',
+  sunroof: 'car_detail_sunroof',
+  panoramic_roof: 'car_detail_sunroof',
+  light: 'car_detail_light',
+  headlight: 'car_detail_light',
+  wheel: 'car_detail_wheel',
+  logo: 'car_detail_logo',
+  seat: 'car_detail_seat_material',
+  seat_material: 'car_detail_seat_material',
+  material: 'car_detail_seat_material',
+  showroom: 'scene_showroom',
+  dealership: 'scene_showroom',
+  scene: 'scene_showroom',
+  outdoor: 'scene_outdoor',
+  city: 'scene_outdoor',
+  scene_outdoor_city: 'scene_outdoor',
+  road: 'scene_road',
+  mountain: 'scene_road',
+  highway: 'scene_road',
+  night: 'scene_night',
+  store_night: 'scene_night',
+  host: 'host_image',
+  avatar: 'host_image',
+}
 const ASSET_REUSE_GENERATION_ROLES = new Set<QuickRenderAssetRole>(ROLE_LABEL_OPTIONS.map((item) => item.value))
 const SINGLETON_ROLE_GROUPS: QuickRenderAssetRole[][] = [
   ['car_model_bundle'],
@@ -838,8 +892,9 @@ function roleLabel(role: QuickRenderAssetRole) {
 
 function supportedRole(value: string | null | undefined): QuickRenderAssetRole | '' {
   const normalized = String(value || '').trim().toLowerCase().replace(/[\s-]+/g, '_')
-  return SUPPORTED_ASSET_ROLES.has(normalized as QuickRenderAssetRole)
-    ? normalized as QuickRenderAssetRole
+  const role = ASSET_ROLE_ALIASES[normalized] || normalized
+  return SUPPORTED_ASSET_ROLES.has(role as QuickRenderAssetRole)
+    ? role as QuickRenderAssetRole
     : ''
 }
 
@@ -1422,8 +1477,9 @@ function buildImportedRenderConfig(input: Record<string, unknown>): ImportedRend
     subtitleMode: normalizeImportedSubtitleMode(input.subtitleMode),
     subtitleLanguage: stringValue(input.subtitleLanguage) || undefined,
     nativeVoiceLanguage: normalizeImportedVoiceLanguage(input.nativeVoiceLanguage) || undefined,
-    nativeVoiceStyle: stringValue(input.nativeVoiceStyle) || undefined,
-    nativeSpeechStyle: stringValue(input.nativeSpeechStyle) || undefined,
+    nativeVoiceStyle: normalizeCarNativeVoiceStyle(stringValue(input.nativeVoiceStyle)),
+    nativeSpeechStyle: normalizeCarNativeSpeechStyle(stringValue(input.nativeSpeechStyle)),
+    autoTtsVoiceId: normalizeImportedNumber(input.autoTtsVoiceId, 1, 999999999) || undefined,
     burnInSubtitle: typeof input.burnInSubtitle === 'boolean' ? input.burnInSubtitle : undefined,
     audioPolicy: normalizeImportedAudioPolicy(input.audioPolicy),
     model: normalizeImportedModel(input.model),
@@ -1787,8 +1843,13 @@ async function buildAssetReusePlanDraft(): Promise<CarSalesPlanDraft> {
     subtitleMode: importedRenderConfig.value.subtitleMode || 'auto',
     subtitleLanguage: importedRenderConfig.value.subtitleLanguage || voiceLanguage,
     nativeVoiceLanguage: voiceLanguage,
-    nativeVoiceStyle: importedRenderConfig.value.nativeVoiceStyle || 'natural_sales',
-    nativeSpeechStyle: importedRenderConfig.value.nativeSpeechStyle || 'balanced',
+    nativeVoiceStyle: normalizeCarNativeVoiceStyle(
+      importedRenderConfig.value.nativeVoiceStyle || carSalesPreferences.nativeVoiceStyle,
+    ),
+    nativeSpeechStyle: normalizeCarNativeSpeechStyle(
+      importedRenderConfig.value.nativeSpeechStyle || carSalesPreferences.nativeSpeechStyle,
+    ),
+    autoTtsVoiceId: importedRenderConfig.value.autoTtsVoiceId || carSalesPreferences.preferredVoiceId,
     burnInSubtitle: importedRenderConfig.value.burnInSubtitle ?? true,
     audioPolicy: importedAudioPolicy || inferredAudioPolicy,
     model: importedRenderConfig.value.model || DEFAULT_CAR_SALES_MODEL,

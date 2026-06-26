@@ -88,18 +88,24 @@
             <label class="system-field">
               <span>口播风格</span>
               <select v-model="preferences.nativeVoiceStyle">
-                <option value="natural_sales">自然销售</option>
-                <option value="warm_female">温暖女声</option>
-                <option value="steady_male">稳重男声</option>
-                <option value="energetic">热情促销</option>
+                <optgroup label="女声">
+                  <option v-for="item in femaleVoiceStyleOptions" :key="item.value" :value="item.value">
+                    {{ item.label }}
+                  </option>
+                </optgroup>
+                <optgroup label="男声">
+                  <option v-for="item in maleVoiceStyleOptions" :key="item.value" :value="item.value">
+                    {{ item.label }}
+                  </option>
+                </optgroup>
               </select>
             </label>
             <label class="system-field">
               <span>讲述节奏</span>
               <select v-model="preferences.nativeSpeechStyle">
-                <option value="balanced">均衡</option>
-                <option value="fast">偏快</option>
-                <option value="calm">舒缓</option>
+                <option v-for="item in speechStyleOptions" :key="item.value" :value="item.value">
+                  {{ item.label }}
+                </option>
               </select>
             </label>
           </div>
@@ -218,6 +224,10 @@ import { computed, onMounted, ref } from 'vue'
 import { getAvatars } from '../../services/avatarApi'
 import { getVoicePresets } from '../../services/voiceApi'
 import {
+  CAR_NATIVE_SPEECH_STYLE_OPTIONS,
+  CAR_NATIVE_VOICE_STYLE_OPTIONS,
+} from '../../constants/carSalesVoiceStyles'
+import {
   loadCarSalesPreferences,
   resetCarSalesPreferences,
   saveCarSalesPreferences,
@@ -250,6 +260,9 @@ const voices = ref<VoicePresetItem[]>([])
 const assetLoading = ref(false)
 const loadError = ref('')
 const savedMessage = ref('')
+const femaleVoiceStyleOptions = CAR_NATIVE_VOICE_STYLE_OPTIONS.filter((item) => item.gender === 'female')
+const maleVoiceStyleOptions = CAR_NATIVE_VOICE_STYLE_OPTIONS.filter((item) => item.gender === 'male')
+const speechStyleOptions = CAR_NATIVE_SPEECH_STYLE_OPTIONS
 
 const subtitleModeLabel = computed(() => {
   const map: Record<string, string> = {

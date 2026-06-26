@@ -193,6 +193,10 @@ export interface QuickRenderRequest {
   nativeVoiceLanguage?: string
   nativeVoiceStyle?: string
   nativeSpeechStyle?: string
+  autoTtsVoiceId?: number
+  autoTtsSpeed?: number
+  autoTtsVolume?: number
+  autoTtsPitch?: number
   burnInSubtitle: boolean
   customSubtitle?: string
   finalVoiceText?: string

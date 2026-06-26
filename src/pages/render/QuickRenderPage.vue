@@ -441,6 +441,10 @@ import {
   type CarSalesGenerationPreferences,
 } from '../../services/systemWorkspaceStore'
 import {
+  normalizeCarNativeSpeechStyle,
+  normalizeCarNativeVoiceStyle,
+} from '../../constants/carSalesVoiceStyles'
+import {
   getLatestPendingCarSalesPlanTask,
   getPendingCarSalesPlanTask,
   isPendingCarSalesRenderTaskTerminal,
@@ -479,6 +483,7 @@ import {
   enrichStoryboardWithDigitalHumanContext,
   sanitizePlanScript,
   shouldSuppressCarSalesVoice,
+  shouldUseUploadedCarSalesVoice,
   syncStoryboardNarrationWithScript,
   type AiPlanPreview,
   type AiPlanStoryboardShot,
@@ -578,13 +583,17 @@ const roleOptions: Array<{ value: QuickRenderAssetRole; label: string }> = [
   { value: 'car_exterior_front', label: '车头外观' },
   { value: 'car_exterior_side', label: '车侧外观' },
   { value: 'car_exterior_rear', label: '车尾外观' },
+  { value: 'car_exterior_45', label: '45度外观' },
   { value: 'car_interior_dashboard', label: '内饰中控' },
   { value: 'car_interior_front_seat', label: '前排座椅' },
   { value: 'car_interior_back_seat', label: '后排座椅' },
+  { value: 'car_interior_steering', label: '方向盘' },
+  { value: 'car_interior_trunk', label: '后备箱' },
   { value: 'car_detail_sunroof', label: '天窗细节' },
   { value: 'car_detail_light', label: '车灯细节' },
   { value: 'car_detail_wheel', label: '轮毂细节' },
   { value: 'car_detail_logo', label: '车标细节' },
+  { value: 'car_detail_seat_material', label: '座椅材质' },
   { value: 'scene_showroom', label: '展厅场景' },
   { value: 'scene_outdoor', label: '户外场景' },
   { value: 'scene_road', label: '道路场景' },
@@ -640,11 +649,17 @@ const vehicleUploadRoles: QuickRenderAssetRole[] = [
   'car_exterior_front',
   'car_exterior_side',
   'car_exterior_rear',
+  'car_exterior_45',
   'car_interior_dashboard',
+  'car_interior_front_seat',
   'car_interior_back_seat',
+  'car_interior_steering',
+  'car_interior_trunk',
+  'car_detail_sunroof',
   'car_detail_wheel',
   'car_detail_light',
   'car_detail_logo',
+  'car_detail_seat_material',
 ]
 const sellingPointTemplates: SellingPointTemplate[] = [
   {
@@ -798,8 +813,8 @@ function createDefaultAdvancedSettings(preferences: CarSalesGenerationPreference
     bgmStyle: 'auto',
     videoStyle: preferences.videoStyle,
     tone: 'professional',
-    nativeVoiceStyle: preferences.nativeVoiceStyle,
-    nativeSpeechStyle: preferences.nativeSpeechStyle,
+    nativeVoiceStyle: normalizeCarNativeVoiceStyle(preferences.nativeVoiceStyle),
+    nativeSpeechStyle: normalizeCarNativeSpeechStyle(preferences.nativeSpeechStyle),
     model: preferences.model,
     generateCover: true,
     generateTitle: true,
@@ -869,6 +884,13 @@ const selectedBgmMaterial = computed(() => materials.value.find((item) => item.r
 const selectedVoiceMaterial = computed(() =>
   materials.value.find((item) => item.role === 'voiceover' || item.role === 'reference_audio') || null,
 )
+function shouldUseUploadedVoiceForAiSmart() {
+  return shouldUseUploadedCarSalesVoice({
+    assets: quickPlanDraftAssets(),
+    audioPolicy: audioPolicy.value,
+    videoType: advancedSettings.value.videoType,
+  })
+}
 const selectedHostMaterial = computed(() =>
   materials.value.find((item) => item.role === 'host_image' || item.role === 'host_video') || null,
 )
@@ -2334,9 +2356,13 @@ async function prepareAiPlanPreview() {
   const sourceText = buildPlanSourceText()
   const estimate = await fetchPlanBillingEstimate(warnings)
   const shouldUseLocalPlanOnly = estimate?.enoughBalance === false
+  const useUploadedVoice = shouldUseUploadedVoiceForAiSmart()
   let storyboard: AiPlanStoryboardShot[] = []
 
-  if (shouldUseLocalPlanOnly) {
+  if (useUploadedVoice) {
+    const warning = '已检测到上传口播音频，AI智能创作将跳过文案生成，成片口播以该音频为准。'
+    if (!warnings.includes(warning)) warnings.push(warning)
+  } else if (shouldUseLocalPlanOnly) {
     scriptFallback = true
     storyboardFallback = true
     warnings.push('当前积分余额不足，已跳过 AI 文案与分镜接口，使用本地方案预览。')
@@ -2373,10 +2399,15 @@ async function prepareAiPlanPreview() {
   if (!storyboard.length) {
     storyboard = buildFallbackStoryboard(script)
   }
+  if (useUploadedVoice) {
+    storyboard = clearAiPlanStoryboardNarration(storyboard)
+  }
   const digitalHumanContext = buildAiSmartDigitalHumanContext(script, storyboard)
   const scriptBeforeDigitalHumanEnrichment = script
-  script = enrichScriptWithDigitalHumanContext(script, digitalHumanContext)
-  if (script !== scriptBeforeDigitalHumanEnrichment) {
+  if (!useUploadedVoice) {
+    script = enrichScriptWithDigitalHumanContext(script, digitalHumanContext)
+  }
+  if (!useUploadedVoice && script !== scriptBeforeDigitalHumanEnrichment) {
     storyboard = syncStoryboardNarrationWithScript(storyboard, script)
   }
   const storyboardBeforeDigitalHumanEnrichment = storyboard
@@ -2385,6 +2416,9 @@ async function prepareAiPlanPreview() {
       if (!warnings.includes(warning)) warnings.push(warning)
     })
   storyboard = enrichStoryboardWithDigitalHumanContext(storyboard, digitalHumanContext)
+  if (useUploadedVoice) {
+    storyboard = clearAiPlanStoryboardNarration(storyboard)
+  }
 
   planPreview.value = {
     script,
@@ -2441,6 +2475,10 @@ function storyboardNarrationScript(storyboard: AiPlanStoryboardShot[]) {
     .map((shot) => normalizeNarrationText(shot.narration || ''))
     .filter(Boolean)
     .join('\n')
+}
+
+function clearAiPlanStoryboardNarration(storyboard: AiPlanStoryboardShot[]) {
+  return storyboard.map((shot) => ({ ...shot, narration: '' }))
 }
 
 function confirmAiPlanAndSubmit() {
@@ -2544,7 +2582,10 @@ function buildAiSmartPlanDraft(finalVoiceTextForRequest: string, plan: AiPlanPre
   const advancedFields = buildQuickAdvancedRequestFields()
   const draftAudioPolicy = audioPolicy.value
   const draftVideoType = advancedFields.videoType
-  const script = shouldSuppressCarSalesVoice({ audioPolicy: draftAudioPolicy, videoType: draftVideoType })
+  const useUploadedVoice = shouldUseUploadedVoiceForAiSmart()
+  const script = useUploadedVoice
+    ? ''
+    : shouldSuppressCarSalesVoice({ audioPolicy: draftAudioPolicy, videoType: draftVideoType })
     ? plan.script
     : finalVoiceTextForRequest || plan.script
   return {
@@ -2560,6 +2601,7 @@ function buildAiSmartPlanDraft(finalVoiceTextForRequest: string, plan: AiPlanPre
     nativeVoiceLanguage: voiceLanguage.value,
     nativeVoiceStyle: advancedSettings.value.nativeVoiceStyle,
     nativeSpeechStyle: advancedSettings.value.nativeSpeechStyle,
+    autoTtsVoiceId: carSalesPreferences.preferredVoiceId,
     burnInSubtitle: subtitleMode.value !== 'off' && advancedSettings.value.burnInSubtitle,
     customSubtitle: subtitleMode.value === 'upload'
       ? customSubtitleText.value || uploadedSubtitleText.value || undefined
@@ -2593,13 +2635,14 @@ function buildQuickRenderPayload(finalVoiceTextForRequest: string, baseRequest?:
   if (!planPreview.value) {
     throw new Error('请先生成并确认文案与分镜；如果生成失败，请重新生成，或从资产中心选择可用文案/分镜。')
   }
+  const useUploadedVoice = shouldUseUploadedVoiceForAiSmart()
   const voiceTextForRequest = shouldSuppressCarSalesVoice({
     audioPolicy: audioPolicy.value,
     videoType: advancedSettings.value.videoType,
-  }) ? '' : finalVoiceTextForRequest
+  }) || useUploadedVoice ? '' : finalVoiceTextForRequest
   const plan: AiPlanPreview = {
     ...planPreview.value,
-    script: voiceTextForRequest || planPreview.value.script,
+    script: useUploadedVoice ? '' : voiceTextForRequest || planPreview.value.script,
     storyboard: storyboardForRequest() || planPreview.value.storyboard,
     totalDuration: totalDuration.value,
     segmentCount: segmentCount.value,
@@ -2618,13 +2661,14 @@ async function buildQuickRenderPayloadForSubmit(
   if (!planPreview.value) {
     throw new Error('Plan preview is required before submit')
   }
+  const useUploadedVoice = shouldUseUploadedVoiceForAiSmart()
   const voiceTextForRequest = shouldSuppressCarSalesVoice({
     audioPolicy: audioPolicy.value,
     videoType: advancedSettings.value.videoType,
-  }) ? '' : finalVoiceTextForRequest
+  }) || useUploadedVoice ? '' : finalVoiceTextForRequest
   const plan: AiPlanPreview = {
     ...planPreview.value,
-    script: voiceTextForRequest || planPreview.value.script,
+    script: useUploadedVoice ? '' : voiceTextForRequest || planPreview.value.script,
     storyboard: storyboardForRequest() || planPreview.value.storyboard,
     totalDuration: totalDuration.value,
     segmentCount: segmentCount.value,
@@ -3218,7 +3262,7 @@ async function submitQuickRender() {
   const suppressVoiceForSubmit = shouldSuppressCarSalesVoice({
     audioPolicy: audioPolicy.value,
     videoType: advancedSettings.value.videoType,
-  })
+  }) || shouldUseUploadedVoiceForAiSmart()
   const planScript = planPreview.value?.script.trim() || ''
   const finalNarration = suppressVoiceForSubmit || planScript ? '' : await ensureNarrationReadyForSubmit()
   if (finalNarration == null) {
@@ -3268,9 +3312,10 @@ function isAiPlanPreviewReadyForSubmit() {
     audioPolicy: audioPolicy.value,
     videoType: advancedSettings.value.videoType,
   })
+  const useUploadedVoice = shouldUseUploadedVoiceForAiSmart()
   return Boolean(
     plan
-    && (suppressVoice || plan.script.trim())
+    && (suppressVoice || useUploadedVoice || plan.script.trim())
     && plan.storyboard.some((shot) => shot.visual?.trim() || shot.narration?.trim()),
   )
 }
@@ -3584,18 +3629,24 @@ function inferRoleFromNameAndMime(nameText: string, mimeText: string | null | un
   }
   if (mime.startsWith('image/')) {
     if (name.includes('host') || name.includes('avatar') || name.includes('主播') || name.includes('数字人')) return 'host_image'
-    if (name.includes('side') || name.includes('侧')) return 'car_exterior_side'
-    if (name.includes('rear') || name.includes('back') || name.includes('尾')) return 'car_exterior_rear'
-    if (name.includes('interior') || name.includes('内饰') || name.includes('dashboard')) return 'car_interior_dashboard'
+    if (name.includes('side') || name.includes('侧面') || name.includes('车侧')) return 'car_exterior_side'
+    if (name.includes('rear') || name.includes('back') || name.includes('尾部') || name.includes('车尾') || name.includes('背面')) return 'car_exterior_rear'
+    if (name.includes('45')) return 'car_exterior_45'
+    if (name.includes('dashboard') || name.includes('interior') || name.includes('内饰') || name.includes('中控') || name.includes('仪表')) return 'car_interior_dashboard'
+    if (name.includes('front_seat') || name.includes('前排')) return 'car_interior_front_seat'
+    if (name.includes('back_seat') || name.includes('rear_seat') || name.includes('后排')) return 'car_interior_back_seat'
+    if (name.includes('steering') || name.includes('方向盘')) return 'car_interior_steering'
+    if (name.includes('trunk') || name.includes('后备箱')) return 'car_interior_trunk'
     if (name.includes('sunroof') || name.includes('天窗') || name.includes('全景天幕')) return 'car_detail_sunroof'
-    if (name.includes('wheel') || name.includes('轮')) return 'car_detail_wheel'
-    if (name.includes('logo') || name.includes('标')) return 'car_detail_logo'
+    if (name.includes('wheel') || name.includes('轮毂') || name.includes('轮胎')) return 'car_detail_wheel'
+    if (name.includes('logo') || name.includes('车标') || name.includes('标识')) return 'car_detail_logo'
     if (name.includes('light') || name.includes('灯')) return 'car_detail_light'
-    if (name.includes('showroom') || name.includes('展厅')) return 'scene_showroom'
-    if (name.includes('road') || name.includes('道路')) return 'scene_road'
-    if (name.includes('night') || name.includes('夜景') || name.includes('门店')) return 'scene_night'
-    if (name.includes('outdoor') || name.includes('city') || name.includes('户外') || name.includes('城市') || name.includes('场景')) return 'scene_outdoor'
-    if (name.includes('car') || name.includes('front') || name.includes('车')) return 'car_exterior_front'
+    if (name.includes('seat') || name.includes('座椅') || name.includes('材质')) return 'car_detail_seat_material'
+    if (name.includes('showroom') || name.includes('展厅') || name.includes('门店')) return 'scene_showroom'
+    if (name.includes('road') || name.includes('highway') || name.includes('山路') || name.includes('公路') || name.includes('道路')) return 'scene_road'
+    if (name.includes('night') || name.includes('夜景')) return 'scene_night'
+    if (name.includes('outdoor') || name.includes('city') || name.includes('户外') || name.includes('城市')) return 'scene_outdoor'
+    if (name.includes('car') || name.includes('front') || name.includes('车头') || name.includes('正面') || name.includes('外观')) return 'car_exterior_front'
     return 'scene_outdoor'
   }
   return 'material'
@@ -3639,6 +3690,49 @@ function normalizeQuickAssetRole(role: string | null | undefined): QuickRenderAs
     subtitle_text: 'subtitle',
     car_bundle: 'car_model_bundle',
     model_bundle: 'car_model_bundle',
+    front: 'car_exterior_front',
+    exterior_front: 'car_exterior_front',
+    car_front: 'car_exterior_front',
+    side: 'car_exterior_side',
+    exterior_side: 'car_exterior_side',
+    rear: 'car_exterior_rear',
+    back: 'car_exterior_rear',
+    exterior_rear: 'car_exterior_rear',
+    '45': 'car_exterior_45',
+    '45_degree': 'car_exterior_45',
+    car_exterior_45_degree: 'car_exterior_45',
+    interior: 'car_interior_dashboard',
+    dashboard: 'car_interior_dashboard',
+    interior_dashboard: 'car_interior_dashboard',
+    front_seat: 'car_interior_front_seat',
+    back_seat: 'car_interior_back_seat',
+    rear_seat: 'car_interior_back_seat',
+    steering: 'car_interior_steering',
+    steering_wheel: 'car_interior_steering',
+    instrument: 'car_interior_dashboard',
+    dashboard_wheel: 'car_interior_dashboard',
+    trunk: 'car_interior_trunk',
+    boot: 'car_interior_trunk',
+    sunroof: 'car_detail_sunroof',
+    panoramic_roof: 'car_detail_sunroof',
+    light: 'car_detail_light',
+    headlight: 'car_detail_light',
+    wheel: 'car_detail_wheel',
+    logo: 'car_detail_logo',
+    seat: 'car_detail_seat_material',
+    seat_material: 'car_detail_seat_material',
+    material: 'car_detail_seat_material',
+    showroom: 'scene_showroom',
+    dealership: 'scene_showroom',
+    scene: 'scene_showroom',
+    outdoor: 'scene_outdoor',
+    city: 'scene_outdoor',
+    scene_outdoor_city: 'scene_outdoor',
+    road: 'scene_road',
+    mountain: 'scene_road',
+    highway: 'scene_road',
+    night: 'scene_night',
+    store_night: 'scene_night',
     host: 'host_image',
     avatar: 'host_image',
     host_video_asset: 'host_video',

@@ -1,5 +1,12 @@
 export type SystemFavoriteKind = 'asset' | 'template' | 'avatar' | 'voice'
 
+import {
+  DEFAULT_CAR_NATIVE_SPEECH_STYLE,
+  DEFAULT_CAR_NATIVE_VOICE_STYLE,
+  normalizeCarNativeSpeechStyle,
+  normalizeCarNativeVoiceStyle,
+} from '../constants/carSalesVoiceStyles'
+
 export interface SystemFavoriteItem {
   kind: SystemFavoriteKind
   id: string
@@ -64,8 +71,8 @@ export const defaultCarSalesPreferences: CarSalesGenerationPreferences = {
   burnInSubtitle: true,
   audioPolicy: 'auto',
   videoStyle: 'realistic',
-  nativeVoiceStyle: 'natural_sales',
-  nativeSpeechStyle: 'balanced',
+  nativeVoiceStyle: DEFAULT_CAR_NATIVE_VOICE_STYLE,
+  nativeSpeechStyle: DEFAULT_CAR_NATIVE_SPEECH_STYLE,
   model: DEFAULT_CAR_SALES_MODEL,
   preferredSellingPointIds: [],
   preferredAvatarId: null,
@@ -196,8 +203,8 @@ export function loadCarSalesPreferences(): CarSalesGenerationPreferences {
     burnInSubtitle: typeof raw.burnInSubtitle === 'boolean' ? raw.burnInSubtitle : defaultCarSalesPreferences.burnInSubtitle,
     audioPolicy: literalIn(raw.audioPolicy, ['auto', 'none', 'voiceover', 'bgm', 'EXTERNAL_AUDIO', 'VIDEO_NATIVE_AUDIO', 'external_audio', 'video_native_audio'] as const, defaultCarSalesPreferences.audioPolicy),
     videoStyle: literalIn(raw.videoStyle, ['realistic', 'premium', 'energetic', 'family', 'tech'] as const, defaultCarSalesPreferences.videoStyle),
-    nativeVoiceStyle: typeof raw.nativeVoiceStyle === 'string' && raw.nativeVoiceStyle ? raw.nativeVoiceStyle : defaultCarSalesPreferences.nativeVoiceStyle,
-    nativeSpeechStyle: typeof raw.nativeSpeechStyle === 'string' && raw.nativeSpeechStyle ? raw.nativeSpeechStyle : defaultCarSalesPreferences.nativeSpeechStyle,
+    nativeVoiceStyle: normalizeCarNativeVoiceStyle(raw.nativeVoiceStyle),
+    nativeSpeechStyle: normalizeCarNativeSpeechStyle(raw.nativeSpeechStyle),
     model: typeof raw.model === 'string' && raw.model && raw.model !== 'auto'
       ? raw.model
       : defaultCarSalesPreferences.model,
@@ -220,6 +227,8 @@ function loadablePreferences(preferences: CarSalesGenerationPreferences): CarSal
   return {
     ...loadCarSalesPreferences(),
     ...preferences,
+    nativeVoiceStyle: normalizeCarNativeVoiceStyle(preferences.nativeVoiceStyle),
+    nativeSpeechStyle: normalizeCarNativeSpeechStyle(preferences.nativeSpeechStyle),
     preferredSellingPointIds: preferences.preferredSellingPointIds.slice(0, 6),
     preferredAvatarId: numberOrNull(preferences.preferredAvatarId),
     preferredVoiceId: numberOrNull(preferences.preferredVoiceId),

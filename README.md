@@ -94,9 +94,9 @@ VITE_API_BASE_URL=http://127.0.0.1:8080/api/v1
 如果不配置：
 
 - 开发环境默认请求 `http://127.0.0.1:8080/api/v1`
-- 生产构建默认请求 `https://huashuohouduan.onrender.com/api/v1`
+- 生产构建默认请求同域 `/api/v1`，由线上 Nginx 转发到后端容器
 
-生产部署建议显式配置 `VITE_API_BASE_URL`，避免请求到错误后端。
+生产部署建议显式配置 `VITE_API_BASE_URL=/api/v1`，避免请求到错误后端。可选配置 `VITE_API_TIMEOUT_MS` 调整普通接口默认超时，AI 文案、分镜和视频分析类长耗时接口会在代码中单独放宽。
 
 ## 可用脚本
 
@@ -227,4 +227,3 @@ Vite 构建可能提示部分 chunk 超过 500KB，这是体积优化建议，�
 ### 本地登录后接口仍返回 401
 
 清理浏览器 localStorage 后重新登录，或确认后端没有切换数据库导致旧 token 对应 session 不存在。
-

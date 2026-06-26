@@ -930,6 +930,11 @@ import {
 import { cancelTask } from '../../services/taskApi'
 import { trackTaskResult } from '../../services/taskRealtime'
 import { newVideoIdempotencyKey, quickRenderVideo } from '../../services/videoApi'
+import { loadCarSalesPreferences } from '../../services/systemWorkspaceStore'
+import {
+  normalizeCarNativeSpeechStyle,
+  normalizeCarNativeVoiceStyle,
+} from '../../constants/carSalesVoiceStyles'
 import BillingEstimateBanner from '../../components/business/BillingEstimateBanner.vue'
 import { useAuthRequired } from '../../composables/useAuthRequired'
 import { useBillingEstimate } from '../../composables/useBillingEstimate'
@@ -985,6 +990,7 @@ const parseEstimate = useBillingEstimate({ taskType: 'VIDEO_PARSE' })
 const router = useRouter()
 const route = useRoute()
 const { requireAuth } = useAuthRequired()
+const carSalesPreferences = loadCarSalesPreferences()
 
 const emit = defineEmits<{
   continue: []
@@ -1216,9 +1222,9 @@ function createDefaultBenchmarkAdvancedSettings(): CarSalesAdvancedSettings {
     bgmStyle: 'auto',
     videoStyle: 'realistic',
     tone: 'professional',
-    nativeVoiceStyle: 'natural_sales',
-    nativeSpeechStyle: 'balanced',
-    model: DEFAULT_CAR_SALES_MODEL,
+    nativeVoiceStyle: normalizeCarNativeVoiceStyle(carSalesPreferences.nativeVoiceStyle),
+    nativeSpeechStyle: normalizeCarNativeSpeechStyle(carSalesPreferences.nativeSpeechStyle),
+    model: carSalesPreferences.model || DEFAULT_CAR_SALES_MODEL,
     generateCover: true,
     generateTitle: true,
     generateDescription: true,
@@ -2567,6 +2573,7 @@ function buildBenchmarkPlanDraft(): CarSalesPlanDraft {
     audioPolicy: effectiveAudioPolicy,
     videoType: effectiveVideoType,
   })
+  const useUploadedVoice = Boolean(voiceAsset) && !suppressVoice
   const parseTaskId = (parse as { taskId?: number | string } | null)?.taskId
   const referenceVideoId = parseTaskId ? String(parseTaskId) : videoUrl.value.trim()
   const uploadedVideoId = localVideoFilePath.value || undefined
@@ -2576,6 +2583,7 @@ function buildBenchmarkPlanDraft(): CarSalesPlanDraft {
     videoUrl.value.trim() ? `参考链接：${videoUrl.value.trim()}` : '',
     `参考视频时长：${durationSeconds} 秒`,
     '文案只作为口播内容；分镜只控制镜头结构，ASR/文案不得改写镜头顺序。',
+    useUploadedVoice ? '用户已上传口播音频，解析/改写文案仅作为参考，不传入最终视频生成。' : '',
   ].filter(Boolean).join('\n')
 
   return {
@@ -2584,7 +2592,7 @@ function buildBenchmarkPlanDraft(): CarSalesPlanDraft {
     prompt,
     referenceUrl: videoUrl.value.trim(),
     coverUrl: videoCoverUrl.value,
-    script: suppressVoice ? '' : script,
+    script: suppressVoice || useUploadedVoice ? '' : script,
     storyboard,
     assets: [...benchmarkDraftAssets.value],
     aspectRatio: benchmarkAspectRatio.value,
@@ -2593,6 +2601,7 @@ function buildBenchmarkPlanDraft(): CarSalesPlanDraft {
     nativeVoiceLanguage: rewriteTargetLanguage.value === '英文' ? 'en-US' : 'zh-CN',
     nativeVoiceStyle: settings.nativeVoiceStyle,
     nativeSpeechStyle: settings.nativeSpeechStyle,
+    autoTtsVoiceId: carSalesPreferences.preferredVoiceId,
     burnInSubtitle: subtitleMode !== 'off' && settings.burnInSubtitle,
     customSubtitle: subtitleMode === 'upload' ? settings.customSubtitle.trim() : undefined,
     audioPolicy: effectiveAudioPolicy,
@@ -2634,12 +2643,14 @@ function buildBenchmarkPlanDraft(): CarSalesPlanDraft {
       `比例 ${benchmarkAspectRatio.value}`,
       `${durationSeconds} 秒`,
       benchmarkDurationNotice.value,
+      useUploadedVoice ? '上传口播' : '',
       suppressVoice ? '无口播' : '',
       settings.hostAppearanceEnabled ? '数字人出镜' : '',
       hasHeadline ? '大字报' : '',
     ].filter(Boolean),
     warnings: [
-      ...(!script && !suppressVoice ? ['当前没有解析/改写文案，请补充口播文案后再提交。'] : []),
+      ...(!script && !suppressVoice && !useUploadedVoice ? ['当前没有解析/改写文案，请补充口播文案后再提交。'] : []),
+      ...(useUploadedVoice ? ['已检测到上传口播音频，爆款解析文案只作为参考，不会传入视频生成。'] : []),
       ...(autoNoVoiceBenchmark ? ['未识别到口播文本，已按无口播对标视频处理，仅参考分镜结构。'] : []),
       ...(benchmarkDurationNotice.value ? [benchmarkDurationNotice.value] : []),
       ...(benchmarkDraftAssets.value.length ? [] : ['汽车销售生成至少需要 1 张车辆图片，请在确认生成前补充车辆素材。']),
@@ -2663,8 +2674,8 @@ function applyBenchmarkDraftSettings(draft: CarSalesPlanDraft) {
     audioPolicy: draft.audioPolicy,
     bgmStyle: (draft.bgmStyle as CarSalesAdvancedSettings['bgmStyle']) || 'auto',
     tone: (draft.tone as CarSalesAdvancedSettings['tone']) || 'professional',
-    nativeVoiceStyle: draft.nativeVoiceStyle || 'natural_sales',
-    nativeSpeechStyle: draft.nativeSpeechStyle || 'balanced',
+    nativeVoiceStyle: normalizeCarNativeVoiceStyle(draft.nativeVoiceStyle),
+    nativeSpeechStyle: normalizeCarNativeSpeechStyle(draft.nativeSpeechStyle),
     model: draft.model || 'auto',
     generateCover: draft.generateCover ?? true,
     generateTitle: draft.generateTitle ?? true,

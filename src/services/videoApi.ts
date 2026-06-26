@@ -23,7 +23,11 @@ import type { TaskItem } from '../types/taskTypes'
 
 interface VideoRequestOptions {
   signal?: AbortSignal
+  timeoutMs?: number
 }
+
+const AI_VIDEO_ANALYSIS_TIMEOUT_MS = 120000
+const AI_PLAN_REQUEST_TIMEOUT_MS = 120000
 
 function idempotencyHeaders(explicitKey?: string | null): Record<string, string> {
   const key =
@@ -62,6 +66,7 @@ export function analyzeVideoScript(videoUrl: string, options: VideoRequestOption
   return request<TaskItem>(`/video/script/analy?${qs}`, {
     method: 'POST',
     signal: options.signal,
+    timeoutMs: options.timeoutMs ?? AI_VIDEO_ANALYSIS_TIMEOUT_MS,
   })
 }
 
@@ -75,6 +80,7 @@ export function analyzeVideoScriptByUrl(videoUrl: string, platform?: string, opt
   return request<TaskItem>(`/video/script/url?${qs}`, {
     method: 'POST',
     signal: options.signal,
+    timeoutMs: options.timeoutMs ?? AI_VIDEO_ANALYSIS_TIMEOUT_MS,
   })
 }
 
@@ -166,6 +172,7 @@ export function generateCarSalesAiPlan(payload: CarSalesAiPlanRequest) {
   return request<CarSalesAiPlanResponse>('/video/car-sales/ai-plan', {
     method: 'POST',
     body: JSON.stringify(payload),
+    timeoutMs: AI_PLAN_REQUEST_TIMEOUT_MS,
   })
 }
 

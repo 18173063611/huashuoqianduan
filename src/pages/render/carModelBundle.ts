@@ -41,6 +41,7 @@ const ROLE_ALIASES: Record<string, string> = {
   exterior_rear: 'car_exterior_rear',
   '45': 'car_exterior_45',
   '45_degree': 'car_exterior_45',
+  car_exterior_45_degree: 'car_exterior_45',
   dashboard: 'car_interior_dashboard',
   interior: 'car_interior_dashboard',
   interior_dashboard: 'car_interior_dashboard',
@@ -49,6 +50,8 @@ const ROLE_ALIASES: Record<string, string> = {
   back_seat: 'car_interior_back_seat',
   steering: 'car_interior_steering',
   steering_wheel: 'car_interior_steering',
+  instrument: 'car_interior_dashboard',
+  dashboard_wheel: 'car_interior_dashboard',
   trunk: 'car_interior_trunk',
   boot: 'car_interior_trunk',
   sunroof: 'car_detail_sunroof',
@@ -56,14 +59,23 @@ const ROLE_ALIASES: Record<string, string> = {
   light: 'car_detail_light',
   headlight: 'car_detail_light',
   wheel: 'car_detail_wheel',
+  logo: 'car_detail_logo',
   seat: 'car_detail_seat_material',
   seat_material: 'car_detail_seat_material',
+  material: 'car_detail_seat_material',
   showroom: 'scene_showroom',
   dealership: 'scene_showroom',
+  scene: 'scene_showroom',
   road: 'scene_road',
+  mountain: 'scene_road',
+  highway: 'scene_road',
   outdoor: 'scene_outdoor',
   city: 'scene_outdoor',
+  scene_outdoor_city: 'scene_outdoor',
   night: 'scene_night',
+  store_night: 'scene_night',
+  host: 'host_image',
+  avatar: 'host_image',
 }
 
 export function parseCarModelBundleRecord(
@@ -225,7 +237,9 @@ function imageUrlFromRecord(record: Record<string, unknown>) {
 function normalizeBundleRole(role: string) {
   const normalized = role.trim().toLowerCase().replace(/[\s-]+/g, '_')
   const aliased = ROLE_ALIASES[normalized] || normalized
-  return aliased.startsWith('car_') || aliased.startsWith('scene_') ? aliased : 'car_exterior_front'
+  return aliased.startsWith('car_') || aliased.startsWith('scene_') || aliased === 'host_image'
+    ? aliased
+    : 'car_exterior_front'
 }
 
 function normalizeOutputUrl(url: string, resolveUrl?: (url: string) => string) {

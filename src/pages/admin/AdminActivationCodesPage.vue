@@ -86,7 +86,7 @@
 import { computed, onMounted, reactive, ref, watch } from 'vue'
 import { ElMessage, ElMessageBox, type FormInstance, type FormRules } from 'element-plus'
 import { Plus, Refresh, Search } from '@element-plus/icons-vue'
-import { getAuthToken } from '../../services/request'
+import { API_BASE_URL, getAuthToken } from '../../services/request'
 
 interface ActivationCode {
   id: number
@@ -94,8 +94,8 @@ interface ActivationCode {
   status: number
 }
 
-const API_BASE = String(import.meta.env.VITE_API_BASE_URL || '').replace(/\/$/, '')
-const activationPath = '/activation/activate-codes'
+const API_BASE = API_BASE_URL.replace(/\/$/, '')
+const activationPath = '/admin/activation/activate-codes'
 
 const codes = ref<ActivationCode[]>([])
 const loading = ref(false)

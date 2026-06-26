@@ -1,6 +1,10 @@
 import { getBillingEstimate } from '../../services/creditApi'
 import { uploadMaterialAsset } from '../../services/assetApi'
 import { generateStoryboard, rewriteScript } from '../../services/scriptApi'
+import {
+  normalizeCarNativeSpeechStyle,
+  normalizeCarNativeVoiceStyle,
+} from '../../constants/carSalesVoiceStyles'
 import type { AssetItem, AssetType } from '../../types/assetTypes'
 import type { BillingEstimateResponse } from '../../types/creditTypes'
 import type { StoryboardShotItem } from '../../types/scriptTypes'
@@ -78,6 +82,10 @@ export interface CarSalesPlanDraft {
   nativeVoiceLanguage?: string
   nativeVoiceStyle?: string
   nativeSpeechStyle?: string
+  autoTtsVoiceId?: number | null
+  autoTtsSpeed?: number
+  autoTtsVolume?: number
+  autoTtsPitch?: number
   burnInSubtitle: boolean
   customSubtitle?: string
   audioPolicy: QuickRenderRequest['audioPolicy']
@@ -135,6 +143,17 @@ export function isNoVoiceCarSalesVideoType(videoType?: string | null) {
 export function shouldSuppressCarSalesVoice(draft: Pick<CarSalesPlanDraft, 'audioPolicy' | 'videoType'>) {
   return isNoVoiceCarSalesAudioPolicy(draft.audioPolicy)
     || isNoVoiceCarSalesVideoType(draft.videoType)
+}
+
+export function shouldUseUploadedCarSalesVoice(
+  draft: Pick<CarSalesPlanDraft, 'assets' | 'audioPolicy' | 'videoType'>,
+) {
+  return !shouldSuppressCarSalesVoice(draft)
+    && draft.assets.some((asset) => isUploadedVoiceAsset(asset))
+}
+
+function isUploadedVoiceAsset(asset?: Pick<CarSalesPlanDraftAsset, 'role'> | null) {
+  return asset?.role === 'voiceover' || asset?.role === 'reference_audio'
 }
 
 type DigitalHumanPlanContext = Pick<CarSalesPlanDraft,
@@ -366,17 +385,25 @@ export function planAssetFromAssetItem(
   }
 }
 
+function clearStoryboardNarration(storyboard: AiPlanStoryboardShot[]) {
+  return storyboard.map((shot) => ({ ...shot, narration: '' }))
+}
+
 export async function prepareCarSalesAiPlanPreview(draft: CarSalesPlanDraft): Promise<AiPlanPreview> {
   const warnings = [...(draft.warnings || [])]
   const estimate = await fetchPlanBillingEstimate(draft, warnings)
   const shouldUseLocalPlanOnly = estimate?.enoughBalance === false
+  const useUploadedVoice = shouldUseUploadedCarSalesVoice(draft)
 
   let scriptFallback = false
   let storyboardFallback = false
-  let script = sanitizePlanScript(draft.script?.trim() || '', draft.prompt)
+  let script = useUploadedVoice ? '' : sanitizePlanScript(draft.script?.trim() || '', draft.prompt)
   let scriptVersionId: number | null = null
 
-  if (shouldUseLocalPlanOnly) {
+  if (useUploadedVoice) {
+    const warning = '已检测到上传口播音频，跳过文案生成，成片口播以该音频为准。'
+    if (!warnings.includes(warning)) warnings.push(warning)
+  } else if (shouldUseLocalPlanOnly) {
     scriptFallback = true
     storyboardFallback = true
     warnings.push('当前积分余额不足，已跳过 AI 文案与分镜接口，使用本地方案预览。')
@@ -405,11 +432,15 @@ export async function prepareCarSalesAiPlanPreview(draft: CarSalesPlanDraft): Pr
     }
   }
 
-  const punctuationRewrite = await rewriteUnpunctuatedPlanScript(script, draft, warnings)
-  script = punctuationRewrite.script
-  scriptVersionId = punctuationRewrite.scriptVersionId || scriptVersionId
+  if (!useUploadedVoice) {
+    const punctuationRewrite = await rewriteUnpunctuatedPlanScript(script, draft, warnings)
+    script = punctuationRewrite.script
+    scriptVersionId = punctuationRewrite.scriptVersionId || scriptVersionId
+  }
   const scriptBeforeDigitalHumanEnrichment = script
-  script = enrichScriptWithDigitalHumanContext(script, draft)
+  if (!useUploadedVoice) {
+    script = enrichScriptWithDigitalHumanContext(script, draft)
+  }
 
   let storyboard = draft.storyboard?.length ? draft.storyboard : []
   if (!storyboard.length && !shouldUseLocalPlanOnly && scriptVersionId) {
@@ -426,13 +457,18 @@ export async function prepareCarSalesAiPlanPreview(draft: CarSalesPlanDraft): Pr
     storyboardFallback = true
     storyboard = buildFallbackStoryboard(script, draft)
   }
-  storyboard = bindStoryboardNarrationToScript(storyboard, script, draft)
+  storyboard = useUploadedVoice
+    ? clearStoryboardNarration(storyboard)
+    : bindStoryboardNarrationToScript(storyboard, script, draft)
   const storyboardBeforeDigitalHumanEnrichment = storyboard
   buildDigitalHumanPlanWarnings(draft, scriptBeforeDigitalHumanEnrichment, storyboardBeforeDigitalHumanEnrichment)
     .forEach((warning) => {
       if (!warnings.includes(warning)) warnings.push(warning)
     })
   storyboard = enrichStoryboardWithDigitalHumanContext(storyboard, draft)
+  if (useUploadedVoice) {
+    storyboard = clearStoryboardNarration(storyboard)
+  }
   storyboard = normalizeStoryboardForModelLimits(storyboard, draft, warnings)
   const effectiveSegmentCount = storyboard.length || draft.segmentCount
   const effectiveTotalDuration = storyboardDurationTotal(storyboard)
@@ -549,11 +585,14 @@ export function buildQuickRenderRequestFromPlanDraft(
   draft: CarSalesPlanDraft,
   plan: AiPlanPreview,
 ): QuickRenderRequest {
-  const script = plan.script.trim()
+  const useUploadedVoice = shouldUseUploadedCarSalesVoice(draft)
+  const script = useUploadedVoice ? '' : plan.script.trim()
   const model = normalizePlanModel(draft.model)
   const effectiveDraft = { ...draft, model }
   const normalizedPlanStoryboard = normalizeStoryboardForModelLimits(plan.storyboard, effectiveDraft)
-  const storyboard = syncStoryboardNarrationWithScript(normalizedPlanStoryboard, script, draft.prompt)
+  const storyboard = useUploadedVoice
+    ? clearStoryboardNarration(normalizedPlanStoryboard)
+    : syncStoryboardNarrationWithScript(normalizedPlanStoryboard, script, draft.prompt)
   const segmentCount = storyboard.length || draft.segmentCount
   const totalDuration = storyboardDurationTotal(storyboard)
     || draft.duration
@@ -562,10 +601,12 @@ export function buildQuickRenderRequestFromPlanDraft(
     Math.round(totalDuration / Math.max(1, segmentCount)) || draft.segmentDuration,
     model,
   )
-  const narrationText = storyboard
-    .map((shot) => sanitizePlanScript(shot.narration || '', draft.prompt))
-    .filter(Boolean)
-    .join('\n')
+  const narrationText = useUploadedVoice
+    ? ''
+    : storyboard
+      .map((shot) => sanitizePlanScript(shot.narration || '', draft.prompt))
+      .filter(Boolean)
+      .join('\n')
   const assetRoleBindings = buildPlanAssetRoleBindings(draft)
   const vehicleImageUrls = planBindingImageUrls(assetRoleBindings, false)
   const sceneImageUrls = planBindingImageUrls(assetRoleBindings, true)
@@ -590,12 +631,16 @@ export function buildQuickRenderRequestFromPlanDraft(
     subtitleMode: draft.subtitleMode,
     subtitleLanguage: draft.subtitleLanguage,
     nativeVoiceLanguage: draft.nativeVoiceLanguage || 'zh-CN',
-    nativeVoiceStyle: draft.nativeVoiceStyle || 'natural_sales',
-    nativeSpeechStyle: draft.nativeSpeechStyle || 'balanced',
+    nativeVoiceStyle: normalizeCarNativeVoiceStyle(draft.nativeVoiceStyle),
+    nativeSpeechStyle: normalizeCarNativeSpeechStyle(draft.nativeSpeechStyle),
+    autoTtsVoiceId: draft.autoTtsVoiceId || undefined,
+    autoTtsSpeed: draft.autoTtsSpeed,
+    autoTtsVolume: draft.autoTtsVolume,
+    autoTtsPitch: draft.autoTtsPitch,
     burnInSubtitle: draft.subtitleMode !== 'off' && draft.burnInSubtitle,
     customSubtitle: draft.subtitleMode === 'upload' ? draft.customSubtitle || undefined : undefined,
-    finalVoiceText: suppressVoice ? undefined : narrationText || script || undefined,
-    strictVoiceText: suppressVoice ? false : Boolean(narrationText || script),
+    finalVoiceText: suppressVoice || useUploadedVoice ? undefined : narrationText || script || undefined,
+    strictVoiceText: suppressVoice || useUploadedVoice ? false : Boolean(narrationText || script),
     audioPolicy: draft.audioPolicy,
     model,
     segmentCount,
@@ -603,7 +648,7 @@ export function buildQuickRenderRequestFromPlanDraft(
     generatedStoryboard: storyboard.map((shot) => ({
       index: shot.index,
       visual: shot.visual,
-      narration: shot.narration,
+      narration: useUploadedVoice ? '' : shot.narration,
       duration: shot.duration,
     })),
     goalText: buildGoalTextForRequest(draft, plan),
