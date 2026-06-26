@@ -1831,6 +1831,7 @@ async function buildAssetReusePlanDraft(): Promise<CarSalesPlanDraft> {
       storyboardAsset ? '已选分镜资产' : '',
       importedScript && !scriptAsset ? '已导入任务口播' : '',
       importedStoryboardShots.length > 0 && !storyboardAsset ? '已导入任务分镜' : '',
+      (importedRenderConfig.value.hostAppearanceEnabled ?? hostAppearanceEnabled.value) ? '数字人出镜' : '',
     ].filter(Boolean),
     warnings: hasVehicle ? [] : ['汽车销售生成至少需要 1 张车辆图片，请补充车辆素材后再确认生成。'],
   }

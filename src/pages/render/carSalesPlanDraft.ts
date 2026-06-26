@@ -117,6 +117,192 @@ export interface CarSalesPlanDraft {
   warnings?: string[]
 }
 
+export function isNoVoiceCarSalesAudioPolicy(policy?: string | null) {
+  const normalized = (policy || '').trim().toLowerCase()
+  return normalized === 'none'
+    || normalized === 'bgm'
+    || normalized === 'silent_bgm'
+    || normalized === 'mute'
+    || normalized === 'muted'
+    || normalized === 'no_voice'
+}
+
+export function isNoVoiceCarSalesVideoType(videoType?: string | null) {
+  const normalized = (videoType || '').trim().toLowerCase()
+  return normalized === 'silent_bgm' || normalized === 'product_showcase'
+}
+
+export function shouldSuppressCarSalesVoice(draft: Pick<CarSalesPlanDraft, 'audioPolicy' | 'videoType'>) {
+  return isNoVoiceCarSalesAudioPolicy(draft.audioPolicy)
+    || isNoVoiceCarSalesVideoType(draft.videoType)
+}
+
+type DigitalHumanPlanContext = Pick<CarSalesPlanDraft,
+  | 'source'
+  | 'prompt'
+  | 'assets'
+  | 'audioPolicy'
+  | 'videoType'
+  | 'nativeVoiceLanguage'
+  | 'hostAppearanceEnabled'
+  | 'hasDigitalHuman'
+  | 'digitalHumanId'
+  | 'avatarUrl'
+  | 'hostImageUrl'
+> & {
+  title?: string
+  script?: string
+  storyboard?: AiPlanStoryboardShot[]
+}
+
+const DIGITAL_HUMAN_CUE_PATTERNS = [
+  /数字人/,
+  /虚拟人/,
+  /主播/,
+  /主持人/,
+  /销售顾问/,
+  /讲解员/,
+  /人物出镜/,
+  /真人出镜/,
+  /出镜讲解/,
+  /出镜口播/,
+  /顾问出镜/,
+  /presenter/i,
+  /avatar/i,
+  /spokesperson/i,
+  /sales consultant/i,
+  /digital human/i,
+  /talking head/i,
+]
+
+const NO_DIGITAL_HUMAN_CUE_PATTERNS = [
+  /无数字人/,
+  /不要数字人/,
+  /不需要数字人/,
+  /不用数字人/,
+  /不出镜/,
+  /人物不出镜/,
+  /不出现人物/,
+  /无人物/,
+  /纯车辆/,
+  /仅车辆/,
+  /只展示车辆/,
+  /no presenter/i,
+  /no host/i,
+  /no avatar/i,
+  /without presenter/i,
+  /vehicle only/i,
+  /car only/i,
+]
+
+export function detectsDigitalHumanCue(text: string) {
+  const normalized = (text || '').trim()
+  if (!normalized) return false
+  const negativeCount = NO_DIGITAL_HUMAN_CUE_PATTERNS.filter((pattern) => pattern.test(normalized)).length
+  const positiveCount = DIGITAL_HUMAN_CUE_PATTERNS.filter((pattern) => pattern.test(normalized)).length
+  return positiveCount > negativeCount
+}
+
+export function carSalesDigitalHumanEnabled(draft: Pick<DigitalHumanPlanContext,
+  'hostAppearanceEnabled' | 'hasDigitalHuman' | 'digitalHumanId' | 'avatarUrl' | 'hostImageUrl'
+>) {
+  return Boolean(
+    draft.hostAppearanceEnabled
+    || draft.hasDigitalHuman
+    || draft.digitalHumanId
+    || draft.avatarUrl
+    || draft.hostImageUrl,
+  )
+}
+
+export function carSalesDraftHasDigitalHumanAsset(draft: Pick<DigitalHumanPlanContext,
+  'assets' | 'digitalHumanId' | 'avatarUrl' | 'hostImageUrl'
+>) {
+  return Boolean(
+    draft.digitalHumanId
+    || draft.avatarUrl
+    || draft.hostImageUrl
+    || draft.assets.some((asset) => asset.role === 'host_image' || asset.role === 'host_video'),
+  )
+}
+
+function digitalHumanAnalysisText(
+  draft: DigitalHumanPlanContext,
+  script = draft.script || '',
+  storyboard = draft.storyboard || [],
+) {
+  return [
+    draft.title || '',
+    draft.prompt || '',
+    script || '',
+    ...storyboard.flatMap((shot) => [shot.visual, shot.narration]),
+  ].filter(Boolean).join('\n')
+}
+
+export function buildDigitalHumanPlanWarnings(
+  draft: DigitalHumanPlanContext,
+  script = draft.script || '',
+  storyboard = draft.storyboard || [],
+) {
+  const warnings: string[] = []
+  const enabled = carSalesDigitalHumanEnabled(draft)
+  const hasAsset = carSalesDraftHasDigitalHumanAsset(draft)
+  const hasCue = detectsDigitalHumanCue(digitalHumanAnalysisText(draft, script, storyboard))
+  if (hasCue && !enabled) {
+    warnings.push('检测到文案/分镜包含数字人、主播或销售顾问出镜描述，但当前未开启数字人出镜；系统会优先按车辆主画面生成，如需保留人物讲解请开启数字人并选择形象。')
+  }
+  if (enabled && !hasAsset) {
+    warnings.push('已开启数字人出镜，但还没有选择数字人形象；系统会保留出镜节奏，建议先选择数字人素材以保证人物一致性。')
+  }
+  if (enabled && !hasCue) {
+    warnings.push(shouldSuppressCarSalesVoice(draft)
+      ? '已根据数字人参数补充分镜无声出镜描述；请确认是否需要销售顾问出镜引导，不需要时可关闭数字人。'
+      : '已根据数字人参数补充分镜出镜描述；请确认是否需要销售顾问出镜讲解，不需要时可关闭数字人。')
+  }
+  return warnings
+}
+
+function digitalHumanStoryboardCue(draft: DigitalHumanPlanContext) {
+  return shouldSuppressCarSalesVoice(draft)
+    ? '数字人销售顾问保持同一形象，在画面侧边安全区出镜做无声引导，不遮挡车辆主体。'
+    : '数字人销售顾问保持同一形象，在画面侧边安全区出镜讲解，不遮挡车辆主体。'
+}
+
+export function digitalHumanSourceInstruction(draft: DigitalHumanPlanContext) {
+  if (!carSalesDigitalHumanEnabled(draft)) return ''
+  if (draft.nativeVoiceLanguage === 'en-US') {
+    return shouldSuppressCarSalesVoice(draft)
+      ? 'Digital human requirement: keep one consistent sales consultant avatar in the storyboard safe zone as a silent guide; do not add voiceover lines.'
+      : 'Digital human requirement: write the script as a sales consultant presentation, and describe the same avatar appearing in the storyboard safe zone without covering the vehicle.'
+  }
+  return shouldSuppressCarSalesVoice(draft)
+    ? '数字人要求：保持同一数字人销售顾问在分镜安全区出镜做无声引导，不生成口播台词。'
+    : '数字人要求：文案以汽车销售顾问口吻讲解；分镜写明同一数字人销售顾问在安全区出镜，不遮挡车辆主体。'
+}
+
+export function enrichStoryboardWithDigitalHumanContext<T extends AiPlanStoryboardShot>(
+  storyboard: T[],
+  draft: DigitalHumanPlanContext,
+) {
+  if (!carSalesDigitalHumanEnabled(draft) || !storyboard.length) return storyboard
+  const cue = digitalHumanStoryboardCue(draft)
+  return storyboard.map((shot) => ({
+    ...shot,
+    visual: detectsDigitalHumanCue(shot.visual) ? shot.visual : `${shot.visual}；${cue}`,
+  }))
+}
+
+export function enrichScriptWithDigitalHumanContext(script: string, draft: DigitalHumanPlanContext) {
+  const clean = sanitizePlanScript(script || '', draft.prompt)
+  if (!clean || shouldSuppressCarSalesVoice(draft) || !carSalesDigitalHumanEnabled(draft) || detectsDigitalHumanCue(clean)) {
+    return clean
+  }
+  const prefix = draft.nativeVoiceLanguage === 'en-US'
+    ? "Hi, I'm your sales consultant. Let me walk you through this vehicle."
+    : '大家好，我是您的汽车销售顾问，今天带您快速了解这款车。'
+  return sanitizePlanScript(`${prefix}\n${clean}`, draft.prompt)
+}
+
 export function sanitizePlanScript(script: string, userPrompt?: string) {
   const original = (script || '').trim()
   if (!original) return ''
@@ -222,6 +408,8 @@ export async function prepareCarSalesAiPlanPreview(draft: CarSalesPlanDraft): Pr
   const punctuationRewrite = await rewriteUnpunctuatedPlanScript(script, draft, warnings)
   script = punctuationRewrite.script
   scriptVersionId = punctuationRewrite.scriptVersionId || scriptVersionId
+  const scriptBeforeDigitalHumanEnrichment = script
+  script = enrichScriptWithDigitalHumanContext(script, draft)
 
   let storyboard = draft.storyboard?.length ? draft.storyboard : []
   if (!storyboard.length && !shouldUseLocalPlanOnly && scriptVersionId) {
@@ -239,6 +427,12 @@ export async function prepareCarSalesAiPlanPreview(draft: CarSalesPlanDraft): Pr
     storyboard = buildFallbackStoryboard(script, draft)
   }
   storyboard = bindStoryboardNarrationToScript(storyboard, script, draft)
+  const storyboardBeforeDigitalHumanEnrichment = storyboard
+  buildDigitalHumanPlanWarnings(draft, scriptBeforeDigitalHumanEnrichment, storyboardBeforeDigitalHumanEnrichment)
+    .forEach((warning) => {
+      if (!warnings.includes(warning)) warnings.push(warning)
+    })
+  storyboard = enrichStoryboardWithDigitalHumanContext(storyboard, draft)
   storyboard = normalizeStoryboardForModelLimits(storyboard, draft, warnings)
   const effectiveSegmentCount = storyboard.length || draft.segmentCount
   const effectiveTotalDuration = storyboardDurationTotal(storyboard)
@@ -377,6 +571,7 @@ export function buildQuickRenderRequestFromPlanDraft(
   const sceneImageUrls = planBindingImageUrls(assetRoleBindings, true)
   const coverAsset = draftCoverAsset(draft)
   const coverUrl = draft.coverUrl || assetCoverUrl(coverAsset) || vehicleImageUrls[0] || sceneImageUrls[0]
+  const suppressVoice = shouldSuppressCarSalesVoice(draft)
   return {
     intent: 'car_sales',
     assetIds: draft.assets.map((item) => item.assetId),
@@ -399,8 +594,8 @@ export function buildQuickRenderRequestFromPlanDraft(
     nativeSpeechStyle: draft.nativeSpeechStyle || 'balanced',
     burnInSubtitle: draft.subtitleMode !== 'off' && draft.burnInSubtitle,
     customSubtitle: draft.subtitleMode === 'upload' ? draft.customSubtitle || undefined : undefined,
-    finalVoiceText: narrationText || script || undefined,
-    strictVoiceText: Boolean(narrationText || script),
+    finalVoiceText: suppressVoice ? undefined : narrationText || script || undefined,
+    strictVoiceText: suppressVoice ? false : Boolean(narrationText || script),
     audioPolicy: draft.audioPolicy,
     model,
     segmentCount,
@@ -577,6 +772,7 @@ function buildPlanSourceText(draft: CarSalesPlanDraft) {
     draft.assets.length ? `已选素材：${draft.assets.map((item) => `${item.fileName}(${roleLabel(item.role)})`).join('；')}` : '',
     `生成参数：${totalDuration} 秒，${draft.segmentCount} 段，比例 ${draft.aspectRatio}`,
     `高级参数：${advancedPlanLabelText(draft)}`,
+    digitalHumanSourceInstruction(draft),
     draft.nativeVoiceLanguage === 'en-US'
       ? 'Voice language: English voiceover only. Return natural English narration and avoid Chinese copy.'
       : '',
@@ -589,6 +785,7 @@ function buildGoalTextForRequest(draft: CarSalesPlanDraft, plan: AiPlanPreview) 
     plan.storyboard.length ? `confirmed storyboard: ${plan.storyboard.map((shot) => shot.visual.trim()).filter(Boolean).join('; ')}` : '',
     draft.referenceUrl ? `参考链接：${draft.referenceUrl}` : '',
     plan.configItems.length ? `方案配置：${plan.configItems.join('，')}` : '',
+    digitalHumanSourceInstruction(draft),
   ].filter(Boolean).join('\n')
 }
 

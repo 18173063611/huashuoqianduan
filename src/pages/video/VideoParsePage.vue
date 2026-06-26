@@ -962,6 +962,7 @@ import {
   ensureCarSalesPlanDraftAsset,
   planAssetFromAssetItem,
   prepareCarSalesAiPlanPreview,
+  shouldSuppressCarSalesVoice,
   syncStoryboardNarrationWithScript,
   type AiPlanPreview,
   type AiPlanStoryboardShot,
@@ -2554,6 +2555,18 @@ function buildBenchmarkPlanDraft(): CarSalesPlanDraft {
   const voiceAsset = benchmarkDraftAssets.value.find((asset) => asset.role === 'voiceover' || asset.role === 'reference_audio')
   const vehicleAsset = benchmarkDraftAssets.value.find((asset) => asset.role === 'car_model_bundle' || asset.role.startsWith('car_'))
   const hasHeadline = Boolean(settings.headlineOverlay.enabled && settings.headlineOverlay.text.trim())
+  const hasBgmAsset = benchmarkDraftAssets.value.some((asset) => asset.role === 'bgm')
+  const autoNoVoiceBenchmark = settings.audioPolicy === 'auto' && !script && !voiceAsset
+  const effectiveAudioPolicy = autoNoVoiceBenchmark
+    ? (settings.bgmStyle !== 'none' || hasBgmAsset ? 'bgm' : 'none')
+    : settings.audioPolicy
+  const effectiveVideoType = autoNoVoiceBenchmark && !settings.hostAppearanceEnabled
+    ? 'silent_bgm'
+    : settings.videoType
+  const suppressVoice = shouldSuppressCarSalesVoice({
+    audioPolicy: effectiveAudioPolicy,
+    videoType: effectiveVideoType,
+  })
   const parseTaskId = (parse as { taskId?: number | string } | null)?.taskId
   const referenceVideoId = parseTaskId ? String(parseTaskId) : videoUrl.value.trim()
   const uploadedVideoId = localVideoFilePath.value || undefined
@@ -2571,7 +2584,7 @@ function buildBenchmarkPlanDraft(): CarSalesPlanDraft {
     prompt,
     referenceUrl: videoUrl.value.trim(),
     coverUrl: videoCoverUrl.value,
-    script,
+    script: suppressVoice ? '' : script,
     storyboard,
     assets: [...benchmarkDraftAssets.value],
     aspectRatio: benchmarkAspectRatio.value,
@@ -2582,7 +2595,7 @@ function buildBenchmarkPlanDraft(): CarSalesPlanDraft {
     nativeSpeechStyle: settings.nativeSpeechStyle,
     burnInSubtitle: subtitleMode !== 'off' && settings.burnInSubtitle,
     customSubtitle: subtitleMode === 'upload' ? settings.customSubtitle.trim() : undefined,
-    audioPolicy: settings.audioPolicy,
+    audioPolicy: effectiveAudioPolicy,
     model: settings.model,
     segmentCount,
     segmentDuration,
@@ -2591,7 +2604,7 @@ function buildBenchmarkPlanDraft(): CarSalesPlanDraft {
     headlineOverlay: settings.headlineOverlay,
     creationMode: '爆款对标创作',
     chainType: 'benchmark',
-    videoType: settings.videoType,
+    videoType: effectiveVideoType,
     hasDigitalHuman: settings.hostAppearanceEnabled,
     digitalHumanId: hostAsset ? String(hostAsset.assetId) : undefined,
     avatarUrl: hostAsset?.fileUrl || hostAsset?.thumbnailUrl || undefined,
@@ -2604,7 +2617,7 @@ function buildBenchmarkPlanDraft(): CarSalesPlanDraft {
     subtitleStyle: `${settings.subtitleOverlay.position}/${settings.subtitleOverlay.fontSize}px`,
     enableBigText: hasHeadline,
     bigTextStyle: hasHeadline ? `${settings.headlineOverlay.position}/${settings.headlineOverlay.fontSize}px` : undefined,
-    enableBgm: settings.bgmStyle !== 'none' && (settings.audioPolicy === 'bgm' || settings.audioPolicy === 'auto' || benchmarkDraftAssets.value.some((asset) => asset.role === 'bgm')),
+    enableBgm: settings.bgmStyle !== 'none' && (effectiveAudioPolicy === 'bgm' || effectiveAudioPolicy === 'auto' || hasBgmAsset),
     bgmStyle: settings.bgmStyle,
     generateCover: settings.generateCover,
     generateTitle: settings.generateTitle,
@@ -2621,11 +2634,13 @@ function buildBenchmarkPlanDraft(): CarSalesPlanDraft {
       `比例 ${benchmarkAspectRatio.value}`,
       `${durationSeconds} 秒`,
       benchmarkDurationNotice.value,
+      suppressVoice ? '无口播' : '',
       settings.hostAppearanceEnabled ? '数字人出镜' : '',
       hasHeadline ? '大字报' : '',
     ].filter(Boolean),
     warnings: [
-      ...(script ? [] : ['当前没有解析/改写文案，请补充口播文案后再提交。']),
+      ...(!script && !suppressVoice ? ['当前没有解析/改写文案，请补充口播文案后再提交。'] : []),
+      ...(autoNoVoiceBenchmark ? ['未识别到口播文本，已按无口播对标视频处理，仅参考分镜结构。'] : []),
       ...(benchmarkDurationNotice.value ? [benchmarkDurationNotice.value] : []),
       ...(benchmarkDraftAssets.value.length ? [] : ['汽车销售生成至少需要 1 张车辆图片，请在确认生成前补充车辆素材。']),
     ],

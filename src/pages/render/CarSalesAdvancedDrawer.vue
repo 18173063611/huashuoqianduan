@@ -335,7 +335,7 @@ function patchVideoType(videoType: CarSalesAdvancedSettings['videoType']) {
       : videoType === 'product_showcase' || videoType === 'silent_bgm'
         ? false
         : props.settings.hostAppearanceEnabled,
-    audioPolicy: videoType === 'silent_bgm' && props.settings.audioPolicy === 'auto'
+    audioPolicy: (videoType === 'silent_bgm' || videoType === 'product_showcase') && props.settings.audioPolicy === 'auto'
       ? 'bgm'
       : props.settings.audioPolicy,
   })

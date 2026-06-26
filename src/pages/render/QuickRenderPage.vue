@@ -471,9 +471,14 @@ import { taskTypeLabel } from '../../utils/taskDisplay'
 import { formatFriendlyDateTime } from '../../utils/timeFormat'
 import AiPlanPreviewDrawer from './AiPlanPreviewDrawer.vue'
 import {
+  buildDigitalHumanPlanWarnings,
   buildQuickRenderRequestFromPlanDraft,
+  digitalHumanSourceInstruction,
   ensureCarSalesPlanDraftAsset,
+  enrichScriptWithDigitalHumanContext,
+  enrichStoryboardWithDigitalHumanContext,
   sanitizePlanScript,
+  shouldSuppressCarSalesVoice,
   syncStoryboardNarrationWithScript,
   type AiPlanPreview,
   type AiPlanStoryboardShot,
@@ -2368,6 +2373,18 @@ async function prepareAiPlanPreview() {
   if (!storyboard.length) {
     storyboard = buildFallbackStoryboard(script)
   }
+  const digitalHumanContext = buildAiSmartDigitalHumanContext(script, storyboard)
+  const scriptBeforeDigitalHumanEnrichment = script
+  script = enrichScriptWithDigitalHumanContext(script, digitalHumanContext)
+  if (script !== scriptBeforeDigitalHumanEnrichment) {
+    storyboard = syncStoryboardNarrationWithScript(storyboard, script)
+  }
+  const storyboardBeforeDigitalHumanEnrichment = storyboard
+  buildDigitalHumanPlanWarnings(digitalHumanContext, scriptBeforeDigitalHumanEnrichment, storyboardBeforeDigitalHumanEnrichment)
+    .forEach((warning) => {
+      if (!warnings.includes(warning)) warnings.push(warning)
+    })
+  storyboard = enrichStoryboardWithDigitalHumanContext(storyboard, digitalHumanContext)
 
   planPreview.value = {
     script,
@@ -2486,13 +2503,55 @@ function selectedHostImageUrlForRequest() {
   return raw ? resolveMediaUrl(raw) : ''
 }
 
+function aiSmartDigitalHumanSourceInstruction() {
+  const advancedFields = buildQuickAdvancedRequestFields()
+  return digitalHumanSourceInstruction({
+    source: 'ai-smart',
+    prompt: '',
+    assets: quickPlanDraftAssets(),
+    audioPolicy: audioPolicy.value,
+    videoType: advancedFields.videoType,
+    nativeVoiceLanguage: voiceLanguage.value,
+    hostAppearanceEnabled: advancedSettings.value.hostAppearanceEnabled,
+    hasDigitalHuman: Boolean(advancedFields.hasDigitalHuman),
+    digitalHumanId: advancedFields.digitalHumanId,
+    avatarUrl: advancedFields.avatarUrl,
+    hostImageUrl: advancedFields.hostImageUrl,
+  })
+}
+
+function buildAiSmartDigitalHumanContext(script = '', storyboard: AiPlanStoryboardShot[] = []) {
+  const advancedFields = buildQuickAdvancedRequestFields()
+  return {
+    source: 'ai-smart' as const,
+    prompt: buildPlanSourceText(),
+    title: carBundleMaterialForPlanName() || 'AI智能创作汽车销售方案',
+    script,
+    storyboard,
+    assets: quickPlanDraftAssets(),
+    audioPolicy: audioPolicy.value,
+    videoType: advancedFields.videoType,
+    nativeVoiceLanguage: voiceLanguage.value,
+    hostAppearanceEnabled: advancedSettings.value.hostAppearanceEnabled,
+    hasDigitalHuman: Boolean(advancedFields.hasDigitalHuman),
+    digitalHumanId: advancedFields.digitalHumanId,
+    avatarUrl: advancedFields.avatarUrl,
+    hostImageUrl: advancedFields.hostImageUrl,
+  }
+}
+
 function buildAiSmartPlanDraft(finalVoiceTextForRequest: string, plan: AiPlanPreview): CarSalesPlanDraft {
   const advancedFields = buildQuickAdvancedRequestFields()
+  const draftAudioPolicy = audioPolicy.value
+  const draftVideoType = advancedFields.videoType
+  const script = shouldSuppressCarSalesVoice({ audioPolicy: draftAudioPolicy, videoType: draftVideoType })
+    ? plan.script
+    : finalVoiceTextForRequest || plan.script
   return {
     source: 'ai-smart',
     prompt: buildPlanSourceText(),
     title: carBundleMaterialForPlanName() || 'AI智能创作汽车销售方案',
-    script: finalVoiceTextForRequest || plan.script,
+    script,
     storyboard: storyboardForRequest() || plan.storyboard,
     assets: quickPlanDraftAssets(),
     aspectRatio: aspectRatio.value,
@@ -2505,7 +2564,7 @@ function buildAiSmartPlanDraft(finalVoiceTextForRequest: string, plan: AiPlanPre
     customSubtitle: subtitleMode.value === 'upload'
       ? customSubtitleText.value || uploadedSubtitleText.value || undefined
       : undefined,
-    audioPolicy: audioPolicy.value,
+    audioPolicy: draftAudioPolicy,
     model: advancedSettings.value.model,
     segmentCount: segmentCount.value,
     segmentDuration: segmentDuration.value,
@@ -2534,15 +2593,19 @@ function buildQuickRenderPayload(finalVoiceTextForRequest: string, baseRequest?:
   if (!planPreview.value) {
     throw new Error('请先生成并确认文案与分镜；如果生成失败，请重新生成，或从资产中心选择可用文案/分镜。')
   }
+  const voiceTextForRequest = shouldSuppressCarSalesVoice({
+    audioPolicy: audioPolicy.value,
+    videoType: advancedSettings.value.videoType,
+  }) ? '' : finalVoiceTextForRequest
   const plan: AiPlanPreview = {
     ...planPreview.value,
-    script: finalVoiceTextForRequest || planPreview.value.script,
+    script: voiceTextForRequest || planPreview.value.script,
     storyboard: storyboardForRequest() || planPreview.value.storyboard,
     totalDuration: totalDuration.value,
     segmentCount: segmentCount.value,
   }
   const unifiedRequest = buildQuickRenderRequestFromPlanDraft(
-    buildAiSmartPlanDraft(finalVoiceTextForRequest, plan),
+    buildAiSmartPlanDraft(voiceTextForRequest, plan),
     plan,
   )
   return baseRequest ? { ...baseRequest, ...unifiedRequest } : unifiedRequest
@@ -2555,14 +2618,18 @@ async function buildQuickRenderPayloadForSubmit(
   if (!planPreview.value) {
     throw new Error('Plan preview is required before submit')
   }
+  const voiceTextForRequest = shouldSuppressCarSalesVoice({
+    audioPolicy: audioPolicy.value,
+    videoType: advancedSettings.value.videoType,
+  }) ? '' : finalVoiceTextForRequest
   const plan: AiPlanPreview = {
     ...planPreview.value,
-    script: finalVoiceTextForRequest || planPreview.value.script,
+    script: voiceTextForRequest || planPreview.value.script,
     storyboard: storyboardForRequest() || planPreview.value.storyboard,
     totalDuration: totalDuration.value,
     segmentCount: segmentCount.value,
   }
-  const draftWithAssets = await ensureCarSalesPlanDraftAsset(buildAiSmartPlanDraft(finalVoiceTextForRequest, plan), plan)
+  const draftWithAssets = await ensureCarSalesPlanDraftAsset(buildAiSmartPlanDraft(voiceTextForRequest, plan), plan)
   const unifiedRequest = buildQuickRenderRequestFromPlanDraft(draftWithAssets, plan)
   return baseRequest ? { ...baseRequest, ...unifiedRequest } : unifiedRequest
 }
@@ -2775,6 +2842,7 @@ function buildPlanSourceText() {
     advancedSettings.value.hostAppearanceEnabled
       ? `数字人出镜：${selectedAvatar.value?.avatarName || (hasHostMaterial.value ? '已选数字人素材' : '待选择')}`
       : '',
+    aiSmartDigitalHumanSourceInstruction(),
     advancedPromptText.value ? `高级配置：${advancedPromptText.value}` : '',
   ].filter(Boolean)
   return parts.join('\n')
@@ -3147,12 +3215,18 @@ async function submitQuickRender() {
   currentTaskId.value = null
   taskStatus.value = ''
   taskProgress.value = null
+  const suppressVoiceForSubmit = shouldSuppressCarSalesVoice({
+    audioPolicy: audioPolicy.value,
+    videoType: advancedSettings.value.videoType,
+  })
   const planScript = planPreview.value?.script.trim() || ''
-  const finalNarration = planScript ? '' : await ensureNarrationReadyForSubmit()
+  const finalNarration = suppressVoiceForSubmit || planScript ? '' : await ensureNarrationReadyForSubmit()
   if (finalNarration == null) {
     return
   }
-  const finalVoiceTextForRequest = await resolveFinalVoiceTextForSubmit(planScript || finalNarration || '')
+  const finalVoiceTextForRequest = suppressVoiceForSubmit
+    ? ''
+    : await resolveFinalVoiceTextForSubmit(planScript || finalNarration || '')
   if (finalVoiceTextForRequest == null) {
     return
   }
@@ -3190,9 +3264,13 @@ async function submitQuickRender() {
 
 function isAiPlanPreviewReadyForSubmit() {
   const plan = planPreview.value
+  const suppressVoice = shouldSuppressCarSalesVoice({
+    audioPolicy: audioPolicy.value,
+    videoType: advancedSettings.value.videoType,
+  })
   return Boolean(
     plan
-    && plan.script.trim()
+    && (suppressVoice || plan.script.trim())
     && plan.storyboard.some((shot) => shot.visual?.trim() || shot.narration?.trim()),
   )
 }
