@@ -48,6 +48,25 @@
           </section>
 
           <section class="car-advanced-section">
+            <h3>场景图</h3>
+            <div class="car-scene-picker">
+              <div v-if="selectedScenePreviewUrl" class="car-scene-preview">
+                <img :src="selectedScenePreviewUrl" :alt="selectedSceneName || '场景图'" />
+              </div>
+              <div v-else class="car-scene-empty">未选择</div>
+              <div class="car-avatar-meta">
+                <strong>{{ selectedSceneName || '未选择场景图' }}</strong>
+                <small>{{ selectedSceneHint }}</small>
+              </div>
+              <div class="car-avatar-actions">
+                <button type="button" @click="$emit('select-scene-asset')">选择场景图</button>
+                <button v-if="hasSceneMaterial" type="button" @click="$emit('clear-scene')">清除</button>
+              </div>
+            </div>
+            <p class="car-advanced-note">场景图会作为展厅、户外、道路或夜景门店背景传入视频生成，参与分镜背景匹配。</p>
+          </section>
+
+          <section class="car-advanced-section">
             <h3>字幕</h3>
             <label class="car-field">
               <span>字幕策略</span>
@@ -316,6 +335,9 @@ const props = defineProps<{
   selectedAvatarName?: string
   selectedAvatarPreviewUrl?: string
   hasHostMaterial?: boolean
+  selectedSceneName?: string
+  selectedScenePreviewUrl?: string
+  hasSceneMaterial?: boolean
 }>()
 
 const emit = defineEmits<{
@@ -325,6 +347,8 @@ const emit = defineEmits<{
   'select-avatar': []
   'select-host-asset': []
   'clear-avatar': []
+  'select-scene-asset': []
+  'clear-scene': []
 }>()
 
 const hostMaterialLabel = computed(() => props.hasHostMaterial ? '已选择数字人素材' : '尚未选择数字人')
@@ -343,6 +367,11 @@ const selectedAvatarHint = computed(() => {
   if (props.selectedAvatarName) return '已回填数字人形象，并加入素材列表'
   if (props.hasHostMaterial) return '已从资产中心选择数字人图片或口播视频'
   return '请选择数字人形象或从资产中心加入 host_image/host_video'
+})
+
+const selectedSceneHint = computed(() => {
+  if (props.hasSceneMaterial) return '已加入本次生成，会随 sceneImageUrls 传给视频生成'
+  return '可从资产中心选择公共场景图，补充展厅、道路、门店等背景约束'
 })
 
 function patch(partial: Partial<CarSalesAdvancedSettings>) {
@@ -501,6 +530,17 @@ function numberFromEvent(event: Event, fallback: number) {
   padding: 10px;
 }
 
+.car-scene-picker {
+  display: grid;
+  grid-template-columns: 96px minmax(0, 1fr);
+  gap: 10px;
+  align-items: center;
+  border: 1px solid #dbeafe;
+  border-radius: 8px;
+  background: #fff;
+  padding: 10px;
+}
+
 .car-avatar-preview {
   overflow: hidden;
   width: 58px;
@@ -509,7 +549,25 @@ function numberFromEvent(event: Event, fallback: number) {
   background: #eef2ff;
 }
 
-.car-avatar-preview img {
+.car-scene-preview,
+.car-scene-empty {
+  overflow: hidden;
+  width: 96px;
+  aspect-ratio: 16 / 9;
+  border-radius: 8px;
+  background: #eef2ff;
+}
+
+.car-scene-empty {
+  display: grid;
+  place-items: center;
+  color: var(--hs-text-muted);
+  font-size: 12px;
+  font-weight: 800;
+}
+
+.car-avatar-preview img,
+.car-scene-preview img {
   width: 100%;
   height: 100%;
   object-fit: cover;

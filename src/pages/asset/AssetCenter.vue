@@ -98,24 +98,7 @@
           </button>
         </div>
 
-        <div v-if="activeCategory === 'materials'" class="asset-business-segment" role="tablist" aria-label="资产业务视图">
-          <button
-            v-for="view in businessViewOptions"
-            :key="view.key"
-            type="button"
-            class="asset-business-btn"
-            :class="{ 'asset-business-btn-active': selectedBusinessView === view.key }"
-            role="tab"
-            :aria-selected="selectedBusinessView === view.key"
-            :disabled="loading"
-            @click="selectBusinessView(view.key)"
-          >
-            <strong>{{ view.label }}</strong>
-            <span>{{ view.hint }}</span>
-          </button>
-        </div>
-
-        <div v-if="activeCategory === 'materials'" class="asset-stage-segment" role="tablist" aria-label="功能来源">
+        <div v-if="activeCategory === 'materials'" class="asset-stage-segment" role="tablist" aria-label="资产类型">
           <button
             v-for="stage in workflowStageOptions"
             :key="stage.key"
@@ -233,7 +216,7 @@
         场景素材包 · <strong>查看并复用汽车销售场景图片组合</strong>
       </template>
       <template v-else-if="activeCategory === 'materials'">
-        {{ selectedBusinessViewOption.label }} · <strong>{{ businessViewStatusText }}</strong>
+        {{ selectedAssetKindLabel }} · <strong>{{ assetKindStatusText }}</strong>
       </template>
       <template v-else-if="listScope === 'global'">
         公共素材 · <strong>全员可见</strong>
@@ -982,14 +965,16 @@ const UNGROUPED_GROUP_KEY = '__ungrouped'
 const GROUP_BENCHMARK = '爆款对标'
 const GROUP_STORYBOARD = '分镜脚本'
 const CAR_MODEL_BUNDLE_GROUP = '汽车素材包'
+const SCRIPT_ASSET_GROUP = '文案资产'
+const STORYBOARD_ASSET_GROUP = '分镜资产'
 const ASSET_PAGE_SIZE = 24
 const INLINE_PREVIEW_BATCH_SIZE = 6
 
 const WORKFLOW_STAGE_OPTIONS = [
-  { key: '', label: '全部功能', sourceTypes: [] },
+  { key: '', label: '全部资产', sourceTypes: [] },
   {
     key: 'benchmark',
-    label: '爆款对标',
+    label: '文案',
     sourceTypes: ['DOUYIN_BENCHMARK', 'DOUYIN_PARSE_TRANSCRIPT', 'DOUYIN_REWRITE', 'DOUYIN_TRANSCRIPT'],
     assetRoles: ['benchmark_json', 'voice_script'],
     assetGroups: [GROUP_BENCHMARK],
@@ -998,7 +983,7 @@ const WORKFLOW_STAGE_OPTIONS = [
   },
   {
     key: 'storyboard',
-    label: '分镜生成',
+    label: '分镜',
     sourceTypes: ['STORYBOARD_GENERATE', 'VIDEO_SCRIPT_ANALYZE', 'VIDEO_SCRIPT_URL_ANALYZE'],
     assetRoles: ['storyboard_json'],
     assetGroups: [GROUP_STORYBOARD],
@@ -1007,17 +992,17 @@ const WORKFLOW_STAGE_OPTIONS = [
   },
   {
     key: 'voice',
-    label: '声音生成',
+    label: '音频/BGM',
     sourceTypes: ['TTS_GENERATE', 'VOICE_SAMPLE'],
   },
   {
     key: 'digitalHuman',
-    label: '数字人',
+    label: '数字人形象',
     sourceTypes: ['AVATAR_GENERATE', 'DIGITAL_HUMAN_GENERATE'],
   },
   {
     key: 'video',
-    label: '视频制作',
+    label: '视频素材',
     sourceTypes: [
       'SEEDANCE_TEXT_VIDEO',
       'SEEDANCE_FIRST_FRAME_VIDEO',
@@ -1030,6 +1015,11 @@ const WORKFLOW_STAGE_OPTIONS = [
       'IMAGE_TO_VIDEO_SEEDANCE_2_0',
       'IMAGE_TO_VIDEO_SEEDANCE_2_0_FAST',
     ],
+  },
+  {
+    key: 'template',
+    label: '资产整合包',
+    sourceTypes: ['ASSET_REUSE_PACKAGE'],
   },
   {
     key: 'carBundle',
@@ -1248,13 +1238,20 @@ const assetGroupOptions = computed(() => {
 })
 
 const workflowStageOptions = computed(() => WORKFLOW_STAGE_OPTIONS)
-const businessViewOptions = computed(() => BUSINESS_VIEW_OPTIONS)
 const selectedBusinessViewOption = computed(
   () => BUSINESS_VIEW_OPTIONS.find((item) => item.key === selectedBusinessView.value) || BUSINESS_VIEW_OPTIONS[0],
 )
+const selectedAssetKindLabel = computed(() => currentWorkflowStageOption()?.label || '全部资产')
 const businessViewStatusText = computed(() => {
   const scope = listScopeLabel(listScope.value)
   return `${scope} · ${selectedBusinessViewOption.value.subtitle}`
+})
+const assetKindStatusText = computed(() => {
+  const scope = listScopeLabel(listScope.value)
+  if (!selectedWorkflowStage.value) {
+    return `${scope} · 文案、分镜、车型素材包、数字人形象等可复用资产`
+  }
+  return businessViewStatusText.value
 })
 const showMaterialContextActions = computed(() =>
   activeCategory.value === 'materials' &&
@@ -1579,8 +1576,8 @@ async function loadAssets(options?: { append?: boolean }) {
     const rows = await getAssets({
       scope: listScope.value,
       assetType: assetTypeForCurrentQuery(),
-      sourceType: selectedWorkflowStage.value ? undefined : selectedSourceType.value || undefined,
-      assetGroup: selectedAssetGroup.value || undefined,
+      sourceType: sourceTypeForCurrentQuery(),
+      assetGroup: assetGroupForCurrentQuery(),
       keyword: keyword.value || undefined,
       sort: sortKey.value,
       pageNo: nextPageNo,
@@ -1982,16 +1979,6 @@ async function reloadAndHighlightAsset(assetId: number) {
   }, 6000)
 }
 
-function selectBusinessView(view: BusinessViewKey) {
-  selectedBusinessView.value = view
-  selectedType.value = ''
-  selectedSourceType.value = ''
-  selectedAssetGroup.value = ''
-  selectedPublicAssetProvider.value = 'all'
-  selectedWorkflowStage.value = ''
-  keyword.value = ''
-}
-
 function syncAssetViewFromRoute() {
   let changed = false
   routeFilterSyncing = true
@@ -2044,6 +2031,8 @@ function selectWorkflowStage(stage: WorkflowStageKey) {
     selectedBusinessView.value = 'avatar'
   } else if (stage === 'video') {
     selectedBusinessView.value = 'video'
+  } else if (stage === 'template') {
+    selectedBusinessView.value = 'template'
   } else if (stage === 'material') {
     selectedBusinessView.value = 'image'
   }
@@ -2068,14 +2057,45 @@ function selectSpecificSourceType() {
 }
 
 function assetTypeForCurrentQuery(): AssetType | undefined {
-  if (selectedWorkflowStage.value === 'carBundle') {
+  if (
+    selectedWorkflowStage.value === 'benchmark' ||
+    selectedWorkflowStage.value === 'storyboard' ||
+    selectedWorkflowStage.value === 'template' ||
+    selectedWorkflowStage.value === 'carBundle'
+  ) {
     return 'JSON'
   }
   if (selectedType.value) {
     return selectedType.value
   }
+  if (!selectedWorkflowStage.value) {
+    return undefined
+  }
   const option = selectedBusinessViewOption.value
   return 'defaultAssetType' in option ? option.defaultAssetType as AssetType : undefined
+}
+
+function sourceTypeForCurrentQuery() {
+  if (selectedWorkflowStage.value === 'template') {
+    return 'ASSET_REUSE_PACKAGE'
+  }
+  return selectedWorkflowStage.value ? undefined : selectedSourceType.value || undefined
+}
+
+function assetGroupForCurrentQuery() {
+  if (selectedWorkflowStage.value === 'benchmark') {
+    return SCRIPT_ASSET_GROUP
+  }
+  if (selectedWorkflowStage.value === 'storyboard') {
+    return STORYBOARD_ASSET_GROUP
+  }
+  if (selectedWorkflowStage.value === 'carBundle') {
+    return CAR_MODEL_BUNDLE_GROUP
+  }
+  if (selectedWorkflowStage.value === 'sceneBundle') {
+    return SCENE_MATERIAL_BUNDLE_GROUP
+  }
+  return selectedAssetGroup.value || undefined
 }
 
 function currentWritableAssetGroup() {
@@ -2109,10 +2129,22 @@ function matchesWorkflowStage(asset: AssetItem) {
   if (listScope.value === 'global' && isPublicCarBundleComponentImage(asset)) {
     return false
   }
+  if (selectedWorkflowStage.value === 'benchmark') {
+    return isCopyBusinessAsset(asset)
+  }
+  if (selectedWorkflowStage.value === 'storyboard') {
+    return isStoryboardBusinessAsset(asset)
+  }
+  if (selectedWorkflowStage.value === 'template') {
+    return isTemplateLibraryAsset(asset)
+  }
   return matchesAssetWorkflowStage(asset, selectedWorkflowStage.value)
 }
 
 function matchesBusinessView(asset: AssetItem) {
+  if (!selectedWorkflowStage.value) {
+    return true
+  }
   if (selectedWorkflowStage.value === 'carBundle' || selectedWorkflowStage.value === 'sceneBundle') {
     return true
   }

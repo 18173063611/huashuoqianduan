@@ -113,7 +113,10 @@
           v-for="item in materials"
           :key="item.asset.assetId"
           class="quick-material"
-          :class="{ 'quick-material--bundle': item.role === 'car_model_bundle' }"
+          :class="{
+            'quick-material--bundle': item.role === 'car_model_bundle',
+            'quick-material--image': Boolean(materialPreviewUrl(item)),
+          }"
         >
           <div v-if="item.role === 'car_model_bundle'" class="quick-material-preview">
             <template v-if="carBundleMaterialImages(item).length">
@@ -128,6 +131,9 @@
               </div>
             </template>
             <span v-else>车型包</span>
+          </div>
+          <div v-else-if="materialPreviewUrl(item)" class="quick-material-preview">
+            <img :src="materialPreviewUrl(item)" :alt="item.asset.fileName" />
           </div>
           <div class="quick-material-main">
             <strong>{{ item.role === 'car_model_bundle' ? carBundleMaterialTitle(item) : item.asset.fileName }}</strong>
@@ -376,11 +382,16 @@
       :selected-avatar-name="selectedAvatar?.avatarName || ''"
       :selected-avatar-preview-url="selectedAvatarPreviewUrl"
       :has-host-material="hasHostMaterial"
+      :selected-scene-name="selectedSceneMaterial?.asset.fileName || ''"
+      :selected-scene-preview-url="selectedScenePreviewUrl"
+      :has-scene-material="hasSceneMaterial"
       @update:settings="advancedSettings = $event"
       @reset="resetAdvancedSettings"
       @select-avatar="openAvatarDrawer"
       @select-host-asset="openAssetDrawer('avatar')"
       @clear-avatar="clearSelectedAvatar"
+      @select-scene-asset="openAssetDrawer('scene')"
+      @clear-scene="clearSelectedSceneAssets"
     />
     <AiPlanPreviewDrawer
       v-model="planPreviewOpen"
@@ -898,8 +909,13 @@ const selectedHostMaterial = computed(() =>
   materials.value.find((item) => item.role === 'host_image' || item.role === 'host_video') || null,
 )
 const hasHostMaterial = computed(() => Boolean(selectedHostMaterial.value))
+const selectedSceneMaterial = computed(() =>
+  materials.value.find((item) => item.role.startsWith('scene_')) || null,
+)
+const hasSceneMaterial = computed(() => Boolean(selectedSceneMaterial.value))
+const selectedScenePreviewUrl = computed(() => materialPreviewUrl(selectedSceneMaterial.value))
 const selectedAvatarPreviewUrl = computed(() =>
-  resolveMediaUrl(selectedAvatar.value?.previewUrl || selectedHostMaterial.value?.asset.thumbnailUrl || selectedHostMaterial.value?.asset.fileUrl || ''),
+  resolveMediaUrl(selectedAvatar.value?.previewUrl || materialPreviewUrl(selectedHostMaterial.value)),
 )
 const uploadedSubtitleText = computed(() =>
   materials.value.find((item) => item.role === 'subtitle' && item.textContent?.trim())?.textContent?.trim() || '',
@@ -2058,6 +2074,11 @@ function clearSelectedAvatar() {
   }
 }
 
+function clearSelectedSceneAssets() {
+  materials.value = materials.value.filter((item) => !item.role.startsWith('scene_'))
+  quickPickedSceneImageUrl.value = ''
+}
+
 function goAvatarCreatePage() {
   if (!requireAuth('登录后可创建数字人形象')) return
   avatarDrawerOpen.value = false
@@ -2196,6 +2217,33 @@ function avatarToAsset(avatar: AvatarItem): AssetItem {
     createdAt: avatar.createdAt || now,
     updatedAt: avatar.updatedAt || now,
   }
+}
+
+function materialPreviewUrl(item: QuickMaterial | null | undefined) {
+  if (!item) {
+    return ''
+  }
+  if (item.role === 'car_model_bundle') {
+    return carBundleMaterialImages(item)[0] || ''
+  }
+  const asset = item.asset
+  const assetType = String(asset.assetType || '').toUpperCase()
+  const canUseFileUrlAsImage = assetType === 'IMAGE'
+    || assetType === 'COVER'
+    || item.role === 'host_image'
+    || item.role.startsWith('scene_')
+    || item.role.startsWith('car_')
+  if (!canUseFileUrlAsImage && !asset.thumbnailUrl) {
+    return ''
+  }
+  const metadata = parseQuickAssetMetadata(asset.metadataJson)
+  const url = asset.thumbnailUrl
+    || quickMetadataText(metadata, 'thumbnailUrl')
+    || quickMetadataText(metadata, 'coverUrl')
+    || quickMetadataText(metadata, 'firstFrameUrl')
+    || quickMetadataText(metadata, 'posterUrl')
+    || (canUseFileUrlAsImage ? asset.fileUrl : '')
+  return resolveMediaUrl(url)
 }
 
 function resolveMediaUrl(url: string | null | undefined) {
@@ -4682,6 +4730,10 @@ onBeforeUnmount(stopAllTracking)
   align-items: stretch;
   border-color: #bfdbfe;
   background: linear-gradient(180deg, #ffffff 0%, #f8fbff 100%);
+}
+
+.quick-material--image {
+  grid-template-columns: 96px minmax(0, 1fr) 150px 64px;
 }
 
 .quick-material-preview {

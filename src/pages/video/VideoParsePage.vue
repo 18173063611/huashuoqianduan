@@ -882,11 +882,16 @@
       :selected-avatar-name="benchmarkSelectedHostAsset?.fileName || ''"
       :selected-avatar-preview-url="benchmarkSelectedHostPreviewUrl"
       :has-host-material="Boolean(benchmarkSelectedHostAsset)"
+      :selected-scene-name="benchmarkSelectedSceneAsset?.fileName || ''"
+      :selected-scene-preview-url="benchmarkSelectedScenePreviewUrl"
+      :has-scene-material="Boolean(benchmarkSelectedSceneAsset)"
       @update:settings="benchmarkAdvancedSettings = $event"
       @reset="resetBenchmarkAdvancedSettings"
       @select-avatar="openBenchmarkAssetDrawer('avatar')"
       @select-host-asset="openBenchmarkAssetDrawer('avatar')"
       @clear-avatar="clearBenchmarkHostAsset"
+      @select-scene-asset="openBenchmarkAssetDrawer('scene')"
+      @clear-scene="clearBenchmarkSceneAssets"
     />
   </div>
 </template>
@@ -1167,10 +1172,11 @@ const sourcePanelTitle = computed(() => (inputMode.value === 'upload' ? '1. ä¸Šä
 const benchmarkSelectedHostAsset = computed(() =>
   benchmarkDraftAssets.value.find((asset) => asset.role === 'host_image' || asset.role === 'host_video') || null,
 )
-const benchmarkSelectedHostPreviewUrl = computed(() => {
-  const asset = benchmarkSelectedHostAsset.value
-  return asset ? normalizePublicMediaUrl(asset.thumbnailUrl || asset.fileUrl || '') : ''
-})
+const benchmarkSelectedHostPreviewUrl = computed(() => benchmarkPlanAssetPreviewUrl(benchmarkSelectedHostAsset.value))
+const benchmarkSelectedSceneAsset = computed(() =>
+  benchmarkDraftAssets.value.find((asset) => asset.role.startsWith('scene_')) || null,
+)
+const benchmarkSelectedScenePreviewUrl = computed(() => benchmarkPlanAssetPreviewUrl(benchmarkSelectedSceneAsset.value))
 const referenceVideoDurationSeconds = computed(() =>
   normalizeBenchmarkDurationSeconds(douyinParse.value?.durationSeconds || 0),
 )
@@ -1234,6 +1240,40 @@ function createDefaultBenchmarkAdvancedSettings(): CarSalesAdvancedSettings {
 
 function resetBenchmarkAdvancedSettings() {
   benchmarkAdvancedSettings.value = createDefaultBenchmarkAdvancedSettings()
+}
+
+function benchmarkPlanAssetPreviewUrl(asset: CarSalesPlanDraftAsset | null | undefined) {
+  if (!asset) return ''
+  const assetType = String(asset.assetType || '').toUpperCase()
+  const canUseFileUrlAsImage = assetType === 'IMAGE'
+    || assetType === 'COVER'
+    || asset.role === 'host_image'
+    || asset.role.startsWith('scene_')
+    || asset.role.startsWith('car_')
+  const metadata = parseBenchmarkAssetMetadata(asset.metadataJson)
+  const url = asset.thumbnailUrl
+    || benchmarkMetadataText(metadata, 'thumbnailUrl')
+    || benchmarkMetadataText(metadata, 'coverUrl')
+    || benchmarkMetadataText(metadata, 'firstFrameUrl')
+    || benchmarkMetadataText(metadata, 'posterUrl')
+    || (canUseFileUrlAsImage ? asset.fileUrl : '')
+    || ''
+  return url ? normalizePublicMediaUrl(url) : ''
+}
+
+function parseBenchmarkAssetMetadata(value: string | null | undefined): Record<string, unknown> | null {
+  if (!value) return null
+  try {
+    const parsed = JSON.parse(value)
+    return parsed && typeof parsed === 'object' && !Array.isArray(parsed) ? parsed as Record<string, unknown> : null
+  } catch {
+    return null
+  }
+}
+
+function benchmarkMetadataText(metadata: Record<string, unknown> | null, key: string) {
+  const value = metadata?.[key]
+  return typeof value === 'string' ? value.trim() : ''
 }
 
 function openBenchmarkAssetDrawer(category: CarSalesAssetCategoryKey) {
@@ -2742,6 +2782,10 @@ function clearBenchmarkHostAsset() {
     hostAppearanceEnabled: false,
     videoType: 'standard',
   }
+}
+
+function clearBenchmarkSceneAssets() {
+  benchmarkDraftAssets.value = benchmarkDraftAssets.value.filter((item) => !item.role.startsWith('scene_'))
 }
 
 function updatePlanScript(value: string) {
