@@ -134,6 +134,8 @@ import { API_ORIGIN } from '../../services/request'
 import type { AssetItem, AssetType } from '../../types/assetTypes'
 import type { QuickRenderAssetRole } from '../../types/videoTypes'
 import {
+  CAR_MODEL_BUNDLE_GROUP,
+  SCENE_MATERIAL_BUNDLE_GROUP,
   developerAssetFeatureBadges,
   normalizeAssetRole as normalizeWorkflowAssetRole,
   normalizedAssetRole as normalizedWorkflowAssetRole,
@@ -210,10 +212,7 @@ const vehicleRoles: RoleOption[] = [
 ]
 
 const sceneRoles: RoleOption[] = [
-  { value: 'scene_showroom', label: '展厅场景' },
-  { value: 'scene_outdoor', label: '户外场景' },
-  { value: 'scene_road', label: '道路场景' },
-  { value: 'scene_night', label: '夜景/门店' },
+  { value: 'scene_showroom', label: '场景图片' },
 ]
 
 const categories: AssetCategory[] = [
@@ -240,8 +239,8 @@ const categories: AssetCategory[] = [
   {
     key: 'scene',
     label: '场景图片',
-    hint: '展厅 / 户外 / 道路',
-    description: '用于补充展厅、道路、门店夜景等分镜背景。',
+    hint: '单张背景图',
+    description: '选择一张展厅、户外、道路或门店夜景图片作为本次视频背景参考。',
     placeholder: '搜索展厅、道路、门店、城市...',
     assetTypes: ['IMAGE', 'COVER'],
     roles: sceneRoles,
@@ -368,26 +367,28 @@ watch(
 )
 
 function syncScopeForCategory(category: CarSalesAssetCategoryKey) {
-  if (category === 'carBundle') {
+  if (category === 'carBundle' || category === 'scene') {
     scope.value = 'all'
   }
 }
 
 async function loadAssets() {
   const seq = ++previewLoadSeq
+  const category = activeCategory.value
   loading.value = true
   errorMessage.value = ''
   try {
+    const assetGroup = assetGroupForCategory(category)
     const lists = await Promise.all(
-      activeCategory.value.assetTypes.map((assetType) =>
+      category.assetTypes.map((assetType) =>
         getAssets({
           assetType,
           keyword: keyword.value,
           scope: scope.value,
-          assetGroup: activeCategory.value.key === 'carBundle' ? '\u6c7d\u8f66\u7d20\u6750\u5305' : undefined,
+          assetGroup,
           sort: 'createdAtDesc',
           pageNo: 1,
-          pageSize: activeCategory.value.key === 'carBundle' ? 80 : 40,
+          pageSize: category.key === 'carBundle' || category.key === 'scene' ? 80 : 40,
         }),
       ),
     )
@@ -402,6 +403,16 @@ async function loadAssets() {
   } finally {
     loading.value = false
   }
+}
+
+function assetGroupForCategory(category: AssetCategory) {
+  if (category.key === 'carBundle') {
+    return CAR_MODEL_BUNDLE_GROUP
+  }
+  if (category.key === 'scene') {
+    return SCENE_MATERIAL_BUNDLE_GROUP
+  }
+  return undefined
 }
 
 function setCategory(key: CarSalesAssetCategoryKey) {
@@ -471,6 +482,9 @@ function assetMatchesCategory(asset: AssetItem, category: AssetCategory) {
   }
   if (category.key === 'carBundle') {
     return isCarBundle(asset)
+  }
+  if (category.key === 'scene') {
+    return isSceneImageAsset(asset)
   }
   if (category.key === 'avatar') {
     return isAvatarAsset(asset) || asset.assetType === 'IMAGE' || asset.assetType === 'COVER'
@@ -544,6 +558,35 @@ function isAvatarAsset(asset: AssetItem) {
     text.includes('avatarname') ||
     text.includes('数字人') ||
     text.includes('主播')
+}
+
+function isSceneImageAsset(asset: AssetItem) {
+  if (!isImageLikeAsset(asset)) {
+    return false
+  }
+  const group = String(asset.assetGroup || '').trim()
+  if (group === SCENE_MATERIAL_BUNDLE_GROUP) {
+    return true
+  }
+  const metadata = parseMetadata(asset.metadataJson)
+  const explicitRole = normalizeWorkflowAssetRole(
+    metadataTextFromRecord(metadata, 'assetRole') || metadataTextFromRecord(metadata, 'role'),
+  )
+  const metadataGroup = metadataTextFromRecord(metadata, 'assetGroup').trim()
+  const bundleType = metadataTextFromRecord(metadata, 'bundleType').trim().toLowerCase()
+  const from = metadataTextFromRecord(metadata, 'from').trim().toLowerCase()
+  return (
+    bundleType === 'scene_material' ||
+    from === 'scene_material' ||
+    from === 'scene_material_image' ||
+    (explicitRole.startsWith('scene_') && metadataGroup === SCENE_MATERIAL_BUNDLE_GROUP)
+  )
+}
+
+function isImageLikeAsset(asset: AssetItem) {
+  const assetType = String(asset.assetType || '').trim().toUpperCase()
+  const mimeType = String(asset.mimeType || '').trim().toLowerCase()
+  return assetType === 'IMAGE' || assetType === 'COVER' || mimeType.startsWith('image/')
 }
 
 function metadataText(asset: AssetItem, key: string) {
@@ -701,7 +744,19 @@ function assetPreviewImageCount(asset: AssetItem) {
 }
 
 function assetPreviewTitle(asset: AssetItem) {
-  return assetPreview(asset)?.title || asset.fileName
+  return assetPreview(asset)?.title || assetDisplayName(asset) || asset.fileName
+}
+
+function assetDisplayName(asset: AssetItem) {
+  const metadata = parseMetadata(asset.metadataJson)
+  return firstNonEmptyText(
+    stringFromRecord(metadata, 'displayName'),
+    stringFromRecord(metadata, 'assetDisplayName'),
+    stringFromRecord(metadata, 'assetName'),
+    stringFromRecord(metadata, 'sourceTitle'),
+    stringFromRecord(metadata, 'title'),
+    stringFromRecord(metadata, 'name'),
+  )
 }
 
 function assetPreviewMeta(asset: AssetItem) {

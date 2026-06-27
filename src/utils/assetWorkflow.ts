@@ -36,7 +36,7 @@ const ROLE_LABELS: Record<string, string> = {
   scene_outdoor: '户外场景',
   scene_road: '道路场景',
   scene_night: '夜景/门店',
-  scene_material_bundle: '场景素材包',
+  scene_material_bundle: '场景图片',
   host_image: '数字人形象',
   car_model_bundle: '车型素材包',
   voiceover: '口播',
@@ -334,7 +334,16 @@ export function isSceneReferenceImageAsset(asset: AssetItem | null | undefined) 
   }
   const group = String(asset.assetGroup || '').trim()
   const role = normalizedAssetRole(asset)
-  return role.startsWith('scene_') || group === SCENE_MATERIAL_BUNDLE_GROUP
+  const metadata = parseJsonObject(asset.metadataJson)
+  const bundleType = stringField(metadata, 'bundleType')
+  const from = stringField(metadata, 'from')
+  return (
+    group === SCENE_MATERIAL_BUNDLE_GROUP ||
+    bundleType === 'scene_material' ||
+    from === 'scene_material' ||
+    from === 'scene_material_image' ||
+    (role.startsWith('scene_') && stringField(metadata, 'assetGroup') === SCENE_MATERIAL_BUNDLE_GROUP)
+  )
 }
 
 export function matchesAssetWorkflowStage(asset: AssetItem, stage: AssetWorkflowStageKey | null | undefined) {
@@ -396,10 +405,24 @@ export function assetWorkflowDisplayTitle(asset: AssetItem | null | undefined) {
       stringField(metadata, 'title'),
       stringField(metadata, 'name'),
     )
-    return title ? `场景素材包：${title}` : asset.fileName
+    return title ? `场景图片：${title}` : asset.fileName
   }
   if (isSceneReferenceImageAsset(asset)) {
-    return `场景图：${generatedAssetSourceLabel(asset) || asset.fileName}`
+    const metadata = parseJsonObject(asset.metadataJson)
+    const title = firstNonEmptyText(
+      stringField(metadata, 'displayName'),
+      stringField(metadata, 'assetDisplayName'),
+      stringField(metadata, 'assetName'),
+      stringField(metadata, 'sourceTitle'),
+      stringField(metadata, 'title'),
+      stringField(metadata, 'name'),
+      generatedAssetSourceLabel(asset),
+      asset.fileName,
+    )
+    if (!title) {
+      return asset.fileName
+    }
+    return title.startsWith('场景图：') || title.startsWith('场景图片：') ? title : `场景图：${title}`
   }
   if (isCarModelScriptAsset(asset)) {
     return `车型文案：${libraryAssetDisplayName(asset, '文案') || carModelContentName(asset) || asset.fileName}`
@@ -429,12 +452,11 @@ export function assetWorkflowDisplayMeta(asset: AssetItem | null | undefined) {
   }
   if (isSceneMaterialBundleAsset(asset)) {
     const metadata = parseJsonObject(asset.metadataJson)
-    const visibilityLabel = String(asset.visibility || '').toUpperCase() === 'PUBLIC' ? '公共素材包' : '私有素材包'
+    const visibilityLabel = String(asset.visibility || '').toUpperCase() === 'PUBLIC' ? '公共场景图片' : '私有场景图片'
     const imageCount = numberField(metadata, 'imageCount')
     return [
       visibilityLabel,
-      '场景素材包',
-      imageCount > 0 ? `${imageCount} 张场景图` : '',
+      imageCount > 0 ? `${imageCount} 张图` : '',
       asset.assetType,
       sourceTypeLabel(asset.sourceType),
     ].filter(Boolean).join(' · ')
@@ -502,7 +524,7 @@ export function assetWorkflowPreviewLabel(asset: AssetItem | null | undefined) {
     return ''
   }
   if (isCarModelBundleAsset(asset)) return '车型素材包'
-  if (isSceneMaterialBundleAsset(asset)) return '场景素材包'
+  if (isSceneMaterialBundleAsset(asset)) return '场景图片'
   if (isSceneReferenceImageAsset(asset)) return '场景图'
   if (isCarModelScriptAsset(asset)) return '文案预览'
   if (isCarModelStoryboardAsset(asset)) return '分镜摘要'

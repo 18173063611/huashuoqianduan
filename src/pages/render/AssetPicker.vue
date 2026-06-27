@@ -174,7 +174,7 @@
                 />
                 <span v-else class="asset-picker-icon">{{ assetIcon(asset) }}</span>
                 <span class="asset-picker-meta">
-                  <strong>{{ asset.fileName }}</strong>
+                  <strong>{{ assetDisplayTitle(asset) }}</strong>
                   <small>{{ assetListSubtitle(asset) }}</small>
                   <span v-if="assetRoleLabel(asset)" class="asset-picker-role-tag">{{ assetRoleLabel(asset) }}</span>
                   <span class="asset-picker-provider-tag" :class="assetProviderTagClass(asset)">
@@ -200,13 +200,13 @@
         <div v-if="activeVideoPreviewUrl" class="asset-picker-active-video">
           <video :src="activeVideoPreviewUrl" controls preload="metadata" playsinline />
           <div>
-            <strong>{{ activeAsset?.fileName }}</strong>
+            <strong>{{ activeAsset ? assetDisplayTitle(activeAsset) : '' }}</strong>
             <small>{{ activeAsset ? assetListSubtitle(activeAsset) : '' }}</small>
           </div>
         </div>
 
         <footer class="asset-picker-modal-foot">
-          <span>{{ activeAsset ? `当前选择：${activeAsset.fileName}` : '单击选中资产，双击可直接选择' }}</span>
+          <span>{{ activeAsset ? `当前选择：${assetDisplayTitle(activeAsset)}` : '单击选中资产，双击可直接选择' }}</span>
           <button
             class="asset-picker-button asset-picker-primary"
             type="button"
@@ -929,6 +929,13 @@ function assetPosterUrl(asset: AssetItem) {
 
 function assetPreview(asset: AssetItem) {
   return normalizePreviewWithWorkflowDisplay(asset, previewByAssetId.value[asset.assetId] || buildFallbackPreview(asset))
+}
+
+function assetDisplayTitle(asset: AssetItem | null | undefined) {
+  if (!asset) {
+    return ''
+  }
+  return assetWorkflowDisplayTitle(asset) || asset.fileName
 }
 
 function normalizePreviewWithWorkflowDisplay(asset: AssetItem, preview: AssetPickerPreview): AssetPickerPreview {
