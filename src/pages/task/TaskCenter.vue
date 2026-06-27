@@ -97,9 +97,14 @@
               {{ formatFriendlyDateTime(task.updatedAt) }}
             </p>
           </div>
-          <button type="button" class="app-primary-button" @click="continuePendingPlanTask(task)">
-            继续生成
-          </button>
+          <div class="pending-plan-actions">
+            <button type="button" class="app-secondary-button pending-plan-delete" @click="deletePendingPlanTask(task)">
+              删除
+            </button>
+            <button type="button" class="app-primary-button" @click="continuePendingPlanTask(task)">
+              继续生成
+            </button>
+          </div>
         </article>
       </section>
 
@@ -626,7 +631,7 @@
 
 import { computed, onBeforeUnmount, onMounted, ref, watch, watchEffect } from 'vue'
 import { RouterLink, useRoute, useRouter } from 'vue-router'
-import { ElMessage } from 'element-plus'
+import { ElMessage, ElMessageBox } from 'element-plus'
 import TaskRowSmoothProgress from '../../components/TaskRowSmoothProgress.vue'
 import AssetPicker from '../render/AssetPicker.vue'
 import { API_ORIGIN, getAuthToken } from '../../services/request'
@@ -647,6 +652,7 @@ import {
 import { getSessionTaskIds } from '../../services/sessionTaskStore'
 import {
   listPendingCarSalesPlanTasks,
+  removePendingCarSalesPlanTask,
   type PendingCarSalesPlanTask,
 } from '../../services/carSalesPlanTaskStore'
 import type { AssetItem } from '../../types/assetTypes'
@@ -716,6 +722,11 @@ const props = withDefaults(
   { panelActive: true },
 )
 
+const emit = defineEmits<{
+  openAsset: [assetId: number]
+  closePanel: []
+}>()
+
 const IMPORTABLE_RENDER_TASK_TYPES = new Set([
   'SEEDANCE_CAR_SALES_VIDEO',
   'SEEDANCE_TEXT_VIDEO',
@@ -784,14 +795,34 @@ function pendingPlanSourceLabel(source: PendingCarSalesPlanTask['source']) {
   return 'AI智能创作'
 }
 
-function continuePendingPlanTask(task: PendingCarSalesPlanTask) {
-  void router.push({
+async function continuePendingPlanTask(task: PendingCarSalesPlanTask) {
+  await router.push({
     name: task.routeName,
     query: {
       ...(task.routeQuery || {}),
       planDraftId: task.id,
     },
   })
+  emit('closePanel')
+}
+
+async function deletePendingPlanTask(task: PendingCarSalesPlanTask) {
+  try {
+    await ElMessageBox.confirm(
+      `确定删除“${task.title}”这个待确认方案吗？删除后不会影响已经提交的视频生成任务。`,
+      '删除待确认方案',
+      {
+        confirmButtonText: '删除',
+        cancelButtonText: '取消',
+        type: 'warning',
+      },
+    )
+  } catch {
+    return
+  }
+  removePendingCarSalesPlanTask(task.id)
+  refreshPendingPlanTasks()
+  ElMessage.success('已删除待确认方案')
 }
 const resultObject = computed(() => {
   const primary = isRecord(selectedTaskResult.value) ? selectedTaskResult.value : null
@@ -2327,9 +2358,30 @@ section.app-card.app-page-stack {
   min-width: 0;
 }
 
+.pending-plan-actions {
+  display: inline-flex;
+  flex: 0 0 auto;
+  align-items: center;
+  gap: 8px;
+}
+
 .pending-plan-card .app-primary-button {
   min-width: 96px;
   white-space: nowrap;
+}
+
+.pending-plan-delete {
+  min-width: 64px;
+  border-color: #fecaca;
+  background: #fff7f7;
+  color: #dc2626;
+  white-space: nowrap;
+}
+
+.pending-plan-delete:hover {
+  border-color: #fca5a5;
+  background: #fee2e2;
+  color: #b91c1c;
 }
 
 .task-toolbar .asset-type-select {

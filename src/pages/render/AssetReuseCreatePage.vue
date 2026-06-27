@@ -539,7 +539,7 @@ import {
   type CarSalesPlanDraft,
 } from './carSalesPlanDraft'
 
-const DEFAULT_CAR_SALES_MODEL = 'doubao-seedance-2-0-pro-250528'
+const DEFAULT_CAR_SALES_MODEL = 'auto'
 const carSalesPreferences = loadCarSalesPreferences()
 
 interface SelectedAsset {

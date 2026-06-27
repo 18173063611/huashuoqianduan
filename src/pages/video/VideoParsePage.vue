@@ -988,7 +988,7 @@ import wechatIcon from '../../assets/platforms/wechat.svg'
 import xiaohongshuIcon from '../../assets/platforms/xiaohongshu.svg'
 import youtubeIcon from '../../assets/platforms/youtube.svg'
 
-const DEFAULT_CAR_SALES_MODEL = 'doubao-seedance-2-0-pro-250528'
+const DEFAULT_CAR_SALES_MODEL = 'auto'
 
 // 抖音解析 / 爆款对标：核心计费动作是 VIDEO_PARSE（视频理解）。
 const parseEstimate = useBillingEstimate({ taskType: 'VIDEO_PARSE' })

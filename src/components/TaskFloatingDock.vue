@@ -55,6 +55,7 @@
             v-if="activePanel === 'task'"
             :panel-active="activePanel === 'task'"
             @open-asset="onOpenAsset"
+            @close-panel="activePanel = null"
           />
           <CustomerFeedbackPanel
             v-else
