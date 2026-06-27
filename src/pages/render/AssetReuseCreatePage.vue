@@ -126,24 +126,35 @@
                 </el-select>
               </label>
               <label class="reuse-setting-field">
-                <span>分段数量</span>
-                <el-select v-model="assetReuseSegmentCount" size="small">
+                <span>目标总时长</span>
+                <el-input-number
+                  v-model="assetReuseTargetDuration"
+                  size="small"
+                  :min="4"
+                  :max="120"
+                  :step="1"
+                  controls-position="right"
+                />
+              </label>
+              <label class="reuse-setting-field">
+                <span>讲述声音</span>
+                <el-select v-model="assetReuseNativeVoiceStyle" size="small">
                   <el-option
-                    v-for="item in ASSET_REUSE_SEGMENT_COUNT_OPTIONS"
-                    :key="item"
-                    :label="`${item} 段`"
-                    :value="item"
+                    v-for="item in CAR_NATIVE_VOICE_STYLE_OPTIONS"
+                    :key="item.value"
+                    :label="item.label"
+                    :value="item.value"
                   />
                 </el-select>
               </label>
               <label class="reuse-setting-field">
-                <span>每段时长</span>
-                <el-select v-model="assetReuseSegmentDuration" size="small">
+                <span>讲述节奏</span>
+                <el-select v-model="assetReuseNativeSpeechStyle" size="small">
                   <el-option
-                    v-for="item in ASSET_REUSE_SEGMENT_DURATION_OPTIONS"
-                    :key="item"
-                    :label="`${item} 秒`"
-                    :value="item"
+                    v-for="item in CAR_NATIVE_SPEECH_STYLE_OPTIONS"
+                    :key="item.value"
+                    :label="item.label"
+                    :value="item.value"
                   />
                 </el-select>
               </label>
@@ -637,6 +648,8 @@ import { newVideoIdempotencyKey, quickRenderVideo } from '../../services/videoAp
 import { cancelTask } from '../../services/taskApi'
 import { loadCarSalesPreferences } from '../../services/systemWorkspaceStore'
 import {
+  CAR_NATIVE_SPEECH_STYLE_OPTIONS,
+  CAR_NATIVE_VOICE_STYLE_OPTIONS,
   normalizeCarNativeSpeechStyle,
   normalizeCarNativeVoiceStyle,
 } from '../../constants/carSalesVoiceStyles'
@@ -657,7 +670,11 @@ import {
 } from './carModelBundle'
 import {
   buildQuickRenderRequestFromPlanDraft,
+  distributePlanDurationsToTarget,
   ensureCarSalesPlanDraftAsset,
+  fitPlanStoryboardToTargetDuration,
+  inferPlanSegmentCountForTargetDuration,
+  normalizePlanTargetDuration,
   parseStoryboardAssetTextToPlanShots,
   planAssetFromAssetItem,
   prepareCarSalesAiPlanPreview,
@@ -823,8 +840,9 @@ const ASSET_REUSE_MODEL_OPTIONS = [
   { value: 'doubao-seedance-2-0-pro-250528', label: 'Seedance 2.0 Pro' },
   { value: DEFAULT_CAR_SALES_MODEL, label: '系统智能选择' },
 ]
-const ASSET_REUSE_SEGMENT_COUNT_OPTIONS = [1, 2, 3, 4, 5, 6, 8, 10, 12]
-const ASSET_REUSE_SEGMENT_DURATION_OPTIONS = [4, 5, 6, 8, 10, 12, 15]
+const ASSET_REUSE_MIN_SEGMENT_DURATION = 4
+const ASSET_REUSE_MAX_SEGMENTS = 12
+const ASSET_REUSE_DEFAULT_TARGET_DURATION = 30
 const ROLE_LABEL_OPTIONS: Array<{ value: QuickRenderAssetRole; label: string }> = [
   ...roleOptions,
   ...CAR_IMAGE_ROLE_OPTIONS.map((item) => ({ value: item.value as QuickRenderAssetRole, label: item.label })),
@@ -906,6 +924,9 @@ const assetReuseSubtitleLanguage = ref('zh-CN')
 const assetReuseBurnInSubtitle = ref(true)
 const assetReuseAudioPolicy = ref<CarSalesPlanDraft['audioPolicy']>('auto')
 const assetReuseModel = ref(DEFAULT_ASSET_REUSE_MODEL)
+const assetReuseTargetDuration = ref(ASSET_REUSE_DEFAULT_TARGET_DURATION)
+const assetReuseNativeVoiceStyle = ref(normalizeCarNativeVoiceStyle(carSalesPreferences.nativeVoiceStyle))
+const assetReuseNativeSpeechStyle = ref(normalizeCarNativeSpeechStyle(carSalesPreferences.nativeSpeechStyle))
 const assetReuseSegmentCount = ref(6)
 const assetReuseSegmentDuration = ref(5)
 const assetReuseHeadlineEnabled = ref(false)
@@ -1005,11 +1026,11 @@ const selectedIntegrationPackageUrl = computed(() =>
     : '',
 )
 const selectedIntegrationPackageName = computed(() => selectedIntegrationPackage.value?.fileName || '')
-const assetReuseTotalDuration = computed(() => assetReuseSegmentCount.value * assetReuseSegmentDuration.value)
+const assetReuseTotalDuration = computed(() => normalizeAssetReuseTargetDuration(assetReuseTargetDuration.value))
 const assetReuseDurationLabel = computed(() => formatDurationLabel(assetReuseTotalDuration.value))
 const assetReuseSettingsSummary = computed(() => [
   optionLabel(ASSET_REUSE_ASPECT_RATIO_OPTIONS, assetReuseAspectRatio.value),
-  `${assetReuseSegmentCount.value} 段`,
+  `${assetReuseTotalDuration.value} 秒`,
   optionLabel(ASSET_REUSE_LANGUAGE_OPTIONS, assetReuseVoiceLanguage.value),
 ].filter(Boolean).join(' · '))
 const assetReuseSubtitleSettingSummary = computed(() => {
@@ -1094,6 +1115,10 @@ function formatDurationLabel(seconds: number) {
   return `${String(minutes).padStart(2, '0')}:${String(rest).padStart(2, '0')}`
 }
 
+function normalizeAssetReuseTargetDuration(value: unknown) {
+  return normalizePlanTargetDuration(value, ASSET_REUSE_DEFAULT_TARGET_DURATION, ASSET_REUSE_MIN_SEGMENT_DURATION, 120)
+}
+
 function resetAssetReuseGenerationControls() {
   assetReuseAspectRatio.value = '9:16'
   assetReuseVoiceLanguage.value = 'zh-CN'
@@ -1102,6 +1127,9 @@ function resetAssetReuseGenerationControls() {
   assetReuseBurnInSubtitle.value = true
   assetReuseAudioPolicy.value = 'auto'
   assetReuseModel.value = DEFAULT_ASSET_REUSE_MODEL
+  assetReuseTargetDuration.value = ASSET_REUSE_DEFAULT_TARGET_DURATION
+  assetReuseNativeVoiceStyle.value = normalizeCarNativeVoiceStyle(carSalesPreferences.nativeVoiceStyle)
+  assetReuseNativeSpeechStyle.value = normalizeCarNativeSpeechStyle(carSalesPreferences.nativeSpeechStyle)
   assetReuseSegmentCount.value = 6
   assetReuseSegmentDuration.value = 5
   assetReuseHeadlineEnabled.value = false
@@ -1120,6 +1148,17 @@ function applyImportedRenderConfigToControls(config: ImportedRenderConfig) {
   assetReuseBurnInSubtitle.value = config.burnInSubtitle ?? config.enableSubtitle ?? assetReuseBurnInSubtitle.value
   assetReuseAudioPolicy.value = normalizeImportedAudioPolicy(config.audioPolicy) || assetReuseAudioPolicy.value
   assetReuseModel.value = config.model || assetReuseModel.value
+  assetReuseTargetDuration.value = normalizeAssetReuseTargetDuration(
+    config.duration
+    || (config.segmentCount && config.segmentDuration ? config.segmentCount * config.segmentDuration : 0)
+    || assetReuseTargetDuration.value,
+  )
+  assetReuseNativeVoiceStyle.value = normalizeCarNativeVoiceStyle(
+    config.nativeVoiceStyle || assetReuseNativeVoiceStyle.value,
+  )
+  assetReuseNativeSpeechStyle.value = normalizeCarNativeSpeechStyle(
+    config.nativeSpeechStyle || assetReuseNativeSpeechStyle.value,
+  )
   assetReuseSegmentCount.value = config.segmentCount
     || Math.max(1, Math.round((config.duration || 0) / (config.segmentDuration || assetReuseSegmentDuration.value)))
     || assetReuseSegmentCount.value
@@ -1137,6 +1176,8 @@ function currentAssetReuseRenderConfig(): ImportedRenderConfig {
     subtitleMode: assetReuseSubtitleMode.value,
     subtitleLanguage: assetReuseSubtitleLanguage.value,
     nativeVoiceLanguage: assetReuseVoiceLanguage.value,
+    nativeVoiceStyle: assetReuseNativeVoiceStyle.value,
+    nativeSpeechStyle: assetReuseNativeSpeechStyle.value,
     burnInSubtitle: assetReuseSubtitleMode.value !== 'off' && assetReuseBurnInSubtitle.value,
     audioPolicy: assetReuseAudioPolicy.value,
     model: assetReuseModel.value,
@@ -2106,19 +2147,61 @@ async function buildAssetReusePlanDraft(): Promise<CarSalesPlanDraft> {
   const hasVehicle = assets.some((asset) => asset.role === 'car_model_bundle' || asset.role.startsWith('car_') || asset.role.startsWith('scene_'))
   const scriptAsset = assets.find((asset) => (asset.role === 'voice_script' || asset.role === 'benchmark_json') && asset.textContent)
   const storyboardAsset = assets.find((asset) => asset.role === 'storyboard_json' && asset.textContent)
+  const benchmarkStructureAsset = assets.find((asset) => asset.role === 'benchmark_json' && asset.textContent)
   const importedScript = importedScriptText.value.trim()
   const importedStoryboardShots = importedStoryboard.value.filter((shot) => shot.visual || shot.narration)
   const selectedStoryboardShots = storyboardAsset
     ? parseStoryboardAssetTextToPlanShots(
       storyboardAsset.textContent,
-      assetReuseSegmentDuration.value,
+      Math.max(1, Math.round(assetReuseTotalDuration.value / Math.max(1, assetReuseSegmentCount.value))),
       24,
     )
     : []
   if (storyboardAsset && !selectedStoryboardShots.length) {
     throw new Error('已选择的分镜资产无法解析为结构化镜头，请重新选择分镜资产或重新生成分镜后再使用资产复用。')
   }
-  const storyboardShots = selectedStoryboardShots.length ? selectedStoryboardShots : importedStoryboardShots
+  const benchmarkStoryboardShots = !selectedStoryboardShots.length && benchmarkStructureAsset
+    ? parseStoryboardAssetTextToPlanShots(
+      benchmarkStructureAsset.textContent,
+      Math.max(1, Math.round(assetReuseTotalDuration.value / Math.max(1, assetReuseSegmentCount.value))),
+      24,
+    )
+    : []
+  const rawStoryboardShots = selectedStoryboardShots.length
+    ? selectedStoryboardShots
+    : benchmarkStoryboardShots.length
+      ? benchmarkStoryboardShots
+      : importedStoryboardShots
+  const storyboardShots = fitPlanStoryboardToTargetDuration(
+    rawStoryboardShots,
+    assetReuseTotalDuration.value,
+    {
+      maxSegments: ASSET_REUSE_MAX_SEGMENTS,
+      minSegmentDuration: ASSET_REUSE_MIN_SEGMENT_DURATION,
+    },
+  )
+  const scriptTextForPlanning = scriptAsset?.textContent?.trim() || importedScript || draftPrompt.value.trim()
+  const derivedSegmentCount = storyboardShots.length || inferPlanSegmentCountForTargetDuration(
+    assetReuseTotalDuration.value,
+    {
+      scriptText: scriptTextForPlanning,
+      model: assetReuseModel.value,
+      maxSegments: ASSET_REUSE_MAX_SEGMENTS,
+      minSegmentDuration: ASSET_REUSE_MIN_SEGMENT_DURATION,
+    },
+  )
+  const derivedSegmentDurations = storyboardShots.length
+    ? storyboardShots.map((shot) => shot.duration)
+    : distributePlanDurationsToTarget(
+      assetReuseTotalDuration.value,
+      derivedSegmentCount,
+      [],
+      { minSegmentDuration: ASSET_REUSE_MIN_SEGMENT_DURATION },
+    )
+  assetReuseSegmentCount.value = Math.max(1, Math.min(ASSET_REUSE_MAX_SEGMENTS, Math.round(derivedSegmentDurations.length || derivedSegmentCount)))
+  assetReuseSegmentDuration.value = Math.max(1, Math.round(
+    derivedSegmentDurations.reduce((sum, value) => sum + value, 0) / Math.max(1, derivedSegmentDurations.length),
+  ))
   const prompt = draftPrompt.value.trim() || [
     '复用已选资产生成一条汽车销售视频',
     scriptAsset ? `参考文案：${scriptAsset.textContent?.slice(0, 400)}` : '',
@@ -2156,12 +2239,8 @@ async function buildAssetReusePlanDraft(): Promise<CarSalesPlanDraft> {
     subtitleMode: assetReuseSubtitleMode.value,
     subtitleLanguage: assetReuseSubtitleLanguage.value || voiceLanguage,
     nativeVoiceLanguage: voiceLanguage,
-    nativeVoiceStyle: normalizeCarNativeVoiceStyle(
-      importedRenderConfig.value.nativeVoiceStyle || carSalesPreferences.nativeVoiceStyle,
-    ),
-    nativeSpeechStyle: normalizeCarNativeSpeechStyle(
-      importedRenderConfig.value.nativeSpeechStyle || carSalesPreferences.nativeSpeechStyle,
-    ),
+    nativeVoiceStyle: normalizeCarNativeVoiceStyle(assetReuseNativeVoiceStyle.value),
+    nativeSpeechStyle: normalizeCarNativeSpeechStyle(assetReuseNativeSpeechStyle.value),
     autoTtsVoiceId: importedRenderConfig.value.autoTtsVoiceId || carSalesPreferences.preferredVoiceId,
     burnInSubtitle: assetReuseSubtitleMode.value !== 'off' && assetReuseBurnInSubtitle.value,
     audioPolicy: effectiveAudioPolicy,

@@ -1043,6 +1043,105 @@ export function maxStoryboardSegmentDurationForModel(model?: string) {
   return /seedance[-_]?2|2-0|85r4g/i.test(key) ? 15 : 12
 }
 
+export function normalizePlanTargetDuration(value: unknown, fallback = 30, min = 4, max = 120) {
+  const parsed = Math.round(Number(value))
+  if (!Number.isFinite(parsed) || parsed <= 0) return fallback
+  return Math.max(min, Math.min(max, parsed))
+}
+
+export function inferPlanSegmentCountForTargetDuration(
+  targetDuration: number,
+  options: {
+    scriptText?: string
+    model?: string
+    maxSegments?: number
+    minSegmentDuration?: number
+  } = {},
+) {
+  const minDuration = Math.max(1, options.minSegmentDuration || 4)
+  const maxSegments = Math.max(1, options.maxSegments || MAX_GENERATION_SEGMENTS)
+  const normalizedTarget = normalizePlanTargetDuration(targetDuration)
+  const maxByMin = Math.max(1, Math.floor(normalizedTarget / minDuration))
+  const minByModelMax = Math.max(1, Math.ceil(normalizedTarget / maxStoryboardSegmentDurationForModel(options.model)))
+  const script = options.scriptText || ''
+  const scriptLines = script
+    .split(/\n+/)
+    .map((line) => line.trim())
+    .filter(Boolean).length
+  const scriptClauses = script
+    .split(/(?<=[。！？!?\.；;])\s*/u)
+    .map((line) => line.trim())
+    .filter(Boolean).length
+  const textHint = Math.max(scriptLines, scriptClauses)
+  const durationHint = normalizedTarget <= 10
+    ? 2
+    : normalizedTarget <= 15
+      ? 3
+      : normalizedTarget <= 30
+        ? Math.ceil(normalizedTarget / 6)
+        : Math.ceil(normalizedTarget / 8)
+  return Math.max(minByModelMax, Math.min(maxSegments, maxByMin, textHint || durationHint))
+}
+
+export function distributePlanDurationsToTarget(
+  totalDuration: number,
+  count: number,
+  weights: number[] = [],
+  options: { minSegmentDuration?: number } = {},
+) {
+  const minSegmentDuration = Math.max(1, Math.round(Number(options.minSegmentDuration) || 4))
+  const total = normalizePlanTargetDuration(totalDuration, 30, minSegmentDuration)
+  const maxCountForTotal = Math.max(1, Math.floor(total / minSegmentDuration))
+  const safeCount = Math.max(
+    1,
+    Math.min(MAX_GENERATION_SEGMENTS, Math.round(Number(count) || 1), maxCountForTotal),
+  )
+  const normalizedWeights = Array.from({ length: safeCount }, (_, idx) => {
+    const value = Math.round(Number(weights[idx]) || 0)
+    return value > 0 ? value : 1
+  })
+  let remainingExtra = Math.max(0, total - safeCount * minSegmentDuration)
+  let remainingWeight = normalizedWeights.reduce((sum, value) => sum + value, 0) || safeCount
+  return normalizedWeights.map((weight, idx) => {
+    const isLast = idx === safeCount - 1
+    const extra = isLast
+      ? remainingExtra
+      : Math.max(0, Math.min(remainingExtra, Math.round((weight / remainingWeight) * remainingExtra)))
+    remainingExtra -= extra
+    remainingWeight -= weight
+    return minSegmentDuration + extra
+  })
+}
+
+export function fitPlanStoryboardToTargetDuration(
+  storyboard: AiPlanStoryboardShot[],
+  targetDuration: number,
+  options: { maxSegments?: number; minSegmentDuration?: number } = {},
+) {
+  const normalizedTarget = normalizePlanTargetDuration(targetDuration)
+  const minSegmentDuration = Math.max(1, Math.round(Number(options.minSegmentDuration) || 4))
+  const maxByMinDuration = Math.max(1, Math.floor(normalizedTarget / minSegmentDuration))
+  const maxSegments = Math.max(
+    1,
+    Math.min(MAX_GENERATION_SEGMENTS, options.maxSegments || MAX_GENERATION_SEGMENTS, maxByMinDuration),
+  )
+  const source = storyboard
+    .filter((shot) => shot.visual || shot.narration)
+    .slice(0, maxSegments)
+  if (!source.length) return []
+  const durations = distributePlanDurationsToTarget(
+    normalizedTarget,
+    source.length,
+    source.map((shot) => shot.duration),
+    { minSegmentDuration },
+  )
+  return source.map((shot, idx) => ({
+    ...shot,
+    index: idx + 1,
+    duration: durations[idx] || Math.max(1, Math.round(normalizedTarget / source.length)),
+  }))
+}
+
 function normalizePlanModel(model?: string) {
   const key = (model || '').trim()
   return !key || key === 'auto' ? DEFAULT_CAR_SALES_MODEL : key
