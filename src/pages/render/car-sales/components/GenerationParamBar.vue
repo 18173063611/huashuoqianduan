@@ -5,15 +5,16 @@
         <span>时长</span>
         <input
           class="quick-duration-input"
-          type="number"
+          type="text"
           inputmode="numeric"
-          min="4"
-          max="120"
-          step="1"
-          :value="targetDuration"
+          maxlength="3"
+          placeholder="15"
+          :value="durationInput"
           :disabled="busy"
-          @input="emitDuration"
-          @blur="emitDuration"
+          @focus="beginDurationEdit"
+          @input="updateDurationInput"
+          @blur="commitDurationInput"
+          @keydown.enter.prevent="commitDurationInput"
         />
         <em>秒</em>
       </label>
@@ -56,7 +57,9 @@
 </template>
 
 <script setup lang="ts">
-defineProps<{
+import { ref, watch } from 'vue'
+
+const props = defineProps<{
   targetDuration: number
   voiceLanguage: string
   voiceLanguageOptions: Array<{ value: string; label: string }>
@@ -72,6 +75,9 @@ defineProps<{
   busyLabel?: string
 }>()
 
+const durationInput = ref(String(normalizeDurationValue(props.targetDuration)))
+const durationEditing = ref(false)
+
 const emit = defineEmits<{
   'update:targetDuration': [value: number]
   'update:voiceLanguage': [value: string]
@@ -80,21 +86,41 @@ const emit = defineEmits<{
   generate: []
 }>()
 
-function emitDuration(event: Event) {
-  const target = event.target as HTMLInputElement | null
-  const rawText = target?.value?.trim() || ''
-  if (!rawText) {
-    if (event.type === 'blur') {
-      emit('update:targetDuration', 15)
-      if (target) target.value = '15'
+watch(
+  () => props.targetDuration,
+  (value) => {
+    if (!durationEditing.value) {
+      durationInput.value = String(normalizeDurationValue(value))
     }
-    return
+  },
+)
+
+function normalizeDurationValue(value: unknown, fallback = 15) {
+  const raw = Number(value)
+  if (!Number.isFinite(raw)) return fallback
+  return Math.max(4, Math.min(120, Math.round(raw)))
+}
+
+function beginDurationEdit() {
+  durationEditing.value = true
+}
+
+function updateDurationInput(event: Event) {
+  const target = event.target as HTMLInputElement | null
+  const value = (target?.value || '').replace(/[^\d]/g, '')
+  durationInput.value = value
+  if (target && target.value !== value) {
+    target.value = value
   }
-  const raw = Number(rawText)
-  const value = Math.max(4, Math.min(120, Math.round(Number.isFinite(raw) ? raw : 15)))
-  if (target && target.value && Number(target.value) !== value) {
-    target.value = String(value)
-  }
+}
+
+function commitDurationInput() {
+  const fallback = normalizeDurationValue(props.targetDuration)
+  const value = durationInput.value.trim()
+    ? normalizeDurationValue(durationInput.value, fallback)
+    : fallback
+  durationEditing.value = false
+  durationInput.value = String(value)
   emit('update:targetDuration', value)
 }
 
