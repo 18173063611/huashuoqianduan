@@ -185,7 +185,7 @@ function durationValue(value: unknown): CarSalesPreferenceDuration {
   if (!Number.isFinite(num)) {
     return defaultCarSalesPreferences.duration
   }
-  return Math.max(8, Math.min(120, Math.round(num)))
+  return Math.max(4, Math.min(120, Math.round(num)))
 }
 
 function numberOrNull(value: unknown) {

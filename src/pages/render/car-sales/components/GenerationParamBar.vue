@@ -7,7 +7,7 @@
           class="quick-duration-input"
           type="number"
           inputmode="numeric"
-          min="8"
+          min="4"
           max="120"
           step="1"
           :value="targetDuration"
@@ -82,8 +82,16 @@ const emit = defineEmits<{
 
 function emitDuration(event: Event) {
   const target = event.target as HTMLInputElement | null
-  const raw = Number(target?.value || 15)
-  const value = Math.max(8, Math.min(120, Math.round(Number.isFinite(raw) ? raw : 15)))
+  const rawText = target?.value?.trim() || ''
+  if (!rawText) {
+    if (event.type === 'blur') {
+      emit('update:targetDuration', 15)
+      if (target) target.value = '15'
+    }
+    return
+  }
+  const raw = Number(rawText)
+  const value = Math.max(4, Math.min(120, Math.round(Number.isFinite(raw) ? raw : 15)))
   if (target && target.value && Number(target.value) !== value) {
     target.value = String(value)
   }

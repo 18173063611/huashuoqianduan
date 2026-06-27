@@ -963,6 +963,9 @@ const voiceLanguageOptions = [
 const voiceLanguageLabel = computed(
   () => voiceLanguageOptions.find((item) => item.value === voiceLanguage.value)?.label || '中文讲述',
 )
+const QUICK_CAR_MIN_SEGMENT_DURATION = 4
+const QUICK_CAR_MAX_SEGMENT_DURATION = 15
+const QUICK_CAR_MAX_SEGMENTS = 8
 const audioPolicy = computed<QuickRenderRequest['audioPolicy']>(() => advancedSettings.value.audioPolicy)
 const totalDuration = computed(() => normalizeTargetDuration(targetDuration.value))
 const segmentCount = computed(() => {
@@ -970,33 +973,60 @@ const segmentCount = computed(() => {
   if (inferredRoute.value === 'material_mix') return Math.max(1, Math.min(4, videoCount.value || 1))
   return preferredCarSalesSegmentCount(totalDuration.value, imageCount.value)
 })
-const segmentDuration = computed(() => Math.max(4, Math.min(15, Math.round(totalDuration.value / Math.max(1, segmentCount.value)))))
+const segmentDurations = computed(() => distributeDurationAcrossSegments(totalDuration.value, segmentCount.value))
+const segmentDuration = computed(() => averageQuickSegmentDuration(segmentDurations.value))
 
 function normalizeTargetDuration(value: unknown) {
   const num = Number(value)
   if (!Number.isFinite(num)) return 15
-  return Math.max(8, Math.min(120, Math.round(num)))
+  return Math.max(QUICK_CAR_MIN_SEGMENT_DURATION, Math.min(120, Math.round(num)))
 }
 
 function preferredCarSalesSegmentCount(duration: number, references: number) {
   const total = normalizeTargetDuration(duration)
-  const maxByMinDuration = Math.max(1, Math.floor(total / 4))
-  const minByMaxDuration = Math.max(1, Math.ceil(total / 15))
-  const durationBasedCount = total <= 10 ? 2 : total <= 15 ? 3 : total <= 20 ? 5 : Math.ceil(total / 5)
-  const referenceRichCount = total >= 30 && references >= 8 ? 8 : durationBasedCount
-  return Math.max(2, Math.min(8, maxByMinDuration, Math.max(minByMaxDuration, referenceRichCount)))
+  const maxByMinDuration = Math.max(1, Math.floor(total / QUICK_CAR_MIN_SEGMENT_DURATION))
+  const minByMaxDuration = Math.max(1, Math.ceil(total / QUICK_CAR_MAX_SEGMENT_DURATION))
+  const durationBasedCount = total < 8 ? 1 : total <= 10 ? 2 : total <= 15 ? 3 : total <= 20 ? 5 : Math.ceil(total / 5)
+  const referenceRichCount = total >= 30 && references >= 8 ? QUICK_CAR_MAX_SEGMENTS : durationBasedCount
+  const desiredCount = Math.max(minByMaxDuration, Math.min(referenceRichCount, maxByMinDuration, QUICK_CAR_MAX_SEGMENTS))
+  return normalizeQuickSegmentCount(desiredCount)
 }
 
-function splitDurationEvenly(duration: number, count: number) {
-  const safeCount = Math.max(1, Math.round(count))
+function normalizeQuickSegmentCount(value: number) {
+  const parsed = Math.round(Number(value))
+  return Math.max(1, Math.min(QUICK_CAR_MAX_SEGMENTS, Number.isFinite(parsed) ? parsed : 1))
+}
+
+function clampQuickSegmentDuration(value: number) {
+  const rounded = Math.round(Number(value))
+  return Math.max(
+    QUICK_CAR_MIN_SEGMENT_DURATION,
+    Math.min(QUICK_CAR_MAX_SEGMENT_DURATION, Number.isFinite(rounded) ? rounded : 5),
+  )
+}
+
+function distributeDurationAcrossSegments(duration: number, count: number) {
   const total = normalizeTargetDuration(duration)
-  const base = Math.floor(total / safeCount)
-  let remainder = total - base * safeCount
+  const maxCountForTotal = Math.max(1, Math.floor(total / QUICK_CAR_MIN_SEGMENT_DURATION))
+  const minCountForTotal = Math.max(1, Math.ceil(total / QUICK_CAR_MAX_SEGMENT_DURATION))
+  const safeCount = Math.max(
+    minCountForTotal,
+    Math.min(normalizeQuickSegmentCount(count), maxCountForTotal, QUICK_CAR_MAX_SEGMENTS),
+  )
+  const adjustedTotal = Math.max(safeCount * QUICK_CAR_MIN_SEGMENT_DURATION, total)
+  const base = Math.floor(adjustedTotal / safeCount)
+  let remainder = adjustedTotal - base * safeCount
   return Array.from({ length: safeCount }).map(() => {
     const value = base + (remainder > 0 ? 1 : 0)
     remainder -= remainder > 0 ? 1 : 0
-    return Math.max(1, value)
+    return clampQuickSegmentDuration(value)
   })
+}
+
+function averageQuickSegmentDuration(values: number[]) {
+  if (!values.length) return 5
+  const total = values.reduce((sum, value) => sum + Math.max(0, Math.round(value || 0)), 0)
+  return clampQuickSegmentDuration(Math.round(total / values.length))
 }
 
 const inferredRoute = computed(() => {
@@ -2849,10 +2879,11 @@ function clearAiPlanStoryboardNarration(storyboard: AiPlanStoryboardShot[]) {
 
 function fitStoryboardDurationsToTarget(storyboard: AiPlanStoryboardShot[]) {
   const total = totalDuration.value
-  const minCountForMaxDuration = Math.max(1, Math.ceil(total / 15))
+  const minCountForMaxDuration = Math.max(1, Math.ceil(total / QUICK_CAR_MAX_SEGMENT_DURATION))
+  const maxCountForMinDuration = Math.max(1, Math.floor(total / QUICK_CAR_MIN_SEGMENT_DURATION))
   const desiredCount = Math.max(
     minCountForMaxDuration,
-    Math.min(8, storyboard.length || segmentCount.value),
+    Math.min(QUICK_CAR_MAX_SEGMENTS, maxCountForMinDuration, storyboard.length || segmentCount.value),
   )
   const source = storyboard.slice(0, desiredCount)
   while (source.length < desiredCount) {
@@ -2864,7 +2895,7 @@ function fitStoryboardDurationsToTarget(storyboard: AiPlanStoryboardShot[]) {
       duration: segmentDuration.value,
     })
   }
-  const durations = splitDurationEvenly(total, Math.max(1, source.length))
+  const durations = distributeDurationAcrossSegments(total, Math.max(1, source.length))
   return source.map((shot, index) => ({
     ...shot,
     index: index + 1,
@@ -3240,7 +3271,7 @@ function startNewAiSmartVideo() {
   subtitleLanguage.value = carSalesPreferences.voiceLanguage
   voiceLanguage.value = carSalesPreferences.voiceLanguage
   goalText.value = ''
-  targetDuration.value = carSalesPreferences.duration
+  targetDuration.value = normalizeTargetDuration(carSalesPreferences.duration)
   submitAttempted.value = false
   busy.value = false
   cancelingRenderTask.value = false
@@ -3351,7 +3382,7 @@ function buildFallbackStoryboard(script: string): AiPlanStoryboardShot[] {
     '补充细节、场景或使用价值，围绕用户关心的卖点推进。',
     '门店或车辆高光收尾，配合自然行动号召。',
   ]
-  const durations = splitDurationEvenly(totalDuration.value, Math.max(1, segmentCount.value))
+  const durations = segmentDurations.value
   return Array.from({ length: segmentCount.value }).map((_, index) => ({
     index: index + 1,
     visual: visualTemplates[index % visualTemplates.length],
