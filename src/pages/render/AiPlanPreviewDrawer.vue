@@ -142,6 +142,14 @@
         <footer class="ai-plan-footer">
           <button type="button" class="app-secondary-button" :disabled="loading" @click="$emit('back')">返回编辑</button>
           <button
+            v-if="loading"
+            type="button"
+            class="app-secondary-button ai-plan-danger-button"
+            @click="$emit('cancel-plan')"
+          >
+            取消方案生成
+          </button>
+          <button
             type="button"
             class="app-secondary-button"
             :disabled="loading"
@@ -212,6 +220,7 @@ const emit = defineEmits<{
   refresh: []
   confirm: []
   regenerate: []
+  'cancel-plan': []
   'cancel-generation': []
   back: []
 }>()

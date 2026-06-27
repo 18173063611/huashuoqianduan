@@ -290,6 +290,14 @@ export interface CarSalesAiPlanRequest {
   segmentCount?: number
   segmentDuration?: number
   sourceText?: string
+  hostAppearanceEnabled?: boolean
+  hasDigitalHuman?: boolean
+  digitalHumanId?: string
+  digitalHumanName?: string
+  avatarUrl?: string
+  hostImageUrl?: string
+  audioPolicy?: QuickRenderAudioPolicy | string
+  videoType?: string
 }
 
 export interface CarSalesAiPlanShot {

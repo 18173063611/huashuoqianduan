@@ -168,11 +168,12 @@ export function quickRenderVideo(payload: QuickRenderRequest, idempotencyKey?: s
   })
 }
 
-export function generateCarSalesAiPlan(payload: CarSalesAiPlanRequest) {
+export function generateCarSalesAiPlan(payload: CarSalesAiPlanRequest, options: VideoRequestOptions = {}) {
   return request<CarSalesAiPlanResponse>('/video/car-sales/ai-plan', {
     method: 'POST',
     body: JSON.stringify(payload),
-    timeoutMs: AI_PLAN_REQUEST_TIMEOUT_MS,
+    signal: options.signal,
+    timeoutMs: options.timeoutMs ?? AI_PLAN_REQUEST_TIMEOUT_MS,
   })
 }
 

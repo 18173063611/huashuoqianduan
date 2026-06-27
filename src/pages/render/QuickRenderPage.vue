@@ -398,6 +398,7 @@
       @refresh="prepareAiPlanPreview"
       @confirm="confirmAiPlanAndSubmit"
       @regenerate="regenerateCurrentAiPlanVideo"
+      @cancel-plan="cancelAiPlanPreviewGeneration"
       @cancel-generation="cancelCurrentRenderTask"
       @back="planPreviewOpen = false"
     />
@@ -783,6 +784,8 @@ let stopTracking: (() => void) | null = null
 let stopNarrationTracking: (() => void) | null = null
 let digitalHumanPollTimer: number | null = null
 let narrationLocalizationPromise: Promise<string> | null = null
+let aiPlanAbortController: AbortController | null = null
+let aiPlanGenerationSeq = 0
 
 function createDefaultAdvancedSettings(preferences: CarSalesGenerationPreferences = carSalesPreferences): CarSalesAdvancedSettings {
   return {
@@ -2333,6 +2336,38 @@ function overlayForRequest(overlay: CarSalesAdvancedSettings['headlineOverlay'])
   }
 }
 
+function aiPlanGenerationStopped(seq: number, controller: AbortController) {
+  return seq !== aiPlanGenerationSeq || controller.signal.aborted
+}
+
+function isAbortError(error: unknown) {
+  return (
+    (typeof DOMException !== 'undefined' && error instanceof DOMException && error.name === 'AbortError') ||
+    (error instanceof Error && error.name === 'AbortError')
+  )
+}
+
+function finishCanceledAiPlanGeneration(seq: number, controller: AbortController) {
+  if (aiPlanAbortController === controller) {
+    aiPlanAbortController = null
+  }
+  if (seq === aiPlanGenerationSeq) {
+    planPreviewLoading.value = false
+    planPreviewError.value = '已取消方案生成'
+  }
+}
+
+function cancelAiPlanPreviewGeneration() {
+  if (!planPreviewLoading.value) return
+  const controller = aiPlanAbortController
+  if (controller && !controller.signal.aborted) {
+    controller.abort()
+  }
+  aiPlanAbortController = null
+  planPreviewLoading.value = false
+  planPreviewError.value = '已取消方案生成'
+}
+
 async function prepareAiPlanPreview() {
   if (!requireAuth('登录后可生成汽车销售视频')) return
   submitAttempted.value = true
@@ -2347,16 +2382,29 @@ async function prepareAiPlanPreview() {
   planPreviewOpen.value = true
   planPreviewLoading.value = true
   planPreviewError.value = ''
+  const aiPlanSeq = ++aiPlanGenerationSeq
+  aiPlanAbortController?.abort()
+  const aiPlanController = new AbortController()
+  aiPlanAbortController = aiPlanController
   const warnings: string[] = []
 
   let scriptFallback = false
   let storyboardFallback = false
   let script = ''
   await ensurePlanTextMaterialsReady()
+  if (aiPlanGenerationStopped(aiPlanSeq, aiPlanController)) {
+    finishCanceledAiPlanGeneration(aiPlanSeq, aiPlanController)
+    return
+  }
   const sourceText = buildPlanSourceText()
   const estimate = await fetchPlanBillingEstimate(warnings)
+  if (aiPlanGenerationStopped(aiPlanSeq, aiPlanController)) {
+    finishCanceledAiPlanGeneration(aiPlanSeq, aiPlanController)
+    return
+  }
   const shouldUseLocalPlanOnly = estimate?.enoughBalance === false
   const useUploadedVoice = shouldUseUploadedVoiceForAiSmart()
+  const advancedFields = buildQuickAdvancedRequestFields()
   let storyboard: AiPlanStoryboardShot[] = []
 
   if (useUploadedVoice) {
@@ -2380,7 +2428,19 @@ async function prepareAiPlanPreview() {
         segmentCount: segmentCount.value,
         segmentDuration: segmentDuration.value,
         sourceText,
-      })
+        hostAppearanceEnabled: advancedSettings.value.hostAppearanceEnabled,
+        hasDigitalHuman: Boolean(advancedFields.hasDigitalHuman),
+        digitalHumanId: advancedFields.digitalHumanId,
+        digitalHumanName: selectedAvatar.value?.avatarName || selectedHostMaterial.value?.asset.fileName || undefined,
+        avatarUrl: advancedFields.avatarUrl,
+        hostImageUrl: advancedFields.hostImageUrl,
+        audioPolicy: audioPolicy.value,
+        videoType: advancedFields.videoType,
+      }, { signal: aiPlanController.signal })
+      if (aiPlanGenerationStopped(aiPlanSeq, aiPlanController)) {
+        finishCanceledAiPlanGeneration(aiPlanSeq, aiPlanController)
+        return
+      }
       script = sanitizePlanScript(normalizeNarrationText(aiPlan.script || ''), userGoalTextForGeneration())
       storyboard = normalizeAiPlanStoryboardShots(aiPlan.storyboard, userGoalTextForGeneration())
       if (!script) {
@@ -2390,6 +2450,10 @@ async function prepareAiPlanPreview() {
         throw new Error('方案接口返回分镜为空')
       }
     } catch (error) {
+      if (isAbortError(error) || aiPlanGenerationStopped(aiPlanSeq, aiPlanController)) {
+        finishCanceledAiPlanGeneration(aiPlanSeq, aiPlanController)
+        return
+      }
       scriptFallback = true
       storyboardFallback = true
       warnings.push(`AI 方案生成使用本地兜底：${errorMessageFrom(error)}`)
@@ -2420,6 +2484,11 @@ async function prepareAiPlanPreview() {
     storyboard = clearAiPlanStoryboardNarration(storyboard)
   }
 
+  if (aiPlanGenerationStopped(aiPlanSeq, aiPlanController)) {
+    finishCanceledAiPlanGeneration(aiPlanSeq, aiPlanController)
+    return
+  }
+
   planPreview.value = {
     script,
     scriptFallback,
@@ -2437,6 +2506,9 @@ async function prepareAiPlanPreview() {
     warnings,
   }
   persistCurrentPendingPlanTask()
+  if (aiPlanAbortController === aiPlanController) {
+    aiPlanAbortController = null
+  }
   planPreviewLoading.value = false
 }
 
