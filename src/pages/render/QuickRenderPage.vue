@@ -46,8 +46,10 @@
           :plan-preview-loading="planPreviewLoading"
           :task-status="taskStatus"
           :task-progress="taskProgress"
+          generate-label="进入方案编辑"
+          generate-title="先确认或生成文案和分镜，再提交视频生成"
           @open-advanced="advancedDrawerOpen = true"
-          @generate="prepareAiPlanPreview"
+          @generate="openAiPlanEditor"
         />
       </div>
 
@@ -404,9 +406,14 @@
       :active-task-progress="taskProgress"
       :cancel-loading="cancelingRenderTask"
       :regenerate-loading="regeneratingRenderTask"
+      manual-plan-actions
       @update-script="updatePlanScript"
       @update-storyboard-shot="updatePlanStoryboardShot"
       @refresh="prepareAiPlanPreview"
+      @generate-script="prepareAiPlanScript"
+      @generate-storyboard="prepareAiPlanStoryboard"
+      @select-script="openPlanAssetDrawer('script')"
+      @select-storyboard="openPlanAssetDrawer('storyboard')"
       @confirm="confirmAiPlanAndSubmit"
       @regenerate="regenerateCurrentAiPlanVideo"
       @cancel-plan="cancelAiPlanPreviewGeneration"
@@ -493,6 +500,7 @@ import {
   ensureCarSalesPlanDraftAsset,
   enrichScriptWithDigitalHumanContext,
   enrichStoryboardWithDigitalHumanContext,
+  parseStoryboardAssetTextToPlanShots,
   sanitizePlanScript,
   shouldSuppressCarSalesVoice,
   shouldUseUploadedCarSalesVoice,
@@ -577,6 +585,9 @@ interface MatchedTemplateCandidate {
   template?: TemplateItem
   asset?: AssetItem
 }
+
+type AiPlanGenerationMode = 'all' | 'script' | 'storyboard'
+type PlanAssetSelectIntent = 'auto' | 'script' | 'storyboard'
 
 const props = withDefaults(defineProps<{ embedded?: boolean }>(), {
   embedded: false,
@@ -747,6 +758,7 @@ const avatarDrawerOpen = ref(false)
 const assetSelectDrawerOpen = ref(false)
 const assetSelectInitialCategory = ref<CarSalesAssetCategoryKey>('carBundle')
 const assetSelectLockedCategory = ref<CarSalesAssetCategoryKey | null>(null)
+const planAssetSelectIntent = ref<PlanAssetSelectIntent>('auto')
 const submitAttempted = ref(false)
 const selectedAvatar = ref<AvatarItem | null>(null)
 const planPreviewOpen = ref(false)
@@ -771,7 +783,7 @@ const aspectRatio = ref<'9:16' | '16:9' | 'auto'>(carSalesPreferences.aspectRati
 const subtitleLanguage = ref(carSalesPreferences.voiceLanguage)
 const voiceLanguage = ref<'zh-CN' | 'en-US'>(carSalesPreferences.voiceLanguage)
 const goalText = ref('')
-const targetDuration = ref<10 | 15 | 20 | 30>(carSalesPreferences.duration)
+const targetDuration = ref(normalizeTargetDuration(carSalesPreferences.duration))
 const uploading = ref(false)
 const busy = ref(false)
 const cancelingRenderTask = ref(false)
@@ -952,15 +964,40 @@ const voiceLanguageLabel = computed(
   () => voiceLanguageOptions.find((item) => item.value === voiceLanguage.value)?.label || '中文讲述',
 )
 const audioPolicy = computed<QuickRenderRequest['audioPolicy']>(() => advancedSettings.value.audioPolicy)
+const totalDuration = computed(() => normalizeTargetDuration(targetDuration.value))
 const segmentCount = computed(() => {
   if (inferredRoute.value === 'digital_human' || inferredRoute.value === 'general_video') return 1
   if (inferredRoute.value === 'material_mix') return Math.max(1, Math.min(4, videoCount.value || 1))
-  const durationBasedCount = targetDuration.value <= 10 ? 2 : targetDuration.value <= 15 ? 3 : targetDuration.value <= 20 ? 5 : 6
-  const referenceRichCount = targetDuration.value >= 30 && imageCount.value >= 8 ? 8 : durationBasedCount
-  return Math.max(2, Math.min(8, referenceRichCount))
+  return preferredCarSalesSegmentCount(totalDuration.value, imageCount.value)
 })
-const segmentDuration = computed(() => Math.max(4, Math.round(targetDuration.value / Math.max(1, segmentCount.value))))
-const totalDuration = computed(() => targetDuration.value)
+const segmentDuration = computed(() => Math.max(4, Math.min(15, Math.round(totalDuration.value / Math.max(1, segmentCount.value)))))
+
+function normalizeTargetDuration(value: unknown) {
+  const num = Number(value)
+  if (!Number.isFinite(num)) return 15
+  return Math.max(8, Math.min(120, Math.round(num)))
+}
+
+function preferredCarSalesSegmentCount(duration: number, references: number) {
+  const total = normalizeTargetDuration(duration)
+  const maxByMinDuration = Math.max(1, Math.floor(total / 4))
+  const minByMaxDuration = Math.max(1, Math.ceil(total / 15))
+  const durationBasedCount = total <= 10 ? 2 : total <= 15 ? 3 : total <= 20 ? 5 : Math.ceil(total / 5)
+  const referenceRichCount = total >= 30 && references >= 8 ? 8 : durationBasedCount
+  return Math.max(2, Math.min(8, maxByMinDuration, Math.max(minByMaxDuration, referenceRichCount)))
+}
+
+function splitDurationEvenly(duration: number, count: number) {
+  const safeCount = Math.max(1, Math.round(count))
+  const total = normalizeTargetDuration(duration)
+  const base = Math.floor(total / safeCount)
+  let remainder = total - base * safeCount
+  return Array.from({ length: safeCount }).map(() => {
+    const value = base + (remainder > 0 ? 1 : 0)
+    remainder -= remainder > 0 ? 1 : 0
+    return Math.max(1, value)
+  })
+}
 
 const inferredRoute = computed(() => {
   if (materials.value.some((item) => item.role === 'car_model_bundle' || item.role.startsWith('car_') || item.role.startsWith('scene_'))) return 'car_sales'
@@ -2002,13 +2039,23 @@ async function handleAssetCenterSelect(payload: { asset: AssetItem; url: string 
 
 function openAssetDrawer(category: CarSalesAssetCategoryKey) {
   if (!requireAuth('登录后可从资产中心选择素材')) return
+  planAssetSelectIntent.value = 'auto'
   assetSelectLockedCategory.value = null
   assetSelectInitialCategory.value = category
   assetSelectDrawerOpen.value = true
 }
 
+function openPlanAssetDrawer(intent: Exclude<PlanAssetSelectIntent, 'auto'>) {
+  if (!requireAuth('登录后可从资产中心选择文案或分镜')) return
+  planAssetSelectIntent.value = intent
+  assetSelectLockedCategory.value = null
+  assetSelectInitialCategory.value = 'script'
+  assetSelectDrawerOpen.value = true
+}
+
 function openCarBundleDrawer() {
   if (!requireAuth('登录后可从资产中心选择车型素材包')) return
+  planAssetSelectIntent.value = 'auto'
   assetSelectLockedCategory.value = 'carBundle'
   assetSelectInitialCategory.value = 'carBundle'
   assetSelectDrawerOpen.value = true
@@ -2024,10 +2071,13 @@ async function handleClassifiedAssetSelect(payload: CarSalesAssetSelectPayload) 
   const role = payload.role
   rememberClassifiedAssetUrl(payload.asset, role)
   try {
-    await appendMaterial(payload.asset, {
+    const material = await appendMaterial(payload.asset, {
       name: payload.asset.fileName || '',
       type: payload.asset.mimeType || '',
     }, role)
+    if (payload.category === 'script' || planAssetSelectIntent.value !== 'auto') {
+      await applySelectedPlanAsset(material, role, planAssetSelectIntent.value)
+    }
     if (role === 'host_image' || role === 'host_video') {
       selectedAvatar.value = null
       advancedSettings.value = {
@@ -2038,6 +2088,8 @@ async function handleClassifiedAssetSelect(payload: CarSalesAssetSelectPayload) 
     }
   } catch (error) {
     errorMessage.value = error instanceof Error ? error.message : '资产加入失败'
+  } finally {
+    planAssetSelectIntent.value = 'auto'
   }
 }
 
@@ -2142,12 +2194,102 @@ async function ensureMaterialTextContent(material: QuickMaterial) {
 }
 
 async function ensurePlanTextMaterialsReady() {
-  const roles: QuickRenderAssetRole[] = ['car_model_bundle']
+  const roles: QuickRenderAssetRole[] = ['car_model_bundle', 'voice_script', 'subtitle', 'storyboard_json', 'benchmark_json']
   const targets = materials.value.filter((item) => roles.includes(item.role))
   if (!targets.length) {
     return
   }
   await Promise.all(targets.map((item) => ensureMaterialTextContent(item)))
+}
+
+function uniqueWarnings(items: string[]) {
+  return Array.from(new Set(items.map((item) => item.trim()).filter(Boolean)))
+}
+
+async function selectedPlanScriptTextFromMaterials() {
+  for (const role of ['voice_script', 'subtitle', 'benchmark_json', 'storyboard_json'] as QuickRenderAssetRole[]) {
+    for (const item of materials.value) {
+      if (item.role !== role) continue
+      const textContent = await ensureMaterialTextContent(item)
+      const text = role === 'voice_script' || role === 'subtitle'
+        ? normalizeNarrationText(textContent)
+        : extractNarrationFromJsonText(textContent)
+      if (text) {
+        return text
+      }
+    }
+  }
+  return ''
+}
+
+async function selectedPlanStoryboardFromMaterials() {
+  for (const role of ['storyboard_json', 'benchmark_json'] as QuickRenderAssetRole[]) {
+    for (const item of materials.value) {
+      if (item.role !== role) continue
+      const textContent = await ensureMaterialTextContent(item)
+      const storyboard = parseStoryboardAssetTextToPlanShots(textContent, segmentDuration.value, 24)
+      if (storyboard.length) {
+        return storyboard
+      }
+    }
+  }
+  return []
+}
+
+async function applySelectedPlanAsset(
+  material: QuickMaterial,
+  role: QuickRenderAssetRole,
+  intent: PlanAssetSelectIntent,
+) {
+  const textContent = await ensureMaterialTextContent(material)
+  if (!textContent) {
+    throw new Error('已选择的资产没有可读取的文案或分镜内容')
+  }
+  const currentPlan = ensureEditablePlanPreview()
+  planPreviewOpen.value = true
+  const warnings = [...currentPlan.warnings]
+  if (intent === 'storyboard' || (intent === 'auto' && role === 'storyboard_json')) {
+    const storyboard = parseStoryboardAssetTextToPlanShots(textContent, segmentDuration.value, 24)
+    if (!storyboard.length) {
+      throw new Error('已选择的分镜资产无法解析为结构化镜头，请重新选择或重新生成分镜')
+    }
+    const script = currentPlan.script || storyboardNarrationScript(storyboard)
+    const syncedStoryboard = script
+      ? syncStoryboardNarrationWithScript(storyboard, script, userGoalTextForGeneration())
+      : storyboard
+    warnings.push(`已使用资产中心分镜：${material.asset.fileName || '未命名资产'}`)
+    planPreview.value = refreshPlanPreviewMeta({
+      ...currentPlan,
+      script,
+      storyboard: fitStoryboardDurationsToTarget(syncedStoryboard),
+      storyboardFallback: false,
+      warnings: uniqueWarnings(warnings),
+    })
+    persistCurrentPendingPlanTask()
+    return
+  }
+  if (
+    intent === 'script' ||
+    (intent === 'auto' && (role === 'voice_script' || role === 'subtitle' || role === 'benchmark_json'))
+  ) {
+    const script = role === 'voice_script' || role === 'subtitle'
+      ? normalizeNarrationText(textContent)
+      : extractNarrationFromJsonText(textContent)
+    if (!script) {
+      throw new Error('已选择的文案资产没有可用口播文案，请重新选择')
+    }
+    warnings.push(`已使用资产中心文案：${material.asset.fileName || '未命名资产'}`)
+    planPreview.value = refreshPlanPreviewMeta({
+      ...currentPlan,
+      script,
+      scriptFallback: false,
+      storyboard: currentPlan.storyboard.length
+        ? syncStoryboardNarrationWithScript(currentPlan.storyboard, script, userGoalTextForGeneration())
+        : currentPlan.storyboard,
+      warnings: uniqueWarnings(warnings),
+    })
+    persistCurrentPendingPlanTask()
+  }
 }
 
 function rememberPickedAssetUrl(asset: AssetItem, url: string) {
@@ -2416,7 +2558,71 @@ function cancelAiPlanPreviewGeneration() {
   planPreviewError.value = '已取消方案生成'
 }
 
-async function prepareAiPlanPreview() {
+function openAiPlanEditor() {
+  if (!requireAuth('登录后可编辑汽车销售视频方案')) return
+  submitAttempted.value = true
+  if (submitBlockReason.value) {
+    errorMessage.value = `生成前还需：${submitBlockReason.value}`
+    if (!hasCarModelBundle.value) {
+      openCarBundleDrawer()
+    }
+    return
+  }
+  errorMessage.value = ''
+  planPreviewError.value = ''
+  ensureEditablePlanPreview()
+  planPreviewOpen.value = true
+}
+
+function ensureEditablePlanPreview() {
+  if (planPreview.value) {
+    planPreview.value = refreshPlanPreviewMeta(planPreview.value)
+    return planPreview.value
+  }
+  planPreview.value = createEmptyPlanPreview()
+  return planPreview.value
+}
+
+function createEmptyPlanPreview(): AiPlanPreview {
+  return {
+    script: '',
+    scriptFallback: false,
+    storyboard: [],
+    storyboardFallback: false,
+    estimatedCredits: 20,
+    balance: null,
+    enoughBalance: null,
+    estimatedDuration: estimatedRenderDurationLabel(),
+    totalDuration: totalDuration.value,
+    segmentCount: segmentCount.value,
+    materialCount: materials.value.length,
+    vehicleMaterialCount: vehicleMaterialCount.value,
+    configItems: planConfigItems(),
+    warnings: [],
+  }
+}
+
+function refreshPlanPreviewMeta(plan: AiPlanPreview): AiPlanPreview {
+  return {
+    ...plan,
+    totalDuration: totalDuration.value,
+    segmentCount: plan.storyboard.length || segmentCount.value,
+    materialCount: materials.value.length,
+    vehicleMaterialCount: vehicleMaterialCount.value,
+    estimatedDuration: estimatedRenderDurationLabel(),
+    configItems: planConfigItems(),
+  }
+}
+
+function prepareAiPlanScript() {
+  void prepareAiPlanPreview('script')
+}
+
+function prepareAiPlanStoryboard() {
+  void prepareAiPlanPreview('storyboard')
+}
+
+async function prepareAiPlanPreview(mode: AiPlanGenerationMode = 'all') {
   if (!requireAuth('登录后可生成汽车销售视频')) return
   submitAttempted.value = true
   if (planPreviewLoading.value) return
@@ -2428,21 +2634,29 @@ async function prepareAiPlanPreview() {
     return
   }
   planPreviewOpen.value = true
+  const currentPlan = ensureEditablePlanPreview()
   planPreviewLoading.value = true
   planPreviewError.value = ''
   const aiPlanSeq = ++aiPlanGenerationSeq
   aiPlanAbortController?.abort()
   const aiPlanController = new AbortController()
   aiPlanAbortController = aiPlanController
-  const warnings: string[] = []
+  const warnings: string[] = [...currentPlan.warnings]
 
-  let scriptFallback = false
-  let storyboardFallback = false
-  let script = ''
+  let scriptFallback = mode === 'storyboard' ? currentPlan.scriptFallback : false
+  let storyboardFallback = mode === 'script' ? currentPlan.storyboardFallback : false
+  let script = mode === 'storyboard' ? currentPlan.script : ''
   await ensurePlanTextMaterialsReady()
   if (aiPlanGenerationStopped(aiPlanSeq, aiPlanController)) {
     finishCanceledAiPlanGeneration(aiPlanSeq, aiPlanController)
     return
+  }
+  if (mode !== 'storyboard' && !script) {
+    const selectedScript = await selectedPlanScriptTextFromMaterials()
+    if (selectedScript) {
+      script = selectedScript
+      warnings.push('已使用资产中心选择的文案。')
+    }
   }
   const sourceText = buildPlanSourceText()
   const estimate = await fetchPlanBillingEstimate(warnings)
@@ -2453,17 +2667,31 @@ async function prepareAiPlanPreview() {
   const shouldUseLocalPlanOnly = estimate?.enoughBalance === false
   const useUploadedVoice = shouldUseUploadedVoiceForAiSmart()
   const advancedFields = buildQuickAdvancedRequestFields()
-  let storyboard: AiPlanStoryboardShot[] = []
+  let storyboard: AiPlanStoryboardShot[] = mode === 'script' ? [...currentPlan.storyboard] : []
+  if (mode !== 'script' && !storyboard.length) {
+    const selectedStoryboard = await selectedPlanStoryboardFromMaterials()
+    if (selectedStoryboard.length) {
+      storyboard = selectedStoryboard
+      warnings.push('已使用资产中心选择的分镜。')
+    }
+  }
+  const shouldGenerateScript = mode === 'script' || (mode === 'all' && !script && !useUploadedVoice)
+  const shouldGenerateStoryboard = mode === 'storyboard' || (mode === 'all' && !storyboard.length)
 
   if (useUploadedVoice) {
     const warning = '已检测到上传口播音频，AI智能创作将跳过文案生成，成片口播以该音频为准。'
     if (!warnings.includes(warning)) warnings.push(warning)
   } else if (shouldUseLocalPlanOnly) {
-    scriptFallback = true
-    storyboardFallback = true
+    scriptFallback = shouldGenerateScript
+    storyboardFallback = shouldGenerateStoryboard
     warnings.push('当前积分余额不足，已跳过 AI 文案与分镜接口，使用本地方案预览。')
-    script = buildFallbackPlanScript()
-  } else {
+    if (shouldGenerateScript || !script) {
+      script = buildFallbackPlanScript()
+    }
+    if (shouldGenerateStoryboard) {
+      storyboard = buildFallbackStoryboard(script)
+    }
+  } else if (shouldGenerateScript || shouldGenerateStoryboard) {
     try {
       const aiPlan = await generateCarSalesAiPlan({
         prompt: userGoalTextForGeneration() || selectedSellingPointLabels().join('，') || '根据车型素材包生成汽车销售视频',
@@ -2489,12 +2717,18 @@ async function prepareAiPlanPreview() {
         finishCanceledAiPlanGeneration(aiPlanSeq, aiPlanController)
         return
       }
-      script = sanitizePlanScript(normalizeNarrationText(aiPlan.script || ''), userGoalTextForGeneration())
-      storyboard = normalizeAiPlanStoryboardShots(aiPlan.storyboard, userGoalTextForGeneration())
-      if (!script) {
+      const generatedScript = sanitizePlanScript(normalizeNarrationText(aiPlan.script || ''), userGoalTextForGeneration())
+      const generatedStoryboard = normalizeAiPlanStoryboardShots(aiPlan.storyboard, userGoalTextForGeneration())
+      if (shouldGenerateScript) {
+        script = generatedScript
+      }
+      if (shouldGenerateStoryboard) {
+        storyboard = generatedStoryboard
+      }
+      if (shouldGenerateScript && !script) {
         throw new Error('方案接口返回文案为空')
       }
-      if (!storyboard.length) {
+      if (shouldGenerateStoryboard && !storyboard.length) {
         throw new Error('方案接口返回分镜为空')
       }
     } catch (error) {
@@ -2502,18 +2736,30 @@ async function prepareAiPlanPreview() {
         finishCanceledAiPlanGeneration(aiPlanSeq, aiPlanController)
         return
       }
-      scriptFallback = true
-      storyboardFallback = true
+      scriptFallback = shouldGenerateScript
+      storyboardFallback = shouldGenerateStoryboard
       warnings.push(`AI 方案生成使用本地兜底：${errorMessageFrom(error)}`)
-      script = buildFallbackPlanScript()
+      if (shouldGenerateScript || !script) {
+        script = buildFallbackPlanScript()
+      }
+      if (shouldGenerateStoryboard) {
+        storyboard = buildFallbackStoryboard(script)
+      }
     }
   }
-  if (!storyboard.length) {
+  if (!storyboard.length && mode !== 'script') {
     storyboard = buildFallbackStoryboard(script)
+    storyboardFallback = true
+  }
+  if (!script && storyboard.length) {
+    script = storyboardNarrationScript(storyboard)
   }
   if (useUploadedVoice) {
     storyboard = clearAiPlanStoryboardNarration(storyboard)
+  } else if (script && storyboard.length) {
+    storyboard = syncStoryboardNarrationWithScript(storyboard, script, userGoalTextForGeneration())
   }
+  storyboard = fitStoryboardDurationsToTarget(storyboard)
   const digitalHumanContext = buildAiSmartDigitalHumanContext(script, storyboard)
   const scriptBeforeDigitalHumanEnrichment = script
   if (!useUploadedVoice) {
@@ -2547,11 +2793,11 @@ async function prepareAiPlanPreview() {
     enoughBalance: estimate?.enoughBalance ?? null,
     estimatedDuration: estimatedRenderDurationLabel(),
     totalDuration: totalDuration.value,
-    segmentCount: segmentCount.value,
+    segmentCount: storyboard.length || segmentCount.value,
     materialCount: materials.value.length,
     vehicleMaterialCount: vehicleMaterialCount.value,
     configItems: planConfigItems(),
-    warnings,
+    warnings: uniqueWarnings(warnings),
   }
   persistCurrentPendingPlanTask()
   if (aiPlanAbortController === aiPlanController) {
@@ -2601,6 +2847,31 @@ function clearAiPlanStoryboardNarration(storyboard: AiPlanStoryboardShot[]) {
   return storyboard.map((shot) => ({ ...shot, narration: '' }))
 }
 
+function fitStoryboardDurationsToTarget(storyboard: AiPlanStoryboardShot[]) {
+  const total = totalDuration.value
+  const minCountForMaxDuration = Math.max(1, Math.ceil(total / 15))
+  const desiredCount = Math.max(
+    minCountForMaxDuration,
+    Math.min(8, storyboard.length || segmentCount.value),
+  )
+  const source = storyboard.slice(0, desiredCount)
+  while (source.length < desiredCount) {
+    const last = source[source.length - 1]
+    source.push({
+      index: source.length + 1,
+      visual: last?.visual || `补充车辆销售镜头 ${source.length + 1}`,
+      narration: last?.narration || '',
+      duration: segmentDuration.value,
+    })
+  }
+  const durations = splitDurationEvenly(total, Math.max(1, source.length))
+  return source.map((shot, index) => ({
+    ...shot,
+    index: index + 1,
+    duration: durations[index] || segmentDuration.value,
+  }))
+}
+
 function confirmAiPlanAndSubmit() {
   if (!requireAuth('登录后可生成汽车销售视频')) return
   if (!planPreview.value || planPreviewLoading.value) return
@@ -2609,7 +2880,7 @@ function confirmAiPlanAndSubmit() {
 }
 
 function storyboardForRequest() {
-  return planPreview.value?.storyboard.map((shot) => ({
+  return fitStoryboardDurationsToTarget(planPreview.value?.storyboard || []).map((shot) => ({
     index: shot.index,
     visual: shot.visual,
     narration: shot.narration,
@@ -3062,12 +3333,13 @@ function buildFallbackPlanScript() {
 }
 
 function normalizeAiPlanStoryboardShots(shots: CarSalesAiPlanShot[], userPrompt = '') {
-  return (shots || []).slice(0, segmentCount.value).map((shot, index) => ({
+  const normalized = (shots || []).slice(0, segmentCount.value).map((shot, index) => ({
     index: shot.index || index + 1,
     visual: shot.visual || `展示车辆卖点镜头 ${index + 1}`,
     narration: sanitizePlanScript(shot.narration || '', userPrompt),
     duration: Math.max(1, Math.round(shot.duration || segmentDuration.value)),
   }))
+  return fitStoryboardDurationsToTarget(normalized)
 }
 
 function buildFallbackStoryboard(script: string): AiPlanStoryboardShot[] {
@@ -3079,11 +3351,12 @@ function buildFallbackStoryboard(script: string): AiPlanStoryboardShot[] {
     '补充细节、场景或使用价值，围绕用户关心的卖点推进。',
     '门店或车辆高光收尾，配合自然行动号召。',
   ]
+  const durations = splitDurationEvenly(totalDuration.value, Math.max(1, segmentCount.value))
   return Array.from({ length: segmentCount.value }).map((_, index) => ({
     index: index + 1,
     visual: visualTemplates[index % visualTemplates.length],
     narration: lines[index] || lines[lines.length - 1] || fallbackGoal,
-    duration: segmentDuration.value,
+    duration: durations[index] || segmentDuration.value,
   }))
 }
 
@@ -5718,6 +5991,32 @@ onBeforeUnmount(stopAllTracking)
   white-space: nowrap;
 }
 
+.quick-control-field--duration {
+  gap: 5px;
+}
+
+.quick-control-field--duration::after {
+  content: none;
+}
+
+.quick-duration-input {
+  width: 56px;
+  border: 0;
+  background: transparent;
+  color: #155eef;
+  font-size: 14px;
+  font-weight: 900;
+  outline: none;
+  text-align: right;
+}
+
+.quick-control-field--duration em {
+  color: #155eef;
+  font-size: 13px;
+  font-style: normal;
+  font-weight: 900;
+}
+
 .quick-generate-button {
   flex: 0 0 auto;
   min-width: 168px;
@@ -6212,6 +6511,10 @@ onBeforeUnmount(stopAllTracking)
   min-width: 58px;
 }
 
+.quick-duration-input {
+  width: 52px;
+}
+
 .quick-drawer-button {
   min-width: 96px;
   min-height: 50px;
@@ -6461,6 +6764,10 @@ onBeforeUnmount(stopAllTracking)
 
 .quick-control-field select {
   appearance: none;
+}
+
+.quick-control-field--duration::after {
+  content: none;
 }
 
 .quick-drawer-button::before {

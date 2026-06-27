@@ -94,6 +94,128 @@
             </div>
           </section>
 
+          <section class="asset-stage-card reuse-generation-settings-card">
+            <div class="workflow-module-head">
+              <div>
+                <h2>生成参数</h2>
+                <p>与新版页面发布前的视频制作参数保持一致；比例、语言、时长、模型、字幕和大字报会随方案一起提交。</p>
+              </div>
+              <span class="workflow-badge core">必看</span>
+            </div>
+            <div class="reuse-setting-grid">
+              <label class="reuse-setting-field">
+                <span>成片比例</span>
+                <el-select v-model="assetReuseAspectRatio" size="small">
+                  <el-option
+                    v-for="item in ASSET_REUSE_ASPECT_RATIO_OPTIONS"
+                    :key="item.value"
+                    :label="item.label"
+                    :value="item.value"
+                  />
+                </el-select>
+              </label>
+              <label class="reuse-setting-field">
+                <span>讲述语言</span>
+                <el-select v-model="assetReuseVoiceLanguage" size="small" @change="assetReuseSubtitleLanguage = assetReuseVoiceLanguage">
+                  <el-option
+                    v-for="item in ASSET_REUSE_LANGUAGE_OPTIONS"
+                    :key="item.value"
+                    :label="item.label"
+                    :value="item.value"
+                  />
+                </el-select>
+              </label>
+              <label class="reuse-setting-field">
+                <span>分段数量</span>
+                <el-select v-model="assetReuseSegmentCount" size="small">
+                  <el-option
+                    v-for="item in ASSET_REUSE_SEGMENT_COUNT_OPTIONS"
+                    :key="item"
+                    :label="`${item} 段`"
+                    :value="item"
+                  />
+                </el-select>
+              </label>
+              <label class="reuse-setting-field">
+                <span>每段时长</span>
+                <el-select v-model="assetReuseSegmentDuration" size="small">
+                  <el-option
+                    v-for="item in ASSET_REUSE_SEGMENT_DURATION_OPTIONS"
+                    :key="item"
+                    :label="`${item} 秒`"
+                    :value="item"
+                  />
+                </el-select>
+              </label>
+              <label class="reuse-setting-field reuse-setting-field--wide">
+                <span>生成模型</span>
+                <el-select v-model="assetReuseModel" size="small">
+                  <el-option
+                    v-for="item in ASSET_REUSE_MODEL_OPTIONS"
+                    :key="item.value"
+                    :label="item.label"
+                    :value="item.value"
+                  />
+                </el-select>
+              </label>
+              <label class="reuse-setting-field">
+                <span>音频策略</span>
+                <el-select v-model="assetReuseAudioPolicy" size="small">
+                  <el-option
+                    v-for="item in ASSET_REUSE_AUDIO_POLICY_OPTIONS"
+                    :key="item.value"
+                    :label="item.label"
+                    :value="item.value"
+                  />
+                </el-select>
+              </label>
+            </div>
+            <details class="reuse-optional-group reuse-generation-more">
+              <summary>
+                <span>字幕与大字报参数 <em>可选</em></span>
+                <small>{{ assetReusePackagingSummary }}</small>
+              </summary>
+              <div class="reuse-optional-body">
+                <div class="reuse-setting-grid reuse-setting-grid--packaging">
+                  <label class="reuse-setting-field">
+                    <span>字幕</span>
+                    <el-select v-model="assetReuseSubtitleMode" size="small">
+                      <el-option
+                        v-for="item in ASSET_REUSE_SUBTITLE_MODE_OPTIONS"
+                        :key="item.value"
+                        :label="item.label"
+                        :value="item.value"
+                      />
+                    </el-select>
+                  </label>
+                  <label class="reuse-setting-field">
+                    <span>字幕语言</span>
+                    <el-select v-model="assetReuseSubtitleLanguage" size="small" :disabled="assetReuseSubtitleMode === 'off'">
+                      <el-option
+                        v-for="item in ASSET_REUSE_LANGUAGE_OPTIONS"
+                        :key="item.value"
+                        :label="item.label"
+                        :value="item.value"
+                      />
+                    </el-select>
+                  </label>
+                  <label class="reuse-setting-switch">
+                    <span>烧录字幕</span>
+                    <el-switch v-model="assetReuseBurnInSubtitle" :disabled="assetReuseSubtitleMode === 'off'" />
+                  </label>
+                  <label class="reuse-setting-switch">
+                    <span>大字报</span>
+                    <el-switch v-model="assetReuseHeadlineEnabled" />
+                  </label>
+                  <label v-if="assetReuseHeadlineEnabled" class="reuse-setting-field reuse-setting-field--wide">
+                    <span>大字报文案</span>
+                    <el-input v-model="assetReuseHeadlineText" maxlength="120" show-word-limit size="small" placeholder="例如：限时到店试驾权益" />
+                  </label>
+                </div>
+              </div>
+            </details>
+          </section>
+
           <div class="reuse-workflow-grid">
             <section class="asset-stage-card reuse-workflow-module">
               <div class="workflow-module-head">
@@ -318,12 +440,16 @@
               <details class="reuse-optional-group">
                 <summary>
                   <span>字幕与大字报 <em>可选</em></span>
-                  <small>默认自动字幕；进入方案确认后可继续调整脚本和分镜。</small>
+                  <small>{{ assetReusePackagingSummary }}</small>
                 </summary>
                 <div class="reuse-optional-body">
                   <div class="workflow-static-setting">
                     <strong>字幕</strong>
-                    <span>自动字幕 / 跟随最终口播语言 / 竖屏销售视频默认样式</span>
+                    <span>{{ assetReuseSubtitleSettingSummary }}</span>
+                  </div>
+                  <div class="workflow-static-setting">
+                    <strong>大字报</strong>
+                    <span>{{ assetReuseHeadlineSettingSummary }}</span>
                   </div>
                 </div>
               </details>
@@ -422,7 +548,8 @@
             </div>
             <div class="preview-meta">
               <span>封面：{{ selectedCoverAsset ? selectedCoverAsset.asset.fileName : '自动使用首帧' }}</span>
-              <span>预计时长：约 00:45</span>
+              <span>预计时长：约 {{ assetReuseDurationLabel }}</span>
+              <span>规格：{{ assetReuseSettingsSummary }}</span>
               <span>预计消耗积分：20 积分</span>
             </div>
             <el-input
@@ -541,6 +668,11 @@ import {
 
 const DEFAULT_CAR_SALES_MODEL = 'auto'
 const carSalesPreferences = loadCarSalesPreferences()
+const SEEDANCE_2_MODEL = 'ep-20260512233524-85r4g'
+const DEFAULT_ASSET_REUSE_MODEL =
+  carSalesPreferences.model && carSalesPreferences.model !== 'auto'
+    ? carSalesPreferences.model
+    : SEEDANCE_2_MODEL
 
 interface SelectedAsset {
   asset: AssetItem
@@ -557,6 +689,7 @@ interface StoredAssetReuseDraft {
   draftPrompt: string
   selectedCoverAssetId: number | null
   selectedAssets: SelectedAsset[]
+  renderConfig?: ImportedRenderConfig
 }
 
 interface ImportedRenderConfig {
@@ -662,6 +795,36 @@ const CAR_SCENE_IMAGE_ROLE_OPTIONS = [
   { value: 'scene_night', label: '夜景/门店' },
 ]
 const CAR_VEHICLE_REFERENCE_ROLES: QuickRenderAssetRole[] = CAR_IMAGE_ROLE_OPTIONS.map((item) => item.value as QuickRenderAssetRole)
+const ASSET_REUSE_ASPECT_RATIO_OPTIONS: Array<{ value: CarSalesPlanDraft['aspectRatio']; label: string }> = [
+  { value: '9:16', label: '竖屏 9:16' },
+  { value: '16:9', label: '横屏 16:9' },
+  { value: 'auto', label: '跟随素材' },
+]
+const ASSET_REUSE_LANGUAGE_OPTIONS = [
+  { value: 'zh-CN', label: '中文讲述' },
+  { value: 'en-US', label: '英文讲述' },
+]
+const ASSET_REUSE_SUBTITLE_MODE_OPTIONS: Array<{ value: CarSalesPlanDraft['subtitleMode']; label: string }> = [
+  { value: 'auto', label: '自动字幕' },
+  { value: 'upload', label: '自定义字幕' },
+  { value: 'off', label: '关闭字幕' },
+]
+const ASSET_REUSE_AUDIO_POLICY_OPTIONS: Array<{ value: CarSalesPlanDraft['audioPolicy']; label: string }> = [
+  { value: 'auto', label: '智能匹配' },
+  { value: 'voiceover', label: '使用口播音频' },
+  { value: 'bgm', label: '仅背景音乐' },
+  { value: 'none', label: '无口播/无音频' },
+]
+const ASSET_REUSE_MODEL_OPTIONS = [
+  ...(DEFAULT_ASSET_REUSE_MODEL !== SEEDANCE_2_MODEL && DEFAULT_ASSET_REUSE_MODEL !== DEFAULT_CAR_SALES_MODEL
+    ? [{ value: DEFAULT_ASSET_REUSE_MODEL, label: '系统默认模型' }]
+    : []),
+  { value: SEEDANCE_2_MODEL, label: 'Seedance 2.0（默认）' },
+  { value: 'doubao-seedance-2-0-pro-250528', label: 'Seedance 2.0 Pro' },
+  { value: DEFAULT_CAR_SALES_MODEL, label: '系统智能选择' },
+]
+const ASSET_REUSE_SEGMENT_COUNT_OPTIONS = [1, 2, 3, 4, 5, 6, 8, 10, 12]
+const ASSET_REUSE_SEGMENT_DURATION_OPTIONS = [4, 5, 6, 8, 10, 12, 15]
 const ROLE_LABEL_OPTIONS: Array<{ value: QuickRenderAssetRole; label: string }> = [
   ...roleOptions,
   ...CAR_IMAGE_ROLE_OPTIONS.map((item) => ({ value: item.value as QuickRenderAssetRole, label: item.label })),
@@ -736,6 +899,17 @@ const selectedIntegrationPackage = ref<AssetItem | null>(null)
 const selectedCoverAssetId = ref<number | null>(null)
 const draftPrompt = ref('')
 const hostAppearanceEnabled = ref(false)
+const assetReuseAspectRatio = ref<CarSalesPlanDraft['aspectRatio']>('9:16')
+const assetReuseVoiceLanguage = ref<'zh-CN' | 'en-US'>('zh-CN')
+const assetReuseSubtitleMode = ref<CarSalesPlanDraft['subtitleMode']>('auto')
+const assetReuseSubtitleLanguage = ref('zh-CN')
+const assetReuseBurnInSubtitle = ref(true)
+const assetReuseAudioPolicy = ref<CarSalesPlanDraft['audioPolicy']>('auto')
+const assetReuseModel = ref(DEFAULT_ASSET_REUSE_MODEL)
+const assetReuseSegmentCount = ref(6)
+const assetReuseSegmentDuration = ref(5)
+const assetReuseHeadlineEnabled = ref(false)
+const assetReuseHeadlineText = ref('')
 const carBundleLoadError = ref('')
 const planPreviewOpen = ref(false)
 const planPreviewLoading = ref(false)
@@ -831,6 +1005,29 @@ const selectedIntegrationPackageUrl = computed(() =>
     : '',
 )
 const selectedIntegrationPackageName = computed(() => selectedIntegrationPackage.value?.fileName || '')
+const assetReuseTotalDuration = computed(() => assetReuseSegmentCount.value * assetReuseSegmentDuration.value)
+const assetReuseDurationLabel = computed(() => formatDurationLabel(assetReuseTotalDuration.value))
+const assetReuseSettingsSummary = computed(() => [
+  optionLabel(ASSET_REUSE_ASPECT_RATIO_OPTIONS, assetReuseAspectRatio.value),
+  `${assetReuseSegmentCount.value} 段`,
+  optionLabel(ASSET_REUSE_LANGUAGE_OPTIONS, assetReuseVoiceLanguage.value),
+].filter(Boolean).join(' · '))
+const assetReuseSubtitleSettingSummary = computed(() => {
+  if (assetReuseSubtitleMode.value === 'off') return '关闭字幕'
+  return [
+    optionLabel(ASSET_REUSE_SUBTITLE_MODE_OPTIONS, assetReuseSubtitleMode.value),
+    optionLabel(ASSET_REUSE_LANGUAGE_OPTIONS, assetReuseSubtitleLanguage.value),
+    assetReuseBurnInSubtitle.value ? '烧录到视频' : '仅生成字幕数据',
+  ].filter(Boolean).join(' / ')
+})
+const assetReuseHeadlineSettingSummary = computed(() =>
+  assetReuseHeadlineEnabled.value
+    ? assetReuseHeadlineText.value.trim() || '开启，使用系统自动大字报'
+    : '关闭',
+)
+const assetReusePackagingSummary = computed(() =>
+  `${assetReuseSubtitleSettingSummary.value}；大字报：${assetReuseHeadlineSettingSummary.value}`,
+)
 
 function addSelectedAsset(asset: AssetItem, role: QuickRenderAssetRole, replaceRoles = singletonRolesFor(role)) {
   if (!ASSET_REUSE_GENERATION_ROLES.has(role)) {
@@ -855,6 +1052,10 @@ function clearSelectedAssets() {
   selectedIntegrationPackage.value = null
   selectedCoverAssetId.value = null
   hostAppearanceEnabled.value = false
+  resetAssetReuseGenerationControls()
+  importedRenderConfig.value = {}
+  importedScriptText.value = ''
+  importedStoryboard.value = []
   carBundleLoadError.value = ''
 }
 
@@ -880,6 +1081,102 @@ function firstSelectedByRoles(roles: QuickRenderAssetRole[]) {
 function selectedAssetUrl(item: SelectedAsset | null) {
   if (!item) return ''
   return assetCoverPreviewUrl(item.asset) || normalizePublicMediaUrl(item.asset.fileUrl || '')
+}
+
+function optionLabel<T extends string | number>(options: Array<{ value: T; label: string }>, value: T) {
+  return options.find((item) => item.value === value)?.label || String(value)
+}
+
+function formatDurationLabel(seconds: number) {
+  const safeSeconds = Math.max(0, Math.round(seconds || 0))
+  const minutes = Math.floor(safeSeconds / 60)
+  const rest = safeSeconds % 60
+  return `${String(minutes).padStart(2, '0')}:${String(rest).padStart(2, '0')}`
+}
+
+function resetAssetReuseGenerationControls() {
+  assetReuseAspectRatio.value = '9:16'
+  assetReuseVoiceLanguage.value = 'zh-CN'
+  assetReuseSubtitleMode.value = 'auto'
+  assetReuseSubtitleLanguage.value = 'zh-CN'
+  assetReuseBurnInSubtitle.value = true
+  assetReuseAudioPolicy.value = 'auto'
+  assetReuseModel.value = DEFAULT_ASSET_REUSE_MODEL
+  assetReuseSegmentCount.value = 6
+  assetReuseSegmentDuration.value = 5
+  assetReuseHeadlineEnabled.value = false
+  assetReuseHeadlineText.value = ''
+}
+
+function applyImportedRenderConfigToControls(config: ImportedRenderConfig) {
+  const voiceLanguage = normalizeImportedVoiceLanguage(config.nativeVoiceLanguage || config.language)
+  assetReuseAspectRatio.value = config.aspectRatio || assetReuseAspectRatio.value
+  assetReuseVoiceLanguage.value = voiceLanguage || assetReuseVoiceLanguage.value
+  assetReuseSubtitleMode.value = config.subtitleMode
+    || (config.enableSubtitle === false ? 'off' : assetReuseSubtitleMode.value)
+  assetReuseSubtitleLanguage.value = config.subtitleLanguage
+    || voiceLanguage
+    || assetReuseSubtitleLanguage.value
+  assetReuseBurnInSubtitle.value = config.burnInSubtitle ?? config.enableSubtitle ?? assetReuseBurnInSubtitle.value
+  assetReuseAudioPolicy.value = normalizeImportedAudioPolicy(config.audioPolicy) || assetReuseAudioPolicy.value
+  assetReuseModel.value = config.model || assetReuseModel.value
+  assetReuseSegmentCount.value = config.segmentCount
+    || Math.max(1, Math.round((config.duration || 0) / (config.segmentDuration || assetReuseSegmentDuration.value)))
+    || assetReuseSegmentCount.value
+  assetReuseSegmentDuration.value = config.segmentDuration || assetReuseSegmentDuration.value
+  assetReuseHeadlineEnabled.value = config.enableBigText
+    ?? Boolean(config.headlineOverlay?.enabled || config.headlineOverlay?.text)
+    ?? assetReuseHeadlineEnabled.value
+  assetReuseHeadlineText.value = config.headlineOverlay?.text || assetReuseHeadlineText.value
+}
+
+function currentAssetReuseRenderConfig(): ImportedRenderConfig {
+  return {
+    ...importedRenderConfig.value,
+    aspectRatio: assetReuseAspectRatio.value,
+    subtitleMode: assetReuseSubtitleMode.value,
+    subtitleLanguage: assetReuseSubtitleLanguage.value,
+    nativeVoiceLanguage: assetReuseVoiceLanguage.value,
+    burnInSubtitle: assetReuseSubtitleMode.value !== 'off' && assetReuseBurnInSubtitle.value,
+    audioPolicy: assetReuseAudioPolicy.value,
+    model: assetReuseModel.value,
+    segmentCount: assetReuseSegmentCount.value,
+    segmentDuration: assetReuseSegmentDuration.value,
+    duration: assetReuseTotalDuration.value,
+    headlineOverlay: buildAssetReuseHeadlineOverlay(),
+    subtitleOverlay: buildAssetReuseSubtitleOverlay(),
+    enableSubtitle: assetReuseSubtitleMode.value !== 'off',
+    enableBigText: assetReuseHeadlineEnabled.value,
+  }
+}
+
+function buildAssetReuseHeadlineOverlay(): CarSalesPlanDraft['headlineOverlay'] {
+  if (!assetReuseHeadlineEnabled.value && !assetReuseHeadlineText.value.trim()) {
+    return undefined
+  }
+  return {
+    enabled: assetReuseHeadlineEnabled.value,
+    text: assetReuseHeadlineText.value.trim() || undefined,
+    fontFamily: 'Noto Sans SC',
+    fontSize: 84,
+    textColor: '#FFFFFF',
+    outlineColor: '#111111',
+    position: 'top',
+  }
+}
+
+function buildAssetReuseSubtitleOverlay(): CarSalesPlanDraft['subtitleOverlay'] {
+  if (assetReuseSubtitleMode.value === 'off') {
+    return undefined
+  }
+  return {
+    enabled: true,
+    fontFamily: 'Noto Sans SC',
+    fontSize: 42,
+    textColor: '#FFFFFF',
+    outlineColor: '#111111',
+    position: 'bottom',
+  }
 }
 
 function singletonRolesFor(role: QuickRenderAssetRole) {
@@ -1166,6 +1463,7 @@ function saveAssetReuseDraft() {
     draftPrompt: draftPrompt.value,
     selectedCoverAssetId: selectedCoverAssetId.value,
     selectedAssets: generationAssets,
+    renderConfig: currentAssetReuseRenderConfig(),
   }
   window.localStorage.setItem(ASSET_REUSE_DRAFT_STORAGE_KEY, JSON.stringify(draft))
   ElMessage.success('草稿已保存到本地')
@@ -1192,6 +1490,10 @@ function restoreAssetReuseDraft() {
     selectedAssets.value = restoredAssets
     hostAppearanceEnabled.value = restoredAssets.some((item) => item.role === 'host_image' || item.role === 'host_video')
     selectedCoverAssetId.value = draft.selectedCoverAssetId ?? firstCoverCandidateId()
+    if (draft.renderConfig) {
+      importedRenderConfig.value = draft.renderConfig
+      applyImportedRenderConfigToControls(draft.renderConfig)
+    }
     if (typeof draft.draftPrompt === 'string' && !draftPrompt.value.trim()) {
       draftPrompt.value = draft.draftPrompt
     }
@@ -1242,6 +1544,7 @@ async function applyImportedAssetReuseInput(input: Record<string, unknown>, succ
   }
 
   importedRenderConfig.value = buildImportedRenderConfig(input)
+  applyImportedRenderConfigToControls(importedRenderConfig.value)
   importedScriptText.value = firstRecordText(input, ['finalVoiceText', 'voiceText', 'scriptText', 'script', 'copywriting'])
   importedStoryboard.value = normalizeImportedStoryboard(firstRecordArray(input, ['generatedStoryboard', 'storyboard', 'shots', 'scenes', 'segments']))
   draftPrompt.value = importedPromptFromRequest(input)
@@ -1768,6 +2071,7 @@ function startNewAssetReuseVideo() {
   selectedCoverAssetId.value = null
   draftPrompt.value = ''
   hostAppearanceEnabled.value = false
+  resetAssetReuseGenerationControls()
   carBundleLoadError.value = ''
   planPreviewOpen.value = false
   planPreviewLoading.value = false
@@ -1807,7 +2111,7 @@ async function buildAssetReusePlanDraft(): Promise<CarSalesPlanDraft> {
   const selectedStoryboardShots = storyboardAsset
     ? parseStoryboardAssetTextToPlanShots(
       storyboardAsset.textContent,
-      importedRenderConfig.value.segmentDuration || 5,
+      assetReuseSegmentDuration.value,
       24,
     )
     : []
@@ -1821,14 +2125,23 @@ async function buildAssetReusePlanDraft(): Promise<CarSalesPlanDraft> {
     storyboardShots.length ? `已锁定结构化分镜：${storyboardShots.length} 个镜头` : '',
     importedScript ? `参考口播：${importedScript.slice(0, 400)}` : '',
   ].filter(Boolean).join('\n')
-  const voiceLanguage = normalizeImportedVoiceLanguage(importedRenderConfig.value.nativeVoiceLanguage)
-    || inferAssetReuseVoiceLanguage(prompt || importedScript)
-  const importedAudioPolicy = normalizeImportedAudioPolicy(importedRenderConfig.value.audioPolicy)
+  const voiceLanguage = assetReuseVoiceLanguage.value || inferAssetReuseVoiceLanguage(prompt || importedScript)
   const inferredAudioPolicy = generationSelections.some((item) => item.role === 'voiceover' || item.role === 'reference_audio')
     ? 'voiceover'
     : generationSelections.some((item) => item.role === 'bgm')
       ? 'bgm'
       : 'auto'
+  const hostEnabled = hostAppearanceEnabled.value && generationSelections.some((item) => item.role === 'host_image' || item.role === 'host_video')
+  const selectedAudioPolicy = normalizeImportedAudioPolicy(assetReuseAudioPolicy.value) || 'auto'
+  const effectiveAudioPolicy = selectedAudioPolicy === 'auto' ? inferredAudioPolicy : selectedAudioPolicy
+  const fallbackVideoType = effectiveAudioPolicy === 'bgm' ? 'silent_bgm' : 'standard'
+  const importedVideoType = importedRenderConfig.value.videoType
+  const videoType = hostEnabled
+    ? 'digital_human'
+    : importedVideoType && importedVideoType !== 'digital_human'
+      ? importedVideoType
+      : fallbackVideoType
+  const renderConfig = currentAssetReuseRenderConfig()
 
   return {
     source: 'asset-reuse',
@@ -1839,9 +2152,9 @@ async function buildAssetReusePlanDraft(): Promise<CarSalesPlanDraft> {
     coverAssetId: selectedCoverAsset.value?.asset.assetId ?? null,
     coverUrl: selectedCoverAsset.value ? assetCoverPreviewUrl(selectedCoverAsset.value.asset) : previewVisualUrl.value,
     assets,
-    aspectRatio: importedRenderConfig.value.aspectRatio || '9:16',
-    subtitleMode: importedRenderConfig.value.subtitleMode || 'auto',
-    subtitleLanguage: importedRenderConfig.value.subtitleLanguage || voiceLanguage,
+    aspectRatio: assetReuseAspectRatio.value,
+    subtitleMode: assetReuseSubtitleMode.value,
+    subtitleLanguage: assetReuseSubtitleLanguage.value || voiceLanguage,
     nativeVoiceLanguage: voiceLanguage,
     nativeVoiceStyle: normalizeCarNativeVoiceStyle(
       importedRenderConfig.value.nativeVoiceStyle || carSalesPreferences.nativeVoiceStyle,
@@ -1850,31 +2163,31 @@ async function buildAssetReusePlanDraft(): Promise<CarSalesPlanDraft> {
       importedRenderConfig.value.nativeSpeechStyle || carSalesPreferences.nativeSpeechStyle,
     ),
     autoTtsVoiceId: importedRenderConfig.value.autoTtsVoiceId || carSalesPreferences.preferredVoiceId,
-    burnInSubtitle: importedRenderConfig.value.burnInSubtitle ?? true,
-    audioPolicy: importedAudioPolicy || inferredAudioPolicy,
-    model: importedRenderConfig.value.model || DEFAULT_CAR_SALES_MODEL,
-    segmentCount: importedRenderConfig.value.segmentCount || 6,
-    segmentDuration: importedRenderConfig.value.segmentDuration || 5,
-    hostAppearanceEnabled: importedRenderConfig.value.hostAppearanceEnabled ?? (hostAppearanceEnabled.value && generationSelections.some((item) => item.role === 'host_image' || item.role === 'host_video')),
-    headlineOverlay: importedRenderConfig.value.headlineOverlay,
-    subtitleOverlay: importedRenderConfig.value.subtitleOverlay,
+    burnInSubtitle: assetReuseSubtitleMode.value !== 'off' && assetReuseBurnInSubtitle.value,
+    audioPolicy: effectiveAudioPolicy,
+    model: assetReuseModel.value,
+    segmentCount: assetReuseSegmentCount.value,
+    segmentDuration: assetReuseSegmentDuration.value,
+    hostAppearanceEnabled: hostEnabled,
+    headlineOverlay: renderConfig.headlineOverlay,
+    subtitleOverlay: renderConfig.subtitleOverlay,
     creationMode: importedRenderConfig.value.creationMode || '资产复用创作',
     chainType: importedRenderConfig.value.chainType || 'asset-reuse',
-    videoType: importedRenderConfig.value.videoType || ((importedRenderConfig.value.hostAppearanceEnabled ?? hostAppearanceEnabled.value) ? 'digital_human' : inferredAudioPolicy === 'bgm' ? 'silent_bgm' : 'standard'),
-    hasDigitalHuman: importedRenderConfig.value.hasDigitalHuman ?? (importedRenderConfig.value.hostAppearanceEnabled ?? hostAppearanceEnabled.value),
+    videoType,
+    hasDigitalHuman: hostEnabled,
     digitalHumanId: importedRenderConfig.value.digitalHumanId || selectedHost.value?.asset.assetId.toString(),
     avatarUrl: importedRenderConfig.value.avatarUrl || importedRenderConfig.value.hostImageUrl || selectedHostUrl.value || undefined,
     hostImageUrl: importedRenderConfig.value.hostImageUrl || importedRenderConfig.value.avatarUrl || selectedHostUrl.value || undefined,
     voiceId: importedRenderConfig.value.voiceId || selectedVoice.value?.asset.assetId.toString(),
     tone: importedRenderConfig.value.tone || 'professional',
     language: importedRenderConfig.value.language || voiceLanguage,
-    duration: importedRenderConfig.value.duration || (importedRenderConfig.value.segmentCount || 6) * (importedRenderConfig.value.segmentDuration || 5),
-    enableSubtitle: importedRenderConfig.value.enableSubtitle ?? (importedRenderConfig.value.subtitleMode || 'auto') !== 'off',
+    duration: assetReuseTotalDuration.value,
+    enableSubtitle: assetReuseSubtitleMode.value !== 'off',
     subtitleStyle: importedRenderConfig.value.subtitleStyle,
-    enableBigText: importedRenderConfig.value.enableBigText ?? Boolean(importedRenderConfig.value.headlineOverlay?.enabled && importedRenderConfig.value.headlineOverlay.text),
+    enableBigText: assetReuseHeadlineEnabled.value,
     bigTextStyle: importedRenderConfig.value.bigTextStyle,
-    enableBgm: importedRenderConfig.value.enableBgm ?? ((importedRenderConfig.value.bgmStyle || 'auto') !== 'none' && (importedAudioPolicy === 'bgm' || inferredAudioPolicy === 'bgm' || generationSelections.some((item) => item.role === 'bgm'))),
-    bgmStyle: importedRenderConfig.value.bgmStyle || 'auto',
+    enableBgm: importedRenderConfig.value.enableBgm ?? ((importedRenderConfig.value.bgmStyle || 'auto') !== 'none' && (effectiveAudioPolicy === 'bgm' || generationSelections.some((item) => item.role === 'bgm'))),
+    bgmStyle: effectiveAudioPolicy === 'none' ? 'none' : importedRenderConfig.value.bgmStyle || 'auto',
     generateCover: importedRenderConfig.value.generateCover ?? true,
     generateTitle: importedRenderConfig.value.generateTitle ?? true,
     generateDescription: importedRenderConfig.value.generateDescription ?? true,
@@ -1887,11 +2200,15 @@ async function buildAssetReusePlanDraft(): Promise<CarSalesPlanDraft> {
     configItems: [
       '资产中心复用',
       `${assets.length} 个素材`,
+      `${assetReuseTotalDuration.value} 秒`,
+      optionLabel(ASSET_REUSE_ASPECT_RATIO_OPTIONS, assetReuseAspectRatio.value),
+      optionLabel(ASSET_REUSE_LANGUAGE_OPTIONS, assetReuseVoiceLanguage.value),
       scriptAsset ? '已选文案资产' : '',
       storyboardAsset ? '已选分镜资产' : '',
       importedScript && !scriptAsset ? '已导入任务口播' : '',
       importedStoryboardShots.length > 0 && !storyboardAsset ? '已导入任务分镜' : '',
-      (importedRenderConfig.value.hostAppearanceEnabled ?? hostAppearanceEnabled.value) ? '数字人出镜' : '',
+      hostEnabled ? '数字人出镜' : '',
+      assetReuseHeadlineEnabled.value ? '大字报' : '',
     ].filter(Boolean),
     warnings: hasVehicle ? [] : ['汽车销售生成至少需要 1 张车辆图片，请补充车辆素材后再确认生成。'],
   }
@@ -2366,6 +2683,57 @@ onMounted(async () => {
   display: grid;
   min-width: 0;
   gap: 14px;
+}
+
+.reuse-generation-settings-card {
+  display: grid;
+  gap: 14px;
+}
+
+.reuse-setting-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.reuse-setting-grid--packaging {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.reuse-setting-field,
+.reuse-setting-switch {
+  display: grid;
+  gap: 8px;
+  min-width: 0;
+  border: 1px solid #e3eaf5;
+  border-radius: 8px;
+  background: #fbfcff;
+  padding: 10px 12px;
+}
+
+.reuse-setting-field--wide {
+  grid-column: span 2;
+}
+
+.reuse-setting-field span,
+.reuse-setting-switch span {
+  color: #344054;
+  font-size: 12px;
+  font-weight: 850;
+}
+
+.reuse-setting-field :deep(.el-select),
+.reuse-setting-field :deep(.el-input) {
+  width: 100%;
+}
+
+.reuse-setting-switch {
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+}
+
+.reuse-generation-more {
+  background: #fff;
 }
 
 .workflow-module-head {
@@ -3489,6 +3857,7 @@ onMounted(async () => {
   }
 
   .reuse-workflow-grid,
+  .reuse-setting-grid,
   .asset-card-row,
   .asset-card-row--story,
   .asset-option-grid,
@@ -3501,6 +3870,10 @@ onMounted(async () => {
 
   .reuse-workflow-strip {
     grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .reuse-setting-field--wide {
+    grid-column: span 1;
   }
 
   .workflow-module-head,

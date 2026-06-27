@@ -6,8 +6,14 @@
           <span class="ai-plan-step">1</span>
           <div>
             <p class="ai-plan-kicker">生成前确认</p>
-            <h2>AI 已为你生成方案</h2>
-            <p>请确认文案、分镜、配置、积分和预计耗时，确认后开始生成视频。</p>
+            <h2>{{ manualPlanActions ? '编辑文案和分镜' : 'AI 已为你生成方案' }}</h2>
+            <p>
+              {{
+                manualPlanActions
+                  ? '可手动编辑、从资产中心选择，或点击按钮生成文案和分镜；确认无误后再生成视频。'
+                  : '请确认文案、分镜、配置、积分和预计耗时，确认后开始生成视频。'
+              }}
+            </p>
           </div>
           <button type="button" class="ai-plan-close" aria-label="关闭方案预览" @click="$emit('update:modelValue', false)">×</button>
         </header>
@@ -22,6 +28,21 @@
           </div>
 
           <p v-if="error" class="ai-plan-error">{{ error }}</p>
+
+          <section v-if="manualPlanActions" class="ai-plan-action-strip">
+            <button type="button" class="app-secondary-button" :disabled="loading" @click="$emit('select-script')">
+              从资产中心选择文案
+            </button>
+            <button type="button" class="app-secondary-button" :disabled="loading" @click="$emit('select-storyboard')">
+              从资产中心选择分镜
+            </button>
+            <button type="button" class="app-secondary-button" :disabled="loading" @click="$emit('generate-script')">
+              {{ loading ? '生成中...' : '开始生成文案' }}
+            </button>
+            <button type="button" class="app-secondary-button" :disabled="loading" @click="$emit('generate-storyboard')">
+              {{ loading ? '生成中...' : '开始生成分镜' }}
+            </button>
+          </section>
 
           <section v-if="activeTaskId" class="ai-plan-task-state">
             <div>
@@ -43,7 +64,9 @@
               <section class="ai-plan-card ai-plan-script-card">
                 <div class="ai-plan-card-head">
                   <span>文案预览</span>
-                  <button type="button">可编辑</button>
+                  <button type="button" @click="$emit('select-script')">
+                    {{ manualPlanActions ? '选择文案' : '可编辑' }}
+                  </button>
                 </div>
                 <textarea
                   :value="plan.script"
@@ -57,9 +80,14 @@
               <section class="ai-plan-card ai-plan-storyboard-card">
                 <div class="ai-plan-card-head">
                   <span>分镜预览</span>
-                  <button type="button">{{ plan.storyboard.length }} 个镜头</button>
+                  <button type="button" @click="$emit('select-storyboard')">
+                    {{ manualPlanActions ? '选择分镜' : `${plan.storyboard.length} 个镜头` }}
+                  </button>
                 </div>
-                <div class="ai-plan-storyboard">
+                <div v-if="plan.storyboard.length === 0" class="ai-plan-empty-state">
+                  暂无分镜，可点击“开始生成分镜”、从资产中心选择分镜，或稍后手动补充。
+                </div>
+                <div v-else class="ai-plan-storyboard">
                   <article v-for="shot in plan.storyboard" :key="shot.index">
                     <div class="ai-plan-shot-thumb">{{ shot.index }}</div>
                     <div>
@@ -140,50 +168,55 @@
         </div>
 
         <footer class="ai-plan-footer">
-          <button type="button" class="app-secondary-button" :disabled="loading" @click="$emit('back')">返回编辑</button>
-          <button
-            v-if="loading"
-            type="button"
-            class="app-secondary-button ai-plan-danger-button"
-            @click="$emit('cancel-plan')"
-          >
-            取消方案生成
-          </button>
-          <button
-            type="button"
-            class="app-secondary-button"
-            :disabled="loading"
-            @click="$emit('refresh')"
-          >
-            重新生成方案
-          </button>
-          <button
-            v-if="activeTaskRunning"
-            type="button"
-            class="app-secondary-button ai-plan-danger-button"
-            :disabled="loading || cancelLoading"
-            @click="$emit('cancel-generation')"
-          >
-            {{ cancelLoading ? '取消中...' : '取消生成' }}
-          </button>
-          <button
-            v-if="activeTaskId && !activeTaskRunning"
-            type="button"
-            class="app-primary-button"
-            :disabled="loading || regenerateLoading || !plan || plan.enoughBalance === false"
-            @click="$emit('regenerate')"
-          >
-            {{ regenerateLoading ? '提交中...' : '再生成一条' }}
-          </button>
-          <button
-            v-if="!activeTaskId || activeTaskRunning"
-            type="button"
-            class="app-primary-button"
-            :disabled="loading || activeTaskRunning || !plan || plan.enoughBalance === false"
-            @click="emitPrimaryAction"
-          >
-            确认生成（{{ plan?.estimatedCredits ?? 0 }} 积分）
-          </button>
+          <div class="ai-plan-footer-left">
+            <button type="button" class="app-secondary-button" :disabled="loading" @click="$emit('back')">返回编辑</button>
+            <button
+              v-if="loading"
+              type="button"
+              class="app-secondary-button ai-plan-danger-button"
+              @click="$emit('cancel-plan')"
+            >
+              取消方案生成
+            </button>
+          </div>
+          <div class="ai-plan-footer-right">
+            <button
+              type="button"
+              class="app-secondary-button"
+              :disabled="loading"
+              @click="$emit('refresh')"
+            >
+              {{ manualPlanActions ? '开始生成文案和分镜' : '重新生成方案' }}
+            </button>
+            <button
+              v-if="activeTaskRunning"
+              type="button"
+              class="app-secondary-button ai-plan-danger-button"
+              :disabled="loading || cancelLoading"
+              @click="$emit('cancel-generation')"
+            >
+              {{ cancelLoading ? '取消中...' : '取消生成' }}
+            </button>
+            <button
+              v-if="activeTaskId && !activeTaskRunning"
+              type="button"
+              class="app-primary-button"
+              :disabled="loading || regenerateLoading || !plan || plan.enoughBalance === false"
+              @click="$emit('regenerate')"
+            >
+              {{ regenerateLoading ? '提交中...' : '再生成一条' }}
+            </button>
+            <button
+              v-if="!activeTaskId || activeTaskRunning"
+              type="button"
+              class="app-primary-button"
+              :disabled="confirmDisabled"
+              :title="manualPlanActions && !manualPlanComplete ? '请先生成或选择文案和分镜' : undefined"
+              @click="emitPrimaryAction"
+            >
+              确认生成（{{ plan?.estimatedCredits ?? 0 }} 积分）
+            </button>
+          </div>
         </footer>
       </aside>
     </div>
@@ -205,6 +238,7 @@ const props = defineProps<{
   activeTaskProgress?: number | null
   cancelLoading?: boolean
   regenerateLoading?: boolean
+  manualPlanActions?: boolean
 }>()
 
 const previewAspectRatio = computed(() => props.aspectRatio === '16:9' ? '16:9' : '9:16')
@@ -212,12 +246,27 @@ const activeTaskRunning = computed(() => {
   if (!props.activeTaskId) return false
   return ['QUEUED', 'RUNNING'].includes(String(props.activeTaskStatus || 'QUEUED').toUpperCase())
 })
+const manualPlanComplete = computed(() => {
+  if (!props.manualPlanActions) return true
+  return Boolean(props.plan?.script.trim() && props.plan.storyboard.length > 0)
+})
+const confirmDisabled = computed(() =>
+  props.loading ||
+  activeTaskRunning.value ||
+  !props.plan ||
+  props.plan.enoughBalance === false ||
+  !manualPlanComplete.value,
+)
 
 const emit = defineEmits<{
   'update:modelValue': [value: boolean]
   'update-script': [value: string]
   'update-storyboard-shot': [index: number, field: 'visual' | 'narration', value: string]
   refresh: []
+  'generate-script': []
+  'generate-storyboard': []
+  'select-script': []
+  'select-storyboard': []
   confirm: []
   regenerate: []
   'cancel-plan': []
@@ -277,6 +326,18 @@ function emitPrimaryAction() {
   border-top: 1px solid #e6ecf7;
   border-bottom: 0;
   background: #fbfcff;
+}
+
+.ai-plan-footer-left,
+.ai-plan-footer-right {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+.ai-plan-footer-right {
+  justify-content: flex-end;
 }
 
 .ai-plan-step {
@@ -379,6 +440,22 @@ function emitPrimaryAction() {
   font-size: 12px;
 }
 
+.ai-plan-action-strip {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  border: 1px solid #dfe7f5;
+  border-radius: 8px;
+  background: #fbfcff;
+  padding: 12px;
+}
+
+.ai-plan-action-strip .app-secondary-button {
+  min-height: 34px;
+  padding: 0 12px;
+  font-size: 12px;
+}
+
 .ai-plan-workspace {
   display: grid;
   grid-template-columns: minmax(260px, 0.92fr) minmax(300px, 1.08fr) minmax(240px, 0.72fr);
@@ -443,6 +520,20 @@ function emitPrimaryAction() {
 .ai-plan-storyboard {
   display: grid;
   gap: 10px;
+}
+
+.ai-plan-empty-state {
+  display: grid;
+  min-height: 164px;
+  place-items: center;
+  border: 1px dashed #cbd5e1;
+  border-radius: 8px;
+  background: #f8fafc;
+  color: #667085;
+  font-size: 13px;
+  line-height: 1.7;
+  padding: 18px;
+  text-align: center;
 }
 
 .ai-plan-storyboard article {

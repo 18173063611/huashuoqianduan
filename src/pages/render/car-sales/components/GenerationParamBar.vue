@@ -1,14 +1,21 @@
 <template>
   <div class="quick-control-area">
     <div class="quick-control-bar" aria-label="基础生成参数">
-      <label class="quick-control-field">
+      <label class="quick-control-field quick-control-field--duration">
         <span>时长</span>
-        <select :value="targetDuration" :disabled="busy" @change="emitDuration">
-          <option :value="10">10秒</option>
-          <option :value="15">15秒</option>
-          <option :value="20">20秒</option>
-          <option :value="30">30秒</option>
-        </select>
+        <input
+          class="quick-duration-input"
+          type="number"
+          inputmode="numeric"
+          min="8"
+          max="120"
+          step="1"
+          :value="targetDuration"
+          :disabled="busy"
+          @input="emitDuration"
+          @blur="emitDuration"
+        />
+        <em>秒</em>
       </label>
       <label class="quick-control-field">
         <span>语言</span>
@@ -34,10 +41,10 @@
         :class="{ 'quick-generate-button--needs-input': submitBlockReason && !busy && !planPreviewLoading }"
         type="button"
         :disabled="busy || planPreviewLoading"
-        :title="submitBlockReason || '立即生成汽车销售视频'"
+        :title="submitBlockReason || generateTitle || '进入方案编辑'"
         @click="$emit('generate')"
       >
-        {{ planPreviewLoading ? '方案生成中...' : busy ? '生成中...' : '立即生成' }}
+        {{ planPreviewLoading ? '方案生成中...' : busy ? busyLabel || '生成中...' : generateLabel || '立即生成' }}
       </button>
     </div>
     <div class="quick-credit-line">
@@ -60,6 +67,9 @@ defineProps<{
   planPreviewLoading: boolean
   taskStatus: string
   taskProgress: number | null
+  generateLabel?: string
+  generateTitle?: string
+  busyLabel?: string
 }>()
 
 const emit = defineEmits<{
@@ -71,8 +81,13 @@ const emit = defineEmits<{
 }>()
 
 function emitDuration(event: Event) {
-  const target = event.target as HTMLSelectElement | null
-  emit('update:targetDuration', Number(target?.value || 15))
+  const target = event.target as HTMLInputElement | null
+  const raw = Number(target?.value || 15)
+  const value = Math.max(8, Math.min(120, Math.round(Number.isFinite(raw) ? raw : 15)))
+  if (target && target.value && Number(target.value) !== value) {
+    target.value = String(value)
+  }
+  emit('update:targetDuration', value)
 }
 
 function emitVoiceLanguage(event: Event) {

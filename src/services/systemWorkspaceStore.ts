@@ -27,7 +27,7 @@ export interface SystemRecentToolItem {
 }
 
 export type CarSalesPreferenceAspectRatio = '9:16' | '16:9' | 'auto'
-export type CarSalesPreferenceDuration = 10 | 15 | 20 | 30
+export type CarSalesPreferenceDuration = number
 export type CarSalesPreferenceLanguage = 'zh-CN' | 'en-US'
 export type CarSalesPreferenceSubtitleMode = 'auto' | 'off' | 'upload'
 export type CarSalesPreferenceAudioPolicy =
@@ -181,7 +181,11 @@ function literalIn<T extends string | number>(value: unknown, allowed: readonly 
 }
 
 function durationValue(value: unknown): CarSalesPreferenceDuration {
-  return literalIn(value, [10, 15, 20, 30] as const, defaultCarSalesPreferences.duration)
+  const num = Number(value)
+  if (!Number.isFinite(num)) {
+    return defaultCarSalesPreferences.duration
+  }
+  return Math.max(8, Math.min(120, Math.round(num)))
 }
 
 function numberOrNull(value: unknown) {
