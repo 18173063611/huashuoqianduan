@@ -12,6 +12,7 @@ import type { CarSalesAssetRoleBinding, QuickRenderAssetRole, QuickRenderRequest
 import {
   buildCarModelBundleAssetRoleBindings,
   carModelBundleCoverUrl,
+  isLikelyImageReferenceUrl,
 } from './carModelBundle'
 
 export type CarSalesPlanSource = 'ai-smart' | 'benchmark' | 'asset-reuse'
@@ -757,11 +758,22 @@ function planBindingImageUrls(bindings: CarSalesAssetRoleBinding[], sceneOnly: b
     .filter((binding) => {
       const role = String(binding.assetRole || '').toLowerCase()
       const isScene = role.startsWith('scene_')
-      return sceneOnly ? isScene : !isScene
+      return bindingIsImageReference(binding) && (sceneOnly ? isScene : !isScene)
     })
     .map((binding) => binding.url)
     .filter((url): url is string => typeof url === 'string' && url.length > 0)
   return Array.from(new Set(urls))
+}
+
+function bindingIsImageReference(binding: CarSalesAssetRoleBinding) {
+  const assetType = String(binding.assetType || '').trim().toLowerCase()
+  if (['audio', 'bgm', 'json', 'script_asset', 'storyboard_asset', 'text', 'video'].includes(assetType)) {
+    return false
+  }
+  if (assetType && assetType !== 'image' && assetType !== 'cover') {
+    return false
+  }
+  return isLikelyImageReferenceUrl(binding.url)
 }
 
 function draftCoverAsset(draft: CarSalesPlanDraft) {

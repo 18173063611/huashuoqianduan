@@ -29,6 +29,20 @@ const IMAGE_URL_FIELDS = [
   'posterUrl',
 ]
 const NESTED_OBJECT_FIELDS = ['asset', 'image', 'file', 'material', 'preview', 'source']
+const IMAGE_ASSET_TYPES = new Set(['image', 'cover'])
+const NON_IMAGE_ASSET_TYPES = new Set([
+  'audio',
+  'bgm',
+  'json',
+  'script',
+  'script_asset',
+  'storyboard',
+  'storyboard_asset',
+  'text',
+  'video',
+])
+const IMAGE_EXTENSIONS = ['.jpg', '.jpeg', '.png', '.webp']
+const NON_IMAGE_EXTENSIONS = ['.aac', '.doc', '.docx', '.json', '.m4a', '.md', '.mp3', '.mp4', '.mov', '.pdf', '.srt', '.txt', '.vtt', '.wav', '.webm']
 
 const ROLE_ALIASES: Record<string, string> = {
   front: 'car_exterior_front',
@@ -185,16 +199,28 @@ export function carModelBundleDeclaredImageCount(
     || extractCarModelBundleImageEntries(record).length
 }
 
+export function isLikelyImageReferenceUrl(value?: string | null) {
+  const text = String(value || '').trim()
+  if (!text) return false
+  const lower = text.toLowerCase()
+  if (lower.startsWith('data:image/')) return true
+  const path = imageReferencePath(lower)
+  if (NON_IMAGE_EXTENSIONS.some((extension) => path.endsWith(extension))) {
+    return false
+  }
+  return IMAGE_EXTENSIONS.some((extension) => path.endsWith(extension))
+}
+
 function imageEntryFromRow(row: unknown): CarModelBundleImageEntry | null {
   if (typeof row === 'string') {
     const url = row.trim()
-    return url ? { url, role: 'car_exterior_front', label: '车型素材' } : null
+    return isLikelyImageReferenceUrl(url) ? { url, role: 'car_exterior_front', label: '车型素材' } : null
   }
   if (!isPlainRecord(row)) {
     return null
   }
   const url = imageUrlFromRecord(row)
-  if (!url) {
+  if (!url || !recordLooksLikeImage(row, url)) {
     return null
   }
   return {
@@ -232,6 +258,40 @@ function imageUrlFromRecord(record: Record<string, unknown>) {
     }
   }
   return ''
+}
+
+function recordLooksLikeImage(record: Record<string, unknown>, url: string) {
+  const assetType = firstText(
+    recordText(record, 'assetType'),
+    recordText(record, 'mediaType'),
+    recordText(record, 'contentKind'),
+  ).toLowerCase()
+  if (NON_IMAGE_ASSET_TYPES.has(assetType)) {
+    return false
+  }
+  if (IMAGE_ASSET_TYPES.has(assetType)) {
+    return isLikelyImageReferenceUrl(url)
+  }
+  const mime = firstText(
+    recordText(record, 'mimeType'),
+    recordText(record, 'mime'),
+    recordText(record, 'contentType'),
+  ).toLowerCase()
+  if (mime.startsWith('image/')) {
+    return isLikelyImageReferenceUrl(url)
+  }
+  if (mime.startsWith('text/') || mime.includes('json') || mime.startsWith('audio/') || mime.startsWith('video/')) {
+    return false
+  }
+  return isLikelyImageReferenceUrl(url)
+}
+
+function imageReferencePath(value: string) {
+  try {
+    return new URL(value, 'https://huashuo.local').pathname.toLowerCase()
+  } catch {
+    return value.split('#')[0].split('?')[0].toLowerCase()
+  }
 }
 
 function normalizeBundleRole(role: string) {
