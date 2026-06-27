@@ -59,6 +59,15 @@
             >
               {{ avatar.avatarId === selectedAvatarId ? '已选择' : '选择' }}
             </button>
+            <button
+              v-if="canDeleteAvatar(avatar)"
+              type="button"
+              class="avatar-select-delete"
+              :disabled="loading"
+              @click="deleteSelectedAvatar(avatar)"
+            >
+              删除
+            </button>
           </article>
         </div>
 
@@ -73,7 +82,7 @@
 
 <script setup lang="ts">
 import { computed, ref, watch } from 'vue'
-import { getAvatars } from '../../services/avatarApi'
+import { deleteAvatar, getAvatars } from '../../services/avatarApi'
 import { API_ORIGIN } from '../../services/request'
 import type { AvatarItem } from '../../types/avatarTypes'
 
@@ -146,6 +155,26 @@ function selectAvatar(avatar: AvatarItem) {
   close()
 }
 
+async function deleteSelectedAvatar(avatar: AvatarItem) {
+  if (!canDeleteAvatar(avatar) || loading.value) {
+    return
+  }
+  const ok = window.confirm(`确认删除该数字人形象？\n${avatar.avatarName}`)
+  if (!ok) {
+    return
+  }
+  loading.value = true
+  errorMessage.value = ''
+  try {
+    await deleteAvatar(avatar.avatarId)
+    avatars.value = avatars.value.filter((item) => item.avatarId !== avatar.avatarId)
+  } catch (error) {
+    errorMessage.value = error instanceof Error ? error.message : '删除数字人失败'
+  } finally {
+    loading.value = false
+  }
+}
+
 function close() {
   emit('update:modelValue', false)
 }
@@ -161,6 +190,10 @@ function visibilityLabel(avatar: AvatarItem) {
   if (avatar.visibility === 'PUBLIC') return '公共'
   if (avatar.visibility === 'PRIVATE') return '私有'
   return avatar.ownerUserId == null ? '公共' : '私有'
+}
+
+function canDeleteAvatar(avatar: AvatarItem) {
+  return avatar.manageable === true && visibilityLabel(avatar) === '私有'
 }
 
 function resolveUrl(url: string | null | undefined) {
@@ -252,7 +285,8 @@ function resolveUrl(url: string | null | undefined) {
 
 .avatar-select-tabs button,
 .avatar-select-button,
-.avatar-select-primary {
+.avatar-select-primary,
+.avatar-select-delete {
   min-height: 34px;
   border: 1px solid var(--hs-border);
   border-radius: 6px;
@@ -267,6 +301,18 @@ function resolveUrl(url: string | null | undefined) {
   border-color: #bfdbfe;
   background: var(--hs-primary-soft);
   color: var(--hs-primary);
+}
+
+.avatar-select-delete {
+  border-color: #fecaca;
+  background: #fff7f7;
+  color: #dc2626;
+}
+
+.avatar-select-delete:hover {
+  border-color: #fca5a5;
+  background: #fee2e2;
+  color: #b91c1c;
 }
 
 .avatar-select-grid {

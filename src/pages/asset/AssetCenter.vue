@@ -222,7 +222,7 @@
         公共素材 · <strong>全员可见</strong>
       </template>
       <span v-if="activeCategory === 'materials'" class="asset-count">
-        {{ assetHasMore ? `已显示 ${assets.length}+ 条` : `共 ${assets.length} 条` }}
+        {{ materialAssetCountLabel }}
       </span>
     </div>
 
@@ -332,7 +332,12 @@
       </button>
     </div>
 
-    <div v-else-if="assets.length === 0" class="app-empty asset-empty">
+    <div v-else-if="isAvatarAssetMode && filteredAssetAvatars.length === 0" class="app-empty asset-empty">
+      <div class="asset-empty-title">暂无数字人资产</div>
+      <div class="asset-empty-subtitle">当前筛选下没有数字人形象，可切换到全部素材或公共素材查看公共推荐。</div>
+    </div>
+
+    <div v-else-if="!isAvatarAssetMode && assets.length === 0" class="app-empty asset-empty">
       <div class="asset-empty-title">暂无资产</div>
       <div class="asset-empty-subtitle">{{ emptySubtitle }}</div>
       <button
@@ -343,6 +348,49 @@
       >
         去登录
       </button>
+    </div>
+
+    <div v-else-if="isAvatarAssetMode" class="avatar-asset-list">
+      <article
+        v-for="avatar in filteredAssetAvatars"
+        :key="avatar.avatarId"
+        class="avatar-asset-card"
+      >
+        <div class="avatar-asset-cover">
+          <img v-if="avatar.previewUrl" :src="resolveFileUrl(avatar.previewUrl)" :alt="avatar.avatarName" />
+          <span v-else>数字人</span>
+        </div>
+        <div class="avatar-asset-body">
+          <strong>{{ avatar.avatarName }}</strong>
+          <p>{{ avatarSourceLabel(avatar) }} · {{ avatarVisibilityLabel(avatar) }}</p>
+          <div class="asset-row-tags">
+            <span class="asset-group-pill asset-business-pill">数字人资产</span>
+            <span class="asset-group-pill" :class="avatarVisibilityPillClass(avatar)">
+              {{ avatarVisibilityLabel(avatar) }}
+            </span>
+            <span v-if="avatar.defaultAvatar" class="asset-group-pill">默认形象</span>
+          </div>
+        </div>
+        <div class="avatar-asset-actions">
+          <button
+            class="app-secondary-button"
+            type="button"
+            :disabled="loading || !avatar.previewUrl"
+            @click="copyAvatarLink(avatar)"
+          >
+            复制链接
+          </button>
+          <button
+            v-if="canDeleteAvatar(avatar)"
+            class="app-secondary-button asset-danger"
+            type="button"
+            :disabled="loading"
+            @click="handleDeleteAvatar(avatar)"
+          >
+            删除
+          </button>
+        </div>
+      </article>
     </div>
 
     <div v-else class="app-file-list asset-file-list" :class="`asset-file-list--${assetViewMode}`">
@@ -508,7 +556,7 @@
       </div>
     </div>
 
-    <div v-if="activeCategory === 'materials' && assets.length > 0" class="asset-pagination-row">
+    <div v-if="activeCategory === 'materials' && !isAvatarAssetMode && assets.length > 0" class="asset-pagination-row">
       <button
         v-if="assetHasMore"
         class="app-secondary-button"
@@ -809,10 +857,12 @@ import {
   uploadMaterialAsset,
 } from '../../services/assetApi'
 import type { AssetListScope, AssetListSort } from '../../services/assetApi'
+import { deleteAvatar, getAvatars } from '../../services/avatarApi'
 import { API_ORIGIN, getAuthToken } from '../../services/request'
 import carPlaceholderImage from '../../assets/car.png'
 import { getAuthUser, type AuthUser } from '../../services/authSession'
 import type { AssetItem, AssetType } from '../../types/assetTypes'
+import type { AvatarItem } from '../../types/avatarTypes'
 import {
   addVoiceToMyLibrary,
   createVoiceSampleTask,
@@ -1100,6 +1150,7 @@ const ASSET_GROUP_PRESETS = [
 ] as const
 
 const assets = ref<AssetItem[]>([])
+const avatarAssets = ref<AvatarItem[]>([])
 const voices = ref<VoicePresetItem[]>([])
 const loading = ref(false)
 const assetLoadingMore = ref(false)
@@ -1283,6 +1334,49 @@ const filteredVoices = computed(() => {
       (voice.scene || '').toLowerCase().includes(q)
     )
   })
+})
+
+const isAvatarAssetMode = computed(() =>
+  activeCategory.value === 'materials' && selectedWorkflowStage.value === 'digitalHuman',
+)
+
+const filteredAssetAvatars = computed(() => {
+  const q = keyword.value.trim().toLowerCase()
+  return [...avatarAssets.value]
+    .filter((avatar) => {
+      if (listScope.value === 'private') return avatarVisibility(avatar) === 'PRIVATE'
+      if (listScope.value === 'global') return avatarVisibility(avatar) === 'PUBLIC'
+      return true
+    })
+    .filter((avatar) => {
+      if (!q) return true
+      return [
+        avatar.avatarName,
+        avatar.sourceType,
+        avatar.prompt,
+        avatar.metadataJson,
+        avatarVisibilityLabel(avatar),
+      ].some((text) => String(text || '').toLowerCase().includes(q))
+    })
+    .sort((left, right) => {
+      if (left.defaultAvatar !== right.defaultAvatar) {
+        return left.defaultAvatar ? -1 : 1
+      }
+      if (sortKey.value === 'createdAtAsc') {
+        return Date.parse(left.createdAt || left.updatedAt || '') - Date.parse(right.createdAt || right.updatedAt || '')
+      }
+      if (sortKey.value === 'fileNameAsc') {
+        return left.avatarName.localeCompare(right.avatarName)
+      }
+      return Date.parse(right.updatedAt || right.createdAt || '') - Date.parse(left.updatedAt || left.createdAt || '')
+    })
+})
+
+const materialAssetCountLabel = computed(() => {
+  if (isAvatarAssetMode.value) {
+    return `共 ${filteredAssetAvatars.value.length} 条`
+  }
+  return assetHasMore.value ? `已显示 ${assets.value.length}+ 条` : `共 ${assets.value.length} 条`
 })
 
 function listScopeLabel(scope: AssetListScope) {
@@ -1559,6 +1653,17 @@ async function loadAssets(options?: { append?: boolean }) {
       const res = await getVoiceCatalog()
       if (seq !== assetLoadSeq) return
       voices.value = res.records || []
+      return
+    }
+    if (isAvatarAssetMode.value) {
+      const rows = await getAvatars()
+      if (seq !== assetLoadSeq) return
+      avatarAssets.value = rows
+      assets.value = []
+      inlinePreviewByAssetId.value = {}
+      assetHasMore.value = false
+      assetPageNo.value = 1
+      lastAssetQueryKey = queryKey
       return
     }
     const nextPageNo = append ? assetPageNo.value + 1 : 1
@@ -2920,6 +3025,30 @@ function assetVisibility(asset: AssetItem) {
   return String(asset.visibility || '').toUpperCase()
 }
 
+function avatarVisibility(avatar: AvatarItem) {
+  const raw = String(avatar.visibility || '').trim().toUpperCase()
+  if (raw === 'PUBLIC' || raw === 'PRIVATE') {
+    return raw
+  }
+  return avatar.ownerUserId == null ? 'PUBLIC' : 'PRIVATE'
+}
+
+function avatarVisibilityLabel(avatar: AvatarItem) {
+  return avatarVisibility(avatar) === 'PUBLIC' ? '公共' : '私有'
+}
+
+function avatarVisibilityPillClass(avatar: AvatarItem) {
+  return avatarVisibility(avatar) === 'PUBLIC' ? 'asset-user-public-pill' : 'asset-private-pill'
+}
+
+function avatarSourceLabel(avatar: AvatarItem) {
+  const sourceType = String(avatar.sourceType || '').trim().toUpperCase()
+  if (sourceType === 'AVATAR_GENERATE') return '数字人形象生成'
+  if (sourceType === 'AI_GENERATED') return 'AI 生成'
+  if (sourceType === 'USER_UPLOAD') return '用户上传'
+  return avatar.sourceType || '形象资产'
+}
+
 function isPublicAsset(asset: AssetItem) {
   return assetVisibility(asset) === 'PUBLIC'
 }
@@ -2944,6 +3073,10 @@ function canShowAlreadyPublished(asset: AssetItem) {
 
 function canDeletePrivateAsset(asset: AssetItem) {
   return hasToken.value && isOwnedPrivateAsset(asset)
+}
+
+function canDeleteAvatar(avatar: AvatarItem) {
+  return hasToken.value && avatar.manageable === true && avatarVisibility(avatar) === 'PRIVATE'
 }
 
 function normalizedAssetRole(asset: AssetItem | null | undefined) {
@@ -2987,6 +3120,25 @@ async function copyLink(asset: AssetItem) {
   }
 }
 
+async function copyAvatarLink(avatar: AvatarItem) {
+  const url = resolveFileUrl(avatar.previewUrl || '')
+  if (!url || url === '#') {
+    errorMessage.value = '该数字人暂无可复制的预览链接'
+    return
+  }
+  try {
+    await navigator.clipboard.writeText(url)
+    jumpHint.value = '已复制数字人图片链接。'
+    window.setTimeout(() => {
+      if (jumpHint.value === '已复制数字人图片链接。') {
+        jumpHint.value = ''
+      }
+    }, 2500)
+  } catch (e) {
+    errorMessage.value = e instanceof Error ? e.message : '复制失败'
+  }
+}
+
 async function openAssetPreview(asset: AssetItem) {
   previewAsset.value = asset
   previewModalOpen.value = true
@@ -3016,6 +3168,27 @@ function closeAssetPreview() {
   previewAsset.value = null
   previewPayload.value = null
   previewShotIndex.value = -1
+}
+
+async function handleDeleteAvatar(avatar: AvatarItem) {
+  if (loading.value) {
+    return
+  }
+  const ok = window.confirm(`确认删除该数字人形象？\n${avatar.avatarName}`)
+  if (!ok) {
+    return
+  }
+  loading.value = true
+  errorMessage.value = ''
+  try {
+    await deleteAvatar(avatar.avatarId)
+    avatarAssets.value = avatarAssets.value.filter((item) => item.avatarId !== avatar.avatarId)
+    jumpHint.value = '已删除数字人形象。'
+  } catch (e) {
+    errorMessage.value = e instanceof Error ? e.message : '删除数字人失败'
+  } finally {
+    loading.value = false
+  }
 }
 
 async function handleDelete(asset: AssetItem) {
@@ -3815,6 +3988,79 @@ async function playVoiceSample(voice: VoicePresetItem) {
   display: grid;
   gap: 12px;
   padding: 16px;
+}
+
+.avatar-asset-list {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+  gap: 12px;
+  min-height: 300px;
+  border: 1px solid var(--hs-border);
+  border-radius: 8px;
+  background: #fff;
+  padding: 16px;
+}
+
+.avatar-asset-card {
+  display: grid;
+  grid-template-rows: auto 1fr auto;
+  gap: 10px;
+  border: 1px solid var(--hs-border);
+  border-radius: 8px;
+  background: #fcfcff;
+  padding: 12px;
+}
+
+.avatar-asset-cover {
+  display: grid;
+  aspect-ratio: 3 / 4;
+  place-items: center;
+  overflow: hidden;
+  border-radius: 8px;
+  background: #eef2ff;
+  color: var(--hs-primary);
+  font-size: 13px;
+  font-weight: 850;
+}
+
+.avatar-asset-cover img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.avatar-asset-body {
+  display: grid;
+  gap: 6px;
+  min-width: 0;
+}
+
+.avatar-asset-body strong {
+  overflow: hidden;
+  color: var(--hs-text);
+  font-size: 15px;
+  font-weight: 850;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.avatar-asset-body p {
+  margin: 0;
+  color: var(--hs-text-muted);
+  font-size: 12px;
+  line-height: 1.5;
+}
+
+.avatar-asset-actions {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.avatar-asset-actions .app-secondary-button {
+  min-height: 32px;
+  padding: 6px 8px;
+  font-size: 12px;
 }
 
 .asset-file-list .app-file-item {

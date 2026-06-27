@@ -43,3 +43,9 @@ export function updateAvatar(avatarId: number, payload: AvatarUpdateRequest) {
     body: JSON.stringify(payload),
   })
 }
+
+export function deleteAvatar(avatarId: number) {
+  return request<void>(`/avatars/${avatarId}`, {
+    method: 'DELETE',
+  })
+}
