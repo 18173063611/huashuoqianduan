@@ -32,7 +32,20 @@
         :class="{ 'quick-recent-item--current': task.taskId === currentTaskId }"
       >
         <div class="quick-recent-thumb">
-          <img :src="recentTaskCoverUrl(task)" alt="" />
+          <img
+            v-if="recentTaskCoverUrl(task) && !failedCoverTaskIds.has(task.taskId)"
+            :src="recentTaskCoverUrl(task)"
+            alt=""
+            @error="markRecentCoverFailed(task.taskId)"
+          />
+          <video
+            v-else-if="recentTaskVideoUrl(task)"
+            :src="recentTaskVideoUrl(task)"
+            muted
+            preload="metadata"
+            playsinline
+          />
+          <img v-else :src="carPlaceholderImage" alt="" />
           <span v-if="recentTaskVideoUrl(task)" class="quick-recent-play" aria-hidden="true">▶</span>
         </div>
         <div class="quick-recent-main">
@@ -85,6 +98,7 @@
 </template>
 
 <script setup lang="ts">
+import { ref } from 'vue'
 import type { TaskItem } from '../../../../types/taskTypes'
 
 defineProps<{
@@ -112,6 +126,14 @@ defineEmits<{
   'go-task-center': [taskId?: number]
   'go-asset-result': [assetId: number]
 }>()
+
+const failedCoverTaskIds = ref<Set<number>>(new Set())
+
+function markRecentCoverFailed(taskId: number) {
+  const next = new Set(failedCoverTaskIds.value)
+  next.add(taskId)
+  failedCoverTaskIds.value = next
+}
 </script>
 
 <style scoped>

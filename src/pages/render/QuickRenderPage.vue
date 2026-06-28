@@ -1892,7 +1892,7 @@ function recentTaskCoverUrl(task: TaskItem) {
     stringRecordField(output, 'poster') ||
     stringRecordField(output, 'lastFrameUrl') ||
     stringRecordField(output, 'firstFrameUrl') ||
-    stringRecordField(output, 'previewUrl') ||
+    recentImageUrlCandidate(stringRecordField(output, 'previewUrl')) ||
     stringRecordField(output, 'imageUrl') ||
     stringRecordField(outputAsset, 'thumbnailUrl') ||
     stringRecordField(outputAsset, 'coverUrl') ||
@@ -1929,6 +1929,14 @@ function imageLikeAssetFileUrl(asset: AssetItem | undefined) {
     return asset.fileUrl || ''
   }
   return /\.(png|jpe?g|webp|gif|avif)(\?|#|$)/i.test(asset.fileUrl || '') ? asset.fileUrl : ''
+}
+
+function recentImageUrlCandidate(url: string) {
+  const value = String(url || '').trim()
+  if (!value) return ''
+  if (/^data:image\//i.test(value)) return value
+  if (/\.(png|jpe?g|webp|gif|avif)(\?|#|$)/i.test(value)) return value
+  return ''
 }
 
 function parseRecentAssetMetadata(asset: AssetItem | undefined) {
