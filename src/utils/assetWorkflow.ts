@@ -222,6 +222,9 @@ export function developerAssetFeatureBadges(asset: AssetItem | null | undefined)
     return []
   }
   const metadata = parseJsonObject(asset?.metadataJson)
+  const role = normalizedAssetRole(asset)
+  const scriptOrStoryboard = role === 'voice_script' || role === 'storyboard_json' ||
+    isCarModelScriptAsset(asset) || isCarModelStoryboardAsset(asset)
   return uniqueNonEmpty([
     carModelHostModeLabel(metadata),
     firstNonEmptyText(
@@ -231,7 +234,9 @@ export function developerAssetFeatureBadges(asset: AssetItem | null | undefined)
     ),
     durationBadge(numberField(metadata, 'durationSeconds')),
     shotCountBadge(numberField(metadata, 'shotCount')),
-    aspectRatioBadge(stringField(metadata, 'aspectRatio')),
+    scriptOrStoryboard
+      ? reusableAspectRatioBadge(metadata)
+      : aspectRatioBadge(stringField(metadata, 'aspectRatio')),
     languageBadge(stringField(metadata, 'language')),
   ])
 }
@@ -590,7 +595,9 @@ function libraryAssetDisplayName(asset: AssetItem, assetKindLabel: string) {
     carModelHostModeLabel(metadata),
     durationBadge(numberField(metadata, 'durationSeconds')),
     shotCountBadge(numberField(metadata, 'shotCount')),
-    aspectRatioBadge(stringField(metadata, 'aspectRatio')),
+    assetKindLabel === '文案' || assetKindLabel === '分镜'
+      ? reusableAspectRatioBadge(metadata)
+      : aspectRatioBadge(stringField(metadata, 'aspectRatio')),
     style,
     languageBadge(stringField(metadata, 'language')),
   ])
@@ -628,6 +635,17 @@ function shotCountBadge(count: number) {
 
 function aspectRatioBadge(value: string) {
   return value ? `${value}画幅` : ''
+}
+
+function reusableAspectRatioBadge(metadata: Record<string, unknown> | null) {
+  const raw = firstNonEmptyText(
+    stringField(metadata, 'supportedAspectRatios'),
+    stringField(metadata, 'aspectRatios'),
+    stringField(metadata, 'aspectRatio'),
+  )
+  if (!raw) return '9:16/16:9通用'
+  if (raw.includes('9:16') && raw.includes('16:9')) return '9:16/16:9通用'
+  return '9:16/16:9通用'
 }
 
 function languageBadge(value: string) {

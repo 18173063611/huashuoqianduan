@@ -51,7 +51,7 @@
     <div class="quick-credit-line">
       <span v-if="taskStatus">{{ taskStatus }}<template v-if="taskProgress != null"> · {{ taskProgress }}%</template></span>
       <span v-else-if="submitBlockReason" class="quick-submit-block-reason">生成前还需：{{ submitBlockReason }}</span>
-      <span v-else>消耗积分：20</span>
+      <span v-else>消耗积分：{{ estimatedCreditCost }}</span>
     </div>
   </div>
 </template>
@@ -70,6 +70,7 @@ const props = defineProps<{
   planPreviewLoading: boolean
   taskStatus: string
   taskProgress: number | null
+  estimatedCreditCost: number
   generateLabel?: string
   generateTitle?: string
   busyLabel?: string

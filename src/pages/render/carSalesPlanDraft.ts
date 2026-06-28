@@ -55,6 +55,13 @@ export interface AiPlanPreview {
   warnings: string[]
 }
 
+export const CAR_SALES_SEGMENT_CREDIT_COST = 220
+
+export function estimateCarSalesVideoCreditCost(segmentCount: unknown) {
+  const parsed = Math.round(Number(segmentCount) || 1)
+  return Math.max(1, Math.min(MAX_GENERATION_SEGMENTS, parsed)) * CAR_SALES_SEGMENT_CREDIT_COST
+}
+
 export interface CarSalesPlanDraftAsset {
   assetId: number
   fileName: string
@@ -481,7 +488,10 @@ export async function prepareCarSalesAiPlanPreview(draft: CarSalesPlanDraft): Pr
     scriptFallback,
     storyboard,
     storyboardFallback,
-    estimatedCredits: estimate?.estimatedCreditCost ?? 20,
+    estimatedCredits: Math.max(
+      estimate?.estimatedCreditCost ?? 0,
+      estimateCarSalesVideoCreditCost(effectiveSegmentCount),
+    ),
     balance: estimate?.balance ?? null,
     enoughBalance: estimate?.enoughBalance ?? null,
     estimatedDuration: estimatedRenderDurationLabel(draft),
@@ -1420,7 +1430,7 @@ async function fetchPlanBillingEstimate(draft: CarSalesPlanDraft, warnings: stri
       durationSeconds: draft.duration || draft.segmentCount * draft.segmentDuration,
     })
   } catch (error) {
-    warnings.push(`积分估算失败，暂按 20 积分展示：${errorMessageFrom(error)}`)
+    warnings.push(`积分估算失败，暂按 ${estimateCarSalesVideoCreditCost(draft.segmentCount)} 积分展示：${errorMessageFrom(error)}`)
     return null as BillingEstimateResponse | null
   }
 }

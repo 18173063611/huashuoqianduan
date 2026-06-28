@@ -40,6 +40,7 @@
           v-model:voice-language="voiceLanguage"
           v-model:aspect-ratio="aspectRatio"
           :voice-language-options="voiceLanguageOptions"
+          :estimated-credit-cost="currentEstimatedCreditCost"
           :busy="busy"
           :can-submit="canSubmit"
           :submit-block-reason="submitBlockReason"
@@ -329,7 +330,7 @@
             </div>
             <div>
               <dt>消耗积分</dt>
-              <dd>{{ planPreview?.estimatedCredits ?? 20 }} 积分</dd>
+              <dd>{{ currentEstimatedCreditCost }} 积分</dd>
             </div>
           </dl>
           <div class="quick-result-actions">
@@ -500,6 +501,7 @@ import {
   ensureCarSalesPlanDraftAsset,
   enrichScriptWithDigitalHumanContext,
   enrichStoryboardWithDigitalHumanContext,
+  estimateCarSalesVideoCreditCost,
   parseStoryboardAssetTextToPlanShots,
   sanitizePlanScript,
   shouldSuppressCarSalesVoice,
@@ -975,6 +977,9 @@ const segmentCount = computed(() => {
 })
 const segmentDurations = computed(() => distributeDurationAcrossSegments(totalDuration.value, segmentCount.value))
 const segmentDuration = computed(() => averageQuickSegmentDuration(segmentDurations.value))
+const currentEstimatedCreditCost = computed(() =>
+  planPreview.value?.estimatedCredits || estimateCarSalesVideoCreditCost(segmentCount.value),
+)
 
 function normalizeTargetDuration(value: unknown) {
   const num = Number(value)
@@ -2614,17 +2619,18 @@ function ensureEditablePlanPreview() {
 }
 
 function createEmptyPlanPreview(): AiPlanPreview {
+  const effectiveSegmentCount = segmentCount.value
   return {
     script: '',
     scriptFallback: false,
     storyboard: [],
     storyboardFallback: false,
-    estimatedCredits: 20,
+    estimatedCredits: estimateCarSalesVideoCreditCost(effectiveSegmentCount),
     balance: null,
     enoughBalance: null,
     estimatedDuration: estimatedRenderDurationLabel(),
     totalDuration: totalDuration.value,
-    segmentCount: segmentCount.value,
+    segmentCount: effectiveSegmentCount,
     materialCount: materials.value.length,
     vehicleMaterialCount: vehicleMaterialCount.value,
     configItems: planConfigItems(),
@@ -2633,10 +2639,15 @@ function createEmptyPlanPreview(): AiPlanPreview {
 }
 
 function refreshPlanPreviewMeta(plan: AiPlanPreview): AiPlanPreview {
+  const effectiveSegmentCount = plan.storyboard.length || segmentCount.value
   return {
     ...plan,
     totalDuration: totalDuration.value,
-    segmentCount: plan.storyboard.length || segmentCount.value,
+    segmentCount: effectiveSegmentCount,
+    estimatedCredits: Math.max(
+      plan.estimatedCredits || 0,
+      estimateCarSalesVideoCreditCost(effectiveSegmentCount),
+    ),
     materialCount: materials.value.length,
     vehicleMaterialCount: vehicleMaterialCount.value,
     estimatedDuration: estimatedRenderDurationLabel(),
@@ -2818,7 +2829,10 @@ async function prepareAiPlanPreview(mode: AiPlanGenerationMode = 'all') {
     scriptFallback,
     storyboard,
     storyboardFallback,
-    estimatedCredits: estimate?.estimatedCreditCost ?? 20,
+    estimatedCredits: Math.max(
+      estimate?.estimatedCreditCost ?? 0,
+      estimateCarSalesVideoCreditCost(storyboard.length || segmentCount.value),
+    ),
     balance: estimate?.balance ?? null,
     enoughBalance: estimate?.enoughBalance ?? null,
     estimatedDuration: estimatedRenderDurationLabel(),
@@ -3401,7 +3415,7 @@ async function fetchPlanBillingEstimate(warnings: string[]) {
       durationSeconds: totalDuration.value,
     })
   } catch (error) {
-    warnings.push(`积分估算失败，暂按 20 积分展示：${errorMessageFrom(error)}`)
+    warnings.push(`积分估算失败，暂按 ${estimateCarSalesVideoCreditCost(segmentCount.value)} 积分展示：${errorMessageFrom(error)}`)
     return null as BillingEstimateResponse | null
   }
 }
