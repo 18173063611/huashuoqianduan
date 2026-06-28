@@ -339,9 +339,7 @@ watch(
   () => props.modelValue,
   (open) => {
     if (open) {
-      activeCategoryKey.value = props.lockedCategory || props.initialCategory || activeCategoryKey.value
-      syncScopeForCategory(activeCategoryKey.value)
-      void loadAssets()
+      openAssetDrawer()
     }
   },
 )
@@ -350,8 +348,17 @@ watch(
   () => props.initialCategory,
   (value) => {
     if (value && !props.lockedCategory) {
+      const changed = activeCategoryKey.value !== value
       activeCategoryKey.value = value
       syncScopeForCategory(value)
+      if (changed) {
+        keyword.value = ''
+        scope.value = 'all'
+        publicProvider.value = 'all'
+      }
+      if (props.modelValue && changed) {
+        void loadAssets()
+      }
     }
   },
 )
@@ -360,11 +367,32 @@ watch(
   () => props.lockedCategory,
   (value) => {
     if (value) {
+      const changed = activeCategoryKey.value !== value
       activeCategoryKey.value = value
       syncScopeForCategory(value)
+      if (changed) {
+        keyword.value = ''
+        scope.value = 'all'
+        publicProvider.value = 'all'
+      }
+      if (props.modelValue && changed) {
+        void loadAssets()
+      }
     }
   },
 )
+
+function openAssetDrawer() {
+  const targetCategory = props.lockedCategory || props.initialCategory || activeCategoryKey.value
+  activeCategoryKey.value = targetCategory
+  keyword.value = ''
+  scope.value = 'all'
+  publicProvider.value = 'all'
+  selectedRoleByAssetId.value = {}
+  previewByAssetId.value = {}
+  syncScopeForCategory(targetCategory)
+  void loadAssets()
+}
 
 function syncScopeForCategory(category: CarSalesAssetCategoryKey) {
   if (category === 'carBundle' || category === 'scene') {
