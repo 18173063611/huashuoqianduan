@@ -159,13 +159,14 @@
           <section class="car-advanced-section">
             <h3>音频与风格</h3>
             <label class="car-field">
-              <span>背景音乐</span>
+              <span>口播/音频策略</span>
               <select :value="settings.audioPolicy" @change="patch({ audioPolicy: ($event.target as HTMLSelectElement).value as CarSalesAdvancedSettings['audioPolicy'] })">
-                <option value="auto">智能匹配/使用已选音频</option>
-                <option value="none">关闭音频</option>
-                <option value="bgm">仅背景音乐</option>
-                <option value="voiceover">优先口播音频</option>
+                <option value="auto">生成口播/智能匹配</option>
+                <option value="voiceover">优先使用口播音频</option>
+                <option value="bgm">无口播，仅背景音乐</option>
+                <option value="none">静音（关闭口播和背景音乐）</option>
               </select>
+              <small>只关闭背景音乐时，请在“背景音乐”里选择关闭背景音乐。</small>
             </label>
             <div class="car-grid-two">
               <label class="car-field">
@@ -208,15 +209,16 @@
                 </select>
               </label>
               <label class="car-field">
-                <span>BGM 风格</span>
+                <span>背景音乐</span>
                 <select :value="settings.bgmStyle" @change="patch({ bgmStyle: ($event.target as HTMLSelectElement).value as CarSalesAdvancedSettings['bgmStyle'] })">
                   <option value="auto">智能匹配</option>
-                  <option value="none">不使用 BGM</option>
+                  <option value="none">关闭背景音乐</option>
                   <option value="upbeat">轻快节奏</option>
                   <option value="premium">高级氛围</option>
                   <option value="warm">温暖生活</option>
                   <option value="tech">科技动感</option>
                 </select>
+                <small>只控制背景音乐，不会关闭口播声音。</small>
               </label>
             </div>
             <div class="car-grid-two">

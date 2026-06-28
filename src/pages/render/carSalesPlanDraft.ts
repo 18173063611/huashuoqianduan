@@ -1511,8 +1511,8 @@ function subtitleModeLabel(mode: CarSalesPlanDraft['subtitleMode']) {
 }
 
 function audioPolicyLabel(policy: CarSalesPlanDraft['audioPolicy']) {
-  if (policy === 'none') return '关闭'
-  if (policy === 'bgm') return '仅BGM'
+  if (policy === 'none') return '静音'
+  if (policy === 'bgm') return '无口播仅BGM'
   if (policy === 'voiceover') return '口播优先'
   return '智能匹配'
 }
@@ -1542,7 +1542,7 @@ function toneLabel(tone: string) {
 function bgmStyleLabel(style: string) {
   const labels: Record<string, string> = {
     auto: '智能匹配',
-    none: '不使用 BGM',
+    none: '关闭背景音乐',
     upbeat: '轻快节奏',
     premium: '高级氛围',
     warm: '温暖生活',
