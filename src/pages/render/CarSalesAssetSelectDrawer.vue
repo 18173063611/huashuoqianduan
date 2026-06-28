@@ -403,6 +403,7 @@ function syncScopeForCategory(category: CarSalesAssetCategoryKey) {
 async function loadAssets() {
   const seq = ++previewLoadSeq
   const category = activeCategory.value
+  const categoryKey = category.key
   loading.value = true
   errorMessage.value = ''
   try {
@@ -420,16 +421,24 @@ async function loadAssets() {
         }),
       ),
     )
+    if (seq !== previewLoadSeq || activeCategory.value.key !== categoryKey) {
+      return
+    }
     assets.value = dedupeAssets(lists.flat())
     seedDefaultRoles()
     seedBundlePreviews()
     void hydrateBundlePreviews(seq)
   } catch (error) {
+    if (seq !== previewLoadSeq || activeCategory.value.key !== categoryKey) {
+      return
+    }
     errorMessage.value = error instanceof Error ? error.message : '加载资产失败'
     assets.value = []
     previewByAssetId.value = {}
   } finally {
-    loading.value = false
+    if (seq === previewLoadSeq && activeCategory.value.key === categoryKey) {
+      loading.value = false
+    }
   }
 }
 
@@ -451,8 +460,8 @@ function setCategory(key: CarSalesAssetCategoryKey) {
     return
   }
   activeCategoryKey.value = key
+  resetDrawerState()
   syncScopeForCategory(key)
-  keyword.value = ''
   void loadAssets()
 }
 
