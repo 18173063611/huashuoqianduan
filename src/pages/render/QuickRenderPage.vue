@@ -47,10 +47,10 @@
           :plan-preview-loading="planPreviewLoading"
           :task-status="taskStatus"
           :task-progress="taskProgress"
-          generate-label="进入方案编辑"
-          generate-title="先确认或生成文案和分镜，再提交视频生成"
+          generate-label="立即生成"
+          generate-title="生成文案和分镜后自动提交视频生成"
           @open-advanced="advancedDrawerOpen = true"
-          @generate="openAiPlanEditor"
+          @generate="generateAndSubmitAiSmartVideo"
         />
       </div>
 
@@ -2642,8 +2642,9 @@ function cancelAiPlanPreviewGeneration() {
   planPreviewError.value = '已取消方案生成'
 }
 
-function openAiPlanEditor() {
-  if (!requireAuth('登录后可编辑汽车销售视频方案')) return
+async function generateAndSubmitAiSmartVideo() {
+  if (busy.value || planPreviewLoading.value) return
+  if (!requireAuth('登录后可生成汽车销售视频')) return
   submitAttempted.value = true
   if (submitBlockReason.value) {
     errorMessage.value = `生成前还需：${submitBlockReason.value}`
@@ -2654,8 +2655,22 @@ function openAiPlanEditor() {
   }
   errorMessage.value = ''
   planPreviewError.value = ''
-  ensureEditablePlanPreview()
   planPreviewOpen.value = true
+  await prepareAiPlanPreview('all')
+  if (planPreviewError.value || planPreviewLoading.value || !planPreview.value) {
+    return
+  }
+  if (planPreview.value.enoughBalance === false) {
+    planPreviewOpen.value = true
+    planPreviewError.value = '积分余额不足，暂未提交视频生成。'
+    return
+  }
+  if (!isAiPlanPreviewReadyForSubmit()) {
+    planPreviewOpen.value = true
+    return
+  }
+  planPreviewOpen.value = false
+  await submitQuickRender()
 }
 
 function ensureEditablePlanPreview() {
@@ -3945,6 +3960,7 @@ async function submitQuickRender() {
     const submitted = await quickRenderVideo(payload, newVideoIdempotencyKey())
     if (submitted.task?.taskId) {
       markCurrentPendingRenderTask(submitted.task.taskId, 'quick_render', String(submitted.task.status || 'QUEUED'), submitted.task.progress ?? 0)
+      clearCurrentPendingPlanAfterVideoSubmit()
       startQuickRenderTracking(submitted.task.taskId)
       return
     }
@@ -3955,6 +3971,7 @@ async function submitQuickRender() {
         submitted.digitalHumanTask.status || 'QUEUED',
         0,
       )
+      clearCurrentPendingPlanAfterVideoSubmit()
       startDigitalHumanPoll(submitted.digitalHumanTask.taskId)
       return
     }
@@ -3980,6 +3997,12 @@ function isAiPlanPreviewReadyForSubmit() {
     && (suppressVoice || useUploadedVoice || plan.script.trim())
     && plan.storyboard.some((shot) => shot.visual?.trim() || shot.narration?.trim()),
   )
+}
+
+function clearCurrentPendingPlanAfterVideoSubmit() {
+  if (!currentPendingPlanTaskId.value) return
+  removePendingCarSalesPlanTask(currentPendingPlanTaskId.value)
+  currentPendingPlanTaskId.value = ''
 }
 
 function startQuickRenderTracking(taskId: number) {

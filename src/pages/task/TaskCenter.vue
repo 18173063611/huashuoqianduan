@@ -745,7 +745,7 @@ const router = useRouter()
 
 const hasToken = ref(false)
 const tasks = ref<TaskItem[]>([])
-const pendingPlanTasks = ref<PendingCarSalesPlanTask[]>(listPendingCarSalesPlanTasks())
+const pendingPlanTasks = ref<PendingCarSalesPlanTask[]>(visiblePendingPlanTasks())
 const summary = ref<TaskSummaryResponse | null>(null)
 const loading = ref(false)
 /** 重试请求进行中时记录 taskId，用于仅禁用对应行的重试按钮 */
@@ -786,7 +786,11 @@ const showMyVideoGallery = computed(() =>
 )
 
 function refreshPendingPlanTasks() {
-  pendingPlanTasks.value = listPendingCarSalesPlanTasks()
+  pendingPlanTasks.value = visiblePendingPlanTasks()
+}
+
+function visiblePendingPlanTasks() {
+  return listPendingCarSalesPlanTasks().filter((task) => !task.activeTaskId)
 }
 
 function pendingPlanSourceLabel(source: PendingCarSalesPlanTask['source']) {
