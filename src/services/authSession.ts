@@ -14,8 +14,12 @@ export interface AuthUser {
   userId: number
   username: string
   displayName: string
+  avatarUrl?: string | null
   role?: 'USER' | 'ADMIN'
   status?: 'ENABLED' | 'DISABLED' | 'LOCKED'
+  phone?: string | null
+  email?: string | null
+  remark?: string | null
   creditBalance?: number
   creditFrozenBalance?: number
   creditTotalConsumed?: number

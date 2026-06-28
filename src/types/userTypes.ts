@@ -6,8 +6,12 @@ export interface UserMe {
   userId: number
   username: string
   displayName: string
+  avatarUrl?: string | null
   role?: UserRole
   status?: UserStatus
+  phone?: string | null
+  email?: string | null
+  remark?: string | null
   creditBalance?: number
   creditFrozenBalance?: number
   creditTotalConsumed?: number
@@ -35,4 +39,16 @@ export interface LoginRequest {
   password: string
   clientType?: AuthClientType
   deviceId?: string
+}
+
+export interface UserProfileUpdateRequest {
+  displayName: string
+  phone?: string | null
+  email?: string | null
+  remark?: string | null
+}
+
+export interface UserPasswordChangeRequest {
+  currentPassword: string
+  newPassword: string
 }

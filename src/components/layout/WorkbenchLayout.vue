@@ -46,7 +46,10 @@
 
       <div class="app-sidebar-user-wrap">
         <button class="app-sidebar-user" type="button" @click="openUserMenu">
-          <span class="app-user-avatar">{{ userInitial }}</span>
+          <span class="app-user-avatar">
+            <img v-if="userAvatarUrl" :src="userAvatarUrl" :alt="userDisplayName" @error="handleAvatarError" />
+            <span v-else>{{ userInitial }}</span>
+          </span>
           <span>
             <strong>{{ userDisplayName }}</strong>
             <small>{{ userSubtitle }}</small>
@@ -109,7 +112,10 @@
             title="用户菜单"
             @click="toggleTopUserMenu"
           >
-            <span class="app-user-avatar app-user-avatar--top">{{ userInitial }}</span>
+            <span class="app-user-avatar app-user-avatar--top">
+              <img v-if="userAvatarUrl" :src="userAvatarUrl" :alt="userDisplayName" @error="handleAvatarError" />
+              <span v-else>{{ userInitial }}</span>
+            </span>
             <span class="app-user-menu-name">{{ currentUser?.displayName || currentUser?.username }}</span>
             <span class="app-user-caret">⌄</span>
           </button>
@@ -266,6 +272,7 @@ const currentUser = ref<UserMe | null>(getAuthUser())
 const expandedSectionKey = ref<MenuSectionKey | ''>('creation')
 const userMenuPlacement = ref<'sidebar' | 'top' | null>(null)
 const authRefreshTick = ref(0)
+const brokenAvatarUrl = ref('')
 
 const authed = computed(() => {
   void authRefreshTick.value
@@ -295,6 +302,10 @@ const pageSubtitle = computed(() => {
 const userInitial = computed(() => {
   const name = authed.value ? currentUser.value?.displayName || currentUser.value?.username || 'U' : '登'
   return name.trim().slice(0, 1).toUpperCase()
+})
+const userAvatarUrl = computed(() => {
+  const url = authed.value ? currentUser.value?.avatarUrl?.trim() || '' : ''
+  return url && url !== brokenAvatarUrl.value ? url : ''
 })
 const userDisplayName = computed(() =>
   authed.value ? currentUser.value?.displayName || currentUser.value?.username || '用户中心' : '登录后使用',
@@ -364,7 +375,7 @@ function toggleTopUserMenu() {
 
 function goUserProfile() {
   userMenuPlacement.value = null
-  void router.push({ name: 'system-preferences' })
+  void router.push({ name: 'system-profile' })
 }
 
 function goPreferences() {
@@ -384,6 +395,10 @@ async function handleLogout() {
     userMenuPlacement.value = null
     void router.push({ name: 'render' })
   }
+}
+
+function handleAvatarError() {
+  brokenAvatarUrl.value = currentUser.value?.avatarUrl || ''
 }
 
 let unsubscribeAuthRefresh: (() => void) | null = null
@@ -406,6 +421,13 @@ watch(
   () => {
     userMenuPlacement.value = null
     syncCurrentUserFromCache()
+  },
+)
+
+watch(
+  () => currentUser.value?.avatarUrl,
+  () => {
+    brokenAvatarUrl.value = ''
   },
 )
 
@@ -582,6 +604,13 @@ watch(
   color: #fff;
   font-size: 13px;
   font-weight: 900;
+  overflow: hidden;
+}
+
+.app-user-avatar img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
 }
 
 .app-user-avatar--top {

@@ -7,7 +7,14 @@ import {
   setAuthUser,
   type AuthClientType,
 } from './authSession'
-import type { LoginRequest, LoginResponse, RegisterRequest, UserMe } from '../types/userTypes'
+import type {
+  LoginRequest,
+  LoginResponse,
+  RegisterRequest,
+  UserMe,
+  UserPasswordChangeRequest,
+  UserProfileUpdateRequest,
+} from '../types/userTypes'
 
 function getDeviceId(clientType: AuthClientType) {
   if (typeof window === 'undefined') return undefined
@@ -60,6 +67,40 @@ export function me(clientType: AuthClientType = 'USER_WEB') {
   return request<UserMe>('/auth/me', { authClientType: clientType })
 }
 
+export function updateProfile(payload: UserProfileUpdateRequest) {
+  return request<UserMe>('/auth/profile', {
+    method: 'PATCH',
+    body: JSON.stringify(payload),
+    authClientType: 'USER_WEB',
+  })
+}
+
+export function uploadProfileAvatar(file: File) {
+  const formData = new FormData()
+  formData.set('file', file)
+  return request<UserMe>('/auth/avatar', {
+    method: 'POST',
+    body: formData,
+    authClientType: 'USER_WEB',
+    timeoutMs: 30000,
+  })
+}
+
+export function clearProfileAvatar() {
+  return request<UserMe>('/auth/avatar', {
+    method: 'DELETE',
+    authClientType: 'USER_WEB',
+  })
+}
+
+export function changePassword(payload: UserPasswordChangeRequest) {
+  return request<void>('/auth/password', {
+    method: 'POST',
+    body: JSON.stringify(payload),
+    authClientType: 'USER_WEB',
+  })
+}
+
 export function applyLogin(
   res: LoginResponse,
   persistOrClientType: boolean | AuthClientType = true,
@@ -75,8 +116,12 @@ export function applyLogin(
       userId: res.userId,
       username: res.username,
       displayName: res.displayName,
+      avatarUrl: res.avatarUrl,
       role: res.role,
       status: res.status,
+      phone: res.phone,
+      email: res.email,
+      remark: res.remark,
       creditBalance: res.creditBalance,
       creditFrozenBalance: res.creditFrozenBalance,
       creditTotalConsumed: res.creditTotalConsumed,

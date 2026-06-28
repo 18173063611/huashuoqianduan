@@ -17,6 +17,7 @@ export type WorkbenchRouteName =
   | 'my-videos'
   | 'AssetCenter'
   | 'system-credits'
+  | 'system-profile'
   | 'system-favorites'
   | 'system-recent'
   | 'system-preferences'
@@ -202,7 +203,7 @@ const routes: RouteRecordRaw[] = [
       },
       {
         path: 'account',
-        redirect: '/assets',
+        redirect: '/system/profile',
       },
       {
         path: 'assets',
@@ -212,7 +213,13 @@ const routes: RouteRecordRaw[] = [
       },
       {
         path: 'system',
-        redirect: '/system/credits',
+        redirect: '/system/profile',
+      },
+      {
+        path: 'system/profile',
+        name: 'system-profile',
+        component: () => import('../pages/system/SystemProfilePage.vue'),
+        meta: { ...businessRouteMeta, menuKey: 'system-profile', title: '个人中心' },
       },
       {
         path: 'system/credits',
@@ -538,6 +545,7 @@ const recentToolTitles: Partial<Record<WorkbenchRouteName, string>> = {
   voice: '声音生成',
   'my-videos': '我的视频',
   AssetCenter: '资产中心',
+  'system-profile': '个人中心',
   'system-credits': '积分记录',
   'system-favorites': '我的收藏',
   'system-preferences': '偏好设置',
@@ -558,6 +566,7 @@ const recentToolSubtitles: Partial<Record<WorkbenchRouteName, string>> = {
   voice: 'AI 资产生产工具',
   'my-videos': '我的视频',
   AssetCenter: '资产中心',
+  'system-profile': '系统管理',
   'system-credits': '系统管理',
   'system-favorites': '系统管理',
   'system-preferences': '系统管理',
