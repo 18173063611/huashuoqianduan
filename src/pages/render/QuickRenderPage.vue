@@ -2334,6 +2334,7 @@ async function applySelectedPlanAsset(
   if (!textContent) {
     throw new Error('已选择的资产没有可读取的文案或分镜内容')
   }
+  stopAiPlanPreviewGenerationForManualInput()
   const currentPlan = ensureEditablePlanPreview()
   planPreviewOpen.value = true
   const warnings = [...currentPlan.warnings]
@@ -2647,6 +2648,17 @@ function cancelAiPlanPreviewGeneration() {
   planPreviewError.value = '已取消方案生成'
 }
 
+function stopAiPlanPreviewGenerationForManualInput() {
+  aiPlanGenerationSeq += 1
+  const controller = aiPlanAbortController
+  if (controller && !controller.signal.aborted) {
+    controller.abort()
+  }
+  aiPlanAbortController = null
+  planPreviewLoading.value = false
+  planPreviewError.value = ''
+}
+
 async function generateAndSubmitAiSmartVideo() {
   if (busy.value || planPreviewLoading.value) return
   if (!requireAuth('登录后可生成汽车销售视频')) return
@@ -2660,18 +2672,13 @@ async function generateAndSubmitAiSmartVideo() {
   }
   errorMessage.value = ''
   planPreviewError.value = ''
-  await prepareAiPlanPreview('all')
-  if (planPreviewError.value || planPreviewLoading.value || !planPreview.value) {
-    return
-  }
-  if (planPreview.value.enoughBalance === false) {
-    planPreviewOpen.value = true
-    planPreviewError.value = '积分余额不足，暂未提交视频生成。'
-    return
-  }
-  if (!isAiPlanPreviewReadyForSubmit()) {
-    planPreviewOpen.value = true
-  }
+  aiPlanAbortController?.abort()
+  aiPlanAbortController = null
+  planPreviewLoading.value = false
+  planPreview.value = createEmptyPlanPreview()
+  restoredPlanRequest.value = null
+  currentPendingPlanTaskId.value = ''
+  planPreviewOpen.value = true
 }
 
 function ensureEditablePlanPreview() {
@@ -3935,8 +3942,10 @@ async function submitQuickRender() {
   errorMessage.value = ''
   result.value = null
   currentTaskId.value = null
-  taskStatus.value = ''
-  taskProgress.value = null
+  taskStatus.value = '正在准备视频制作'
+  taskProgress.value = 8
+  busy.value = true
+  stopRenderTracking()
   const suppressVoiceForSubmit = shouldSuppressCarSalesVoice({
     audioPolicy: audioPolicy.value,
     videoType: advancedSettings.value.videoType,
@@ -3944,16 +3953,20 @@ async function submitQuickRender() {
   const planScript = planPreview.value?.script.trim() || ''
   const finalNarration = suppressVoiceForSubmit || planScript ? '' : await ensureNarrationReadyForSubmit()
   if (finalNarration == null) {
+    busy.value = false
     return
   }
+  taskStatus.value = '正在处理文案并提交视频制作'
+  taskProgress.value = Math.max(taskProgress.value ?? 0, 14)
   const finalVoiceTextForRequest = suppressVoiceForSubmit
     ? ''
     : await resolveFinalVoiceTextForSubmit(planScript || finalNarration || '')
   if (finalVoiceTextForRequest == null) {
+    busy.value = false
     return
   }
-  busy.value = true
-  stopRenderTracking()
+  taskStatus.value = '正在提交视频制作'
+  taskProgress.value = Math.max(taskProgress.value ?? 0, 22)
 
   try {
     const payload = await buildQuickRenderPayloadForSubmit(finalVoiceTextForRequest, restoredPlanRequest.value)
