@@ -493,6 +493,9 @@ watch(
 
 async function openPicker() {
   if (!requireAuth('登录后可从资产中心选择素材')) return
+  keyword.value = ''
+  selectedRoleFilter.value = 'all'
+  selectedScope.value = props.initialScope || 'private'
   modalOpen.value = true
   await loadAssets()
 }
