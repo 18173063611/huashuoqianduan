@@ -499,6 +499,16 @@
                         placeholder="搜索 BGM 音频资产..."
                         @select="handleBgmAssetSelect"
                       />
+                      <label class="reuse-upload-audio" :class="{ disabled: assetReuseBgmUploading }">
+                        <input
+                          type="file"
+                          accept="audio/*"
+                          :disabled="assetReuseBgmUploading"
+                          @change="handleAssetReuseBgmUpload"
+                        />
+                        <span>{{ assetReuseBgmUploading ? '上传中...' : '上传本地 BGM' }}</span>
+                        <small>{{ selectedBgmName || '仅作为背景音乐后期混入，不覆盖口播音频' }}</small>
+                      </label>
                       <button v-if="selectedBgm" type="button" class="workflow-mini-button" @click="removeSelected(selectedBgm.asset.assetId)">
                         不使用背景音乐
                       </button>
@@ -687,7 +697,7 @@ import {
   VideoPlay,
 } from '@element-plus/icons-vue'
 import { ElMessage } from 'element-plus'
-import { getAssetDetail, getAssetTextContent } from '../../services/assetApi'
+import { getAssetDetail, getAssetTextContent, uploadMaterialAsset } from '../../services/assetApi'
 import { rememberSessionTaskId } from '../../services/sessionTaskStore'
 import {
   consumePendingRenderTaskImport,
@@ -997,6 +1007,7 @@ const carBundleLoadError = ref('')
 const planPreviewOpen = ref(false)
 const planPreviewLoading = ref(false)
 const planSubmitting = ref(false)
+const assetReuseBgmUploading = ref(false)
 const cancelingRenderTask = ref(false)
 const activeRenderTaskId = ref<number | null>(null)
 const activeRenderTaskStatus = ref('')
@@ -1451,6 +1462,43 @@ function handleVoiceAssetSelect(payload: AssetPickerPayload) {
 
 function handleBgmAssetSelect(payload: AssetPickerPayload) {
   addSelectedAsset(payload.asset, 'bgm', ['bgm'])
+  assetReuseAudioPolicy.value = assetReuseAudioPolicy.value === 'none' ? 'auto' : assetReuseAudioPolicy.value
+  importedRenderConfig.value = {
+    ...importedRenderConfig.value,
+    bgmStyle: 'auto',
+    enableBgm: true,
+  }
+}
+
+async function handleAssetReuseBgmUpload(event: Event) {
+  const input = event.target as HTMLInputElement
+  const file = input.files?.[0]
+  input.value = ''
+  if (!file) return
+  if (!requireAuth('登录后可上传 BGM')) return
+  assetReuseBgmUploading.value = true
+  try {
+    const asset = await uploadMaterialAsset(file, {
+      metadataJson: JSON.stringify({
+        from: 'asset_reuse_bgm_upload',
+        assetRole: 'bgm',
+        originalFileName: file.name,
+        source: 'asset_reuse',
+      }),
+    })
+    addSelectedAsset(asset, 'bgm', ['bgm'])
+    assetReuseAudioPolicy.value = assetReuseAudioPolicy.value === 'none' ? 'auto' : assetReuseAudioPolicy.value
+    importedRenderConfig.value = {
+      ...importedRenderConfig.value,
+      bgmStyle: 'auto',
+      enableBgm: true,
+    }
+    ElMessage.success('BGM 已上传并加入本次生成')
+  } catch (error) {
+    ElMessage.error(error instanceof Error ? error.message : 'BGM 上传失败')
+  } finally {
+    assetReuseBgmUploading.value = false
+  }
 }
 
 function disableHostAppearance() {
@@ -3184,6 +3232,40 @@ onMounted(async () => {
   font-size: 12px;
   font-weight: 850;
   cursor: pointer;
+}
+
+.reuse-upload-audio {
+  display: grid;
+  gap: 4px;
+  border: 1px solid #dbe5f5;
+  border-radius: 7px;
+  background: #fff;
+  color: #1261ff;
+  padding: 10px 12px;
+  cursor: pointer;
+}
+
+.reuse-upload-audio input {
+  display: none;
+}
+
+.reuse-upload-audio span {
+  font-size: 13px;
+  font-weight: 900;
+}
+
+.reuse-upload-audio small {
+  overflow: hidden;
+  color: #667085;
+  font-size: 12px;
+  font-weight: 650;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.reuse-upload-audio.disabled {
+  cursor: wait;
+  opacity: 0.62;
 }
 
 .storyboard-duration-panel {

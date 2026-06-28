@@ -388,6 +388,9 @@
       :selected-scene-name="selectedSceneMaterial?.asset.fileName || ''"
       :selected-scene-preview-url="selectedScenePreviewUrl"
       :has-scene-material="hasSceneMaterial"
+      :selected-bgm-name="selectedBgmMaterial?.asset.fileName || ''"
+      :has-bgm-material="Boolean(selectedBgmMaterial)"
+      :bgm-uploading="bgmUploading"
       @update:settings="advancedSettings = $event"
       @reset="resetAdvancedSettings"
       @select-avatar="openAvatarDrawer"
@@ -395,6 +398,9 @@
       @clear-avatar="clearSelectedAvatar"
       @select-scene-asset="openAssetDrawer('scene')"
       @clear-scene="clearSelectedSceneAssets"
+      @select-bgm-asset="openAssetDrawer('bgm')"
+      @upload-bgm="handleAdvancedBgmUpload"
+      @clear-bgm="clearSelectedBgmAssets"
     />
     <AiPlanPreviewDrawer
       v-model="planPreviewOpen"
@@ -440,6 +446,7 @@
 
 <script setup lang="ts">
 import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
+import { ElMessage } from 'element-plus'
 import { useRoute, useRouter } from 'vue-router'
 import { getAssets, getAssetDetail, getAssetTextContent, uploadMaterialAsset } from '../../services/assetApi'
 import { getAvatars } from '../../services/avatarApi'
@@ -787,6 +794,7 @@ const voiceLanguage = ref<'zh-CN' | 'en-US'>(carSalesPreferences.voiceLanguage)
 const goalText = ref('')
 const targetDuration = ref(normalizeTargetDuration(carSalesPreferences.duration))
 const uploading = ref(false)
+const bgmUploading = ref(false)
 const busy = ref(false)
 const cancelingRenderTask = ref(false)
 const regeneratingRenderTask = ref(false)
@@ -2121,6 +2129,12 @@ async function handleClassifiedAssetSelect(payload: CarSalesAssetSelectPayload) 
         videoType: 'digital_human',
       }
     }
+    if (role === 'bgm') {
+      advancedSettings.value = {
+        ...advancedSettings.value,
+        bgmStyle: 'auto',
+      }
+    }
   } catch (error) {
     errorMessage.value = error instanceof Error ? error.message : '资产加入失败'
   } finally {
@@ -2164,6 +2178,41 @@ function clearSelectedAvatar() {
 function clearSelectedSceneAssets() {
   materials.value = materials.value.filter((item) => !item.role.startsWith('scene_'))
   quickPickedSceneImageUrl.value = ''
+}
+
+async function handleAdvancedBgmUpload(file: File) {
+  if (!requireAuth('登录后可上传 BGM')) return
+  bgmUploading.value = true
+  errorMessage.value = ''
+  try {
+    const asset = await uploadMaterialAsset(file, {
+      metadataJson: JSON.stringify({
+        from: 'quick_render_bgm_upload',
+        assetRole: 'bgm',
+        originalFileName: file.name,
+        source: 'quick_render',
+      }),
+    })
+    await appendMaterial(asset, {
+      name: file.name,
+      type: file.type || asset.mimeType || 'audio/*',
+    }, 'bgm')
+    rememberClassifiedAssetUrl(asset, 'bgm')
+    advancedSettings.value = {
+      ...advancedSettings.value,
+      bgmStyle: 'auto',
+    }
+    ElMessage.success('BGM 已上传并加入本次生成')
+  } catch (error) {
+    errorMessage.value = error instanceof Error ? error.message : 'BGM 上传失败'
+  } finally {
+    bgmUploading.value = false
+  }
+}
+
+function clearSelectedBgmAssets() {
+  materials.value = materials.value.filter((item) => item.role !== 'bgm')
+  quickPickedAudioUrl.value = selectedVoiceMaterial.value ? assetUrlForSelection(selectedVoiceMaterial.value.asset) : ''
 }
 
 function goAvatarCreatePage() {
@@ -3067,6 +3116,176 @@ function quickPlanDraftAssets(): CarSalesPlanDraftAsset[] {
   }))
 }
 
+function restoredAssetType(value: unknown): AssetItem['assetType'] {
+  const normalized = String(value || '').trim().toUpperCase()
+  if (['TEXT', 'IMAGE', 'AUDIO', 'VIDEO', 'COVER', 'JSON'].includes(normalized)) {
+    return normalized as AssetItem['assetType']
+  }
+  if (normalized.includes('AUDIO')) return 'AUDIO'
+  if (normalized.includes('VIDEO')) return 'VIDEO'
+  if (normalized.includes('JSON')) return 'JSON'
+  if (normalized.includes('TEXT')) return 'TEXT'
+  return 'IMAGE'
+}
+
+function draftAssetToMaterial(asset: CarSalesPlanDraftAsset, index: number): QuickMaterial {
+  const now = new Date().toISOString()
+  const role = normalizeQuickAssetRole(asset.role) || 'material'
+  const assetType = restoredAssetType(asset.assetType)
+  const fileUrl = asset.fileUrl || asset.thumbnailUrl || ''
+  return {
+    asset: {
+      assetId: Number.isFinite(Number(asset.assetId)) ? Number(asset.assetId) : -Date.now() - index,
+      ownerUserId: null,
+      projectId: null,
+      taskId: null,
+      assetType,
+      visibility: null,
+      status: null,
+      fileName: asset.fileName || roleLabel(role),
+      filePath: null,
+      fileUrl,
+      thumbnailUrl: asset.thumbnailUrl || (assetType === 'IMAGE' || assetType === 'COVER' ? fileUrl : null),
+      mimeType: asset.mimeType || (assetType === 'IMAGE' || assetType === 'COVER' ? 'image/*' : null),
+      fileSize: 0,
+      sourceType: 'RESTORED_PLAN_DRAFT',
+      metadataJson: asset.metadataJson || JSON.stringify({ assetRole: role }),
+      createdAt: now,
+      updatedAt: now,
+    },
+    role,
+    textContent: asset.textContent,
+  }
+}
+
+function restoredAssetsFromRequest(request: QuickRenderRequest | null | undefined): CarSalesPlanDraftAsset[] {
+  if (!request) return []
+  const restored: CarSalesPlanDraftAsset[] = []
+  ;(request.assetRoleBindings || []).forEach((binding, index) => {
+    const role = normalizeQuickAssetRole(binding.assetRole) || 'material'
+    const assetType = restoredAssetType(binding.assetType)
+    const url = binding.url || ''
+    restored.push({
+      assetId: Number(binding.assetId) || -100000 - index,
+      fileName: binding.label || roleLabel(role),
+      assetType,
+      mimeType: assetType === 'IMAGE' || assetType === 'COVER' ? 'image/*' : null,
+      fileUrl: url,
+      thumbnailUrl: assetType === 'IMAGE' || assetType === 'COVER' ? url : null,
+      metadataJson: JSON.stringify({
+        assetRole: role,
+        carPackageId: binding.carPackageId,
+        carIndex: binding.carIndex,
+      }),
+      role,
+    })
+  })
+  const hasHost = restored.some((asset) => asset.role === 'host_image' || asset.role === 'host_video')
+  const hostUrl = request.hostImageUrl || request.avatarUrl || ''
+  if (hostUrl && !hasHost) {
+    restored.push({
+      assetId: Number(request.digitalHumanId) || -200001,
+      fileName: request.vehicleName ? `${request.vehicleName} 数字人` : '数字人形象',
+      assetType: 'IMAGE',
+      mimeType: 'image/*',
+      fileUrl: hostUrl,
+      thumbnailUrl: hostUrl,
+      metadataJson: JSON.stringify({ assetRole: 'host_image', digitalHumanId: request.digitalHumanId }),
+      role: 'host_image',
+    })
+  }
+  return restored
+}
+
+function restorePickedUrlsFromMaterials() {
+  quickPickedImageUrl.value = ''
+  quickPickedSceneImageUrl.value = ''
+  quickPickedCarBundleUrl.value = ''
+  quickPickedAudioUrl.value = ''
+  quickPickedJsonUrl.value = ''
+  quickPickedTextUrl.value = ''
+  quickPickedVideoUrl.value = ''
+  materials.value.forEach((item) => rememberClassifiedAssetUrl(item.asset, item.role))
+}
+
+function restoreMaterialsFromPlanTask(task: PendingCarSalesPlanTask) {
+  const assets = task.draft?.assets?.length
+    ? task.draft.assets
+    : restoredAssetsFromRequest(task.request)
+  if (!assets.length) return
+  selectedAvatar.value = null
+  materials.value = assets.map((asset, index) => draftAssetToMaterial(asset, index))
+  restorePickedUrlsFromMaterials()
+}
+
+function restorePlanTaskSettings(task: PendingCarSalesPlanTask) {
+  const draft = task.draft
+  const request = task.request
+  const nextAspectRatio = draft?.aspectRatio || request?.aspectRatio || task.aspectRatio
+  if (nextAspectRatio === '9:16' || nextAspectRatio === '16:9' || nextAspectRatio === 'auto') {
+    aspectRatio.value = nextAspectRatio
+  }
+  const language = draft?.nativeVoiceLanguage || request?.nativeVoiceLanguage || request?.language
+  if (language === 'en-US' || language === 'zh-CN') {
+    voiceLanguage.value = language
+    subtitleLanguage.value = language
+  }
+  targetDuration.value = normalizeTargetDuration(draft?.duration || request?.duration || task.plan.totalDuration)
+
+  const defaults = createDefaultAdvancedSettings()
+  const subtitleOverlay = draft?.subtitleOverlay || request?.subtitleOverlay
+  const headlineOverlay = draft?.headlineOverlay || request?.headlineOverlay
+  const videoType = draft?.videoType || request?.videoType || defaults.videoType
+  const hasDigitalHuman = Boolean(
+    draft?.hostAppearanceEnabled ||
+    draft?.hasDigitalHuman ||
+    draft?.digitalHumanId ||
+    draft?.avatarUrl ||
+    draft?.hostImageUrl ||
+    request?.hostAppearanceEnabled ||
+    request?.hasDigitalHuman ||
+    request?.digitalHumanId ||
+    request?.avatarUrl ||
+    request?.hostImageUrl,
+  )
+  advancedSettings.value = {
+    ...defaults,
+    videoType: ['standard', 'digital_human', 'product_showcase', 'silent_bgm'].includes(String(videoType))
+      ? videoType as CarSalesAdvancedSettings['videoType']
+      : hasDigitalHuman ? 'digital_human' : defaults.videoType,
+    hostAppearanceEnabled: hasDigitalHuman,
+    subtitleMode: (draft?.subtitleMode || request?.subtitleMode || defaults.subtitleMode) as CarSalesAdvancedSettings['subtitleMode'],
+    customSubtitle: draft?.customSubtitle || request?.customSubtitle || defaults.customSubtitle,
+    burnInSubtitle: draft?.burnInSubtitle ?? request?.burnInSubtitle ?? defaults.burnInSubtitle,
+    subtitleOverlay: {
+      ...defaults.subtitleOverlay,
+      ...(subtitleOverlay || {}),
+    },
+    headlineOverlay: {
+      ...defaults.headlineOverlay,
+      ...(headlineOverlay || {}),
+    },
+    audioPolicy: (draft?.audioPolicy || request?.audioPolicy || defaults.audioPolicy) as CarSalesAdvancedSettings['audioPolicy'],
+    bgmStyle: (draft?.bgmStyle || request?.bgmStyle || defaults.bgmStyle) as CarSalesAdvancedSettings['bgmStyle'],
+    videoStyle: defaults.videoStyle,
+    tone: (draft?.tone || request?.tone || defaults.tone) as CarSalesAdvancedSettings['tone'],
+    nativeVoiceStyle: normalizeCarNativeVoiceStyle(draft?.nativeVoiceStyle || request?.nativeVoiceStyle || defaults.nativeVoiceStyle),
+    nativeSpeechStyle: normalizeCarNativeSpeechStyle(draft?.nativeSpeechStyle || request?.nativeSpeechStyle || defaults.nativeSpeechStyle),
+    model: draft?.model || request?.model || defaults.model,
+    generateCover: draft?.generateCover ?? request?.generateCover ?? defaults.generateCover,
+    generateTitle: draft?.generateTitle ?? request?.generateTitle ?? defaults.generateTitle,
+    generateDescription: draft?.generateDescription ?? request?.generateDescription ?? defaults.generateDescription,
+    generateTags: draft?.generateTags ?? request?.generateTags ?? defaults.generateTags,
+  }
+
+  const sourceText = normalizeNarrationText(request?.finalVoiceText || draft?.script || task.plan.script || '')
+  if (sourceText) {
+    finalNarrationText.value = sourceText
+    narrationResolvedKey.value = `${voiceLanguage.value}:${stableTextKey(sourceText)}`
+    narrationEdited.value = false
+  }
+}
+
 function buildQuickRenderPayload(finalVoiceTextForRequest: string, baseRequest?: QuickRenderRequest | null): QuickRenderRequest {
   if (!planPreview.value) {
     throw new Error('请先生成并确认文案与分镜；如果生成失败，请重新生成，或从资产中心选择可用文案/分镜。')
@@ -3120,6 +3339,12 @@ function persistCurrentPendingPlanTask() {
   currentPendingPlanTaskId.value = id
   const existing = getPendingCarSalesPlanTask(id)
   const request = buildQuickRenderPayload(planPreview.value.script, restoredPlanRequest.value)
+  const draft = buildAiSmartPlanDraft(planPreview.value.script, {
+    ...planPreview.value,
+    storyboard: storyboardForRequest() || planPreview.value.storyboard,
+    totalDuration: totalDuration.value,
+    segmentCount: segmentCount.value,
+  })
   restoredPlanRequest.value = request
   upsertPendingCarSalesPlanTask({
     id,
@@ -3130,6 +3355,7 @@ function persistCurrentPendingPlanTask() {
     aspectRatio: aspectRatio.value,
     plan: planPreview.value,
     request,
+    draft,
     activeTaskId: existing?.activeTaskId ?? null,
     activeTaskKind: existing?.activeTaskKind ?? null,
     activeTaskStatus: existing?.activeTaskStatus,
@@ -3158,10 +3384,8 @@ function restoreLatestPendingPlanTask() {
 function applyPendingAiSmartPlanTask(task: PendingCarSalesPlanTask, openPreview: boolean) {
   currentPendingPlanTaskId.value = task.id
   restoredPlanRequest.value = task.request || null
-  aspectRatio.value = task.aspectRatio
-  if (task.request?.nativeVoiceLanguage === 'en-US' || task.request?.nativeVoiceLanguage === 'zh-CN') {
-    voiceLanguage.value = task.request.nativeVoiceLanguage
-  }
+  restoreMaterialsFromPlanTask(task)
+  restorePlanTaskSettings(task)
   planPreview.value = task.plan
   planPreviewError.value = ''
   planPreviewLoading.value = false
@@ -4564,7 +4788,7 @@ async function applyPreferredAvatar() {
 watch([narrationSourceText, voiceLanguage], () => refreshNarrationEditorForCurrentSource())
 
 watch(
-  () => route.query.planDraftId,
+  () => [route.query.planDraftId, route.query.continueAt],
   () => restorePendingPlanFromRoute(),
   { immediate: true },
 )

@@ -801,6 +801,7 @@ async function continuePendingPlanTask(task: PendingCarSalesPlanTask) {
     query: {
       ...(task.routeQuery || {}),
       planDraftId: task.id,
+      continueAt: String(Date.now()),
     },
   })
   emit('closePanel')

@@ -885,6 +885,9 @@
       :selected-scene-name="benchmarkSelectedSceneAsset?.fileName || ''"
       :selected-scene-preview-url="benchmarkSelectedScenePreviewUrl"
       :has-scene-material="Boolean(benchmarkSelectedSceneAsset)"
+      :selected-bgm-name="benchmarkSelectedBgmAsset?.fileName || ''"
+      :has-bgm-material="Boolean(benchmarkSelectedBgmAsset)"
+      :bgm-uploading="benchmarkBgmUploading"
       @update:settings="benchmarkAdvancedSettings = $event"
       @reset="resetBenchmarkAdvancedSettings"
       @select-avatar="openBenchmarkAssetDrawer('avatar')"
@@ -892,6 +895,9 @@
       @clear-avatar="clearBenchmarkHostAsset"
       @select-scene-asset="openBenchmarkAssetDrawer('scene')"
       @clear-scene="clearBenchmarkSceneAssets"
+      @select-bgm-asset="openBenchmarkAssetDrawer('bgm')"
+      @upload-bgm="handleBenchmarkBgmUpload"
+      @clear-bgm="clearBenchmarkBgmAssets"
     />
   </div>
 </template>
@@ -936,6 +942,7 @@ import { cancelTask } from '../../services/taskApi'
 import { trackTaskResult } from '../../services/taskRealtime'
 import { newVideoIdempotencyKey, quickRenderVideo } from '../../services/videoApi'
 import { loadCarSalesPreferences } from '../../services/systemWorkspaceStore'
+import { uploadMaterialAsset } from '../../services/assetApi'
 import {
   normalizeCarNativeSpeechStyle,
   normalizeCarNativeVoiceStyle,
@@ -945,6 +952,7 @@ import { useAuthRequired } from '../../composables/useAuthRequired'
 import { useBillingEstimate } from '../../composables/useBillingEstimate'
 import { useSmoothTaskProgress } from '../../composables/useSmoothTaskProgress'
 import { normalizePublicMediaUrl } from '../../utils/mediaUrl'
+import { ElMessage } from 'element-plus'
 import {
   Coin,
   Collection,
@@ -1128,6 +1136,7 @@ const benchmarkAdvancedSettings = ref<CarSalesAdvancedSettings>(createDefaultBen
 const benchmarkAspectRatio = ref<'9:16' | '16:9' | 'auto'>('9:16')
 const benchmarkTargetDuration = ref<number>(30)
 const benchmarkDraftAssets = ref<CarSalesPlanDraftAsset[]>([])
+const benchmarkBgmUploading = ref(false)
 const parseAbort = ref<AbortController | null>(null)
 const parseCanceling = ref(false)
 let stopParseTracking: (() => void) | null = null
@@ -1177,6 +1186,9 @@ const benchmarkSelectedSceneAsset = computed(() =>
   benchmarkDraftAssets.value.find((asset) => asset.role.startsWith('scene_')) || null,
 )
 const benchmarkSelectedScenePreviewUrl = computed(() => benchmarkPlanAssetPreviewUrl(benchmarkSelectedSceneAsset.value))
+const benchmarkSelectedBgmAsset = computed(() =>
+  benchmarkDraftAssets.value.find((asset) => asset.role === 'bgm') || null,
+)
 const referenceVideoDurationSeconds = computed(() =>
   normalizeBenchmarkDurationSeconds(douyinParse.value?.durationSeconds || 0),
 )
@@ -2763,6 +2775,12 @@ function handleBenchmarkAssetSelect(payload: CarSalesAssetSelectPayload) {
       videoType: 'digital_human',
     }
   }
+  if (payload.role === 'bgm') {
+    benchmarkAdvancedSettings.value = {
+      ...benchmarkAdvancedSettings.value,
+      bgmStyle: 'auto',
+    }
+  }
   benchmarkAssetDrawerOpen.value = false
   applyMessage.value = `已加入素材：${payload.asset.fileName}`
 }
@@ -2786,6 +2804,41 @@ function clearBenchmarkHostAsset() {
 
 function clearBenchmarkSceneAssets() {
   benchmarkDraftAssets.value = benchmarkDraftAssets.value.filter((item) => !item.role.startsWith('scene_'))
+}
+
+async function handleBenchmarkBgmUpload(file: File) {
+  if (!requireAuth('登录后可上传 BGM')) return
+  benchmarkBgmUploading.value = true
+  applyMessage.value = ''
+  try {
+    const asset = await uploadMaterialAsset(file, {
+      metadataJson: JSON.stringify({
+        from: 'benchmark_bgm_upload',
+        assetRole: 'bgm',
+        originalFileName: file.name,
+        source: 'benchmark',
+      }),
+    })
+    const next = planAssetFromAssetItem(asset, 'bgm')
+    benchmarkDraftAssets.value = [
+      ...benchmarkDraftAssets.value.filter((item) => item.role !== 'bgm' && item.assetId !== next.assetId),
+      next,
+    ]
+    benchmarkAdvancedSettings.value = {
+      ...benchmarkAdvancedSettings.value,
+      bgmStyle: 'auto',
+    }
+    applyMessage.value = `BGM 已上传并加入本次生成：${asset.fileName}`
+    ElMessage.success('BGM 已上传到资产中心')
+  } catch (error) {
+    applyMessage.value = error instanceof Error ? error.message : 'BGM 上传失败'
+  } finally {
+    benchmarkBgmUploading.value = false
+  }
+}
+
+function clearBenchmarkBgmAssets() {
+  benchmarkDraftAssets.value = benchmarkDraftAssets.value.filter((item) => item.role !== 'bgm')
 }
 
 function updatePlanScript(value: string) {

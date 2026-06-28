@@ -5,9 +5,10 @@
       :disabled="disabled"
       maxlength="500"
       rows="3"
-      :placeholder="placeholder || '描述你想要的视频，例如：帮我生成一条比亚迪宋PLUS销售视频，突出空间大和家庭出行场景'"
+      :placeholder="placeholder || '可选填写：描述你想要的视频，例如突出空间、续航、智能座舱或到店促销'"
       @input="emitInput"
     />
+    <p class="quick-prompt-optional-note">需求描述为选填，不输入也可以直接选择车型素材包生成。</p>
     <div class="quick-prompt-meta">
       <span :class="{ warning: required && !modelValue.trim() }">{{ characterCount }}/500</span>
       <small>{{ helperText }}</small>
@@ -49,3 +50,28 @@ function emitInput(event: Event) {
   emit('update:modelValue', target?.value.trim() || '')
 }
 </script>
+
+<style scoped>
+.quick-prompt-optional-note {
+  position: absolute;
+  right: 148px;
+  bottom: 14px;
+  left: 18px;
+  overflow: hidden;
+  margin: 0;
+  color: #8a94ab;
+  font-size: 12px;
+  font-weight: 600;
+  line-height: 1.35;
+  pointer-events: none;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+@media (max-width: 640px) {
+  .quick-prompt-optional-note {
+    right: 92px;
+    font-size: 11px;
+  }
+}
+</style>

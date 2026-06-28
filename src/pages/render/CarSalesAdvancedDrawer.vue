@@ -237,6 +237,21 @@
                 <small>只控制背景音乐，不会关闭口播声音。</small>
               </label>
             </div>
+            <div class="car-bgm-picker">
+              <div class="car-avatar-meta">
+                <strong>{{ selectedBgmName || '未选择本地 BGM' }}</strong>
+                <small>{{ selectedBgmHint }}</small>
+              </div>
+              <div class="car-avatar-actions car-bgm-actions">
+                <button type="button" @click="$emit('select-bgm-asset')">选择 BGM</button>
+                <label class="car-upload-button" :class="{ disabled: bgmUploading }">
+                  <input type="file" accept="audio/*" :disabled="bgmUploading" @change="handleBgmFileChange" />
+                  <span>{{ bgmUploading ? '上传中...' : '上传本地 BGM' }}</span>
+                </label>
+                <button v-if="hasBgmMaterial" type="button" @click="$emit('clear-bgm')">清除</button>
+              </div>
+            </div>
+            <p class="car-advanced-note">本地 BGM 会先上传到资产中心，再作为背景音乐后期混入；不会覆盖口播、字幕或口型。</p>
             <div class="car-grid-two">
               <label class="car-field">
                 <span>讲述节奏</span>
@@ -357,6 +372,9 @@ const props = defineProps<{
   selectedSceneName?: string
   selectedScenePreviewUrl?: string
   hasSceneMaterial?: boolean
+  selectedBgmName?: string
+  hasBgmMaterial?: boolean
+  bgmUploading?: boolean
 }>()
 
 const emit = defineEmits<{
@@ -368,6 +386,9 @@ const emit = defineEmits<{
   'clear-avatar': []
   'select-scene-asset': []
   'clear-scene': []
+  'select-bgm-asset': []
+  'upload-bgm': [file: File]
+  'clear-bgm': []
 }>()
 
 const hostMaterialLabel = computed(() => props.hasHostMaterial ? '已选择数字人素材' : '尚未选择数字人')
@@ -392,6 +413,10 @@ const selectedAvatarHint = computed(() => {
 const selectedSceneHint = computed(() => {
   if (props.hasSceneMaterial) return '已加入本次生成，会随 sceneImageUrls 传给视频生成'
   return '可从资产中心选择公共场景图，补充展厅、道路、门店等背景约束'
+})
+const selectedBgmHint = computed(() => {
+  if (props.hasBgmMaterial) return '已加入本次生成，只作为背景音乐后期混入'
+  return '可从资产中心选择或上传本地 BGM，不参与口播、字幕或口型'
 })
 
 function patch(partial: Partial<CarSalesAdvancedSettings>) {
@@ -431,6 +456,15 @@ function patchOverlay(
 function numberFromEvent(event: Event, fallback: number) {
   const value = Number((event.target as HTMLInputElement).value)
   return Number.isFinite(value) ? value : fallback
+}
+
+function handleBgmFileChange(event: Event) {
+  const input = event.target as HTMLInputElement
+  const file = input.files?.[0]
+  if (file) {
+    emit('upload-bgm', file)
+  }
+  input.value = ''
 }
 </script>
 
@@ -561,6 +595,15 @@ function numberFromEvent(event: Event, fallback: number) {
   padding: 10px;
 }
 
+.car-bgm-picker {
+  display: grid;
+  gap: 10px;
+  border: 1px solid #dbeafe;
+  border-radius: 8px;
+  background: #fff;
+  padding: 10px;
+}
+
 .car-avatar-preview {
   overflow: hidden;
   width: 58px;
@@ -636,6 +679,36 @@ function numberFromEvent(event: Event, fallback: number) {
   border-color: #bfdbfe;
   background: var(--hs-primary-soft);
   color: var(--hs-primary);
+}
+
+.car-upload-button {
+  display: inline-flex;
+  min-height: 32px;
+  align-items: center;
+  justify-content: center;
+  border: 1px solid var(--hs-border);
+  border-radius: 6px;
+  background: #fff;
+  color: var(--hs-text);
+  padding: 0 10px;
+  font-size: 12px;
+  font-weight: 800;
+  cursor: pointer;
+}
+
+.car-upload-button input {
+  display: none;
+}
+
+.car-upload-button:hover {
+  border-color: #bfdbfe;
+  background: var(--hs-primary-soft);
+  color: var(--hs-primary);
+}
+
+.car-upload-button.disabled {
+  cursor: wait;
+  opacity: 0.62;
 }
 
 .car-field {
