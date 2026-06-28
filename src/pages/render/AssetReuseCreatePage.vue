@@ -271,10 +271,13 @@
                 placeholder="搜索车型素材包..."
                 @select="handleCarBundleAssetSelect"
               />
-              <div v-if="selectedCarBundle" class="workflow-status" :class="{ error: carBundleLoadError }">
+              <div v-if="selectedCarBundle" class="workflow-status package-status" :class="{ error: carBundleLoadError }">
                 <strong>{{ carBundleLoadError ? '素材包读取失败' : '已载入车型素材包' }}</strong>
                 <span v-if="!carBundleLoadError">{{ selectedCarBundleName }} · {{ selectedCarBundleImageCountText }}</span>
                 <span v-else>{{ carBundleLoadError }}</span>
+                <button type="button" class="workflow-mini-button" @click="removeSelectedCarBundle">
+                  移除素材包
+                </button>
               </div>
               <div v-if="selectedCarBundleCoverUrl" class="module-cover-preview">
                 <img :src="selectedCarBundleCoverUrl" :alt="selectedCarBundleName" />
@@ -283,6 +286,27 @@
                   <span>{{ selectedCarBundleName }}</span>
                 </div>
               </div>
+
+              <details v-if="selectedCarBundle" class="reuse-optional-group car-bundle-expanded" open>
+                <summary>
+                  <span>车型素材包内容 <em>已展开</em></span>
+                  <small>{{ selectedCarBundleImageCountText }}</small>
+                </summary>
+                <div class="reuse-optional-body">
+                  <div v-if="selectedCarBundlePreviewImages.length" class="car-bundle-image-grid">
+                    <article v-for="image in selectedCarBundlePreviewImages" :key="image.url">
+                      <img :src="image.url" :alt="image.label" />
+                      <div>
+                        <strong>{{ image.label }}</strong>
+                        <span>{{ image.roleLabel }}</span>
+                      </div>
+                    </article>
+                  </div>
+                  <p v-else class="car-bundle-empty">
+                    素材包已选择，但暂未解析到可预览图片；生成时仍会按素材包 JSON 继续传入。
+                  </p>
+                </div>
+              </details>
 
               <details class="reuse-optional-group">
                 <summary>
@@ -737,6 +761,8 @@ import AssetPicker from './AssetPicker.vue'
 import {
   carModelBundleCoverUrl,
   carModelBundleDeclaredImageCount,
+  extractCarModelBundleImageEntries,
+  parseCarModelBundleRecord,
 } from './carModelBundle'
 import {
   buildQuickRenderRequestFromPlanDraft,
@@ -1080,6 +1106,30 @@ const selectedCarBundleName = computed(() => selectedCarBundle.value?.asset.file
 const selectedCarBundleCoverUrl = computed(() =>
   selectedCarBundle.value ? assetCoverPreviewUrl(selectedCarBundle.value.asset) : '',
 )
+const selectedCarBundlePreviewImages = computed(() => {
+  const selected = selectedCarBundle.value
+  if (!selected) return []
+  const text = assetRawTextById.value[selected.asset.assetId] || ''
+  const record = parseCarModelBundleRecord(text, selected.asset.metadataJson)
+  const entries = extractCarModelBundleImageEntries(record)
+  const rows = entries
+    .map((entry, index) => {
+      const url = normalizePublicMediaUrl(entry.url)
+      if (!url) return null
+      const role = supportedRole(entry.role)
+      return {
+        url,
+        label: entry.label || `车型图片 ${index + 1}`,
+        roleLabel: role ? roleLabel(role) : entry.role || '车型素材',
+      }
+    })
+    .filter((item): item is { url: string; label: string; roleLabel: string } => Boolean(item))
+  if (rows.length) return rows
+  const cover = selectedCarBundleCoverUrl.value
+  return cover
+    ? [{ url: cover, label: selectedCarBundleName.value || '车型素材包封面', roleLabel: '封面' }]
+    : []
+})
 const selectedCarBundleImageCountText = computed(() => {
   const asset = selectedCarBundle.value?.asset
   if (!asset) return '等待选择'
@@ -1160,10 +1210,23 @@ function addSelectedAsset(asset: AssetItem, role: QuickRenderAssetRole, replaceR
 }
 
 function removeSelected(assetId: number) {
+  const removed = selectedAssets.value.find((item) => item.asset.assetId === assetId)
   selectedAssets.value = selectedAssets.value.filter((item) => item.asset.assetId !== assetId)
+  if (removed?.role === 'car_model_bundle') {
+    const nextCounts = { ...carBundleImageCountById.value }
+    delete nextCounts[assetId]
+    carBundleImageCountById.value = nextCounts
+    carBundleLoadError.value = ''
+  }
   if (selectedCoverAssetId.value === assetId) {
     selectedCoverAssetId.value = firstCoverCandidateId()
   }
+}
+
+function removeSelectedCarBundle() {
+  const selected = selectedCarBundle.value
+  if (!selected) return
+  removeSelected(selected.asset.assetId)
 }
 
 function clearSelectedAssets() {
@@ -3167,6 +3230,57 @@ onMounted(async () => {
   font-size: 12px;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+
+.car-bundle-expanded {
+  border-color: #bfdbfe;
+  background: #f8fbff;
+}
+
+.car-bundle-image-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(132px, 1fr));
+  gap: 10px;
+}
+
+.car-bundle-image-grid article {
+  display: grid;
+  min-width: 0;
+  gap: 7px;
+  border: 1px solid #e7edf7;
+  border-radius: 8px;
+  background: #fff;
+  padding: 8px;
+}
+
+.car-bundle-image-grid img {
+  width: 100%;
+  aspect-ratio: 4 / 3;
+  border-radius: 6px;
+  background: #f1f5f9;
+  object-fit: cover;
+}
+
+.car-bundle-image-grid div {
+  display: grid;
+  min-width: 0;
+  gap: 3px;
+}
+
+.car-bundle-image-grid strong {
+  overflow: hidden;
+  color: #101828;
+  font-size: 12.5px;
+  font-weight: 900;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.car-bundle-image-grid span,
+.car-bundle-empty {
+  color: #667085;
+  font-size: 12px;
+  line-height: 1.5;
 }
 
 .module-selected-list {
