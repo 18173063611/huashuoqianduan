@@ -179,9 +179,9 @@
             <div class="ready-stat-list">
               <span><em><el-icon><Coin /></el-icon>预计消耗</em><strong>20 积分</strong></span>
               <span><em><el-icon><Timer /></el-icon>预计耗时</em><strong>1-2 分钟</strong></span>
-              <span><em><el-icon><PictureRounded /></el-icon>已关联车辆图片</em><strong>{{ benchmarkDraftAssets.length }} 张</strong></span>
+              <span><em><el-icon><PictureRounded /></el-icon>已关联车辆素材</em><strong>{{ benchmarkDraftAssets.length }} 个</strong></span>
             </div>
-            <div class="benchmark-param-grid">
+            <div class="benchmark-param-grid benchmark-param-grid--settings">
               <label>
                 <span>视频比例</span>
                 <select v-model="benchmarkAspectRatio">
@@ -198,15 +198,58 @@
                   </option>
                 </select>
               </label>
+              <label>
+                <span>讲述语言</span>
+                <select v-model="rewriteTargetLanguage">
+                  <option value="中文">中文讲述</option>
+                  <option value="英文">英文讲述</option>
+                </select>
+              </label>
+              <label>
+                <span>讲述声音</span>
+                <select v-model="benchmarkAdvancedSettings.nativeVoiceStyle">
+                  <option v-for="item in CAR_NATIVE_VOICE_STYLE_OPTIONS" :key="item.value" :value="item.value">
+                    {{ item.label }}
+                  </option>
+                </select>
+              </label>
+              <label>
+                <span>讲述节奏</span>
+                <select v-model="benchmarkAdvancedSettings.nativeSpeechStyle">
+                  <option v-for="item in CAR_NATIVE_SPEECH_STYLE_OPTIONS" :key="item.value" :value="item.value">
+                    {{ item.label }}
+                  </option>
+                </select>
+              </label>
+              <label>
+                <span>生成模型</span>
+                <select v-model="benchmarkAdvancedSettings.model">
+                  <option value="doubao-seedance-2-0-pro-250528">Seedance 2.0 Pro</option>
+                  <option value="doubao-seedance-1-5-pro-251215">Seedance 1.5 Pro</option>
+                </select>
+              </label>
+              <label>
+                <span>音频策略</span>
+                <select v-model="benchmarkAdvancedSettings.audioPolicy">
+                  <option value="auto">生成口播/智能匹配</option>
+                  <option value="voiceover">优先使用口播音频</option>
+                  <option value="bgm">无口播，仅背景音乐</option>
+                  <option value="none">静音</option>
+                </select>
+              </label>
               <p v-if="benchmarkDurationNotice" class="info-text">{{ benchmarkDurationNotice }}</p>
             </div>
             <button class="primary-button" type="button" :disabled="planPreviewLoading || planSubmitting" @click="prepareBenchmarkPlanPreview">
               <el-icon><MagicStick /></el-icon>
               <span>{{ planPreviewLoading ? '方案生成中...' : planSubmitting ? '提交中...' : '确认生成' }}</span>
             </button>
+            <button type="button" class="secondary-button" @click="openBenchmarkAssetDrawer('carBundle')">
+              <el-icon><PictureRounded /></el-icon>
+              <span>从资产中心选择车型素材包</span>
+            </button>
             <button type="button" class="secondary-button" @click="openBenchmarkAssetDrawer('vehicle')">
               <el-icon><PictureRounded /></el-icon>
-              <span>从资产中心选择车辆图片</span>
+              <span>补充车辆图片</span>
             </button>
             <button type="button" class="secondary-button" @click="benchmarkAdvancedDrawerOpen = true">
               <el-icon><MagicStick /></el-icon>
@@ -364,8 +407,8 @@
                 <span class="vehicle-thumb vehicle-thumb--three"></span>
                 <span class="vehicle-thumb vehicle-thumb--four"></span>
               </div>
-              <button type="button" class="secondary-button" @click="openBenchmarkAssetDrawer('vehicle')">
-                从资产中心选择
+              <button type="button" class="secondary-button" @click="openBenchmarkAssetDrawer('carBundle')">
+                从资产中心选择车型素材包
               </button>
             </article>
 
@@ -412,11 +455,12 @@
           <div class="benchmark-asset-bridge">
             <div>
               <strong>车辆素材</strong>
-              <span>{{ benchmarkDraftAssets.length ? `已选 ${benchmarkDraftAssets.length} 个` : '生成汽车销售视频至少需要 1 张车图' }}</span>
+              <span>{{ benchmarkSelectedVehicleAsset ? `已选择：${benchmarkSelectedVehicleAsset.fileName}` : '生成汽车销售视频至少需要车型素材包或 1 张车图' }}</span>
             </div>
-            <button type="button" class="secondary-button" @click="openBenchmarkAssetDrawer('vehicle')">选择车图/素材</button>
+            <button type="button" class="secondary-button" @click="openBenchmarkAssetDrawer('carBundle')">选择车型素材包</button>
+            <button type="button" class="secondary-button" @click="openBenchmarkAssetDrawer('vehicle')">补充车辆图片</button>
           </div>
-          <div class="benchmark-param-grid benchmark-param-grid--wide">
+          <div class="benchmark-param-grid benchmark-param-grid--settings">
             <label>
               <span>视频比例</span>
               <select v-model="benchmarkAspectRatio">
@@ -433,8 +477,171 @@
                 </option>
               </select>
             </label>
+            <label>
+              <span>讲述语言</span>
+              <select v-model="rewriteTargetLanguage">
+                <option value="中文">中文讲述</option>
+                <option value="英文">英文讲述</option>
+              </select>
+            </label>
+            <label>
+              <span>讲述声音</span>
+              <select v-model="benchmarkAdvancedSettings.nativeVoiceStyle">
+                <option v-for="item in CAR_NATIVE_VOICE_STYLE_OPTIONS" :key="item.value" :value="item.value">
+                  {{ item.label }}
+                </option>
+              </select>
+            </label>
+            <label>
+              <span>讲述节奏</span>
+              <select v-model="benchmarkAdvancedSettings.nativeSpeechStyle">
+                <option v-for="item in CAR_NATIVE_SPEECH_STYLE_OPTIONS" :key="item.value" :value="item.value">
+                  {{ item.label }}
+                </option>
+              </select>
+            </label>
+            <label>
+              <span>生成模型</span>
+              <select v-model="benchmarkAdvancedSettings.model">
+                <option value="doubao-seedance-2-0-pro-250528">Seedance 2.0 Pro</option>
+                <option value="doubao-seedance-1-5-pro-251215">Seedance 1.5 Pro</option>
+              </select>
+            </label>
+            <label>
+              <span>音频策略</span>
+              <select v-model="benchmarkAdvancedSettings.audioPolicy">
+                <option value="auto">生成口播/智能匹配</option>
+                <option value="voiceover">优先使用口播音频</option>
+                <option value="bgm">无口播，仅背景音乐</option>
+                <option value="none">静音</option>
+              </select>
+            </label>
             <p v-if="benchmarkDurationNotice" class="info-text">{{ benchmarkDurationNotice }}</p>
             <button type="button" class="secondary-button" @click="benchmarkAdvancedDrawerOpen = true">高级参数</button>
+          </div>
+          <div class="benchmark-option-stack">
+            <details class="benchmark-option-group" open>
+              <summary>
+                <strong>音频与人物</strong>
+                <small>口播、背景音乐、人物出镜集中在这里。</small>
+              </summary>
+              <div class="benchmark-option-body">
+                <div class="benchmark-toggle-row">
+                  <span>人物出镜</span>
+                  <div>
+                    <button type="button" :class="{ active: !benchmarkAdvancedSettings.hostAppearanceEnabled }" @click="setBenchmarkHostAppearance(false)">
+                      不出镜
+                    </button>
+                    <button type="button" :class="{ active: benchmarkAdvancedSettings.hostAppearanceEnabled }" @click="setBenchmarkHostAppearance(true)">
+                      虚拟人物出镜
+                    </button>
+                  </div>
+                </div>
+                <div v-if="benchmarkAdvancedSettings.hostAppearanceEnabled" class="benchmark-inline-card">
+                  <div>
+                    <strong>数字人形象</strong>
+                    <span>{{ benchmarkSelectedHostAsset?.fileName || '请选择数字人图片' }}</span>
+                  </div>
+                  <button type="button" class="secondary-button" @click="openBenchmarkAssetDrawer('avatar')">
+                    {{ benchmarkSelectedHostAsset ? '更换' : '选择' }}
+                  </button>
+                </div>
+                <div class="benchmark-inline-card">
+                  <div>
+                    <strong>口播/配音音频</strong>
+                    <span>{{ benchmarkVoiceSummary }}</span>
+                  </div>
+                  <button type="button" class="secondary-button" @click="openBenchmarkAssetDrawer('bgm')">选择</button>
+                  <button
+                    v-if="benchmarkSelectedVoiceAsset"
+                    type="button"
+                    class="ghost-danger-button"
+                    @click="removeBenchmarkDraftAsset(benchmarkSelectedVoiceAsset.assetId)"
+                  >
+                    移除
+                  </button>
+                </div>
+              </div>
+            </details>
+
+            <details class="benchmark-option-group" open>
+              <summary>
+                <strong>背景音乐 BGM</strong>
+                <small>{{ benchmarkBgmSummary }}</small>
+              </summary>
+              <div class="benchmark-option-body">
+                <label class="benchmark-inline-field">
+                  <span>BGM 风格</span>
+                  <select v-model="benchmarkAdvancedSettings.bgmStyle">
+                    <option value="auto">智能匹配</option>
+                    <option value="none">关闭背景音乐</option>
+                    <option value="upbeat">轻快节奏</option>
+                    <option value="premium">高级氛围</option>
+                    <option value="warm">温暖亲和</option>
+                    <option value="tech">科技感</option>
+                  </select>
+                </label>
+                <div class="benchmark-inline-card">
+                  <div>
+                    <strong>背景音乐 BGM</strong>
+                    <span>{{ benchmarkSelectedBgmAsset?.fileName || '从资产中心选择音频' }}</span>
+                  </div>
+                  <button type="button" class="secondary-button" @click="openBenchmarkAssetDrawer('bgm')">选择</button>
+                  <button v-if="benchmarkSelectedBgmAsset" type="button" class="ghost-danger-button" @click="clearBenchmarkBgmAssets">
+                    移除
+                  </button>
+                </div>
+                <label class="benchmark-upload-button" :class="{ disabled: benchmarkBgmUploading }">
+                  <input type="file" accept="audio/*" :disabled="benchmarkBgmUploading" @change="handleBenchmarkBgmFileInput" />
+                  <span>{{ benchmarkBgmUploading ? '上传中...' : '上传本地 BGM' }}</span>
+                  <small>仅作为背景音乐后期混入，不覆盖口播音频。</small>
+                </label>
+              </div>
+            </details>
+
+            <details class="benchmark-option-group" open>
+              <summary>
+                <strong>字幕与大字报</strong>
+                <small>{{ benchmarkSubtitleSummary }} / 大字报：{{ benchmarkHeadlineSummary }}</small>
+              </summary>
+              <div class="benchmark-option-body">
+                <label class="benchmark-inline-field">
+                  <span>字幕</span>
+                  <select v-model="benchmarkAdvancedSettings.subtitleMode">
+                    <option value="auto">自动字幕</option>
+                    <option value="upload">自定义字幕</option>
+                    <option value="off">关闭字幕</option>
+                  </select>
+                </label>
+                <label class="benchmark-check-row">
+                  <input v-model="benchmarkAdvancedSettings.burnInSubtitle" type="checkbox" :disabled="benchmarkAdvancedSettings.subtitleMode === 'off'" />
+                  <span>烧录到视频</span>
+                </label>
+                <textarea
+                  v-if="benchmarkAdvancedSettings.subtitleMode === 'upload'"
+                  v-model="benchmarkAdvancedSettings.customSubtitle"
+                  class="benchmark-mini-textarea"
+                  maxlength="1000"
+                  placeholder="输入要烧录到视频里的字幕文案"
+                />
+                <label class="benchmark-check-row">
+                  <input
+                    :checked="benchmarkAdvancedSettings.headlineOverlay.enabled"
+                    type="checkbox"
+                    @change="patchBenchmarkHeadlineOverlay({ enabled: ($event.target as HTMLInputElement).checked })"
+                  />
+                  <span>使用大字报</span>
+                </label>
+                <textarea
+                  v-if="benchmarkAdvancedSettings.headlineOverlay.enabled"
+                  :value="benchmarkAdvancedSettings.headlineOverlay.text"
+                  class="benchmark-mini-textarea"
+                  maxlength="120"
+                  placeholder="例如：限时到店礼遇，预约试驾享专属权益"
+                  @input="patchBenchmarkHeadlineOverlay({ text: ($event.target as HTMLTextAreaElement).value })"
+                />
+              </div>
+            </details>
           </div>
           <div v-if="benchmarkDraftAssets.length" class="benchmark-selected-assets">
             <span v-for="asset in benchmarkDraftAssets" :key="asset.assetId">
@@ -944,6 +1151,8 @@ import { newVideoIdempotencyKey, quickRenderVideo } from '../../services/videoAp
 import { loadCarSalesPreferences } from '../../services/systemWorkspaceStore'
 import { uploadMaterialAsset } from '../../services/assetApi'
 import {
+  CAR_NATIVE_SPEECH_STYLE_OPTIONS,
+  CAR_NATIVE_VOICE_STYLE_OPTIONS,
   normalizeCarNativeSpeechStyle,
   normalizeCarNativeVoiceStyle,
 } from '../../constants/carSalesVoiceStyles'
@@ -996,7 +1205,7 @@ import wechatIcon from '../../assets/platforms/wechat.svg'
 import xiaohongshuIcon from '../../assets/platforms/xiaohongshu.svg'
 import youtubeIcon from '../../assets/platforms/youtube.svg'
 
-const DEFAULT_CAR_SALES_MODEL = 'auto'
+const DEFAULT_CAR_SALES_MODEL = 'doubao-seedance-2-0-pro-250528'
 
 // 抖音解析 / 爆款对标：核心计费动作是 VIDEO_PARSE（视频理解）。
 const parseEstimate = useBillingEstimate({ taskType: 'VIDEO_PARSE' })
@@ -1130,7 +1339,7 @@ const planPreview = ref<AiPlanPreview | null>(null)
 const benchmarkPlanDraft = ref<CarSalesPlanDraft | null>(null)
 const currentPendingPlanTaskId = ref('')
 const benchmarkAssetDrawerOpen = ref(false)
-const benchmarkAssetDrawerInitialCategory = ref<CarSalesAssetCategoryKey>('vehicle')
+const benchmarkAssetDrawerInitialCategory = ref<CarSalesAssetCategoryKey>('carBundle')
 const benchmarkAdvancedDrawerOpen = ref(false)
 const benchmarkAdvancedSettings = ref<CarSalesAdvancedSettings>(createDefaultBenchmarkAdvancedSettings())
 const benchmarkAspectRatio = ref<'9:16' | '16:9' | 'auto'>('9:16')
@@ -1189,6 +1398,29 @@ const benchmarkSelectedScenePreviewUrl = computed(() => benchmarkPlanAssetPrevie
 const benchmarkSelectedBgmAsset = computed(() =>
   benchmarkDraftAssets.value.find((asset) => asset.role === 'bgm') || null,
 )
+const benchmarkSelectedVoiceAsset = computed(() =>
+  benchmarkDraftAssets.value.find((asset) => asset.role === 'voiceover' || asset.role === 'reference_audio') || null,
+)
+const benchmarkSelectedVehicleAsset = computed(() =>
+  benchmarkDraftAssets.value.find((asset) => asset.role === 'car_model_bundle' || asset.role.startsWith('car_')) || null,
+)
+const benchmarkVoiceSummary = computed(() =>
+  benchmarkSelectedVoiceAsset.value?.fileName || '默认按口播文案驱动模型；可选择口播/配音音频。',
+)
+const benchmarkBgmSummary = computed(() => {
+  if (benchmarkAdvancedSettings.value.bgmStyle === 'none') return '关闭背景音乐'
+  return benchmarkSelectedBgmAsset.value?.fileName || '智能匹配背景音乐，可从资产中心选择或上传。'
+})
+const benchmarkSubtitleSummary = computed(() => {
+  if (benchmarkAdvancedSettings.value.subtitleMode === 'off') return '关闭字幕'
+  const language = rewriteTargetLanguage.value === '英文' ? '英文讲述' : '中文讲述'
+  return `${benchmarkAdvancedSettings.value.subtitleMode === 'upload' ? '自定义字幕' : '自动字幕'} / ${language} / ${benchmarkAdvancedSettings.value.burnInSubtitle ? '烧录到视频' : '不烧录'}`
+})
+const benchmarkHeadlineSummary = computed(() =>
+  benchmarkAdvancedSettings.value.headlineOverlay.enabled
+    ? (benchmarkAdvancedSettings.value.headlineOverlay.text || '已开启，可编辑大字报文案')
+    : '关闭',
+)
 const referenceVideoDurationSeconds = computed(() =>
   normalizeBenchmarkDurationSeconds(douyinParse.value?.durationSeconds || 0),
 )
@@ -1242,7 +1474,9 @@ function createDefaultBenchmarkAdvancedSettings(): CarSalesAdvancedSettings {
     tone: 'professional',
     nativeVoiceStyle: normalizeCarNativeVoiceStyle(carSalesPreferences.nativeVoiceStyle),
     nativeSpeechStyle: normalizeCarNativeSpeechStyle(carSalesPreferences.nativeSpeechStyle),
-    model: carSalesPreferences.model || DEFAULT_CAR_SALES_MODEL,
+    model: carSalesPreferences.model && carSalesPreferences.model !== 'auto'
+      ? carSalesPreferences.model
+      : DEFAULT_CAR_SALES_MODEL,
     generateCover: true,
     generateTitle: true,
     generateDescription: true,
@@ -1292,6 +1526,37 @@ function openBenchmarkAssetDrawer(category: CarSalesAssetCategoryKey) {
   if (!requireAuth('登录后可从资产中心选择素材')) return
   benchmarkAssetDrawerInitialCategory.value = category
   benchmarkAssetDrawerOpen.value = true
+}
+
+function setBenchmarkHostAppearance(enabled: boolean) {
+  benchmarkAdvancedSettings.value = {
+    ...benchmarkAdvancedSettings.value,
+    hostAppearanceEnabled: enabled,
+    videoType: enabled
+      ? 'digital_human'
+      : benchmarkAdvancedSettings.value.videoType === 'digital_human'
+        ? 'standard'
+        : benchmarkAdvancedSettings.value.videoType,
+  }
+}
+
+function patchBenchmarkHeadlineOverlay(partial: Partial<CarSalesTextOverlaySettings>) {
+  benchmarkAdvancedSettings.value = {
+    ...benchmarkAdvancedSettings.value,
+    headlineOverlay: {
+      ...benchmarkAdvancedSettings.value.headlineOverlay,
+      ...partial,
+    },
+  }
+}
+
+function handleBenchmarkBgmFileInput(event: Event) {
+  const input = event.target as HTMLInputElement
+  const file = input.files?.[0]
+  if (file) {
+    void handleBenchmarkBgmUpload(file)
+  }
+  input.value = ''
 }
 
 watch(videoUrl, (value) => {
@@ -2728,7 +2993,7 @@ function applyBenchmarkDraftSettings(draft: CarSalesPlanDraft) {
     tone: (draft.tone as CarSalesAdvancedSettings['tone']) || 'professional',
     nativeVoiceStyle: normalizeCarNativeVoiceStyle(draft.nativeVoiceStyle),
     nativeSpeechStyle: normalizeCarNativeSpeechStyle(draft.nativeSpeechStyle),
-    model: draft.model || 'auto',
+    model: draft.model && draft.model !== 'auto' ? draft.model : DEFAULT_CAR_SALES_MODEL,
     generateCover: draft.generateCover ?? true,
     generateTitle: draft.generateTitle ?? true,
     generateDescription: draft.generateDescription ?? true,
@@ -2886,7 +3151,7 @@ async function confirmBenchmarkPlan() {
     return
   }
   if (!benchmarkPlanDraft.value.assets.some((asset) => asset.role === 'car_model_bundle' || asset.role.startsWith('car_') || asset.role.startsWith('scene_'))) {
-    planPreviewError.value = '汽车销售生成至少需要 1 张车辆图片。请返回页面选择车图/车辆素材后再提交。'
+    planPreviewError.value = '汽车销售生成至少需要车型素材包或 1 张车辆图片。请返回页面选择车型素材包/车辆图片后再提交。'
     return
   }
   planSubmitting.value = true
@@ -4701,6 +4966,15 @@ function applyScript() {
   align-items: end;
 }
 
+.benchmark-param-grid--settings {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  align-items: end;
+}
+
+.benchmark-param-grid--settings .info-text {
+  grid-column: 1 / -1;
+}
+
 .benchmark-param-grid label {
   display: grid;
   min-width: 0;
@@ -5201,6 +5475,7 @@ function applyScript() {
   display: flex;
   align-items: center;
   justify-content: space-between;
+  flex-wrap: wrap;
   gap: 12px;
   border: 1px dashed #c7d7fe;
   border-radius: 8px;
@@ -5229,6 +5504,205 @@ function applyScript() {
 .benchmark-asset-bridge .secondary-button {
   flex: 0 0 auto;
   min-height: 34px;
+}
+
+.benchmark-option-stack {
+  display: grid;
+  gap: 12px;
+}
+
+.benchmark-option-group {
+  overflow: hidden;
+  border: 1px solid #e3eaf5;
+  border-radius: 8px;
+  background: #fbfcff;
+}
+
+.benchmark-option-group summary {
+  display: grid;
+  grid-template-columns: minmax(120px, auto) minmax(0, 1fr) auto;
+  gap: 10px;
+  align-items: center;
+  min-height: 48px;
+  padding: 0 12px;
+  cursor: pointer;
+  list-style: none;
+}
+
+.benchmark-option-group summary::-webkit-details-marker {
+  display: none;
+}
+
+.benchmark-option-group summary::after {
+  content: '展开';
+  display: inline-flex;
+  min-height: 24px;
+  align-items: center;
+  justify-content: center;
+  border-radius: 999px;
+  background: #eef4ff;
+  color: #1261ff;
+  padding: 0 10px;
+  font-size: 12px;
+  font-weight: 900;
+}
+
+.benchmark-option-group[open] > summary::after {
+  content: '收起';
+}
+
+.benchmark-option-group summary strong {
+  color: #101828;
+  font-size: 14px;
+  font-weight: 900;
+}
+
+.benchmark-option-group summary small {
+  overflow: hidden;
+  color: #667085;
+  font-size: 12px;
+  font-weight: 700;
+  line-height: 1.5;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.benchmark-option-body {
+  display: grid;
+  gap: 12px;
+  border-top: 1px solid #e3eaf5;
+  padding: 12px;
+}
+
+.benchmark-toggle-row,
+.benchmark-inline-card {
+  display: flex;
+  min-width: 0;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  border: 1px solid #e6eefb;
+  border-radius: 8px;
+  background: #fff;
+  padding: 10px;
+}
+
+.benchmark-toggle-row > span,
+.benchmark-inline-card strong,
+.benchmark-inline-field > span {
+  color: #101828;
+  font-size: 13px;
+  font-weight: 900;
+}
+
+.benchmark-toggle-row > div {
+  display: flex;
+  gap: 8px;
+}
+
+.benchmark-toggle-row button,
+.ghost-danger-button {
+  min-height: 34px;
+  border: 1px solid #dfe7f3;
+  border-radius: 7px;
+  background: #fff;
+  color: #344054;
+  padding: 0 12px;
+  font-size: 13px;
+  font-weight: 850;
+  cursor: pointer;
+}
+
+.benchmark-toggle-row button.active {
+  border-color: #1261ff;
+  color: #1261ff;
+}
+
+.benchmark-inline-card > div {
+  display: grid;
+  min-width: 0;
+  gap: 4px;
+}
+
+.benchmark-inline-card span,
+.benchmark-upload-button small {
+  overflow: hidden;
+  color: #667085;
+  font-size: 12px;
+  line-height: 1.5;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.benchmark-inline-card .secondary-button {
+  flex: 0 0 auto;
+  min-height: 34px;
+}
+
+.ghost-danger-button {
+  border-color: #fecaca;
+  color: #dc2626;
+}
+
+.benchmark-inline-field {
+  display: grid;
+  gap: 6px;
+}
+
+.benchmark-inline-field select,
+.benchmark-mini-textarea {
+  width: 100%;
+  border: 1px solid #dfe7f3;
+  border-radius: 7px;
+  background: #fff;
+  color: #101828;
+  outline: none;
+}
+
+.benchmark-inline-field select {
+  min-height: 38px;
+  padding: 0 10px;
+}
+
+.benchmark-check-row {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  color: #344054;
+  font-size: 13px;
+  font-weight: 850;
+}
+
+.benchmark-mini-textarea {
+  min-height: 72px;
+  resize: vertical;
+  padding: 9px 10px;
+  line-height: 1.55;
+}
+
+.benchmark-upload-button {
+  display: grid;
+  gap: 4px;
+  border: 1px solid #dbeafe;
+  border-radius: 8px;
+  background: #fff;
+  padding: 10px 12px;
+  cursor: pointer;
+}
+
+.benchmark-upload-button input {
+  display: none;
+}
+
+.benchmark-upload-button span {
+  color: #1261ff;
+  font-size: 13px;
+  font-weight: 900;
+}
+
+.benchmark-upload-button.disabled {
+  cursor: not-allowed;
+  opacity: 0.62;
 }
 
 .benchmark-selected-assets {

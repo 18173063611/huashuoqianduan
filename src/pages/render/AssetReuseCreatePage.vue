@@ -2909,6 +2909,7 @@ onMounted(async () => {
 
 .reuse-generation-settings-card {
   display: grid;
+  order: 4;
   gap: 14px;
 }
 

@@ -48,7 +48,7 @@
           :task-status="taskStatus"
           :task-progress="taskProgress"
           generate-label="立即生成"
-          generate-title="生成文案和分镜后自动提交视频生成"
+          generate-title="生成文案和分镜后进入确认"
           @open-advanced="advancedDrawerOpen = true"
           @generate="generateAndSubmitAiSmartVideo"
         />
@@ -2655,7 +2655,6 @@ async function generateAndSubmitAiSmartVideo() {
   }
   errorMessage.value = ''
   planPreviewError.value = ''
-  planPreviewOpen.value = true
   await prepareAiPlanPreview('all')
   if (planPreviewError.value || planPreviewLoading.value || !planPreview.value) {
     return
@@ -2667,10 +2666,7 @@ async function generateAndSubmitAiSmartVideo() {
   }
   if (!isAiPlanPreviewReadyForSubmit()) {
     planPreviewOpen.value = true
-    return
   }
-  planPreviewOpen.value = false
-  await submitQuickRender()
 }
 
 function ensureEditablePlanPreview() {

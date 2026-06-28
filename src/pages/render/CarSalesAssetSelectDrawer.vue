@@ -350,11 +350,9 @@ watch(
     if (value && !props.lockedCategory) {
       const changed = activeCategoryKey.value !== value
       activeCategoryKey.value = value
-      syncScopeForCategory(value)
       if (changed) {
-        keyword.value = ''
-        scope.value = 'all'
-        publicProvider.value = 'all'
+        resetDrawerState()
+        syncScopeForCategory(value)
       }
       if (props.modelValue && changed) {
         void loadAssets()
@@ -369,11 +367,9 @@ watch(
     if (value) {
       const changed = activeCategoryKey.value !== value
       activeCategoryKey.value = value
-      syncScopeForCategory(value)
       if (changed) {
-        keyword.value = ''
-        scope.value = 'all'
-        publicProvider.value = 'all'
+        resetDrawerState()
+        syncScopeForCategory(value)
       }
       if (props.modelValue && changed) {
         void loadAssets()
@@ -385,13 +381,17 @@ watch(
 function openAssetDrawer() {
   const targetCategory = props.lockedCategory || props.initialCategory || activeCategoryKey.value
   activeCategoryKey.value = targetCategory
+  resetDrawerState()
+  syncScopeForCategory(targetCategory)
+  void loadAssets()
+}
+
+function resetDrawerState() {
   keyword.value = ''
   scope.value = 'all'
   publicProvider.value = 'all'
   selectedRoleByAssetId.value = {}
   previewByAssetId.value = {}
-  syncScopeForCategory(targetCategory)
-  void loadAssets()
 }
 
 function syncScopeForCategory(category: CarSalesAssetCategoryKey) {
