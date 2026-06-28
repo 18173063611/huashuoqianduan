@@ -445,7 +445,7 @@
 </template>
 
 <script setup lang="ts">
-import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
+import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { ElMessage } from 'element-plus'
 import { useRoute, useRouter } from 'vue-router'
 import { getAssets, getAssetDetail, getAssetTextContent, uploadMaterialAsset } from '../../services/assetApi'
@@ -2082,26 +2082,31 @@ async function handleAssetCenterSelect(payload: { asset: AssetItem; url: string 
 
 function openAssetDrawer(category: CarSalesAssetCategoryKey) {
   if (!requireAuth('登录后可从资产中心选择素材')) return
-  planAssetSelectIntent.value = 'auto'
-  assetSelectLockedCategory.value = null
-  assetSelectInitialCategory.value = category
-  assetSelectDrawerOpen.value = true
+  reopenAssetSelectDrawer(category, null, 'auto')
 }
 
 function openPlanAssetDrawer(intent: Exclude<PlanAssetSelectIntent, 'auto'>) {
   if (!requireAuth('登录后可从资产中心选择文案或分镜')) return
-  planAssetSelectIntent.value = intent
-  assetSelectLockedCategory.value = null
-  assetSelectInitialCategory.value = 'script'
-  assetSelectDrawerOpen.value = true
+  reopenAssetSelectDrawer('script', null, intent)
 }
 
 function openCarBundleDrawer() {
   if (!requireAuth('登录后可从资产中心选择车型素材包')) return
-  planAssetSelectIntent.value = 'auto'
-  assetSelectLockedCategory.value = 'carBundle'
-  assetSelectInitialCategory.value = 'carBundle'
-  assetSelectDrawerOpen.value = true
+  reopenAssetSelectDrawer('carBundle', 'carBundle', 'auto')
+}
+
+function reopenAssetSelectDrawer(
+  category: CarSalesAssetCategoryKey,
+  lockedCategory: CarSalesAssetCategoryKey | null,
+  intent: PlanAssetSelectIntent,
+) {
+  planAssetSelectIntent.value = intent
+  assetSelectLockedCategory.value = lockedCategory
+  assetSelectInitialCategory.value = category
+  assetSelectDrawerOpen.value = false
+  void nextTick(() => {
+    assetSelectDrawerOpen.value = true
+  })
 }
 
 function openAvatarDrawer() {

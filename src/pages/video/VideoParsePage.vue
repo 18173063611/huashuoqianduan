@@ -1110,7 +1110,7 @@
 </template>
 
 <script setup lang="ts">
-import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
+import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { downloadShareVideo, rewriteDouyinCopywriting, startDouyinParseWithTranscript } from '../../services/writerDouyinApi'
 import { API_BASE_URL, API_ORIGIN } from '../../services/request'
@@ -1525,7 +1525,10 @@ function benchmarkMetadataText(metadata: Record<string, unknown> | null, key: st
 function openBenchmarkAssetDrawer(category: CarSalesAssetCategoryKey) {
   if (!requireAuth('登录后可从资产中心选择素材')) return
   benchmarkAssetDrawerInitialCategory.value = category
-  benchmarkAssetDrawerOpen.value = true
+  benchmarkAssetDrawerOpen.value = false
+  void nextTick(() => {
+    benchmarkAssetDrawerOpen.value = true
+  })
 }
 
 function setBenchmarkHostAppearance(enabled: boolean) {
