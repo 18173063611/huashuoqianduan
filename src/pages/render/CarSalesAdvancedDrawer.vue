@@ -95,6 +95,14 @@
             </label>
             <div class="car-grid-two">
               <label class="car-field">
+                <span>字体</span>
+                <select :value="settings.subtitleOverlay.fontFamily" @change="patchOverlay('subtitleOverlay', { fontFamily: ($event.target as HTMLSelectElement).value })">
+                  <option v-for="item in textFontOptions" :key="item.value" :value="item.value">
+                    {{ item.label }}
+                  </option>
+                </select>
+              </label>
+              <label class="car-field">
                 <span>字幕位置</span>
                 <select :value="settings.subtitleOverlay.position" @change="patchOverlay('subtitleOverlay', { position: ($event.target as HTMLSelectElement).value as OverlayPosition })">
                   <option value="bottom">底部</option>
@@ -134,6 +142,14 @@
               @input="patchOverlay('headlineOverlay', { text: ($event.target as HTMLTextAreaElement).value })"
             />
             <div class="car-grid-two">
+              <label class="car-field">
+                <span>字体</span>
+                <select :value="settings.headlineOverlay.fontFamily" @change="patchOverlay('headlineOverlay', { fontFamily: ($event.target as HTMLSelectElement).value })">
+                  <option v-for="item in textFontOptions" :key="item.value" :value="item.value">
+                    {{ item.label }}
+                  </option>
+                </select>
+              </label>
               <label class="car-field">
                 <span>位置</span>
                 <select :value="settings.headlineOverlay.position" @change="patchOverlay('headlineOverlay', { position: ($event.target as HTMLSelectElement).value as OverlayPosition })">
@@ -291,6 +307,7 @@
 
 <script setup lang="ts">
 import { computed } from 'vue'
+import { CAR_TEXT_FONT_OPTIONS } from '../../constants/carSalesTextStyles'
 import {
   CAR_NATIVE_SPEECH_STYLE_OPTIONS,
   CAR_NATIVE_VOICE_STYLE_OPTIONS,
@@ -357,6 +374,7 @@ const hostMaterialLabel = computed(() => props.hasHostMaterial ? '已选择数�
 const femaleVoiceStyleOptions = computed(() => CAR_NATIVE_VOICE_STYLE_OPTIONS.filter((item) => item.gender === 'female'))
 const maleVoiceStyleOptions = computed(() => CAR_NATIVE_VOICE_STYLE_OPTIONS.filter((item) => item.gender === 'male'))
 const speechStyleOptions = computed(() => CAR_NATIVE_SPEECH_STYLE_OPTIONS)
+const textFontOptions = CAR_TEXT_FONT_OPTIONS
 const selectedVoiceStyleHint = computed(() => {
   const value = normalizeCarNativeVoiceStyle(props.settings.nativeVoiceStyle)
   return CAR_NATIVE_VOICE_STYLE_OPTIONS.find((item) => item.value === value)?.hint || ''

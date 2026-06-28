@@ -214,6 +214,17 @@
                     <span>烧录字幕</span>
                     <el-switch v-model="assetReuseBurnInSubtitle" :disabled="assetReuseSubtitleMode === 'off'" />
                   </label>
+                  <label class="reuse-setting-field">
+                    <span>字幕字体</span>
+                    <el-select v-model="assetReuseSubtitleFontFamily" size="small" :disabled="assetReuseSubtitleMode === 'off'">
+                      <el-option
+                        v-for="item in CAR_TEXT_FONT_OPTIONS"
+                        :key="item.value"
+                        :label="item.label"
+                        :value="item.value"
+                      />
+                    </el-select>
+                  </label>
                   <label class="reuse-setting-switch">
                     <span>大字报</span>
                     <el-switch v-model="assetReuseHeadlineEnabled" />
@@ -221,6 +232,17 @@
                   <label v-if="assetReuseHeadlineEnabled" class="reuse-setting-field reuse-setting-field--wide">
                     <span>大字报文案</span>
                     <el-input v-model="assetReuseHeadlineText" maxlength="120" show-word-limit size="small" placeholder="例如：限时到店试驾权益" />
+                  </label>
+                  <label v-if="assetReuseHeadlineEnabled" class="reuse-setting-field">
+                    <span>大字报字体</span>
+                    <el-select v-model="assetReuseHeadlineFontFamily" size="small">
+                      <el-option
+                        v-for="item in CAR_TEXT_FONT_OPTIONS"
+                        :key="item.value"
+                        :label="item.label"
+                        :value="item.value"
+                      />
+                    </el-select>
                   </label>
                 </div>
               </div>
@@ -254,6 +276,13 @@
                 <span v-if="!carBundleLoadError">{{ selectedCarBundleName }} · {{ selectedCarBundleImageCountText }}</span>
                 <span v-else>{{ carBundleLoadError }}</span>
               </div>
+              <div v-if="selectedCarBundleCoverUrl" class="module-cover-preview">
+                <img :src="selectedCarBundleCoverUrl" :alt="selectedCarBundleName" />
+                <div>
+                  <strong>车型素材包预览</strong>
+                  <span>{{ selectedCarBundleName }}</span>
+                </div>
+              </div>
 
               <details class="reuse-optional-group">
                 <summary>
@@ -276,6 +305,13 @@
                   />
                   <div v-if="selectedSceneSelections.length" class="module-selected-list">
                     <article v-for="item in selectedSceneSelections" :key="item.asset.assetId">
+                      <img
+                        v-if="assetCoverPreviewUrl(item.asset)"
+                        class="module-selected-thumb"
+                        :src="assetCoverPreviewUrl(item.asset)"
+                        :alt="item.asset.fileName"
+                      />
+                      <div v-else class="module-selected-thumb module-selected-thumb--empty">图</div>
                       <span>{{ roleLabel(item.role) }}</span>
                       <strong>{{ item.asset.fileName }}</strong>
                       <button type="button" @click="removeSelected(item.asset.assetId)">移除</button>
@@ -304,6 +340,13 @@
                   />
                   <div v-if="selectedVehicleImageSelections.length" class="module-selected-list">
                     <article v-for="item in selectedVehicleImageSelections" :key="item.asset.assetId">
+                      <img
+                        v-if="assetCoverPreviewUrl(item.asset)"
+                        class="module-selected-thumb"
+                        :src="assetCoverPreviewUrl(item.asset)"
+                        :alt="item.asset.fileName"
+                      />
+                      <div v-else class="module-selected-thumb module-selected-thumb--empty">图</div>
                       <span>{{ roleLabel(item.role) }}</span>
                       <strong>{{ item.asset.fileName }}</strong>
                       <button type="button" @click="removeSelected(item.asset.assetId)">移除</button>
@@ -336,6 +379,22 @@
                 placeholder="搜索分镜生成结果..."
                 @select="handleStoryboardAssetSelect"
               />
+              <section v-if="selectedStoryboardPreviewShots.length" class="storyboard-duration-panel">
+                <div class="storyboard-duration-head">
+                  <strong>分镜段落时长</strong>
+                  <span>{{ selectedStoryboardPreviewShots.length }} 段 · 合计 {{ selectedStoryboardDurationTotal }} 秒</span>
+                </div>
+                <div class="storyboard-duration-list">
+                  <article v-for="shot in selectedStoryboardPreviewShots" :key="shot.index">
+                    <span>第{{ shot.index }}段</span>
+                    <strong>{{ Math.round(shot.duration || 0) }} 秒</strong>
+                    <p>{{ shot.visual || shot.narration || '分镜镜头' }}</p>
+                  </article>
+                </div>
+              </section>
+              <p v-else-if="selectedStoryboard" class="storyboard-duration-empty">
+                已选择分镜资产，正在读取或无法解析段落时长；进入方案确认时会再次按目标总时长规整。
+              </p>
               <AssetPicker
                 title="爆款对标结果（口播文案）"
                 asset-type="JSON"
@@ -653,6 +712,7 @@ import {
   normalizeCarNativeSpeechStyle,
   normalizeCarNativeVoiceStyle,
 } from '../../constants/carSalesVoiceStyles'
+import { CAR_TEXT_FONT_OPTIONS } from '../../constants/carSalesTextStyles'
 import { useAuthRequired } from '../../composables/useAuthRequired'
 import type { AssetItem, AssetType } from '../../types/assetTypes'
 import type { QuickRenderAssetRole } from '../../types/videoTypes'
@@ -931,6 +991,8 @@ const assetReuseSegmentCount = ref(6)
 const assetReuseSegmentDuration = ref(5)
 const assetReuseHeadlineEnabled = ref(false)
 const assetReuseHeadlineText = ref('')
+const assetReuseSubtitleFontFamily = ref('Microsoft YaHei')
+const assetReuseHeadlineFontFamily = ref('Microsoft YaHei')
 const carBundleLoadError = ref('')
 const planPreviewOpen = ref(false)
 const planPreviewLoading = ref(false)
@@ -1004,6 +1066,9 @@ const canPreparePlan = computed(() =>
 )
 const selectedCarBundleUrl = computed(() => selectedAssetUrl(selectedCarBundle.value))
 const selectedCarBundleName = computed(() => selectedCarBundle.value?.asset.fileName || '')
+const selectedCarBundleCoverUrl = computed(() =>
+  selectedCarBundle.value ? assetCoverPreviewUrl(selectedCarBundle.value.asset) : '',
+)
 const selectedCarBundleImageCountText = computed(() => {
   const asset = selectedCarBundle.value?.asset
   if (!asset) return '等待选择'
@@ -1012,6 +1077,27 @@ const selectedCarBundleImageCountText = computed(() => {
 })
 const selectedStoryboardUrl = computed(() => selectedAssetUrl(selectedStoryboard.value))
 const selectedStoryboardName = computed(() => selectedStoryboard.value?.asset.fileName || '')
+const selectedStoryboardPreviewShots = computed(() => {
+  const selected = selectedStoryboard.value
+  const selectedText = selected ? assetRawTextById.value[selected.asset.assetId] || '' : ''
+  const parsedShots = selectedText
+    ? parseStoryboardAssetTextToPlanShots(
+      selectedText,
+      Math.max(1, Math.round(assetReuseTotalDuration.value / Math.max(1, assetReuseSegmentCount.value))),
+      24,
+    )
+    : selected
+      ? []
+      : importedStoryboard.value
+  if (!parsedShots.length) return []
+  return fitPlanStoryboardToTargetDuration(parsedShots, assetReuseTotalDuration.value, {
+    maxSegments: ASSET_REUSE_MAX_SEGMENTS,
+    minSegmentDuration: ASSET_REUSE_MIN_SEGMENT_DURATION,
+  })
+})
+const selectedStoryboardDurationTotal = computed(() =>
+  selectedStoryboardPreviewShots.value.reduce((sum, shot) => sum + Math.max(1, Math.round(shot.duration || 0)), 0),
+)
 const selectedBenchmarkUrl = computed(() => selectedAssetUrl(selectedBenchmark.value))
 const selectedBenchmarkName = computed(() => selectedBenchmark.value?.asset.fileName || '')
 const selectedHostUrl = computed(() => selectedAssetUrl(selectedHost.value))
@@ -1038,12 +1124,13 @@ const assetReuseSubtitleSettingSummary = computed(() => {
   return [
     optionLabel(ASSET_REUSE_SUBTITLE_MODE_OPTIONS, assetReuseSubtitleMode.value),
     optionLabel(ASSET_REUSE_LANGUAGE_OPTIONS, assetReuseSubtitleLanguage.value),
+    fontLabel(assetReuseSubtitleFontFamily.value),
     assetReuseBurnInSubtitle.value ? '烧录到视频' : '仅生成字幕数据',
   ].filter(Boolean).join(' / ')
 })
 const assetReuseHeadlineSettingSummary = computed(() =>
   assetReuseHeadlineEnabled.value
-    ? assetReuseHeadlineText.value.trim() || '开启，使用系统自动大字报'
+    ? [assetReuseHeadlineText.value.trim() || '开启，使用系统自动大字报', fontLabel(assetReuseHeadlineFontFamily.value)].join(' / ')
     : '关闭',
 )
 const assetReusePackagingSummary = computed(() =>
@@ -1108,6 +1195,10 @@ function optionLabel<T extends string | number>(options: Array<{ value: T; label
   return options.find((item) => item.value === value)?.label || String(value)
 }
 
+function fontLabel(fontFamily: string) {
+  return CAR_TEXT_FONT_OPTIONS.find((item) => item.value === fontFamily)?.label || fontFamily
+}
+
 function formatDurationLabel(seconds: number) {
   const safeSeconds = Math.max(0, Math.round(seconds || 0))
   const minutes = Math.floor(safeSeconds / 60)
@@ -1134,6 +1225,8 @@ function resetAssetReuseGenerationControls() {
   assetReuseSegmentDuration.value = 5
   assetReuseHeadlineEnabled.value = false
   assetReuseHeadlineText.value = ''
+  assetReuseSubtitleFontFamily.value = 'Microsoft YaHei'
+  assetReuseHeadlineFontFamily.value = 'Microsoft YaHei'
 }
 
 function applyImportedRenderConfigToControls(config: ImportedRenderConfig) {
@@ -1146,6 +1239,7 @@ function applyImportedRenderConfigToControls(config: ImportedRenderConfig) {
     || voiceLanguage
     || assetReuseSubtitleLanguage.value
   assetReuseBurnInSubtitle.value = config.burnInSubtitle ?? config.enableSubtitle ?? assetReuseBurnInSubtitle.value
+  assetReuseSubtitleFontFamily.value = config.subtitleOverlay?.fontFamily || assetReuseSubtitleFontFamily.value
   assetReuseAudioPolicy.value = normalizeImportedAudioPolicy(config.audioPolicy) || assetReuseAudioPolicy.value
   assetReuseModel.value = config.model || assetReuseModel.value
   assetReuseTargetDuration.value = normalizeAssetReuseTargetDuration(
@@ -1167,6 +1261,7 @@ function applyImportedRenderConfigToControls(config: ImportedRenderConfig) {
     ?? Boolean(config.headlineOverlay?.enabled || config.headlineOverlay?.text)
     ?? assetReuseHeadlineEnabled.value
   assetReuseHeadlineText.value = config.headlineOverlay?.text || assetReuseHeadlineText.value
+  assetReuseHeadlineFontFamily.value = config.headlineOverlay?.fontFamily || assetReuseHeadlineFontFamily.value
 }
 
 function currentAssetReuseRenderConfig(): ImportedRenderConfig {
@@ -1198,7 +1293,7 @@ function buildAssetReuseHeadlineOverlay(): CarSalesPlanDraft['headlineOverlay'] 
   return {
     enabled: assetReuseHeadlineEnabled.value,
     text: assetReuseHeadlineText.value.trim() || undefined,
-    fontFamily: 'Noto Sans SC',
+    fontFamily: assetReuseHeadlineFontFamily.value,
     fontSize: 84,
     textColor: '#FFFFFF',
     outlineColor: '#111111',
@@ -1212,7 +1307,7 @@ function buildAssetReuseSubtitleOverlay(): CarSalesPlanDraft['subtitleOverlay'] 
   }
   return {
     enabled: true,
-    fontFamily: 'Noto Sans SC',
+    fontFamily: assetReuseSubtitleFontFamily.value,
     fontSize: 42,
     textColor: '#FFFFFF',
     outlineColor: '#111111',
@@ -2986,6 +3081,45 @@ onMounted(async () => {
   background: #fff;
 }
 
+.module-cover-preview {
+  display: grid;
+  grid-template-columns: 96px minmax(0, 1fr);
+  gap: 12px;
+  align-items: center;
+  border: 1px solid #e7edf7;
+  border-radius: 8px;
+  background: #fff;
+  padding: 10px;
+}
+
+.module-cover-preview img {
+  width: 96px;
+  height: 64px;
+  border-radius: 6px;
+  background: #f1f5f9;
+  object-fit: cover;
+}
+
+.module-cover-preview div {
+  display: grid;
+  min-width: 0;
+  gap: 4px;
+}
+
+.module-cover-preview strong {
+  color: #101828;
+  font-size: 13px;
+  font-weight: 900;
+}
+
+.module-cover-preview span {
+  overflow: hidden;
+  color: #667085;
+  font-size: 12px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
 .module-selected-list {
   display: grid;
   gap: 8px;
@@ -2993,13 +3127,29 @@ onMounted(async () => {
 
 .module-selected-list article {
   display: grid;
-  grid-template-columns: auto minmax(0, 1fr) auto;
+  grid-template-columns: 52px auto minmax(0, 1fr) auto;
   gap: 10px;
   align-items: center;
   border: 1px solid #e7edf7;
   border-radius: 8px;
   background: #fff;
   padding: 9px 10px;
+}
+
+.module-selected-thumb {
+  width: 52px;
+  height: 40px;
+  border-radius: 6px;
+  background: #f1f5f9;
+  object-fit: cover;
+}
+
+.module-selected-thumb--empty {
+  display: grid;
+  place-items: center;
+  color: #94a3b8;
+  font-size: 12px;
+  font-weight: 900;
 }
 
 .module-selected-list span {
@@ -3034,6 +3184,79 @@ onMounted(async () => {
   font-size: 12px;
   font-weight: 850;
   cursor: pointer;
+}
+
+.storyboard-duration-panel {
+  display: grid;
+  gap: 10px;
+  border: 1px solid #e7edf7;
+  border-radius: 8px;
+  background: #fbfcff;
+  padding: 12px;
+}
+
+.storyboard-duration-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.storyboard-duration-head strong {
+  color: #101828;
+  font-size: 14px;
+  font-weight: 900;
+}
+
+.storyboard-duration-head span {
+  color: #1261ff;
+  font-size: 12px;
+  font-weight: 900;
+}
+
+.storyboard-duration-list {
+  display: grid;
+  gap: 8px;
+}
+
+.storyboard-duration-list article {
+  display: grid;
+  grid-template-columns: auto auto minmax(0, 1fr);
+  gap: 10px;
+  align-items: center;
+  border: 1px solid #e7edf7;
+  border-radius: 7px;
+  background: #fff;
+  padding: 8px 10px;
+}
+
+.storyboard-duration-list span {
+  color: #667085;
+  font-size: 12px;
+  font-weight: 850;
+}
+
+.storyboard-duration-list strong {
+  color: #1261ff;
+  font-size: 13px;
+  font-weight: 900;
+  white-space: nowrap;
+}
+
+.storyboard-duration-list p {
+  overflow: hidden;
+  margin: 0;
+  color: #344054;
+  font-size: 12px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.storyboard-duration-empty {
+  margin: 0;
+  color: #667085;
+  font-size: 12px;
+  line-height: 1.5;
 }
 
 .workflow-prompt-box {
