@@ -1214,6 +1214,9 @@ const route = useRoute()
 const { requireAuth } = useAuthRequired()
 const carSalesPreferences = loadCarSalesPreferences()
 const isBenchmarkCreationEntry = computed(() => {
+  if (route.name === 'benchmark-create-page') {
+    return true
+  }
   const entry = route.query.entry
   return (Array.isArray(entry) ? entry[0] : entry) === 'creation'
 })
@@ -2729,8 +2732,7 @@ function persistBenchmarkPendingPlanTask() {
     id,
     source: 'benchmark',
     title: benchmarkPlanDraft.value.title || '爆款对标方案',
-    routeName: 'video-parse',
-    routeQuery: { entry: 'creation' },
+    routeName: 'benchmark-create-page',
     aspectRatio: benchmarkPlanDraft.value.aspectRatio,
     plan: planPreview.value,
     draft: benchmarkPlanDraft.value,

@@ -7,6 +7,7 @@ import { recordRecentTool } from '../services/systemWorkspaceStore'
 
 export type WorkbenchRouteName =
   | 'video-parse'
+  | 'benchmark-create-page'
   | 'asset-reuse'
   | 'script-rewrite'
   | 'storyboard'
@@ -152,8 +153,14 @@ const routes: RouteRecordRaw[] = [
       {
         path: 'video-parse',
         name: 'video-parse',
+        component: () => import('../pages/video/AssetBenchmarkPage.vue'),
+        meta: { ...businessRouteMeta, menuKey: 'video-parse', title: '爆款对标' },
+      },
+      {
+        path: 'benchmark-create',
+        name: 'benchmark-create-page',
         component: () => import('../pages/video/VideoParsePage.vue'),
-        meta: { ...businessRouteMeta, menuKey: 'video-parse' },
+        meta: { ...businessRouteMeta, menuKey: 'benchmark-create', title: '爆款对标创作' },
       },
       {
         path: 'asset-reuse',
@@ -538,6 +545,7 @@ router.beforeEach(async (to) => {
 const recentToolTitles: Partial<Record<WorkbenchRouteName, string>> = {
   render: 'AI 智能创作',
   'video-parse': '爆款对标',
+  'benchmark-create-page': '爆款对标创作',
   'asset-reuse': '资产复用创作',
   'script-rewrite': '爆款对标',
   storyboard: '分镜生成',
@@ -559,6 +567,7 @@ const recentToolTitles: Partial<Record<WorkbenchRouteName, string>> = {
 const recentToolSubtitles: Partial<Record<WorkbenchRouteName, string>> = {
   render: '创作中心',
   'video-parse': 'AI 资产生产工具',
+  'benchmark-create-page': '创作中心',
   'asset-reuse': '创作中心',
   'script-rewrite': 'AI 资产生产工具',
   storyboard: 'AI 资产生产工具',
@@ -587,7 +596,9 @@ router.afterEach((to) => {
   }
   const workbenchRouteName = routeName as WorkbenchRouteName
   const entry = to.query.entry
-  const isBenchmarkCreation = routeName === 'video-parse' && (Array.isArray(entry) ? entry[0] : entry) === 'creation'
+  const isBenchmarkCreation =
+    routeName === 'benchmark-create-page' ||
+    (routeName === 'video-parse' && (Array.isArray(entry) ? entry[0] : entry) === 'creation')
   const title =
     (isBenchmarkCreation ? '爆款对标创作' : undefined) ||
     recentToolTitles[workbenchRouteName] ||

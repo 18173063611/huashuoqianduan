@@ -10,7 +10,7 @@ export interface PendingCarSalesPlanTask {
   id: string
   source: CarSalesPlanSource
   title: string
-  routeName: 'render' | 'asset-reuse' | 'video-parse'
+  routeName: 'render' | 'asset-reuse' | 'video-parse' | 'benchmark-create-page'
   routeQuery?: Record<string, string>
   createdAt: string
   updatedAt: string

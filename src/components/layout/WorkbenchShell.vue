@@ -37,7 +37,7 @@ const activeKey = computed<string>(() => {
   if (route.name === 'render' && route.query.mode === 'manual') {
     return 'render-manual'
   }
-  if (route.name === 'video-parse' && route.query.entry === 'creation') {
+  if (route.name === 'benchmark-create-page' || (route.name === 'video-parse' && route.query.entry === 'creation')) {
     return 'benchmark-create'
   }
   if (route.name === 'my-videos') {
@@ -121,7 +121,7 @@ function navigateToMenu(key: MenuKey) {
     return
   }
   if (key === 'benchmark-create') {
-    pushWithPending({ name: 'video-parse', query: { entry: 'creation' } })
+    pushWithPending({ name: 'benchmark-create-page' })
     return
   }
   if (key === 'my-videos-all') {
