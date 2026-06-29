@@ -123,22 +123,36 @@
               </label>
             </div>
             <div class="car-color-grid">
-              <label class="car-color-field">
+              <div class="car-color-field">
                 <span>文字颜色</span>
-                <input
-                  type="color"
-                  :value="settings.subtitleOverlay.textColor"
-                  @input="patchOverlay('subtitleOverlay', { textColor: normalizeHexColor(($event.target as HTMLInputElement).value, '#ffffff') })"
-                />
-              </label>
-              <label class="car-color-field">
+                <div class="car-color-swatches">
+                  <button
+                    v-for="item in textColorPresets"
+                    :key="`subtitle-text-${item.value}`"
+                    type="button"
+                    class="car-color-swatch"
+                    :class="{ active: colorPresetActive(settings.subtitleOverlay.textColor, item.value) }"
+                    :style="{ backgroundColor: item.value }"
+                    :title="item.label"
+                    @click="patchOverlay('subtitleOverlay', { textColor: item.value })"
+                  />
+                </div>
+              </div>
+              <div class="car-color-field">
                 <span>描边颜色</span>
-                <input
-                  type="color"
-                  :value="settings.subtitleOverlay.outlineColor"
-                  @input="patchOverlay('subtitleOverlay', { outlineColor: normalizeHexColor(($event.target as HTMLInputElement).value, '#111827') })"
-                />
-              </label>
+                <div class="car-color-swatches">
+                  <button
+                    v-for="item in textColorPresets"
+                    :key="`subtitle-outline-${item.value}`"
+                    type="button"
+                    class="car-color-swatch"
+                    :class="{ active: colorPresetActive(settings.subtitleOverlay.outlineColor, item.value) }"
+                    :style="{ backgroundColor: item.value }"
+                    :title="item.label"
+                    @click="patchOverlay('subtitleOverlay', { outlineColor: item.value })"
+                  />
+                </div>
+              </div>
             </div>
             <div v-if="settings.subtitleMode !== 'off'" class="car-overlay-preview" :class="overlayPositionClass(settings.subtitleOverlay.position)">
               <span :style="subtitlePreviewStyle">{{ subtitlePreviewText }}</span>
@@ -192,22 +206,36 @@
               </label>
             </div>
             <div class="car-color-grid">
-              <label class="car-color-field">
+              <div class="car-color-field">
                 <span>文字颜色</span>
-                <input
-                  type="color"
-                  :value="settings.headlineOverlay.textColor"
-                  @input="patchOverlay('headlineOverlay', { textColor: normalizeHexColor(($event.target as HTMLInputElement).value, '#ffffff') })"
-                />
-              </label>
-              <label class="car-color-field">
+                <div class="car-color-swatches">
+                  <button
+                    v-for="item in textColorPresets"
+                    :key="`headline-text-${item.value}`"
+                    type="button"
+                    class="car-color-swatch"
+                    :class="{ active: colorPresetActive(settings.headlineOverlay.textColor, item.value) }"
+                    :style="{ backgroundColor: item.value }"
+                    :title="item.label"
+                    @click="patchOverlay('headlineOverlay', { textColor: item.value })"
+                  />
+                </div>
+              </div>
+              <div class="car-color-field">
                 <span>描边颜色</span>
-                <input
-                  type="color"
-                  :value="settings.headlineOverlay.outlineColor"
-                  @input="patchOverlay('headlineOverlay', { outlineColor: normalizeHexColor(($event.target as HTMLInputElement).value, '#111827') })"
-                />
-              </label>
+                <div class="car-color-swatches">
+                  <button
+                    v-for="item in textColorPresets"
+                    :key="`headline-outline-${item.value}`"
+                    type="button"
+                    class="car-color-swatch"
+                    :class="{ active: colorPresetActive(settings.headlineOverlay.outlineColor, item.value) }"
+                    :style="{ backgroundColor: item.value }"
+                    :title="item.label"
+                    @click="patchOverlay('headlineOverlay', { outlineColor: item.value })"
+                  />
+                </div>
+              </div>
             </div>
             <div v-if="settings.headlineOverlay.enabled" class="car-overlay-preview" :class="overlayPositionClass(settings.headlineOverlay.position)">
               <span :style="headlinePreviewStyle">{{ headlinePreviewText }}</span>
@@ -364,7 +392,7 @@
 
 <script setup lang="ts">
 import { computed } from 'vue'
-import { CAR_TEXT_FONT_OPTIONS } from '../../constants/carSalesTextStyles'
+import { CAR_TEXT_COLOR_PRESETS, CAR_TEXT_FONT_OPTIONS } from '../../constants/carSalesTextStyles'
 import {
   CAR_NATIVE_SPEECH_STYLE_OPTIONS,
   CAR_NATIVE_VOICE_STYLE_OPTIONS,
@@ -438,6 +466,7 @@ const femaleVoiceStyleOptions = computed(() => CAR_NATIVE_VOICE_STYLE_OPTIONS.fi
 const maleVoiceStyleOptions = computed(() => CAR_NATIVE_VOICE_STYLE_OPTIONS.filter((item) => item.gender === 'male'))
 const speechStyleOptions = computed(() => CAR_NATIVE_SPEECH_STYLE_OPTIONS)
 const textFontOptions = CAR_TEXT_FONT_OPTIONS
+const textColorPresets = CAR_TEXT_COLOR_PRESETS
 const subtitlePreviewText = computed(() => {
   if (props.settings.subtitleMode === 'upload' && props.settings.customSubtitle.trim()) {
     return props.settings.customSubtitle.trim().split(/\n+/)[0]
@@ -518,6 +547,10 @@ function normalizeHexColor(value: string | undefined, fallback: string) {
     return `#${clean[1]}${clean[1]}${clean[2]}${clean[2]}${clean[3]}${clean[3]}`
   }
   return fallback
+}
+
+function colorPresetActive(current: string | undefined, preset: string) {
+  return normalizeHexColor(current, '').toLowerCase() === normalizeHexColor(preset, '').toLowerCase()
 }
 
 function overlayPositionClass(position: OverlayPosition | undefined) {
@@ -870,14 +903,25 @@ function handleBgmFileChange(event: Event) {
   font-weight: 800;
 }
 
-.car-color-field input {
-  width: 44px;
-  height: 28px;
-  border: 0;
-  border-radius: 6px;
-  background: transparent;
-  padding: 0;
+.car-color-swatches {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 6px;
+}
+
+.car-color-swatch {
+  width: 24px;
+  height: 24px;
+  border: 2px solid #d0d5dd;
+  border-radius: 999px;
+  box-shadow: inset 0 0 0 1px rgba(15, 23, 42, 0.08);
   cursor: pointer;
+}
+
+.car-color-swatch.active {
+  border-color: #2563eb;
+  box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.16), inset 0 0 0 1px rgba(15, 23, 42, 0.08);
 }
 
 .car-overlay-preview {

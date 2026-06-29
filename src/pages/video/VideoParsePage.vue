@@ -659,22 +659,36 @@
                     </label>
                   </div>
                   <div class="benchmark-color-grid">
-                    <label class="benchmark-color-field">
+                    <div class="benchmark-color-field">
                       <span>文字颜色</span>
-                      <input
-                        :value="benchmarkAdvancedSettings.subtitleOverlay.textColor"
-                        type="color"
-                        @input="patchBenchmarkSubtitleOverlay({ textColor: normalizeBenchmarkHexColor(($event.target as HTMLInputElement).value, '#ffffff') })"
-                      />
-                    </label>
-                    <label class="benchmark-color-field">
+                      <div class="benchmark-color-swatches">
+                        <button
+                          v-for="item in benchmarkTextColorPresets"
+                          :key="`benchmark-subtitle-text-${item.value}`"
+                          type="button"
+                          class="benchmark-color-swatch"
+                          :class="{ active: benchmarkColorPresetActive(benchmarkAdvancedSettings.subtitleOverlay.textColor, item.value) }"
+                          :style="{ backgroundColor: item.value }"
+                          :title="item.label"
+                          @click="patchBenchmarkSubtitleOverlay({ textColor: item.value })"
+                        />
+                      </div>
+                    </div>
+                    <div class="benchmark-color-field">
                       <span>描边颜色</span>
-                      <input
-                        :value="benchmarkAdvancedSettings.subtitleOverlay.outlineColor"
-                        type="color"
-                        @input="patchBenchmarkSubtitleOverlay({ outlineColor: normalizeBenchmarkHexColor(($event.target as HTMLInputElement).value, '#111827') })"
-                      />
-                    </label>
+                      <div class="benchmark-color-swatches">
+                        <button
+                          v-for="item in benchmarkTextColorPresets"
+                          :key="`benchmark-subtitle-outline-${item.value}`"
+                          type="button"
+                          class="benchmark-color-swatch"
+                          :class="{ active: benchmarkColorPresetActive(benchmarkAdvancedSettings.subtitleOverlay.outlineColor, item.value) }"
+                          :style="{ backgroundColor: item.value }"
+                          :title="item.label"
+                          @click="patchBenchmarkSubtitleOverlay({ outlineColor: item.value })"
+                        />
+                      </div>
+                    </div>
                   </div>
                   <div class="benchmark-overlay-preview" :class="`pos-${benchmarkAdvancedSettings.subtitleOverlay.position}`">
                     <span :style="benchmarkSubtitlePreviewStyle">{{ benchmarkSubtitlePreviewText }}</span>
@@ -738,22 +752,36 @@
                     </label>
                   </div>
                   <div class="benchmark-color-grid">
-                    <label class="benchmark-color-field">
+                    <div class="benchmark-color-field">
                       <span>文字颜色</span>
-                      <input
-                        :value="benchmarkAdvancedSettings.headlineOverlay.textColor"
-                        type="color"
-                        @input="patchBenchmarkHeadlineOverlay({ textColor: normalizeBenchmarkHexColor(($event.target as HTMLInputElement).value, '#ffffff') })"
-                      />
-                    </label>
-                    <label class="benchmark-color-field">
+                      <div class="benchmark-color-swatches">
+                        <button
+                          v-for="item in benchmarkTextColorPresets"
+                          :key="`benchmark-headline-text-${item.value}`"
+                          type="button"
+                          class="benchmark-color-swatch"
+                          :class="{ active: benchmarkColorPresetActive(benchmarkAdvancedSettings.headlineOverlay.textColor, item.value) }"
+                          :style="{ backgroundColor: item.value }"
+                          :title="item.label"
+                          @click="patchBenchmarkHeadlineOverlay({ textColor: item.value })"
+                        />
+                      </div>
+                    </div>
+                    <div class="benchmark-color-field">
                       <span>描边颜色</span>
-                      <input
-                        :value="benchmarkAdvancedSettings.headlineOverlay.outlineColor"
-                        type="color"
-                        @input="patchBenchmarkHeadlineOverlay({ outlineColor: normalizeBenchmarkHexColor(($event.target as HTMLInputElement).value, '#111827') })"
-                      />
-                    </label>
+                      <div class="benchmark-color-swatches">
+                        <button
+                          v-for="item in benchmarkTextColorPresets"
+                          :key="`benchmark-headline-outline-${item.value}`"
+                          type="button"
+                          class="benchmark-color-swatch"
+                          :class="{ active: benchmarkColorPresetActive(benchmarkAdvancedSettings.headlineOverlay.outlineColor, item.value) }"
+                          :style="{ backgroundColor: item.value }"
+                          :title="item.label"
+                          @click="patchBenchmarkHeadlineOverlay({ outlineColor: item.value })"
+                        />
+                      </div>
+                    </div>
                   </div>
                   <div class="benchmark-overlay-preview" :class="`pos-${benchmarkAdvancedSettings.headlineOverlay.position}`">
                     <span :style="benchmarkHeadlinePreviewStyle">{{ benchmarkHeadlinePreviewText }}</span>
@@ -1309,7 +1337,7 @@ import {
   type CarSalesPlanDraft,
   type CarSalesPlanDraftAsset,
 } from '../render/carSalesPlanDraft'
-import { CAR_TEXT_FONT_OPTIONS } from '../../constants/carSalesTextStyles'
+import { CAR_TEXT_COLOR_PRESETS, CAR_TEXT_FONT_OPTIONS } from '../../constants/carSalesTextStyles'
 
 const DEFAULT_CAR_SALES_MODEL = 'doubao-seedance-2-0-pro-250528'
 
@@ -1328,6 +1356,7 @@ const isBenchmarkCreationEntry = computed(() => {
 })
 const benchmarkPageTitle = computed(() => isBenchmarkCreationEntry.value ? '爆款对标创作' : '爆款对标')
 const benchmarkTextFontOptions = CAR_TEXT_FONT_OPTIONS
+const benchmarkTextColorPresets = CAR_TEXT_COLOR_PRESETS
 const benchmarkTextPositionOptions: Array<{ value: CarSalesTextOverlaySettings['position']; label: string }> = [
   { value: 'top', label: '顶部' },
   { value: 'middle', label: '中部' },
@@ -1707,6 +1736,10 @@ function normalizeBenchmarkHexColor(value: string, fallback: string) {
     return `#${r}${r}${g}${g}${b}${b}`.toLowerCase()
   }
   return fallback
+}
+
+function benchmarkColorPresetActive(current: string | undefined, preset: string) {
+  return normalizeBenchmarkHexColor(current || '', '').toLowerCase() === normalizeBenchmarkHexColor(preset, '').toLowerCase()
 }
 
 function benchmarkOverlayPreviewStyle(
@@ -5903,8 +5936,7 @@ function applyScript() {
   grid-template-columns: repeat(2, minmax(0, 1fr));
 }
 
-.benchmark-number-input,
-.benchmark-color-field input[type='color'] {
+.benchmark-number-input {
   width: 100%;
   min-height: 38px;
   border: 1px solid #dfe7f3;
@@ -5926,8 +5958,24 @@ function applyScript() {
   font-weight: 900;
 }
 
-.benchmark-color-field input[type='color'] {
-  padding: 4px;
+.benchmark-color-swatches {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.benchmark-color-swatch {
+  width: 24px;
+  height: 24px;
+  border: 2px solid #d0d5dd;
+  border-radius: 999px;
+  box-shadow: inset 0 0 0 1px rgba(15, 23, 42, 0.08);
+  cursor: pointer;
+}
+
+.benchmark-color-swatch.active {
+  border-color: #2563eb;
+  box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.16), inset 0 0 0 1px rgba(15, 23, 42, 0.08);
 }
 
 .benchmark-overlay-preview {

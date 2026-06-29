@@ -1068,15 +1068,6 @@
                         <label>文字颜色</label>
                         <div class="render-color-row">
                           <span class="render-color-current" :style="{ backgroundColor: carSubtitleTextColor }" aria-hidden="true" />
-                          <input v-model="carSubtitleTextColor" type="color" :disabled="busy" aria-label="微调字幕文字颜色" />
-                          <input
-                            v-model.trim="carSubtitleTextColor"
-                            type="text"
-                            :disabled="busy"
-                            placeholder="#FFFFFF"
-                            aria-label="字幕文字颜色 HEX"
-                            @blur="normalizeCarSubtitleTextColor"
-                          />
                         </div>
                         <div class="render-color-swatches" aria-label="常用字幕文字颜色">
                           <button
@@ -1099,15 +1090,6 @@
                         <label>描边颜色</label>
                         <div class="render-color-row">
                           <span class="render-color-current" :style="{ backgroundColor: carSubtitleOutlineColor }" aria-hidden="true" />
-                          <input v-model="carSubtitleOutlineColor" type="color" :disabled="busy" aria-label="微调字幕描边颜色" />
-                          <input
-                            v-model.trim="carSubtitleOutlineColor"
-                            type="text"
-                            :disabled="busy"
-                            placeholder="#111111"
-                            aria-label="字幕描边颜色 HEX"
-                            @blur="normalizeCarSubtitleOutlineColor"
-                          />
                         </div>
                         <div class="render-color-swatches" aria-label="常用字幕描边颜色">
                           <button
@@ -1197,15 +1179,6 @@
                           <label>文字颜色</label>
                           <div class="render-color-row">
                             <span class="render-color-current" :style="{ backgroundColor: carHeadlineTextColor }" aria-hidden="true" />
-                            <input v-model="carHeadlineTextColor" type="color" :disabled="busy" aria-label="微调文字颜色" />
-                            <input
-                              v-model.trim="carHeadlineTextColor"
-                              type="text"
-                              :disabled="busy"
-                              placeholder="#FFFFFF"
-                              aria-label="文字颜色 HEX"
-                              @blur="normalizeCarHeadlineTextColor"
-                            />
                           </div>
                           <div class="render-color-swatches" aria-label="常用文字颜色">
                             <button
@@ -1228,15 +1201,6 @@
                           <label>描边颜色</label>
                           <div class="render-color-row">
                             <span class="render-color-current" :style="{ backgroundColor: carHeadlineOutlineColor }" aria-hidden="true" />
-                            <input v-model="carHeadlineOutlineColor" type="color" :disabled="busy" aria-label="微调描边颜色" />
-                            <input
-                              v-model.trim="carHeadlineOutlineColor"
-                              type="text"
-                              :disabled="busy"
-                              placeholder="#111111"
-                              aria-label="描边颜色 HEX"
-                              @blur="normalizeCarHeadlineOutlineColor"
-                            />
                           </div>
                           <div class="render-color-swatches" aria-label="常用描边颜色">
                             <button
@@ -1754,6 +1718,7 @@ import { useSmoothTaskProgress } from '../../composables/useSmoothTaskProgress'
 import { API_ORIGIN, getAuthToken } from '../../services/request'
 import BillingEstimateBanner from '../../components/business/BillingEstimateBanner.vue'
 import { useBillingEstimate } from '../../composables/useBillingEstimate'
+import { CAR_TEXT_COLOR_PRESETS } from '../../constants/carSalesTextStyles'
 import { rememberSessionTaskId } from '../../services/sessionTaskStore'
 import { trackTaskResult } from '../../services/taskRealtime'
 import { getTaskDetail, getTaskResult } from '../../services/taskApi'
@@ -2204,15 +2169,7 @@ const carHeadlinePositionOptions: Array<{ value: CarHeadlinePosition; label: str
   { value: 'middle', label: '中部' },
   { value: 'bottom', label: '底部' },
 ]
-const carHeadlineColorPresets = [
-  { label: '白色', value: '#ffffff' },
-  { label: '黑色', value: '#111111' },
-  { label: '红色', value: '#ef4444' },
-  { label: '黄色', value: '#facc15' },
-  { label: '蓝色', value: '#2563eb' },
-  { label: '绿色', value: '#22c55e' },
-  { label: '橙色', value: '#f97316' },
-]
+const carHeadlineColorPresets = CAR_TEXT_COLOR_PRESETS
 const renderAspectRatioOptions: Array<{ value: RenderAspectRatio; label: string; hint: string }> = [
   { value: '9:16', label: '竖屏 9:16', hint: '适合抖音、视频号、竖版信息流' },
   { value: '16:9', label: '横屏 16:9', hint: '适合横版展示、门店大屏和通用素材' },
@@ -5908,22 +5865,6 @@ function setCarHeadlineOutlineColor(value: string) {
   carHeadlineOutlineColor.value = normalizeHexColor(value, '#111111')
 }
 
-function normalizeCarHeadlineTextColor() {
-  carHeadlineTextColor.value = normalizeHexColor(carHeadlineTextColor.value, '#ffffff')
-}
-
-function normalizeCarSubtitleTextColor() {
-  carSubtitleTextColor.value = normalizeHexColor(carSubtitleTextColor.value, '#ffffff')
-}
-
-function normalizeCarSubtitleOutlineColor() {
-  carSubtitleOutlineColor.value = normalizeHexColor(carSubtitleOutlineColor.value, '#111111')
-}
-
-function normalizeCarHeadlineOutlineColor() {
-  carHeadlineOutlineColor.value = normalizeHexColor(carHeadlineOutlineColor.value, '#111111')
-}
-
 function isCarSubtitleTextColorPreset(value: string) {
   return colorMatches(carSubtitleTextColor.value, value)
 }
@@ -8629,12 +8570,6 @@ onBeforeUnmount(() => {
   gap: 10px;
 }
 
-.render-text-poster-controls input[type='color'] {
-  width: 100%;
-  min-height: 38px;
-  padding: 4px;
-}
-
 .render-color-grid {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
@@ -8650,7 +8585,7 @@ onBeforeUnmount(() => {
 
 .render-color-row {
   display: grid;
-  grid-template-columns: 32px 42px minmax(0, 1fr);
+  grid-template-columns: 32px;
   gap: 8px;
   align-items: center;
 }
@@ -8661,25 +8596,6 @@ onBeforeUnmount(() => {
   border: 1px solid #d8dde8;
   border-radius: 999px;
   box-shadow: inset 0 0 0 2px rgba(255, 255, 255, 0.72);
-}
-
-.render-color-row input[type='color'] {
-  width: 42px;
-  height: 34px;
-  border: 1px solid #d8dde8;
-  border-radius: 8px;
-  background: #fff;
-  padding: 3px;
-}
-
-.render-color-row input[type='text'] {
-  min-width: 0;
-  height: 34px;
-  padding: 0 10px;
-  font-family: inherit;
-  font-size: 12.5px;
-  font-weight: 800;
-  text-transform: uppercase;
 }
 
 .render-color-swatches {

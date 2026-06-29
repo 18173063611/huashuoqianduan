@@ -247,24 +247,38 @@
                       :disabled="assetReuseSubtitleMode === 'off'"
                     />
                   </label>
-                  <label class="reuse-setting-field">
+                  <div class="reuse-setting-field reuse-color-field">
                     <span>字幕文字颜色</span>
-                    <input
-                      v-model="assetReuseSubtitleTextColor"
-                      class="reuse-color-input"
-                      type="color"
-                      :disabled="assetReuseSubtitleMode === 'off'"
-                    />
-                  </label>
-                  <label class="reuse-setting-field">
+                    <div class="reuse-color-swatches">
+                      <button
+                        v-for="item in assetReuseColorPresets"
+                        :key="`reuse-subtitle-text-${item.value}`"
+                        type="button"
+                        class="reuse-color-swatch"
+                        :class="{ active: assetReuseColorPresetActive(assetReuseSubtitleTextColor, item.value) }"
+                        :style="{ backgroundColor: item.value }"
+                        :title="item.label"
+                        :disabled="assetReuseSubtitleMode === 'off'"
+                        @click="assetReuseSubtitleTextColor = item.value"
+                      />
+                    </div>
+                  </div>
+                  <div class="reuse-setting-field reuse-color-field">
                     <span>字幕描边颜色</span>
-                    <input
-                      v-model="assetReuseSubtitleOutlineColor"
-                      class="reuse-color-input"
-                      type="color"
-                      :disabled="assetReuseSubtitleMode === 'off'"
-                    />
-                  </label>
+                    <div class="reuse-color-swatches">
+                      <button
+                        v-for="item in assetReuseColorPresets"
+                        :key="`reuse-subtitle-outline-${item.value}`"
+                        type="button"
+                        class="reuse-color-swatch"
+                        :class="{ active: assetReuseColorPresetActive(assetReuseSubtitleOutlineColor, item.value) }"
+                        :style="{ backgroundColor: item.value }"
+                        :title="item.label"
+                        :disabled="assetReuseSubtitleMode === 'off'"
+                        @click="assetReuseSubtitleOutlineColor = item.value"
+                      />
+                    </div>
+                  </div>
                   <div v-if="assetReuseSubtitleMode !== 'off'" class="reuse-style-preview">
                     <span>字幕样式预览</span>
                     <div class="reuse-overlay-preview" :class="`pos-${assetReuseSubtitlePosition}`">
@@ -311,14 +325,36 @@
                       :step="4"
                     />
                   </label>
-                  <label v-if="assetReuseHeadlineEnabled" class="reuse-setting-field">
+                  <div v-if="assetReuseHeadlineEnabled" class="reuse-setting-field reuse-color-field">
                     <span>大字报文字颜色</span>
-                    <input v-model="assetReuseHeadlineTextColor" class="reuse-color-input" type="color" />
-                  </label>
-                  <label v-if="assetReuseHeadlineEnabled" class="reuse-setting-field">
+                    <div class="reuse-color-swatches">
+                      <button
+                        v-for="item in assetReuseColorPresets"
+                        :key="`reuse-headline-text-${item.value}`"
+                        type="button"
+                        class="reuse-color-swatch"
+                        :class="{ active: assetReuseColorPresetActive(assetReuseHeadlineTextColor, item.value) }"
+                        :style="{ backgroundColor: item.value }"
+                        :title="item.label"
+                        @click="assetReuseHeadlineTextColor = item.value"
+                      />
+                    </div>
+                  </div>
+                  <div v-if="assetReuseHeadlineEnabled" class="reuse-setting-field reuse-color-field">
                     <span>大字报描边颜色</span>
-                    <input v-model="assetReuseHeadlineOutlineColor" class="reuse-color-input" type="color" />
-                  </label>
+                    <div class="reuse-color-swatches">
+                      <button
+                        v-for="item in assetReuseColorPresets"
+                        :key="`reuse-headline-outline-${item.value}`"
+                        type="button"
+                        class="reuse-color-swatch"
+                        :class="{ active: assetReuseColorPresetActive(assetReuseHeadlineOutlineColor, item.value) }"
+                        :style="{ backgroundColor: item.value }"
+                        :title="item.label"
+                        @click="assetReuseHeadlineOutlineColor = item.value"
+                      />
+                    </div>
+                  </div>
                   <div v-if="assetReuseHeadlineEnabled" class="reuse-style-preview">
                     <span>大字报样式预览</span>
                     <div class="reuse-overlay-preview" :class="`pos-${assetReuseHeadlinePosition}`">
@@ -697,24 +733,38 @@
                         :disabled="assetReuseSubtitleMode === 'off'"
                       />
                     </label>
-                    <label class="reuse-setting-field">
+                    <div class="reuse-setting-field reuse-color-field">
                       <span>字幕文字颜色</span>
-                      <input
-                        v-model="assetReuseSubtitleTextColor"
-                        class="reuse-color-input"
-                        type="color"
-                        :disabled="assetReuseSubtitleMode === 'off'"
-                      />
-                    </label>
-                    <label class="reuse-setting-field">
+                      <div class="reuse-color-swatches">
+                        <button
+                          v-for="item in assetReuseColorPresets"
+                          :key="`reuse-module-subtitle-text-${item.value}`"
+                          type="button"
+                          class="reuse-color-swatch"
+                          :class="{ active: assetReuseColorPresetActive(assetReuseSubtitleTextColor, item.value) }"
+                          :style="{ backgroundColor: item.value }"
+                          :title="item.label"
+                          :disabled="assetReuseSubtitleMode === 'off'"
+                          @click="assetReuseSubtitleTextColor = item.value"
+                        />
+                      </div>
+                    </div>
+                    <div class="reuse-setting-field reuse-color-field">
                       <span>字幕描边颜色</span>
-                      <input
-                        v-model="assetReuseSubtitleOutlineColor"
-                        class="reuse-color-input"
-                        type="color"
-                        :disabled="assetReuseSubtitleMode === 'off'"
-                      />
-                    </label>
+                      <div class="reuse-color-swatches">
+                        <button
+                          v-for="item in assetReuseColorPresets"
+                          :key="`reuse-module-subtitle-outline-${item.value}`"
+                          type="button"
+                          class="reuse-color-swatch"
+                          :class="{ active: assetReuseColorPresetActive(assetReuseSubtitleOutlineColor, item.value) }"
+                          :style="{ backgroundColor: item.value }"
+                          :title="item.label"
+                          :disabled="assetReuseSubtitleMode === 'off'"
+                          @click="assetReuseSubtitleOutlineColor = item.value"
+                        />
+                      </div>
+                    </div>
                     <div v-if="assetReuseSubtitleMode !== 'off'" class="reuse-style-preview">
                       <span>字幕样式预览</span>
                       <div class="reuse-overlay-preview" :class="`pos-${assetReuseSubtitlePosition}`">
@@ -761,14 +811,36 @@
                         :step="4"
                       />
                     </label>
-                    <label v-if="assetReuseHeadlineEnabled" class="reuse-setting-field">
+                    <div v-if="assetReuseHeadlineEnabled" class="reuse-setting-field reuse-color-field">
                       <span>大字报文字颜色</span>
-                      <input v-model="assetReuseHeadlineTextColor" class="reuse-color-input" type="color" />
-                    </label>
-                    <label v-if="assetReuseHeadlineEnabled" class="reuse-setting-field">
+                      <div class="reuse-color-swatches">
+                        <button
+                          v-for="item in assetReuseColorPresets"
+                          :key="`reuse-module-headline-text-${item.value}`"
+                          type="button"
+                          class="reuse-color-swatch"
+                          :class="{ active: assetReuseColorPresetActive(assetReuseHeadlineTextColor, item.value) }"
+                          :style="{ backgroundColor: item.value }"
+                          :title="item.label"
+                          @click="assetReuseHeadlineTextColor = item.value"
+                        />
+                      </div>
+                    </div>
+                    <div v-if="assetReuseHeadlineEnabled" class="reuse-setting-field reuse-color-field">
                       <span>大字报描边颜色</span>
-                      <input v-model="assetReuseHeadlineOutlineColor" class="reuse-color-input" type="color" />
-                    </label>
+                      <div class="reuse-color-swatches">
+                        <button
+                          v-for="item in assetReuseColorPresets"
+                          :key="`reuse-module-headline-outline-${item.value}`"
+                          type="button"
+                          class="reuse-color-swatch"
+                          :class="{ active: assetReuseColorPresetActive(assetReuseHeadlineOutlineColor, item.value) }"
+                          :style="{ backgroundColor: item.value }"
+                          :title="item.label"
+                          @click="assetReuseHeadlineOutlineColor = item.value"
+                        />
+                      </div>
+                    </div>
                     <div v-if="assetReuseHeadlineEnabled" class="reuse-style-preview">
                       <span>大字报样式预览</span>
                       <div class="reuse-overlay-preview" :class="`pos-${assetReuseHeadlinePosition}`">
@@ -967,7 +1039,7 @@ import {
   normalizeCarNativeSpeechStyle,
   normalizeCarNativeVoiceStyle,
 } from '../../constants/carSalesVoiceStyles'
-import { CAR_TEXT_FONT_OPTIONS } from '../../constants/carSalesTextStyles'
+import { CAR_TEXT_COLOR_PRESETS, CAR_TEXT_FONT_OPTIONS } from '../../constants/carSalesTextStyles'
 import { useAuthRequired } from '../../composables/useAuthRequired'
 import type { AssetItem, AssetType } from '../../types/assetTypes'
 import type { QuickRenderAssetRole } from '../../types/videoTypes'
@@ -1260,6 +1332,7 @@ const assetReuseSubtitleTextColor = ref('#FFFFFF')
 const assetReuseSubtitleOutlineColor = ref('#111111')
 const assetReuseHeadlineTextColor = ref('#FFFFFF')
 const assetReuseHeadlineOutlineColor = ref('#111111')
+const assetReuseColorPresets = CAR_TEXT_COLOR_PRESETS
 const assetReuseTextPositionOptions: Array<{ value: OverlayPosition; label: string }> = [
   { value: 'top', label: '顶部' },
   { value: 'middle', label: '中部' },
@@ -1566,6 +1639,10 @@ function normalizeAssetReuseHexColor(value: unknown, fallback: string) {
     return `#${r}${r}${g}${g}${b}${b}`.toUpperCase()
   }
   return fallback
+}
+
+function assetReuseColorPresetActive(current: string, preset: string) {
+  return normalizeAssetReuseHexColor(current, '').toLowerCase() === normalizeAssetReuseHexColor(preset, '').toLowerCase()
 }
 
 function assetReuseOverlayPreviewStyle(
@@ -3349,13 +3426,33 @@ onMounted(async () => {
   width: 100%;
 }
 
-.reuse-color-input {
-  width: 100%;
-  min-height: 32px;
-  border: 1px solid #dfe7f3;
-  border-radius: 7px;
-  background: #fff;
-  padding: 4px;
+.reuse-color-field {
+  align-content: start;
+}
+
+.reuse-color-swatches {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.reuse-color-swatch {
+  width: 24px;
+  height: 24px;
+  border: 2px solid #d0d5dd;
+  border-radius: 999px;
+  box-shadow: inset 0 0 0 1px rgba(15, 23, 42, 0.08);
+  cursor: pointer;
+}
+
+.reuse-color-swatch.active {
+  border-color: #2563eb;
+  box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.16), inset 0 0 0 1px rgba(15, 23, 42, 0.08);
+}
+
+.reuse-color-swatch:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
 }
 
 .reuse-style-preview {

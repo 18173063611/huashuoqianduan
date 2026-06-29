@@ -403,32 +403,40 @@
               </div>
             </aside>
           </div>
-          <div v-if="carSalesSegmentVideos.length" class="task-result-segments">
+          <div v-if="carSalesSegmentRows.length" class="task-result-segments">
             <h4>{{ seedanceVideoUrl ? '分段视频' : '已完成片段预览' }}</h4>
             <div class="task-result-segment-grid">
               <article
-                v-for="(segment, idx) in carSalesSegmentVideos"
-                :key="segmentKey(segment, idx)"
+                v-for="(row, idx) in carSalesSegmentRows"
+                :key="segmentKey(row.segment, idx)"
                 class="task-result-segment-item"
               >
-                <video :src="segmentVideoUrl(segment)" controls preload="metadata" />
+                <video v-if="segmentVideoUrl(row.segment)" :src="segmentVideoUrl(row.segment)" controls preload="metadata" />
+                <div v-else class="task-segment-empty-preview">
+                  <strong>第 {{ row.index }} 段尚未生成</strong>
+                  <span>可只重试这一段，保留已成功片段</span>
+                </div>
                 <div>
-                  <strong>片段 {{ idx + 1 }}</strong>
-                  <small>资产 ID：{{ segmentAssetId(segment) || '-' }}</small>
+                  <strong>片段 {{ row.index }}</strong>
+                  <small>{{ segmentAssetId(row.segment) ? `资产 ID：${segmentAssetId(row.segment)}` : '暂无可用片段资产' }}</small>
                 </div>
                 <div class="task-segment-actions">
-                  <a :href="segmentVideoUrl(segment)" target="_blank" rel="noreferrer">打开片段</a>
+                  <a v-if="segmentVideoUrl(row.segment)" :href="segmentVideoUrl(row.segment)" target="_blank" rel="noreferrer">打开片段</a>
                   <button
                     v-if="canRegenerateCarSalesSegment"
                     type="button"
                     class="task-segment-action-button"
-                    :disabled="segmentRegenerationState(idx)?.loading || segmentRegenerationState(idx)?.adopting"
+                    :disabled="
+                      !canRegenerateCarSalesSegmentRow(idx) ||
+                      segmentRegenerationState(idx)?.loading ||
+                      segmentRegenerationState(idx)?.adopting
+                    "
                     @click="handleRegenerateSegment(idx)"
                   >
                     {{ segmentRegenerationState(idx)?.loading ? '提交中...' : '重新生成此段' }}
                   </button>
                   <button
-                    v-if="canRegenerateCarSalesSegment"
+                    v-if="canComposeCarSalesSegments && segmentVideoUrl(row.segment)"
                     type="button"
                     class="task-segment-action-button task-segment-action-button--danger"
                     :disabled="composeBusy || carSalesSegmentVideos.length <= 1"
@@ -476,7 +484,7 @@
                 </div>
               </article>
             </div>
-            <section v-if="canRegenerateCarSalesSegment" class="task-compose-panel">
+            <section v-if="canComposeCarSalesSegments" class="task-compose-panel">
               <div class="task-compose-head">
                 <div>
                   <h4>手动拼接</h4>
@@ -710,6 +718,11 @@ interface SegmentRegenerationState {
   error: string
 }
 
+interface CarSalesSegmentRow {
+  segment: Record<string, unknown> | null
+  index: number
+}
+
 interface ManualComposeSegment {
   assetId: number | null
   videoUrl: string
@@ -917,13 +930,28 @@ const selectedVideoCoverUrl = computed(() => {
 })
 const canRegenerateCarSalesSegment = computed(() => {
   const task = selectedResultTask.value
-  return isCarSalesTask(task) && task?.status === 'SUCCESS' && carSalesSegmentVideos.value.length > 0
+  const status = String(task?.status || '').toUpperCase()
+  return (
+    isCarSalesTask(task) &&
+    ['SUCCESS', 'FAILED', 'RETRYABLE', 'CANCELED'].includes(status) &&
+    carSalesSegmentVideos.value.length > 0
+  )
 })
-const canComposeCarSalesSegments = computed(() => canRegenerateCarSalesSegment.value && manualComposeSegments.value.length > 0)
+const canComposeCarSalesSegments = computed(() => {
+  const task = selectedResultTask.value
+  return isCarSalesTask(task) && task?.status === 'SUCCESS' && manualComposeSegments.value.length > 0
+})
 const carSalesSegmentCount = computed(() => {
   const raw = resultObject.value?.segmentCount
   const parsed = typeof raw === 'number' ? raw : Number(raw)
   return Number.isFinite(parsed) && parsed > 0 ? parsed : Math.max(1, carSalesSegmentVideos.value.length)
+})
+const carSalesSegmentRows = computed<CarSalesSegmentRow[]>(() => {
+  const total = Math.max(carSalesSegmentCount.value, carSalesSegmentVideos.value.length)
+  return Array.from({ length: total }, (_, idx) => ({
+    segment: carSalesSegmentVideos.value[idx] || null,
+    index: idx + 1,
+  }))
 })
 const carSalesCompletedSegmentCount = computed(() => {
   const raw = resultObject.value?.completedSegmentCount
@@ -2047,18 +2075,21 @@ function arrayStringField(value: Record<string, unknown> | null | undefined, fie
   return Array.isArray(raw) ? raw.filter((item): item is string => typeof item === 'string' && item.length > 0) : []
 }
 
-function segmentVideoUrl(segment: Record<string, unknown>) {
-  return stringField(segment, 'videoUrl')
+function segmentVideoUrl(segment: Record<string, unknown> | null) {
+  return segment ? stringField(segment, 'videoUrl') : ''
 }
 
-function segmentAssetId(segment: Record<string, unknown>) {
+function segmentAssetId(segment: Record<string, unknown> | null) {
+  if (!segment) {
+    return null
+  }
   const raw = segment.resultAssetId
   const parsed = typeof raw === 'number' ? raw : Number(raw)
   return Number.isFinite(parsed) && parsed > 0 ? parsed : null
 }
 
-function segmentKey(segment: Record<string, unknown>, idx: number) {
-  return String(segmentAssetId(segment) || stringField(segment, 'taskId') || idx)
+function segmentKey(segment: Record<string, unknown> | null, idx: number) {
+  return segment ? String(segmentAssetId(segment) || stringField(segment, 'taskId') || idx) : `segment-slot-${idx + 1}`
 }
 
 function currentSegmentsForCompose(): ManualComposeSegment[] {
@@ -2168,6 +2199,20 @@ function segmentRegenerationState(idx: number) {
   return segmentRegenerations.value[idx + 1] || null
 }
 
+function canRegenerateCarSalesSegmentRow(idx: number) {
+  if (!canRegenerateCarSalesSegment.value) {
+    return false
+  }
+  const row = carSalesSegmentRows.value[idx]
+  if (!row) {
+    return false
+  }
+  if (row.segment) {
+    return true
+  }
+  return idx <= carSalesCompletedSegmentCount.value
+}
+
 function updateSegmentRegeneration(segmentIndex: number, patch: Partial<SegmentRegenerationState>) {
   const previous = segmentRegenerations.value[segmentIndex] || {
     taskId: null,
@@ -2215,7 +2260,7 @@ function canAdoptSegmentRegeneration(idx: number) {
 
 async function handleRegenerateSegment(idx: number) {
   const task = selectedResultTask.value
-  if (!task || !canRegenerateCarSalesSegment.value) {
+  if (!task || !canRegenerateCarSalesSegmentRow(idx)) {
     return
   }
   const segmentIndex = idx + 1
@@ -3305,6 +3350,23 @@ section.app-card.app-page-stack {
   max-height: 180px;
   border-radius: 8px;
   background: #111827;
+}
+
+.task-segment-empty-preview {
+  display: grid;
+  place-items: center;
+  min-height: 140px;
+  padding: 18px;
+  border: 1px dashed #bfdbfe;
+  border-radius: 8px;
+  background: #eff6ff;
+  color: #2563eb;
+  text-align: center;
+}
+
+.task-segment-empty-preview span {
+  color: #667085;
+  font-size: 12px;
 }
 
 .task-result-segment-item strong,
