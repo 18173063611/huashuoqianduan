@@ -1,5 +1,10 @@
 ﻿<template>
   <div class="benchmark-page">
+    <header class="benchmark-page-hero">
+      <h1>爆款对标</h1>
+      <p>解析参考视频，提炼可复用的口播文案、镜头结构和营销节奏。</p>
+    </header>
+
     <div class="benchmark-layout">
       <aside class="analysis-card">
         <section class="panel-block">
@@ -30,18 +35,13 @@
           </div>
 
           <template v-if="inputMode === 'link'">
-            <div class="platform-tabs" role="tablist" aria-label="视频平台">
-              <button
-                v-for="option in platformOptions"
-                :key="option.value"
-                type="button"
-                :class="{ active: selectedPlatform === option.value }"
-                :disabled="parsing || parseCanceling"
-                @click="selectPlatform(option.value)"
-              >
-                {{ option.label }}
-              </button>
-            </div>
+            <VideoPlatformTabs
+              v-model="selectedPlatform"
+              class="benchmark-platform-tabs"
+              :options="platformOptions"
+              :disabled="parsing || parseCanceling"
+              @select="selectPlatform"
+            />
             <p class="platform-note">{{ selectedPlatformNote }}</p>
             <p v-if="selectedPlatformLimitReason" class="platform-limit-note">{{ selectedPlatformLimitReason }}</p>
             <p v-if="platformAutoHint" class="platform-auto-hint">{{ platformAutoHint }}</p>
@@ -427,6 +427,7 @@ import { rememberSessionTaskId } from '../../services/sessionTaskStore'
 import { cancelTask } from '../../services/taskApi'
 import { trackTaskResult } from '../../services/taskRealtime'
 import BillingEstimateBanner from '../../components/business/BillingEstimateBanner.vue'
+import VideoPlatformTabs from '../../components/business/VideoPlatformTabs.vue'
 import { useBillingEstimate } from '../../composables/useBillingEstimate'
 import { useSmoothTaskProgress } from '../../composables/useSmoothTaskProgress'
 import { normalizePublicMediaUrl } from '../../utils/mediaUrl'
@@ -1443,6 +1444,33 @@ function applyScript() {
   margin: 24px auto 30px;
 }
 
+.benchmark-page-hero {
+  display: flex;
+  min-height: 86px;
+  align-items: center;
+  justify-content: center;
+  flex-direction: column;
+  margin-bottom: 18px;
+  text-align: center;
+}
+
+.benchmark-page-hero h1 {
+  margin: 0;
+  color: #101828;
+  font-size: 30px;
+  font-weight: 900;
+  line-height: 1.2;
+  letter-spacing: 0;
+}
+
+.benchmark-page-hero p {
+  margin: 10px 0 0;
+  color: #667085;
+  font-size: 16px;
+  font-weight: 650;
+  line-height: 1.6;
+}
+
 .benchmark-head {
   display: flex;
   align-items: flex-start;
@@ -1486,19 +1514,19 @@ function applyScript() {
 }
 
 .secondary-button:hover:not(:disabled) {
-  border-color: #c9c2ff;
-  color: #5148e5;
+  border-color: #bfdbfe;
+  color: #2563eb;
 }
 
 .primary-button {
   border: 0;
-  background: #563bf0;
-  box-shadow: 0 10px 18px rgba(86, 59, 240, 0.24);
+  background: #2563eb;
+  box-shadow: 0 10px 18px rgba(37, 99, 235, 0.22);
   color: #fff;
 }
 
 .primary-button:hover:not(:disabled) {
-  background: #4630d1;
+  background: #1d4ed8;
   transform: translateY(-1px);
 }
 
@@ -1619,9 +1647,13 @@ function applyScript() {
 
 .source-tabs button.active,
 .platform-tabs button.active {
-  border-color: #7d67ff;
-  background: #f2efff;
-  color: #513ee8;
+  border-color: #bfdbfe;
+  background: #eff6ff;
+  color: #2563eb;
+}
+
+.benchmark-platform-tabs {
+  margin: 14px 0 10px;
 }
 
 .source-tabs button:disabled,
@@ -1692,7 +1724,7 @@ function applyScript() {
 
 .video-upload-picker span {
   flex-shrink: 0;
-  color: #4630d1;
+  color: #2563eb;
   font-size: 13px;
   font-weight: 850;
 }
@@ -1741,7 +1773,7 @@ function applyScript() {
 .local-upload-progress-fill {
   height: 100%;
   border-radius: inherit;
-  background: linear-gradient(90deg, #6f5cff, #21b08a);
+  background: linear-gradient(90deg, #2563eb, #38bdf8);
   transition: width 180ms ease;
 }
 
@@ -1831,7 +1863,7 @@ function applyScript() {
 .download-progress-fill {
   height: 100%;
   border-radius: inherit;
-  background: linear-gradient(90deg, #1f8a61 0%, #3fb77f 100%);
+  background: linear-gradient(90deg, #2563eb 0%, #38bdf8 100%);
   transition: width 0.25s ease;
 }
 
@@ -1977,8 +2009,8 @@ function applyScript() {
   height: 22px;
   place-items: center;
   border-radius: 999px;
-  background: #7567f6;
-  color: #fff;
+  background: #eff6ff;
+  color: #2563eb;
   font-size: 11px;
   font-weight: 900;
 }
@@ -2217,7 +2249,7 @@ function applyScript() {
 .rewrite-progress-fill {
   height: 100%;
   border-radius: 999px;
-  background: linear-gradient(90deg, #563bf0 0%, #7c6dff 100%);
+  background: linear-gradient(90deg, #2563eb 0%, #60a5fa 100%);
   transition: width 0.35s ease;
 }
 

@@ -47,18 +47,12 @@
         </div>
 
         <div v-if="sourceMode === 'url'" class="storyboard-source storyboard-source-url">
-          <div class="storyboard-platforms" role="group" aria-label="视频平台">
-            <button
-              v-for="option in platformOptions"
-              :key="option.value"
-              type="button"
-              :class="{ active: selectedPlatform === option.value }"
-              :disabled="busy"
-              @click="selectedPlatform = option.value"
-            >
-              {{ option.label }}
-            </button>
-          </div>
+          <VideoPlatformTabs
+            v-model="selectedPlatform"
+            class="storyboard-platform-tabs"
+            :options="platformOptions"
+            :disabled="busy"
+          />
           <input
             v-model.trim="videoUrl"
             type="url"
@@ -272,6 +266,7 @@ import { normalizePublicMediaUrl } from '../../utils/mediaUrl'
 import type { VideoScriptAnalyzeResult, VideoScriptShotItem } from '../../types/videoTypes'
 import type { TaskItem } from '../../types/taskTypes'
 import BillingEstimateBanner from '../../components/business/BillingEstimateBanner.vue'
+import VideoPlatformTabs from '../../components/business/VideoPlatformTabs.vue'
 import { useBillingEstimate } from '../../composables/useBillingEstimate'
 import { notifyAuthRefresh } from '../../services/authRefreshHub'
 
@@ -830,6 +825,10 @@ async function handleAnalyzeFile() {
   display: flex;
   flex-wrap: wrap;
   gap: 8px;
+}
+
+.storyboard-platform-tabs {
+  margin-bottom: 2px;
 }
 
 .storyboard-platforms button {

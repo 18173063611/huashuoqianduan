@@ -71,20 +71,13 @@
                   {{ parseCanceling ? '取消中…' : '取消' }}
                 </button>
               </div>
-              <div class="platform-tabs redesign-platforms" role="tablist" aria-label="视频平台">
-                <button
-                  v-for="option in platformOptions"
-                  :key="option.value"
-                  type="button"
-                  :class="{ active: selectedPlatform === option.value }"
-                  :disabled="parsing || parseCanceling"
-                  @click="selectPlatform(option.value)"
-                >
-                  <img v-if="option.icon" :src="option.icon" alt="" />
-                  <span v-else class="platform-auto-icon" aria-hidden="true">⌁</span>
-                  <span>{{ option.label }}</span>
-                </button>
-              </div>
+              <VideoPlatformTabs
+                v-model="selectedPlatform"
+                class="redesign-platforms"
+                :options="platformOptions"
+                :disabled="parsing || parseCanceling"
+                @select="selectPlatform"
+              />
               <p class="platform-note">{{ selectedPlatformNote }}</p>
               <p v-if="selectedPlatformLimitReason" class="platform-limit-note">{{ selectedPlatformLimitReason }}</p>
               <p v-if="platformAutoHint" class="platform-auto-hint">{{ platformAutoHint }}</p>
@@ -624,6 +617,69 @@
                   maxlength="1000"
                   placeholder="输入要烧录到视频里的字幕文案"
                 />
+                <div v-if="benchmarkAdvancedSettings.subtitleMode !== 'off'" class="benchmark-text-style-panel">
+                  <div class="benchmark-text-style-head">
+                    <strong>字幕样式</strong>
+                    <small>选择后会随本次生成提交</small>
+                  </div>
+                  <div class="benchmark-text-style-grid">
+                    <label class="benchmark-inline-field">
+                      <span>字体</span>
+                      <select
+                        :value="benchmarkAdvancedSettings.subtitleOverlay.fontFamily"
+                        @change="patchBenchmarkSubtitleOverlay({ fontFamily: ($event.target as HTMLSelectElement).value })"
+                      >
+                        <option v-for="item in benchmarkTextFontOptions" :key="item.value" :value="item.value">
+                          {{ item.label }}
+                        </option>
+                      </select>
+                    </label>
+                    <label class="benchmark-inline-field">
+                      <span>位置</span>
+                      <select
+                        :value="benchmarkAdvancedSettings.subtitleOverlay.position"
+                        @change="patchBenchmarkSubtitleOverlay({ position: ($event.target as HTMLSelectElement).value as CarSalesTextOverlaySettings['position'] })"
+                      >
+                        <option v-for="item in benchmarkTextPositionOptions" :key="item.value" :value="item.value">
+                          {{ item.label }}
+                        </option>
+                      </select>
+                    </label>
+                    <label class="benchmark-inline-field">
+                      <span>字号</span>
+                      <input
+                        class="benchmark-number-input"
+                        :value="benchmarkAdvancedSettings.subtitleOverlay.fontSize"
+                        type="number"
+                        min="20"
+                        max="80"
+                        step="2"
+                        @input="patchBenchmarkSubtitleOverlay({ fontSize: numberFromBenchmarkEvent($event, 36, 20, 80) })"
+                      />
+                    </label>
+                  </div>
+                  <div class="benchmark-color-grid">
+                    <label class="benchmark-color-field">
+                      <span>文字颜色</span>
+                      <input
+                        :value="benchmarkAdvancedSettings.subtitleOverlay.textColor"
+                        type="color"
+                        @input="patchBenchmarkSubtitleOverlay({ textColor: normalizeBenchmarkHexColor(($event.target as HTMLInputElement).value, '#ffffff') })"
+                      />
+                    </label>
+                    <label class="benchmark-color-field">
+                      <span>描边颜色</span>
+                      <input
+                        :value="benchmarkAdvancedSettings.subtitleOverlay.outlineColor"
+                        type="color"
+                        @input="patchBenchmarkSubtitleOverlay({ outlineColor: normalizeBenchmarkHexColor(($event.target as HTMLInputElement).value, '#111827') })"
+                      />
+                    </label>
+                  </div>
+                  <div class="benchmark-overlay-preview" :class="`pos-${benchmarkAdvancedSettings.subtitleOverlay.position}`">
+                    <span :style="benchmarkSubtitlePreviewStyle">{{ benchmarkSubtitlePreviewText }}</span>
+                  </div>
+                </div>
                 <label class="benchmark-check-row">
                   <input
                     :checked="benchmarkAdvancedSettings.headlineOverlay.enabled"
@@ -640,6 +696,69 @@
                   placeholder="例如：限时到店礼遇，预约试驾享专属权益"
                   @input="patchBenchmarkHeadlineOverlay({ text: ($event.target as HTMLTextAreaElement).value })"
                 />
+                <div v-if="benchmarkAdvancedSettings.headlineOverlay.enabled" class="benchmark-text-style-panel">
+                  <div class="benchmark-text-style-head">
+                    <strong>大字报样式</strong>
+                    <small>样式预览会同步当前文字、字号和位置</small>
+                  </div>
+                  <div class="benchmark-text-style-grid">
+                    <label class="benchmark-inline-field">
+                      <span>字体</span>
+                      <select
+                        :value="benchmarkAdvancedSettings.headlineOverlay.fontFamily"
+                        @change="patchBenchmarkHeadlineOverlay({ fontFamily: ($event.target as HTMLSelectElement).value })"
+                      >
+                        <option v-for="item in benchmarkTextFontOptions" :key="item.value" :value="item.value">
+                          {{ item.label }}
+                        </option>
+                      </select>
+                    </label>
+                    <label class="benchmark-inline-field">
+                      <span>位置</span>
+                      <select
+                        :value="benchmarkAdvancedSettings.headlineOverlay.position"
+                        @change="patchBenchmarkHeadlineOverlay({ position: ($event.target as HTMLSelectElement).value as CarSalesTextOverlaySettings['position'] })"
+                      >
+                        <option v-for="item in benchmarkTextPositionOptions" :key="item.value" :value="item.value">
+                          {{ item.label }}
+                        </option>
+                      </select>
+                    </label>
+                    <label class="benchmark-inline-field">
+                      <span>字号</span>
+                      <input
+                        class="benchmark-number-input"
+                        :value="benchmarkAdvancedSettings.headlineOverlay.fontSize"
+                        type="number"
+                        min="48"
+                        max="120"
+                        step="4"
+                        @input="patchBenchmarkHeadlineOverlay({ fontSize: numberFromBenchmarkEvent($event, 64, 48, 120) })"
+                      />
+                    </label>
+                  </div>
+                  <div class="benchmark-color-grid">
+                    <label class="benchmark-color-field">
+                      <span>文字颜色</span>
+                      <input
+                        :value="benchmarkAdvancedSettings.headlineOverlay.textColor"
+                        type="color"
+                        @input="patchBenchmarkHeadlineOverlay({ textColor: normalizeBenchmarkHexColor(($event.target as HTMLInputElement).value, '#ffffff') })"
+                      />
+                    </label>
+                    <label class="benchmark-color-field">
+                      <span>描边颜色</span>
+                      <input
+                        :value="benchmarkAdvancedSettings.headlineOverlay.outlineColor"
+                        type="color"
+                        @input="patchBenchmarkHeadlineOverlay({ outlineColor: normalizeBenchmarkHexColor(($event.target as HTMLInputElement).value, '#111827') })"
+                      />
+                    </label>
+                  </div>
+                  <div class="benchmark-overlay-preview" :class="`pos-${benchmarkAdvancedSettings.headlineOverlay.position}`">
+                    <span :style="benchmarkHeadlinePreviewStyle">{{ benchmarkHeadlinePreviewText }}</span>
+                  </div>
+                </div>
               </div>
             </details>
           </div>
@@ -689,20 +808,13 @@
           </div>
 
           <template v-if="inputMode === 'link'">
-            <div class="platform-tabs" role="tablist" aria-label="视频平台">
-              <button
-                v-for="option in platformOptions"
-                :key="option.value"
-                type="button"
-                :class="{ active: selectedPlatform === option.value }"
-                :disabled="parsing || parseCanceling"
-                @click="selectPlatform(option.value)"
-              >
-                <img v-if="option.icon" :src="option.icon" alt="" />
-                <span v-else class="platform-auto-icon" aria-hidden="true">⌁</span>
-                <span>{{ option.label }}</span>
-              </button>
-            </div>
+            <VideoPlatformTabs
+              v-model="selectedPlatform"
+              class="benchmark-platform-tabs"
+              :options="platformOptions"
+              :disabled="parsing || parseCanceling"
+              @select="selectPlatform"
+            />
             <p class="platform-note">{{ selectedPlatformNote }}</p>
             <p v-if="selectedPlatformLimitReason" class="platform-limit-note">{{ selectedPlatformLimitReason }}</p>
             <p v-if="platformAutoHint" class="platform-auto-hint">{{ platformAutoHint }}</p>
@@ -1157,6 +1269,7 @@ import {
   normalizeCarNativeVoiceStyle,
 } from '../../constants/carSalesVoiceStyles'
 import BillingEstimateBanner from '../../components/business/BillingEstimateBanner.vue'
+import VideoPlatformTabs from '../../components/business/VideoPlatformTabs.vue'
 import { useAuthRequired } from '../../composables/useAuthRequired'
 import { useBillingEstimate } from '../../composables/useBillingEstimate'
 import { useSmoothTaskProgress } from '../../composables/useSmoothTaskProgress'
@@ -1196,14 +1309,7 @@ import {
   type CarSalesPlanDraft,
   type CarSalesPlanDraftAsset,
 } from '../render/carSalesPlanDraft'
-import bilibiliIcon from '../../assets/platforms/bilibili.svg'
-import douyinIcon from '../../assets/platforms/douyin.svg'
-import facebookIcon from '../../assets/platforms/facebook.svg'
-import kuaishouIcon from '../../assets/platforms/kuaishou.svg'
-import tiktokIcon from '../../assets/platforms/tiktok.svg'
-import wechatIcon from '../../assets/platforms/wechat.svg'
-import xiaohongshuIcon from '../../assets/platforms/xiaohongshu.svg'
-import youtubeIcon from '../../assets/platforms/youtube.svg'
+import { CAR_TEXT_FONT_OPTIONS } from '../../constants/carSalesTextStyles'
 
 const DEFAULT_CAR_SALES_MODEL = 'doubao-seedance-2-0-pro-250528'
 
@@ -1221,6 +1327,12 @@ const isBenchmarkCreationEntry = computed(() => {
   return (Array.isArray(entry) ? entry[0] : entry) === 'creation'
 })
 const benchmarkPageTitle = computed(() => isBenchmarkCreationEntry.value ? '爆款对标创作' : '爆款对标')
+const benchmarkTextFontOptions = CAR_TEXT_FONT_OPTIONS
+const benchmarkTextPositionOptions: Array<{ value: CarSalesTextOverlaySettings['position']; label: string }> = [
+  { value: 'top', label: '顶部' },
+  { value: 'middle', label: '中部' },
+  { value: 'bottom', label: '底部' },
+]
 
 const emit = defineEmits<{
   continue: []
@@ -1231,7 +1343,6 @@ type VideoPlatformOption = {
   label: string
   placeholder: string
   officialNote: string
-  icon?: string
 }
 
 const platformOptions: VideoPlatformOption[] = [
@@ -1244,56 +1355,48 @@ const platformOptions: VideoPlatformOption[] = [
   {
     value: 'douyin',
     label: '抖音',
-    icon: douyinIcon,
     placeholder: '粘贴抖音分享链接或完整分享文案',
     officialNote: '抖音开放平台视频数据能力需要开通授权；任意公开视频直链解析不属于通用官方开放能力。',
   },
   {
     value: 'xiaohongshu',
     label: '小红书',
-    icon: xiaohongshuIcon,
     placeholder: '粘贴小红书完整分享文案或 http(s) 链接',
     officialNote: '小红书公开开放文档未提供任意笔记视频下载解析接口，解析稳定性受平台限制影响。',
   },
   {
     value: 'wechat_channels',
     label: '视频号',
-    icon: wechatIcon,
     placeholder: '粘贴微信视频号分享链接，例如 https://weixin.qq.com/sph/...',
     officialNote: '微信视频号官方开放能力不提供任意公开视频下载解析接口；该平台内容通常需要微信登录、客户端上下文或平台授权，当前无法稳定解析。',
   },
   {
     value: 'tiktok',
     label: 'TikTok',
-    icon: tiktokIcon,
     placeholder: '粘贴 TikTok 视频链接',
     officialNote: 'TikTok Display API 需用户授权，官方返回元数据与 embed_link，不提供任意公开视频下载直链。',
   },
   {
     value: 'kuaishou',
     label: '快手',
-    icon: kuaishouIcon,
     placeholder: '粘贴快手分享链接或完整分享文案',
     officialNote: '快手开放平台官方能力以登录、发布、挂载为主，未提供任意公开视频下载解析接口。',
   },
   {
     value: 'bilibili',
     label: 'B站',
-    icon: bilibiliIcon,
     placeholder: '粘贴 B 站视频链接',
     officialNote: 'B 站官方外链播放器支持 bvid/aid/cid；当前按 bvid/cid 链路处理公开视频信息。',
   },
   {
     value: 'youtube',
     label: 'YouTube',
-    icon: youtubeIcon,
     placeholder: '粘贴 YouTube 视频链接',
     officialNote: 'YouTube 官方 Data/IFrame API 支持元数据与嵌入播放，不提供任意视频下载直链。',
   },
   {
     value: 'facebook',
     label: 'Facebook',
-    icon: facebookIcon,
     placeholder: '粘贴 Facebook 公开视频链接',
     officialNote: 'Facebook 官方支持公开视频嵌入和 Graph API 授权访问，但不提供任意公开视频下载接口；很多视频需要登录、地区或权限校验，当前无法稳定解析。',
   },
@@ -1429,6 +1532,20 @@ const benchmarkHeadlineSummary = computed(() =>
     ? (benchmarkAdvancedSettings.value.headlineOverlay.text || '已开启，可编辑大字报文案')
     : '关闭',
 )
+const benchmarkSubtitlePreviewText = computed(() => {
+  const customSubtitle = benchmarkAdvancedSettings.value.customSubtitle.trim()
+  const source = customSubtitle || rewrittenText.value.trim() || sourceText.value.trim()
+  return source ? source.slice(0, 42) : '这台车空间宽敞，配置也很到位。'
+})
+const benchmarkHeadlinePreviewText = computed(() =>
+  benchmarkAdvancedSettings.value.headlineOverlay.text.trim() || '限时到店礼遇',
+)
+const benchmarkSubtitlePreviewStyle = computed(() =>
+  benchmarkOverlayPreviewStyle(benchmarkAdvancedSettings.value.subtitleOverlay, 'subtitle'),
+)
+const benchmarkHeadlinePreviewStyle = computed(() =>
+  benchmarkOverlayPreviewStyle(benchmarkAdvancedSettings.value.headlineOverlay, 'headline'),
+)
 const referenceVideoDurationSeconds = computed(() =>
   normalizeBenchmarkDurationSeconds(douyinParse.value?.durationSeconds || 0),
 )
@@ -1558,6 +1675,56 @@ function patchBenchmarkHeadlineOverlay(partial: Partial<CarSalesTextOverlaySetti
       ...benchmarkAdvancedSettings.value.headlineOverlay,
       ...partial,
     },
+  }
+}
+
+function patchBenchmarkSubtitleOverlay(partial: Partial<CarSalesTextOverlaySettings>) {
+  benchmarkAdvancedSettings.value = {
+    ...benchmarkAdvancedSettings.value,
+    subtitleOverlay: {
+      ...benchmarkAdvancedSettings.value.subtitleOverlay,
+      ...partial,
+    },
+  }
+}
+
+function numberFromBenchmarkEvent(event: Event, fallback: number, min: number, max: number) {
+  const value = Number((event.target as HTMLInputElement).value)
+  if (!Number.isFinite(value)) return fallback
+  return Math.max(min, Math.min(max, Math.round(value)))
+}
+
+function normalizeBenchmarkHexColor(value: string, fallback: string) {
+  const source = String(value || '').trim()
+  if (/^#[0-9a-fA-F]{6}$/.test(source)) return source.toLowerCase()
+  if (/^[0-9a-fA-F]{6}$/.test(source)) return `#${source.toLowerCase()}`
+  if (/^#[0-9a-fA-F]{3}$/.test(source)) {
+    const [, r, g, b] = source
+    return `#${r}${r}${g}${g}${b}${b}`.toLowerCase()
+  }
+  if (/^[0-9a-fA-F]{3}$/.test(source)) {
+    const [r, g, b] = source
+    return `#${r}${r}${g}${g}${b}${b}`.toLowerCase()
+  }
+  return fallback
+}
+
+function benchmarkOverlayPreviewStyle(
+  overlay: CarSalesTextOverlaySettings,
+  kind: 'subtitle' | 'headline',
+) {
+  const baseSize = Number(overlay.fontSize) || (kind === 'headline' ? 64 : 36)
+  const previewSize = kind === 'headline'
+    ? Math.max(24, Math.min(58, Math.round(baseSize * 0.56)))
+    : Math.max(16, Math.min(34, Math.round(baseSize * 0.7)))
+  const outlineWidth = kind === 'headline' ? 2 : 1
+  const outlineColor = normalizeBenchmarkHexColor(overlay.outlineColor, '#111827')
+  return {
+    color: normalizeBenchmarkHexColor(overlay.textColor, '#ffffff'),
+    fontFamily: overlay.fontFamily,
+    fontSize: `${previewSize}px`,
+    WebkitTextStroke: `${outlineWidth}px ${outlineColor}`,
+    textShadow: `0 ${outlineWidth}px 0 ${outlineColor}, 0 -${outlineWidth}px 0 ${outlineColor}, ${outlineWidth}px 0 0 ${outlineColor}, -${outlineWidth}px 0 0 ${outlineColor}`,
   }
 }
 
@@ -3381,9 +3548,9 @@ function applyScript() {
 
 .source-tabs button.active,
 .platform-tabs button.active {
-  border-color: #7d67ff;
-  background: #f2efff;
-  color: #513ee8;
+  border-color: #bfdbfe;
+  background: #eff6ff;
+  color: #2563eb;
 }
 
 .source-tabs button:disabled,
@@ -3454,7 +3621,7 @@ function applyScript() {
 
 .video-upload-picker span {
   flex-shrink: 0;
-  color: #4630d1;
+  color: #2563eb;
   font-size: 13px;
   font-weight: 850;
 }
@@ -3739,8 +3906,8 @@ function applyScript() {
   height: 22px;
   place-items: center;
   border-radius: 999px;
-  background: #7567f6;
-  color: #fff;
+  background: #eff6ff;
+  color: #2563eb;
   font-size: 11px;
   font-weight: 900;
 }
@@ -4460,8 +4627,8 @@ function applyScript() {
   min-height: 24px;
   align-items: center;
   border-radius: 999px;
-  background: #f1f5fb;
-  color: #667085;
+  background: #eff6ff;
+  color: #2563eb;
   padding: 0 11px;
   font-size: 12px;
   font-weight: 800;
@@ -4652,8 +4819,12 @@ function applyScript() {
 }
 
 .source-tabs.redesign-tabs,
-.platform-tabs.redesign-platforms {
+.redesign-platforms {
   margin: 0;
+}
+
+.benchmark-platform-tabs {
+  margin: 14px 0 10px;
 }
 
 .source-tabs.redesign-tabs button,
@@ -5688,6 +5859,105 @@ function applyScript() {
   resize: vertical;
   padding: 9px 10px;
   line-height: 1.55;
+}
+
+.benchmark-text-style-panel {
+  display: grid;
+  gap: 10px;
+  border: 1px solid #e6eefb;
+  border-radius: 8px;
+  background: #fff;
+  padding: 10px;
+}
+
+.benchmark-text-style-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.benchmark-text-style-head strong {
+  color: #101828;
+  font-size: 13px;
+  font-weight: 900;
+}
+
+.benchmark-text-style-head small {
+  overflow: hidden;
+  color: #667085;
+  font-size: 12px;
+  font-weight: 700;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.benchmark-text-style-grid,
+.benchmark-color-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.benchmark-color-grid {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.benchmark-number-input,
+.benchmark-color-field input[type='color'] {
+  width: 100%;
+  min-height: 38px;
+  border: 1px solid #dfe7f3;
+  border-radius: 7px;
+  background: #fff;
+  color: #101828;
+  padding: 0 10px;
+  outline: none;
+}
+
+.benchmark-color-field {
+  display: grid;
+  gap: 6px;
+}
+
+.benchmark-color-field span {
+  color: #101828;
+  font-size: 13px;
+  font-weight: 900;
+}
+
+.benchmark-color-field input[type='color'] {
+  padding: 4px;
+}
+
+.benchmark-overlay-preview {
+  display: flex;
+  min-height: 126px;
+  align-items: flex-start;
+  justify-content: center;
+  overflow: hidden;
+  border: 1px solid #d7e2f3;
+  border-radius: 8px;
+  background:
+    linear-gradient(180deg, rgba(15, 23, 42, 0.16), rgba(15, 23, 42, 0.62)),
+    linear-gradient(135deg, #dbeafe 0%, #94a3b8 48%, #0f172a 100%);
+  padding: 14px;
+}
+
+.benchmark-overlay-preview.pos-middle {
+  align-items: center;
+}
+
+.benchmark-overlay-preview.pos-bottom {
+  align-items: flex-end;
+}
+
+.benchmark-overlay-preview span {
+  max-width: 92%;
+  text-align: center;
+  font-weight: 900;
+  line-height: 1.16;
+  overflow-wrap: anywhere;
 }
 
 .benchmark-upload-button {

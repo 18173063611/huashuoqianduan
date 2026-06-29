@@ -225,6 +225,52 @@
                       />
                     </el-select>
                   </label>
+                  <label class="reuse-setting-field">
+                    <span>字幕位置</span>
+                    <el-select v-model="assetReuseSubtitlePosition" size="small" :disabled="assetReuseSubtitleMode === 'off'">
+                      <el-option
+                        v-for="item in assetReuseTextPositionOptions"
+                        :key="item.value"
+                        :label="item.label"
+                        :value="item.value"
+                      />
+                    </el-select>
+                  </label>
+                  <label class="reuse-setting-field">
+                    <span>字幕字号</span>
+                    <el-input-number
+                      v-model="assetReuseSubtitleFontSize"
+                      size="small"
+                      :min="20"
+                      :max="80"
+                      :step="2"
+                      :disabled="assetReuseSubtitleMode === 'off'"
+                    />
+                  </label>
+                  <label class="reuse-setting-field">
+                    <span>字幕文字颜色</span>
+                    <input
+                      v-model="assetReuseSubtitleTextColor"
+                      class="reuse-color-input"
+                      type="color"
+                      :disabled="assetReuseSubtitleMode === 'off'"
+                    />
+                  </label>
+                  <label class="reuse-setting-field">
+                    <span>字幕描边颜色</span>
+                    <input
+                      v-model="assetReuseSubtitleOutlineColor"
+                      class="reuse-color-input"
+                      type="color"
+                      :disabled="assetReuseSubtitleMode === 'off'"
+                    />
+                  </label>
+                  <div v-if="assetReuseSubtitleMode !== 'off'" class="reuse-style-preview">
+                    <span>字幕样式预览</span>
+                    <div class="reuse-overlay-preview" :class="`pos-${assetReuseSubtitlePosition}`">
+                      <b :style="assetReuseSubtitlePreviewStyle">{{ assetReuseSubtitlePreviewText }}</b>
+                    </div>
+                  </div>
                   <label class="reuse-setting-switch">
                     <span>大字报</span>
                     <el-switch v-model="assetReuseHeadlineEnabled" />
@@ -244,6 +290,41 @@
                       />
                     </el-select>
                   </label>
+                  <label v-if="assetReuseHeadlineEnabled" class="reuse-setting-field">
+                    <span>大字报位置</span>
+                    <el-select v-model="assetReuseHeadlinePosition" size="small">
+                      <el-option
+                        v-for="item in assetReuseTextPositionOptions"
+                        :key="item.value"
+                        :label="item.label"
+                        :value="item.value"
+                      />
+                    </el-select>
+                  </label>
+                  <label v-if="assetReuseHeadlineEnabled" class="reuse-setting-field">
+                    <span>大字报字号</span>
+                    <el-input-number
+                      v-model="assetReuseHeadlineFontSize"
+                      size="small"
+                      :min="48"
+                      :max="120"
+                      :step="4"
+                    />
+                  </label>
+                  <label v-if="assetReuseHeadlineEnabled" class="reuse-setting-field">
+                    <span>大字报文字颜色</span>
+                    <input v-model="assetReuseHeadlineTextColor" class="reuse-color-input" type="color" />
+                  </label>
+                  <label v-if="assetReuseHeadlineEnabled" class="reuse-setting-field">
+                    <span>大字报描边颜色</span>
+                    <input v-model="assetReuseHeadlineOutlineColor" class="reuse-color-input" type="color" />
+                  </label>
+                  <div v-if="assetReuseHeadlineEnabled" class="reuse-style-preview">
+                    <span>大字报样式预览</span>
+                    <div class="reuse-overlay-preview" :class="`pos-${assetReuseHeadlinePosition}`">
+                      <b :style="assetReuseHeadlinePreviewStyle">{{ assetReuseHeadlinePreviewText }}</b>
+                    </div>
+                  </div>
                 </div>
               </div>
             </details>
@@ -806,6 +887,8 @@ interface StoredAssetReuseDraft {
   renderConfig?: ImportedRenderConfig
 }
 
+type OverlayPosition = NonNullable<CarSalesPlanDraft['subtitleOverlay']>['position']
+
 interface ImportedRenderConfig {
   aspectRatio?: CarSalesPlanDraft['aspectRatio']
   subtitleMode?: CarSalesPlanDraft['subtitleMode']
@@ -1030,6 +1113,19 @@ const assetReuseHeadlineEnabled = ref(false)
 const assetReuseHeadlineText = ref('')
 const assetReuseSubtitleFontFamily = ref('Microsoft YaHei')
 const assetReuseHeadlineFontFamily = ref('Microsoft YaHei')
+const assetReuseSubtitlePosition = ref<OverlayPosition>('bottom')
+const assetReuseHeadlinePosition = ref<OverlayPosition>('top')
+const assetReuseSubtitleFontSize = ref(42)
+const assetReuseHeadlineFontSize = ref(84)
+const assetReuseSubtitleTextColor = ref('#FFFFFF')
+const assetReuseSubtitleOutlineColor = ref('#111111')
+const assetReuseHeadlineTextColor = ref('#FFFFFF')
+const assetReuseHeadlineOutlineColor = ref('#111111')
+const assetReuseTextPositionOptions: Array<{ value: OverlayPosition; label: string }> = [
+  { value: 'top', label: '顶部' },
+  { value: 'middle', label: '中部' },
+  { value: 'bottom', label: '底部' },
+]
 const carBundleLoadError = ref('')
 const planPreviewOpen = ref(false)
 const planPreviewLoading = ref(false)
@@ -1187,16 +1283,44 @@ const assetReuseSubtitleSettingSummary = computed(() => {
     optionLabel(ASSET_REUSE_SUBTITLE_MODE_OPTIONS, assetReuseSubtitleMode.value),
     optionLabel(ASSET_REUSE_LANGUAGE_OPTIONS, assetReuseSubtitleLanguage.value),
     fontLabel(assetReuseSubtitleFontFamily.value),
+    `${positionLabel(assetReuseSubtitlePosition.value)} ${assetReuseSubtitleFontSize.value}px`,
     assetReuseBurnInSubtitle.value ? '烧录到视频' : '仅生成字幕数据',
   ].filter(Boolean).join(' / ')
 })
 const assetReuseHeadlineSettingSummary = computed(() =>
   assetReuseHeadlineEnabled.value
-    ? [assetReuseHeadlineText.value.trim() || '开启，使用系统自动大字报', fontLabel(assetReuseHeadlineFontFamily.value)].join(' / ')
+    ? [
+        assetReuseHeadlineText.value.trim() || '开启，使用系统自动大字报',
+        fontLabel(assetReuseHeadlineFontFamily.value),
+        `${positionLabel(assetReuseHeadlinePosition.value)} ${assetReuseHeadlineFontSize.value}px`,
+      ].join(' / ')
     : '关闭',
 )
 const assetReusePackagingSummary = computed(() =>
   `${assetReuseSubtitleSettingSummary.value}；大字报：${assetReuseHeadlineSettingSummary.value}`,
+)
+const assetReuseSubtitlePreviewText = computed(() => {
+  const source = importedScriptText.value.trim() || draftPrompt.value.trim()
+  return source ? source.slice(0, 42) : '这台车空间宽敞，配置也很到位。'
+})
+const assetReuseHeadlinePreviewText = computed(() =>
+  assetReuseHeadlineText.value.trim() || '限时到店礼遇',
+)
+const assetReuseSubtitlePreviewStyle = computed(() =>
+  assetReuseOverlayPreviewStyle({
+    fontFamily: assetReuseSubtitleFontFamily.value,
+    fontSize: assetReuseSubtitleFontSize.value,
+    textColor: assetReuseSubtitleTextColor.value,
+    outlineColor: assetReuseSubtitleOutlineColor.value,
+  }, 'subtitle'),
+)
+const assetReuseHeadlinePreviewStyle = computed(() =>
+  assetReuseOverlayPreviewStyle({
+    fontFamily: assetReuseHeadlineFontFamily.value,
+    fontSize: assetReuseHeadlineFontSize.value,
+    textColor: assetReuseHeadlineTextColor.value,
+    outlineColor: assetReuseHeadlineOutlineColor.value,
+  }, 'headline'),
 )
 
 function addSelectedAsset(asset: AssetItem, role: QuickRenderAssetRole, replaceRoles = singletonRolesFor(role)) {
@@ -1274,6 +1398,61 @@ function fontLabel(fontFamily: string) {
   return CAR_TEXT_FONT_OPTIONS.find((item) => item.value === fontFamily)?.label || fontFamily
 }
 
+function positionLabel(position: OverlayPosition) {
+  return assetReuseTextPositionOptions.find((item) => item.value === position)?.label || position
+}
+
+function normalizeOverlayPosition(position: unknown, fallback: OverlayPosition): OverlayPosition {
+  return position === 'top' || position === 'middle' || position === 'bottom'
+    ? position
+    : fallback
+}
+
+function normalizeOverlayFontSize(value: unknown, fallback: number, min: number, max: number) {
+  const size = Number(value)
+  if (!Number.isFinite(size)) return fallback
+  return Math.max(min, Math.min(max, Math.round(size)))
+}
+
+function normalizeAssetReuseHexColor(value: unknown, fallback: string) {
+  const source = String(value || '').trim()
+  if (/^#[0-9a-fA-F]{6}$/.test(source)) return source.toUpperCase()
+  if (/^[0-9a-fA-F]{6}$/.test(source)) return `#${source.toUpperCase()}`
+  if (/^#[0-9a-fA-F]{3}$/.test(source)) {
+    const [, r, g, b] = source
+    return `#${r}${r}${g}${g}${b}${b}`.toUpperCase()
+  }
+  if (/^[0-9a-fA-F]{3}$/.test(source)) {
+    const [r, g, b] = source
+    return `#${r}${r}${g}${g}${b}${b}`.toUpperCase()
+  }
+  return fallback
+}
+
+function assetReuseOverlayPreviewStyle(
+  overlay: Pick<NonNullable<CarSalesPlanDraft['subtitleOverlay']>, 'fontFamily' | 'fontSize' | 'textColor' | 'outlineColor'>,
+  kind: 'subtitle' | 'headline',
+) {
+  const baseSize = Number(overlay.fontSize) || (kind === 'headline' ? 84 : 42)
+  const previewSize = kind === 'headline'
+    ? Math.max(24, Math.min(58, Math.round(baseSize * 0.56)))
+    : Math.max(16, Math.min(34, Math.round(baseSize * 0.7)))
+  const outlineWidth = kind === 'headline' ? 2 : 1
+  const outlineColor = normalizeAssetReuseHexColor(overlay.outlineColor, '#111111')
+  return {
+    color: normalizeAssetReuseHexColor(overlay.textColor, '#FFFFFF'),
+    fontFamily: overlay.fontFamily,
+    fontSize: `${previewSize}px`,
+    WebkitTextStroke: `${outlineWidth}px ${outlineColor}`,
+    textShadow: `0 ${outlineWidth}px 0 ${outlineColor}, 0 -${outlineWidth}px 0 ${outlineColor}, ${outlineWidth}px 0 0 ${outlineColor}, -${outlineWidth}px 0 0 ${outlineColor}`,
+  }
+}
+
+function assetReuseOverlayStyleLabel(overlay: CarSalesPlanDraft['subtitleOverlay']) {
+  if (!overlay) return undefined
+  return `${positionLabel(normalizeOverlayPosition(overlay.position, 'bottom'))}/${normalizeOverlayFontSize(overlay.fontSize, 42, 12, 160)}px`
+}
+
 function formatDurationLabel(seconds: number) {
   const safeSeconds = Math.max(0, Math.round(seconds || 0))
   const minutes = Math.floor(safeSeconds / 60)
@@ -1302,6 +1481,14 @@ function resetAssetReuseGenerationControls() {
   assetReuseHeadlineText.value = ''
   assetReuseSubtitleFontFamily.value = 'Microsoft YaHei'
   assetReuseHeadlineFontFamily.value = 'Microsoft YaHei'
+  assetReuseSubtitlePosition.value = 'bottom'
+  assetReuseHeadlinePosition.value = 'top'
+  assetReuseSubtitleFontSize.value = 42
+  assetReuseHeadlineFontSize.value = 84
+  assetReuseSubtitleTextColor.value = '#FFFFFF'
+  assetReuseSubtitleOutlineColor.value = '#111111'
+  assetReuseHeadlineTextColor.value = '#FFFFFF'
+  assetReuseHeadlineOutlineColor.value = '#111111'
 }
 
 function applyImportedRenderConfigToControls(config: ImportedRenderConfig) {
@@ -1315,6 +1502,10 @@ function applyImportedRenderConfigToControls(config: ImportedRenderConfig) {
     || assetReuseSubtitleLanguage.value
   assetReuseBurnInSubtitle.value = config.burnInSubtitle ?? config.enableSubtitle ?? assetReuseBurnInSubtitle.value
   assetReuseSubtitleFontFamily.value = config.subtitleOverlay?.fontFamily || assetReuseSubtitleFontFamily.value
+  assetReuseSubtitlePosition.value = normalizeOverlayPosition(config.subtitleOverlay?.position, assetReuseSubtitlePosition.value)
+  assetReuseSubtitleFontSize.value = normalizeOverlayFontSize(config.subtitleOverlay?.fontSize, assetReuseSubtitleFontSize.value, 20, 80)
+  assetReuseSubtitleTextColor.value = normalizeAssetReuseHexColor(config.subtitleOverlay?.textColor, assetReuseSubtitleTextColor.value)
+  assetReuseSubtitleOutlineColor.value = normalizeAssetReuseHexColor(config.subtitleOverlay?.outlineColor, assetReuseSubtitleOutlineColor.value)
   assetReuseAudioPolicy.value = normalizeImportedAudioPolicy(config.audioPolicy) || assetReuseAudioPolicy.value
   assetReuseModel.value = config.model || assetReuseModel.value
   assetReuseTargetDuration.value = normalizeAssetReuseTargetDuration(
@@ -1337,6 +1528,10 @@ function applyImportedRenderConfigToControls(config: ImportedRenderConfig) {
     ?? assetReuseHeadlineEnabled.value
   assetReuseHeadlineText.value = config.headlineOverlay?.text || assetReuseHeadlineText.value
   assetReuseHeadlineFontFamily.value = config.headlineOverlay?.fontFamily || assetReuseHeadlineFontFamily.value
+  assetReuseHeadlinePosition.value = normalizeOverlayPosition(config.headlineOverlay?.position, assetReuseHeadlinePosition.value)
+  assetReuseHeadlineFontSize.value = normalizeOverlayFontSize(config.headlineOverlay?.fontSize, assetReuseHeadlineFontSize.value, 48, 120)
+  assetReuseHeadlineTextColor.value = normalizeAssetReuseHexColor(config.headlineOverlay?.textColor, assetReuseHeadlineTextColor.value)
+  assetReuseHeadlineOutlineColor.value = normalizeAssetReuseHexColor(config.headlineOverlay?.outlineColor, assetReuseHeadlineOutlineColor.value)
 }
 
 function currentAssetReuseRenderConfig(): ImportedRenderConfig {
@@ -1369,10 +1564,10 @@ function buildAssetReuseHeadlineOverlay(): CarSalesPlanDraft['headlineOverlay'] 
     enabled: assetReuseHeadlineEnabled.value,
     text: assetReuseHeadlineText.value.trim() || undefined,
     fontFamily: assetReuseHeadlineFontFamily.value,
-    fontSize: 84,
-    textColor: '#FFFFFF',
-    outlineColor: '#111111',
-    position: 'top',
+    fontSize: normalizeOverlayFontSize(assetReuseHeadlineFontSize.value, 84, 48, 120),
+    textColor: normalizeAssetReuseHexColor(assetReuseHeadlineTextColor.value, '#FFFFFF'),
+    outlineColor: normalizeAssetReuseHexColor(assetReuseHeadlineOutlineColor.value, '#111111'),
+    position: assetReuseHeadlinePosition.value,
   }
 }
 
@@ -1383,10 +1578,10 @@ function buildAssetReuseSubtitleOverlay(): CarSalesPlanDraft['subtitleOverlay'] 
   return {
     enabled: true,
     fontFamily: assetReuseSubtitleFontFamily.value,
-    fontSize: 42,
-    textColor: '#FFFFFF',
-    outlineColor: '#111111',
-    position: 'bottom',
+    fontSize: normalizeOverlayFontSize(assetReuseSubtitleFontSize.value, 42, 20, 80),
+    textColor: normalizeAssetReuseHexColor(assetReuseSubtitleTextColor.value, '#FFFFFF'),
+    outlineColor: normalizeAssetReuseHexColor(assetReuseSubtitleOutlineColor.value, '#111111'),
+    position: assetReuseSubtitlePosition.value,
   }
 }
 
@@ -2469,9 +2664,9 @@ async function buildAssetReusePlanDraft(): Promise<CarSalesPlanDraft> {
     language: importedRenderConfig.value.language || voiceLanguage,
     duration: assetReuseTotalDuration.value,
     enableSubtitle: assetReuseSubtitleMode.value !== 'off',
-    subtitleStyle: importedRenderConfig.value.subtitleStyle,
+    subtitleStyle: assetReuseOverlayStyleLabel(renderConfig.subtitleOverlay) || importedRenderConfig.value.subtitleStyle,
     enableBigText: assetReuseHeadlineEnabled.value,
-    bigTextStyle: importedRenderConfig.value.bigTextStyle,
+    bigTextStyle: assetReuseOverlayStyleLabel(renderConfig.headlineOverlay) || importedRenderConfig.value.bigTextStyle,
     enableBgm: importedRenderConfig.value.enableBgm ?? ((importedRenderConfig.value.bgmStyle || 'auto') !== 'none' && (effectiveAudioPolicy === 'bgm' || generationSelections.some((item) => item.role === 'bgm'))),
     bgmStyle: effectiveAudioPolicy === 'none' ? 'none' : importedRenderConfig.value.bgmStyle || 'auto',
     generateCover: importedRenderConfig.value.generateCover ?? true,
@@ -3010,8 +3205,64 @@ onMounted(async () => {
 }
 
 .reuse-setting-field :deep(.el-select),
-.reuse-setting-field :deep(.el-input) {
+.reuse-setting-field :deep(.el-input),
+.reuse-setting-field :deep(.el-input-number) {
   width: 100%;
+}
+
+.reuse-color-input {
+  width: 100%;
+  min-height: 32px;
+  border: 1px solid #dfe7f3;
+  border-radius: 7px;
+  background: #fff;
+  padding: 4px;
+}
+
+.reuse-style-preview {
+  display: grid;
+  grid-column: 1 / -1;
+  gap: 8px;
+  border: 1px solid #e6eefb;
+  border-radius: 8px;
+  background: #fff;
+  padding: 10px 12px;
+}
+
+.reuse-style-preview > span {
+  color: #344054;
+  font-size: 12px;
+  font-weight: 850;
+}
+
+.reuse-overlay-preview {
+  display: flex;
+  min-height: 126px;
+  align-items: flex-start;
+  justify-content: center;
+  overflow: hidden;
+  border: 1px solid #d7e2f3;
+  border-radius: 8px;
+  background:
+    linear-gradient(180deg, rgba(15, 23, 42, 0.14), rgba(15, 23, 42, 0.62)),
+    linear-gradient(135deg, #dbeafe 0%, #94a3b8 48%, #0f172a 100%);
+  padding: 14px;
+}
+
+.reuse-overlay-preview.pos-middle {
+  align-items: center;
+}
+
+.reuse-overlay-preview.pos-bottom {
+  align-items: flex-end;
+}
+
+.reuse-overlay-preview b {
+  max-width: 92%;
+  text-align: center;
+  font-weight: 900;
+  line-height: 1.16;
+  overflow-wrap: anywhere;
 }
 
 .reuse-setting-switch {

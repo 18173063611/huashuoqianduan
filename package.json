@@ -9,6 +9,8 @@
     "preview": "vite preview",
     "visual:render": "node scripts/visual-render.mjs",
     "visual:creative": "node scripts/visual-creative-pages.mjs",
+    "screenshots:tutorial": "node scripts/capture-tutorial-screenshots.mjs",
+    "ppt:release": "node scripts/build-release-ppt.mjs",
     "e2e:asset-reuse": "node scripts/e2e-asset-reuse.mjs",
     "e2e:render-covers": "node scripts/e2e-render-recent-covers.mjs"
   },

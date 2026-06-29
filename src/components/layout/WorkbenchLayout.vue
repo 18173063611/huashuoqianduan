@@ -173,7 +173,7 @@ interface MenuSection {
   items: MenuItem[]
 }
 
-type MenuSectionKey = 'creation' | 'ai-tools'
+type MenuSectionKey = 'creation' | 'ai-tools' | 'tutorial'
 
 const menuSections: MenuSection[] = [
   {
@@ -236,6 +236,20 @@ const menuSections: MenuSection[] = [
         icon: Microphone,
         title: '声音生成',
         subtitle: '生成口播音频，管理可复用音色。',
+      },
+    ],
+  },
+  {
+    key: 'tutorial',
+    label: '使用教程',
+    icon: Document,
+    items: [
+      {
+        key: 'help-tutorials',
+        label: '教程中心',
+        icon: Document,
+        title: '使用教程',
+        subtitle: '按截图快速掌握汽车 AI 视频从素材选择到生成下载的完整流程。',
       },
     ],
   },

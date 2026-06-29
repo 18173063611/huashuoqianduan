@@ -1,0 +1,25 @@
+{
+  "generatedAt": "2026-06-29T06:56:00.877Z",
+  "appBaseUrl": "https://kcpq.site",
+  "viewport": {
+    "width": 2560,
+    "height": 1440
+  },
+  "deviceScaleFactor": 2,
+  "outputDir": "D:\\javacode\\huashuo\\huashuoqianduan\\public\\tutorial\\screenshots",
+  "docOutputDir": "D:\\javacode\\huashuo\\交付文档\\assets\\screenshots",
+  "files": [
+    "public/tutorial/screenshots/login.png",
+    "public/tutorial/screenshots/dashboard.png",
+    "public/tutorial/screenshots/create-video.png",
+    "public/tutorial/screenshots/selling-point-templates.png",
+    "public/tutorial/screenshots/recent-results.png",
+    "public/tutorial/screenshots/advanced-parameters.png",
+    "public/tutorial/screenshots/advanced-parameters-top.png",
+    "public/tutorial/screenshots/asset-center.png",
+    "public/tutorial/screenshots/asset-materials.png",
+    "public/tutorial/screenshots/asset-reuse.png",
+    "public/tutorial/screenshots/benchmark-create.png",
+    "public/tutorial/screenshots/task-center.png"
+  ]
+}

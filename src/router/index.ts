@@ -350,30 +350,8 @@ const routes: RouteRecordRaw[] = [
       {
         path: 'help/tutorials',
         name: 'help-tutorials',
-        component: () => import('../pages/workbench/WorkbenchInfoPage.vue'),
-        props: {
-          eyebrow: '帮助中心',
-          title: '帮助中心',
-          description: '围绕汽车销售一键成片、资产复用和 AI 资产生产工具整理使用教程。',
-          cards: [
-            {
-              title: '汽车销售一键成片',
-              description: '从需求描述、车辆图片、高级参数到 AI 方案确认和任务结果验收。',
-              status: '整理中',
-            },
-            {
-              title: '资产复用创作',
-              description: '从资产中心选择车辆、文案、分镜、数字人和 BGM，组合后进入一键生成。',
-              status: '整理中',
-            },
-            {
-              title: 'AI 资产生产工具',
-              description: '爆款对标、分镜生成、数字人形象和声音生成的独立使用方式。',
-              status: '整理中',
-            },
-          ],
-        },
-        meta: { public: true, menuKey: 'help-tutorials', title: '帮助中心' },
+        component: () => import('../pages/help/TutorialPage.vue'),
+        meta: { public: true, menuKey: 'help-tutorials', title: '使用教程' },
       },
       {
         path: 'help/faq',
@@ -558,7 +536,7 @@ const recentToolTitles: Partial<Record<WorkbenchRouteName, string>> = {
   'system-favorites': '我的收藏',
   'system-preferences': '偏好设置',
   help: '帮助中心',
-  'help-tutorials': '帮助中心',
+  'help-tutorials': '使用教程',
   'help-faq': '常见问题',
   'help-changelog': '更新日志',
   'help-contact': '联系客服',
