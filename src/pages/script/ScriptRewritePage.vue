@@ -1,56 +1,9 @@
 <template>
   <div class="script-workspace">
     <header class="tool-page-hero">
-      <h1>文案生成</h1>
-      <p>解析或改写销售文案，沉淀可复用口播脚本。</p>
+      <h1>爆款对标</h1>
+      <p>解析对标视频，沉淀可复用口播脚本和爆款分析。</p>
     </header>
-    <section class="app-card copy-template-panel">
-      <div class="copy-template-head">
-        <div>
-          <p>AI 匹配文案模板</p>
-          <h2>选择文案模板</h2>
-          <span>当前卖点：{{ selectedCopyTemplate?.sellingPoint || '家用空间' }}</span>
-        </div>
-        <div class="copy-template-tabs" role="tablist" aria-label="文案模板分类">
-          <button
-            v-for="item in copyTemplateCategories"
-            :key="item.value"
-            type="button"
-            :class="{ active: selectedCopyTemplateCategory === item.value }"
-            @click="selectCopyTemplateCategory(item.value)"
-          >
-            {{ item.label }}
-          </button>
-        </div>
-      </div>
-
-      <div class="copy-template-list">
-        <article
-          v-for="template in visibleCopyTemplates"
-          :key="template.id"
-          class="copy-template-option"
-          :class="{ active: selectedCopyTemplateId === template.id }"
-          @click="selectedCopyTemplateId = template.id"
-        >
-          <span class="copy-template-radio" aria-hidden="true"></span>
-          <div>
-            <strong>{{ template.title }}</strong>
-            <p>{{ template.copy }}</p>
-            <small>{{ template.scene }} · {{ template.tone }}</small>
-          </div>
-          <b>{{ selectedCopyTemplateId === template.id ? '已选' : '推荐' }}</b>
-        </article>
-      </div>
-
-      <div class="copy-template-actions">
-        <button type="button" class="app-secondary-button" @click="selectedCopyTemplateId = copyTemplateOptions[0]?.id || ''">
-          取消
-        </button>
-        <button type="button" class="app-primary-button" :disabled="!selectedCopyTemplate" @click="applySelectedCopyTemplate">
-          确认选择
-        </button>
-      </div>
-    </section>
 
     <section class="app-card script-panel script-panel-side">
       <div class="app-section-title">
@@ -154,75 +107,9 @@ import { computed, onMounted, ref } from 'vue'
 import { applyWriterScript, parseDouyinVideo, updateWriterScript } from '../../services/writerApi'
 import type { DouyinParseResponse, WriterScriptItem } from '../../types/writerTypes'
 
-interface CopyTemplateOption {
-  id: string
-  category: string
-  title: string
-  sellingPoint: string
-  scene: string
-  tone: string
-  copy: string
-}
-
 const emit = defineEmits<{
   continue: []
 }>()
-
-const copyTemplateCategories = [
-  { value: 'all', label: '全部' },
-  { value: 'family', label: '家用空间' },
-  { value: 'smart', label: '智能座舱' },
-  { value: 'exterior', label: '外观颜值' },
-  { value: 'promo', label: '促销活动' },
-]
-
-const copyTemplateOptions: CopyTemplateOption[] = [
-  {
-    id: 'copy-family-01',
-    category: 'family',
-    title: '文案模板-01 家用空间文案',
-    sellingPoint: '家用空间',
-    scene: '家庭通勤',
-    tone: '亲和转化',
-    copy: '空间不够用？这台车把全家出行都安排得明明白白。后排宽敞，后备箱能装下露营装备和儿童用品，日常通勤舒适，周末出游也安心。现在到店试驾，享限时权益。',
-  },
-  {
-    id: 'copy-family-02',
-    category: 'family',
-    title: '文案模板-02 舒适通勤文案',
-    sellingPoint: '家用空间',
-    scene: '城市代步',
-    tone: '稳重清晰',
-    copy: '每天上下班、接送家人、周末短途出行，一台车要舒适也要省心。宽敞座舱配合灵活储物，让一家人的行李和生活小物都有位置。',
-  },
-  {
-    id: 'copy-smart-01',
-    category: 'smart',
-    title: '文案模板-03 智能座舱文案',
-    sellingPoint: '智能座舱',
-    scene: '年轻用户',
-    tone: '科技感',
-    copy: '上车一句话，导航、音乐和空调快速响应。智能座舱让通勤更轻松，大屏交互清晰，辅助驾驶配置也更适合城市路况。',
-  },
-  {
-    id: 'copy-exterior-01',
-    category: 'exterior',
-    title: '文案模板-04 外观展示文案',
-    sellingPoint: '外观颜值',
-    scene: '门店实拍',
-    tone: '质感表达',
-    copy: '第一眼就有高级感。车身线条利落，灯组细节醒目，停在门店也能拍出大片质感，适合想要颜值和实用兼顾的用户。',
-  },
-  {
-    id: 'copy-promo-01',
-    category: 'promo',
-    title: '文案模板-05 到店促销文案',
-    sellingPoint: '到店促销',
-    scene: '门店转化',
-    tone: '行动号召',
-    copy: '近期到店看车更划算，预约试驾可享专属权益。现车可看，金融方案灵活，想了解落地价和置换补贴，现在就联系门店顾问。',
-  },
-]
 
 const videoUrl = ref('')
 const sourceScript = ref('')
@@ -233,8 +120,6 @@ const parsing = ref(false)
 const saving = ref(false)
 const parseError = ref('')
 const scriptError = ref('')
-const selectedCopyTemplateCategory = ref('all')
-const selectedCopyTemplateId = ref(copyTemplateOptions[0].id)
 
 const analysisItems = computed(() => {
   if (!parseResult.value) {
@@ -250,14 +135,6 @@ const analysisItems = computed(() => {
     { index: '6', label: '爆款原因', value: analysis.hotReason },
   ].filter((item) => item.value)
 })
-const visibleCopyTemplates = computed(() =>
-  selectedCopyTemplateCategory.value === 'all'
-    ? copyTemplateOptions
-    : copyTemplateOptions.filter((item) => item.category === selectedCopyTemplateCategory.value),
-)
-const selectedCopyTemplate = computed(() =>
-  copyTemplateOptions.find((item) => item.id === selectedCopyTemplateId.value) || null,
-)
 
 onMounted(async () => {
   parseResult.value = undefined
@@ -267,23 +144,6 @@ onMounted(async () => {
   parseError.value = ''
   scriptError.value = ''
 })
-
-function applySelectedCopyTemplate() {
-  if (!selectedCopyTemplate.value) {
-    return
-  }
-  finalScript.value = selectedCopyTemplate.value.copy
-  if (!sourceScript.value) {
-    sourceScript.value = selectedCopyTemplate.value.copy
-  }
-  scriptError.value = ''
-}
-
-function selectCopyTemplateCategory(category: string) {
-  selectedCopyTemplateCategory.value = category
-  selectedCopyTemplateId.value =
-    (category === 'all' ? copyTemplateOptions[0] : copyTemplateOptions.find((item) => item.category === category))?.id || ''
-}
 
 async function handleParseDouyin() {
   if (!videoUrl.value) {
@@ -371,154 +231,6 @@ function resetParsedContent() {
   grid-template-columns: minmax(320px, 0.82fr) minmax(0, 1.18fr);
   gap: 16px;
   align-items: start;
-}
-
-.copy-template-panel {
-  display: grid;
-  grid-column: 1 / -1;
-  gap: 16px;
-  border-radius: 8px;
-}
-
-.copy-template-head {
-  display: flex;
-  align-items: flex-start;
-  justify-content: space-between;
-  gap: 18px;
-}
-
-.copy-template-head p,
-.copy-template-head h2,
-.copy-template-head span {
-  margin: 0;
-}
-
-.copy-template-head p {
-  color: #155eef;
-  font-size: 12px;
-  font-weight: 900;
-}
-
-.copy-template-head h2 {
-  margin-top: 4px;
-  color: #101828;
-  font-size: 20px;
-  font-weight: 900;
-}
-
-.copy-template-head span {
-  display: block;
-  margin-top: 6px;
-  color: #667085;
-  font-size: 13px;
-}
-
-.copy-template-tabs {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 8px;
-  justify-content: flex-end;
-}
-
-.copy-template-tabs button {
-  min-height: 32px;
-  border: 1px solid #dfe7f5;
-  border-radius: 8px;
-  background: #fff;
-  color: #344054;
-  cursor: pointer;
-  font-size: 12px;
-  font-weight: 850;
-  padding: 0 12px;
-}
-
-.copy-template-tabs button.active {
-  border-color: #bfdbfe;
-  background: #eff6ff;
-  color: #155eef;
-}
-
-.copy-template-list {
-  display: grid;
-  gap: 10px;
-}
-
-.copy-template-option {
-  display: grid;
-  grid-template-columns: 18px minmax(0, 1fr) auto;
-  gap: 12px;
-  align-items: start;
-  border: 1px solid #e6ecf7;
-  border-radius: 8px;
-  background: #fff;
-  cursor: pointer;
-  padding: 12px 14px;
-}
-
-.copy-template-option.active {
-  border-color: #155eef;
-  background: #f8fbff;
-  box-shadow: 0 0 0 3px rgba(21, 94, 239, 0.08);
-}
-
-.copy-template-radio {
-  display: block;
-  width: 14px;
-  height: 14px;
-  margin-top: 4px;
-  border: 1px solid #cbd5e1;
-  border-radius: 50%;
-  background: #fff;
-}
-
-.copy-template-option.active .copy-template-radio {
-  border: 4px solid #155eef;
-}
-
-.copy-template-option strong,
-.copy-template-option p,
-.copy-template-option small {
-  display: block;
-  margin: 0;
-}
-
-.copy-template-option strong {
-  color: #101828;
-  font-size: 14px;
-  font-weight: 900;
-}
-
-.copy-template-option p {
-  margin-top: 8px;
-  color: #344054;
-  font-size: 13px;
-  line-height: 1.7;
-  display: -webkit-box;
-  overflow: hidden;
-  -webkit-box-orient: vertical;
-  -webkit-line-clamp: 2;
-}
-
-.copy-template-option small {
-  margin-top: 8px;
-  color: #667085;
-  font-size: 12px;
-  font-weight: 750;
-}
-
-.copy-template-option b {
-  align-self: start;
-  border-radius: 999px;
-  background: #eff6ff;
-  color: #155eef;
-  font-size: 12px;
-  padding: 4px 9px;
-}
-
-.copy-template-actions {
-  display: grid;
-  grid-template-columns: minmax(120px, 1fr) minmax(160px, 1fr);
-  gap: 12px;
 }
 
 .script-panel {
@@ -686,26 +398,12 @@ function resetParsedContent() {
 }
 
 @media (max-width: 640px) {
-  .copy-template-head,
   .script-input-row,
   .script-current-card {
     grid-template-columns: 1fr;
   }
 
-  .copy-template-head {
-    display: grid;
-  }
-
-  .copy-template-tabs {
-    justify-content: flex-start;
-  }
-
-  .copy-template-option,
   .script-video-card {
-    grid-template-columns: 1fr;
-  }
-
-  .copy-template-actions {
     grid-template-columns: 1fr;
   }
 }

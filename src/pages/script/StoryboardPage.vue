@@ -4,56 +4,6 @@
       <h1>分镜生成</h1>
       <p>解析脚本或参考视频，生成可编辑的镜头结构。</p>
     </header>
-    <section class="app-card storyboard-template-panel">
-      <div class="storyboard-template-head">
-        <div>
-          <p>AI 匹配分镜模板</p>
-          <h2>选择分镜模板</h2>
-          <span>当前卖点：{{ selectedStoryboardTemplate?.sellingPoint || '空间展示' }}</span>
-        </div>
-        <div class="storyboard-template-tabs" role="tablist" aria-label="分镜模板分类">
-          <button
-            v-for="item in storyboardTemplateCategories"
-            :key="item.value"
-            type="button"
-            :class="{ active: selectedStoryboardTemplateCategory === item.value }"
-            @click="selectStoryboardTemplateCategory(item.value)"
-          >
-            {{ item.label }}
-          </button>
-        </div>
-      </div>
-
-      <div class="storyboard-template-grid">
-        <article
-          v-for="template in visibleStoryboardTemplates"
-          :key="template.id"
-          class="storyboard-template-card"
-          :class="{ active: selectedStoryboardTemplateId === template.id }"
-          @click="selectedStoryboardTemplateId = template.id"
-        >
-          <div class="storyboard-template-cover">
-            <i v-if="selectedStoryboardTemplateId === template.id" aria-hidden="true">✓</i>
-            <span>{{ template.shotCount }} 个镜头</span>
-            <strong>{{ template.duration }}</strong>
-          </div>
-          <div>
-            <strong>{{ template.title }}</strong>
-            <p>{{ template.description }}</p>
-            <small>{{ template.sellingPoint }} · {{ template.duration }}</small>
-          </div>
-        </article>
-      </div>
-
-      <div class="storyboard-template-actions">
-        <button type="button" class="app-secondary-button" @click="selectedStoryboardTemplateId = storyboardTemplateOptions[0]?.id || ''">
-          取消
-        </button>
-        <button type="button" class="app-primary-button" :disabled="!selectedStoryboardTemplate" @click="applySelectedStoryboardTemplate">
-          确认选择
-        </button>
-      </div>
-    </section>
 
     <section class="app-card storyboard-input">
         <div class="app-section-title">
@@ -327,17 +277,6 @@ import { notifyAuthRefresh } from '../../services/authRefreshHub'
 
 type SourceMode = 'url' | 'file'
 
-interface StoryboardTemplateOption {
-  id: string
-  category: string
-  title: string
-  sellingPoint: string
-  duration: string
-  shotCount: number
-  description: string
-  shots: VideoScriptShotItem[]
-}
-
 type StoryboardPlatformOption = {
   value: string
   label: string
@@ -397,112 +336,8 @@ const platformOptions: StoryboardPlatformOption[] = [
   },
 ]
 
-const storyboardTemplateCategories = [
-  { value: 'all', label: '全部' },
-  { value: 'space', label: '空间展示' },
-  { value: 'exterior', label: '外观展示' },
-  { value: 'smart', label: '智能体验' },
-  { value: 'promo', label: '促销转化' },
-]
-
-const storyboardTemplateOptions: StoryboardTemplateOption[] = [
-  {
-    id: 'story-space-01',
-    category: 'space',
-    title: '空间展示模板',
-    sellingPoint: '家用空间',
-    duration: '15秒',
-    shotCount: 4,
-    description: '外观开场、后排空间、后备箱容量、到店试驾引导。',
-    shots: [
-      { order: 1, time: '00:00:00-00:00:04', page: '车辆外观驶入画面，建立家庭 SUV 质感。', backgroundMusic: '轻快、温暖', content: '空间大，出行更舒适。', highlight: '用正侧外观建立第一印象' },
-      { order: 2, time: '00:00:04-00:00:08', page: '切换后排座椅和腿部空间，展示乘坐舒适度。', backgroundMusic: '轻快、温暖', content: '后排宽敞，长途乘坐也轻松。', highlight: '重点拍摄后排腿部空间' },
-      { order: 3, time: '00:00:08-00:00:12', page: '后备箱打开，放入露营装备和日常物品。', backgroundMusic: '轻快、温暖', content: '后备箱能装下全家出游装备。', highlight: '突出装载能力' },
-      { order: 4, time: '00:00:12-00:00:15', page: '门店顾问出镜或门店外景，引导预约试驾。', backgroundMusic: '轻快、收束', content: '现在到店试驾，享限时权益。', highlight: '收束到转化动作' },
-    ],
-  },
-  {
-    id: 'story-exterior-01',
-    category: 'exterior',
-    title: '外观展示模板',
-    sellingPoint: '外观颜值',
-    duration: '15秒',
-    shotCount: 4,
-    description: '车头、侧身、灯组、轮毂四段展示外观质感。',
-    shots: [
-      { order: 1, time: '00:00:00-00:00:04', page: '车头低角度推进，突出前脸设计。', backgroundMusic: '节奏感', content: '第一眼，就有高级感。', highlight: '低机位推进' },
-      { order: 2, time: '00:00:04-00:00:08', page: '侧身线条和腰线扫过。', backgroundMusic: '节奏感', content: '车身线条利落，动感更足。', highlight: '横向运镜' },
-      { order: 3, time: '00:00:08-00:00:12', page: '灯组和轮毂细节特写。', backgroundMusic: '节奏感', content: '细节到位，拍出来也好看。', highlight: '特写切换' },
-      { order: 4, time: '00:00:12-00:00:15', page: '车辆停在门店外，叠加到店引导。', backgroundMusic: '收束', content: '喜欢这台车，欢迎到店实拍看车。', highlight: '门店转化' },
-    ],
-  },
-  {
-    id: 'story-smart-01',
-    category: 'smart',
-    title: '智能体验模板',
-    sellingPoint: '智能座舱',
-    duration: '15秒',
-    shotCount: 4,
-    description: '中控大屏、语音交互、辅助驾驶和年轻通勤场景。',
-    shots: [
-      { order: 1, time: '00:00:00-00:00:04', page: '中控大屏亮起，展示座舱科技感。', backgroundMusic: '科技感', content: '智能座舱，上车就懂你。', highlight: '屏幕点亮' },
-      { order: 2, time: '00:00:04-00:00:08', page: '语音控制导航、音乐或空调。', backgroundMusic: '科技感', content: '一句话，导航音乐轻松安排。', highlight: '突出交互效率' },
-      { order: 3, time: '00:00:08-00:00:12', page: '道路行驶画面，展示辅助驾驶提示。', backgroundMusic: '科技感', content: '通勤路上，更轻松也更安心。', highlight: '安全感表达' },
-      { order: 4, time: '00:00:12-00:00:15', page: '年轻用户上车离开，收束品牌感。', backgroundMusic: '收束', content: '来店体验智能座舱的顺手感。', highlight: '体验邀约' },
-    ],
-  },
-  {
-    id: 'story-smart-02',
-    category: 'smart',
-    title: '科技亮点模板',
-    sellingPoint: '智能座舱',
-    duration: '15秒',
-    shotCount: 4,
-    description: '屏幕、语音、泊车辅助和年轻用户体验的节奏化组合。',
-    shots: [
-      { order: 1, time: '00:00:00-00:00:04', page: '屏幕动效和仪表信息展示。', backgroundMusic: '科技节奏', content: '科技感，从上车这一刻开始。', highlight: '屏幕特写' },
-      { order: 2, time: '00:00:04-00:00:08', page: '语音唤醒和导航路线出现。', backgroundMusic: '科技节奏', content: '导航、音乐，一句话搞定。', highlight: '语音交互' },
-      { order: 3, time: '00:00:08-00:00:12', page: '泊车或辅助驾驶提示画面。', backgroundMusic: '科技节奏', content: '城市通勤，更轻松。', highlight: '辅助能力' },
-      { order: 4, time: '00:00:12-00:00:15', page: '用户下车回望车辆，收束体验。', backgroundMusic: '收束', content: '到店体验，才知道多顺手。', highlight: '体验转化' },
-    ],
-  },
-  {
-    id: 'story-promo-01',
-    category: 'promo',
-    title: '试驾促销模板',
-    sellingPoint: '到店促销',
-    duration: '15秒',
-    shotCount: 5,
-    description: '门店、顾问、权益、现车和预约试驾五段转化。',
-    shots: [
-      { order: 1, time: '00:00:00-00:00:03', page: '门店外景或展厅入口。', backgroundMusic: '轻快', content: '近期到店看车更划算。', highlight: '建立门店真实感' },
-      { order: 2, time: '00:00:03-00:00:06', page: '销售顾问介绍车辆亮点。', backgroundMusic: '轻快', content: '现车可看，配置清楚讲。', highlight: '顾问出镜' },
-      { order: 3, time: '00:00:06-00:00:09', page: '权益字幕或大字报。', backgroundMusic: '轻快', content: '预约试驾享专属权益。', highlight: '权益强化' },
-      { order: 4, time: '00:00:09-00:00:12', page: '客户试驾或车辆出发。', backgroundMusic: '轻快', content: '亲自开一圈，感受更直接。', highlight: '行动画面' },
-      { order: 5, time: '00:00:12-00:00:15', page: '联系方式和到店引导。', backgroundMusic: '收束', content: '现在联系门店顾问。', highlight: '强转化' },
-    ],
-  },
-  {
-    id: 'story-promo-02',
-    category: 'promo',
-    title: '价格权益模板',
-    sellingPoint: '价格优惠',
-    duration: '15秒',
-    shotCount: 4,
-    description: '落地价咨询、金融方案、置换补贴和限时到店权益。',
-    shots: [
-      { order: 1, time: '00:00:00-00:00:04', page: '门店现车陈列，叠加限时权益。', backgroundMusic: '轻快', content: '近期看车，权益更合适。', highlight: '权益开场' },
-      { order: 2, time: '00:00:04-00:00:08', page: '顾问展示金融方案或配置单。', backgroundMusic: '轻快', content: '金融方案灵活，落地价清楚算。', highlight: '价格信息' },
-      { order: 3, time: '00:00:08-00:00:12', page: '置换补贴和礼包信息展示。', backgroundMusic: '轻快', content: '置换、礼包，到店详细了解。', highlight: '补贴强化' },
-      { order: 4, time: '00:00:12-00:00:15', page: '预约试驾按钮或门店联系方式。', backgroundMusic: '收束', content: '现在预约试驾，锁定专属权益。', highlight: '行动号召' },
-    ],
-  },
-]
-
 const sourceMode = ref<SourceMode>('url')
 const selectedPlatform = ref('auto')
-const selectedStoryboardTemplateCategory = ref('all')
-const selectedStoryboardTemplateId = ref(storyboardTemplateOptions[0].id)
 
 // 与 WriterAsyncTaskService 一致：链接 -> VIDEO_SCRIPT_URL_ANALYZE，上传解析 -> VIDEO_SCRIPT_ANALYZE。
 const storyboardEstimate = useBillingEstimate({
@@ -555,15 +390,6 @@ const videoPlaceholder = computed(
 const selectedPlatformLimitReason = computed(
   () => platformOptions.find((option) => option.value === selectedPlatform.value)?.limitReason || '',
 )
-const visibleStoryboardTemplates = computed(() =>
-  selectedStoryboardTemplateCategory.value === 'all'
-    ? storyboardTemplateOptions
-    : storyboardTemplateOptions.filter((item) => item.category === selectedStoryboardTemplateCategory.value),
-)
-const selectedStoryboardTemplate = computed(() =>
-  storyboardTemplateOptions.find((item) => item.id === selectedStoryboardTemplateId.value) || null,
-)
-
 const ORDER_CN = ['一', '二', '三', '四', '五', '六', '七', '八', '九', '十']
 
 function orderLabel(order: number) {
@@ -750,27 +576,6 @@ function resetResult() {
   analyzedVideoUrl.value = ''
 }
 
-function selectStoryboardTemplateCategory(category: string) {
-  selectedStoryboardTemplateCategory.value = category
-  selectedStoryboardTemplateId.value =
-    (category === 'all' ? storyboardTemplateOptions[0] : storyboardTemplateOptions.find((item) => item.category === category))?.id || ''
-}
-
-function applySelectedStoryboardTemplate() {
-  if (!selectedStoryboardTemplate.value) {
-    return
-  }
-  stopAnalyzeTask()
-  analyzeAbort?.abort()
-  busy.value = false
-  cancelingAnalyze.value = false
-  currentAnalyzeTaskId = null
-  errorMessage.value = ''
-  stage.value = ''
-  analyzedVideoUrl.value = ''
-  shots.value = selectedStoryboardTemplate.value.shots.map((shot) => ({ ...shot }))
-}
-
 async function runAnalyze(submit: (signal: AbortSignal) => Promise<TaskItem>, targetUrl: string) {
   const runId = ++analyzeRunSeq
   stopAnalyzeTask()
@@ -944,177 +749,6 @@ async function handleAnalyzeFile() {
   gap: 16px;
   margin-right: 10px;
   margin-left: 10px;
-}
-
-.storyboard-template-panel {
-  display: grid;
-  grid-column: 1 / -1;
-  gap: 16px;
-  border-radius: 8px;
-}
-
-.storyboard-template-head {
-  display: flex;
-  align-items: flex-start;
-  justify-content: space-between;
-  gap: 18px;
-}
-
-.storyboard-template-head p,
-.storyboard-template-head h2,
-.storyboard-template-head span {
-  margin: 0;
-}
-
-.storyboard-template-head p {
-  color: #155eef;
-  font-size: 12px;
-  font-weight: 900;
-}
-
-.storyboard-template-head h2 {
-  margin-top: 4px;
-  color: #101828;
-  font-size: 20px;
-  font-weight: 900;
-}
-
-.storyboard-template-head span {
-  display: block;
-  margin-top: 6px;
-  color: #667085;
-  font-size: 13px;
-}
-
-.storyboard-template-tabs {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 8px;
-  justify-content: flex-end;
-}
-
-.storyboard-template-tabs button {
-  min-height: 32px;
-  border: 1px solid #dfe7f5;
-  border-radius: 8px;
-  background: #fff;
-  color: #344054;
-  cursor: pointer;
-  font-size: 12px;
-  font-weight: 850;
-  padding: 0 12px;
-}
-
-.storyboard-template-tabs button.active {
-  border-color: #bfdbfe;
-  background: #eff6ff;
-  color: #155eef;
-}
-
-.storyboard-template-grid {
-  display: grid;
-  grid-template-columns: repeat(4, minmax(0, 1fr));
-  gap: 14px;
-}
-
-.storyboard-template-card {
-  display: grid;
-  gap: 10px;
-  border: 1px solid #e6ecf7;
-  border-radius: 8px;
-  background: #fff;
-  cursor: pointer;
-  padding: 8px;
-}
-
-.storyboard-template-card.active {
-  border-color: #155eef;
-  background: #f8fbff;
-  box-shadow: 0 0 0 3px rgba(21, 94, 239, 0.08);
-}
-
-.storyboard-template-cover {
-  position: relative;
-  display: grid;
-  aspect-ratio: 16 / 9;
-  align-content: end;
-  gap: 4px;
-  border-radius: 8px;
-  background:
-    linear-gradient(180deg, rgba(16, 24, 40, 0.03), rgba(16, 24, 40, 0.72)),
-    linear-gradient(135deg, #dbeafe, #94a3b8 48%, #1f2937);
-  color: #fff;
-  padding: 10px;
-}
-
-.storyboard-template-cover i {
-  position: absolute;
-  top: 8px;
-  left: 8px;
-  display: grid;
-  width: 20px;
-  height: 20px;
-  place-items: center;
-  border-radius: 999px;
-  background: #155eef;
-  color: #fff;
-  font-size: 12px;
-  font-style: normal;
-  font-weight: 900;
-}
-
-.storyboard-template-cover span,
-.storyboard-template-cover strong {
-  display: block;
-}
-
-.storyboard-template-cover span {
-  font-size: 12px;
-  font-weight: 850;
-}
-
-.storyboard-template-cover strong {
-  font-size: 16px;
-  font-weight: 900;
-}
-
-.storyboard-template-card div:not(.storyboard-template-cover) {
-  display: grid;
-  gap: 5px;
-}
-
-.storyboard-template-card strong,
-.storyboard-template-card p,
-.storyboard-template-card small {
-  margin: 0;
-}
-
-.storyboard-template-card strong {
-  color: #101828;
-  font-size: 14px;
-  font-weight: 900;
-}
-
-.storyboard-template-card p {
-  color: #344054;
-  font-size: 12px;
-  line-height: 1.55;
-  display: -webkit-box;
-  overflow: hidden;
-  -webkit-box-orient: vertical;
-  -webkit-line-clamp: 2;
-}
-
-.storyboard-template-card small {
-  color: #667085;
-  font-size: 12px;
-  font-weight: 750;
-}
-
-.storyboard-template-actions {
-  display: grid;
-  grid-template-columns: minmax(120px, 1fr) minmax(160px, 1fr);
-  gap: 12px;
 }
 
 .storyboard-head h1 {
@@ -1803,10 +1437,6 @@ async function handleAnalyzeFile() {
   .storyboard-page {
     width: calc(100% - 32px);
   }
-
-  .storyboard-template-grid {
-    grid-template-columns: repeat(2, minmax(0, 1fr));
-  }
 }
 
 @media (max-width: 560px) {
@@ -1821,19 +1451,9 @@ async function handleAnalyzeFile() {
 
   .storyboard-tabs,
   .storyboard-platforms,
-  .storyboard-actions,
-  .storyboard-template-grid,
-  .storyboard-template-actions {
+  .storyboard-actions {
     display: grid;
     grid-template-columns: 1fr;
-  }
-
-  .storyboard-template-head {
-    display: grid;
-  }
-
-  .storyboard-template-tabs {
-    justify-content: flex-start;
   }
 
   .storyboard-file-picker {

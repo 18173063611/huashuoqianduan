@@ -140,7 +140,6 @@ import { useRoute, useRouter } from 'vue-router'
 import {
   ArrowDown,
   DataAnalysis,
-  Document,
   FolderOpened,
   MagicStick,
   Microphone,
@@ -216,13 +215,6 @@ const menuSections: MenuSection[] = [
         icon: DataAnalysis,
         title: '爆款对标',
         subtitle: '解析参考视频，沉淀口播文案、对标分析和可复用素材。',
-      },
-      {
-        key: 'script-rewrite',
-        label: '文案生成',
-        icon: Document,
-        title: '文案生成',
-        subtitle: '解析或改写销售文案，沉淀可复用口播脚本。',
       },
       {
         key: 'storyboard',

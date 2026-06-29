@@ -167,12 +167,12 @@ const routes: RouteRecordRaw[] = [
         component: () => import('../pages/script/StoryboardPage.vue'),
         meta: { ...businessRouteMeta, menuKey: 'storyboard' },
       },
-      {
-        path: 'copywriting',
-        name: 'script-rewrite',
-        component: () => import('../pages/script/ScriptRewritePage.vue'),
-        meta: { ...businessRouteMeta, menuKey: 'script-rewrite', title: '文案生成' },
-      },
+        {
+          path: 'copywriting',
+          name: 'script-rewrite',
+          component: () => import('../pages/script/ScriptRewritePage.vue'),
+          meta: { ...businessRouteMeta, menuKey: 'script-rewrite', title: '爆款对标' },
+        },
       {
         path: 'voice',
         name: 'voice',
@@ -301,7 +301,7 @@ const routes: RouteRecordRaw[] = [
             },
             {
               title: '最近工具',
-              description: '后续记录爆款对标、文案生成、分镜生成等工具使用历史。',
+              description: '后续记录爆款对标、分镜生成等工具使用历史。',
               status: '规划中',
             },
           ],
@@ -361,7 +361,7 @@ const routes: RouteRecordRaw[] = [
             },
             {
               title: 'AI 资产生产工具',
-              description: '爆款对标、文案生成、分镜生成、数字人形象和声音生成的独立使用方式。',
+              description: '爆款对标、分镜生成、数字人形象和声音生成的独立使用方式。',
               status: '整理中',
             },
           ],
@@ -537,9 +537,9 @@ router.beforeEach(async (to) => {
 
 const recentToolTitles: Partial<Record<WorkbenchRouteName, string>> = {
   render: 'AI 智能创作',
-  'video-parse': '爆款对标创作',
+  'video-parse': '爆款对标',
   'asset-reuse': '资产复用创作',
-  'script-rewrite': '文案生成',
+  'script-rewrite': '爆款对标',
   storyboard: '分镜生成',
   avatar: '数字人形象',
   voice: '声音生成',
@@ -558,7 +558,7 @@ const recentToolTitles: Partial<Record<WorkbenchRouteName, string>> = {
 
 const recentToolSubtitles: Partial<Record<WorkbenchRouteName, string>> = {
   render: '创作中心',
-  'video-parse': '创作中心',
+  'video-parse': 'AI 资产生产工具',
   'asset-reuse': '创作中心',
   'script-rewrite': 'AI 资产生产工具',
   storyboard: 'AI 资产生产工具',
@@ -586,14 +586,17 @@ router.afterEach((to) => {
     return
   }
   const workbenchRouteName = routeName as WorkbenchRouteName
+  const entry = to.query.entry
+  const isBenchmarkCreation = routeName === 'video-parse' && (Array.isArray(entry) ? entry[0] : entry) === 'creation'
   const title =
+    (isBenchmarkCreation ? '爆款对标创作' : undefined) ||
     recentToolTitles[workbenchRouteName] ||
     (typeof to.meta.title === 'string' ? to.meta.title : routeName)
   recordRecentTool({
     routeName,
     path: to.fullPath,
     title,
-    subtitle: recentToolSubtitles[workbenchRouteName],
+    subtitle: isBenchmarkCreation ? '创作中心' : recentToolSubtitles[workbenchRouteName],
   })
 })
 

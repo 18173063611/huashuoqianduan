@@ -5,7 +5,7 @@
         <div class="benchmark-title-line">
           <div>
             <h1>
-              爆款对标创作
+              {{ benchmarkPageTitle }}
               <span class="benchmark-head-tag">爆款驱动</span>
             </h1>
             <p>从优秀案例中提炼卖点、文案和成片结构。</p>
@@ -1213,6 +1213,11 @@ const router = useRouter()
 const route = useRoute()
 const { requireAuth } = useAuthRequired()
 const carSalesPreferences = loadCarSalesPreferences()
+const isBenchmarkCreationEntry = computed(() => {
+  const entry = route.query.entry
+  return (Array.isArray(entry) ? entry[0] : entry) === 'creation'
+})
+const benchmarkPageTitle = computed(() => isBenchmarkCreationEntry.value ? '爆款对标创作' : '爆款对标')
 
 const emit = defineEmits<{
   continue: []
@@ -2931,7 +2936,7 @@ function buildBenchmarkPlanDraft(): CarSalesPlanDraft {
     hostAppearanceEnabled: settings.hostAppearanceEnabled,
     subtitleOverlay: settings.subtitleOverlay,
     headlineOverlay: settings.headlineOverlay,
-    creationMode: '爆款对标创作',
+    creationMode: benchmarkPageTitle.value,
     chainType: 'benchmark',
     videoType: effectiveVideoType,
     hasDigitalHuman: settings.hostAppearanceEnabled,
