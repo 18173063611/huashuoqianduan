@@ -637,6 +637,145 @@
                     <strong>大字报</strong>
                     <span>{{ assetReuseHeadlineSettingSummary }}</span>
                   </div>
+                  <div class="reuse-setting-grid reuse-setting-grid--packaging">
+                    <label class="reuse-setting-field">
+                      <span>字幕</span>
+                      <el-select v-model="assetReuseSubtitleMode" size="small">
+                        <el-option
+                          v-for="item in ASSET_REUSE_SUBTITLE_MODE_OPTIONS"
+                          :key="item.value"
+                          :label="item.label"
+                          :value="item.value"
+                        />
+                      </el-select>
+                    </label>
+                    <label class="reuse-setting-field">
+                      <span>字幕语言</span>
+                      <el-select v-model="assetReuseSubtitleLanguage" size="small" :disabled="assetReuseSubtitleMode === 'off'">
+                        <el-option
+                          v-for="item in ASSET_REUSE_LANGUAGE_OPTIONS"
+                          :key="item.value"
+                          :label="item.label"
+                          :value="item.value"
+                        />
+                      </el-select>
+                    </label>
+                    <label class="reuse-setting-switch">
+                      <span>烧录字幕</span>
+                      <el-switch v-model="assetReuseBurnInSubtitle" :disabled="assetReuseSubtitleMode === 'off'" />
+                    </label>
+                    <label class="reuse-setting-field">
+                      <span>字幕字体</span>
+                      <el-select v-model="assetReuseSubtitleFontFamily" size="small" :disabled="assetReuseSubtitleMode === 'off'">
+                        <el-option
+                          v-for="item in CAR_TEXT_FONT_OPTIONS"
+                          :key="item.value"
+                          :label="item.label"
+                          :value="item.value"
+                        />
+                      </el-select>
+                    </label>
+                    <label class="reuse-setting-field">
+                      <span>字幕位置</span>
+                      <el-select v-model="assetReuseSubtitlePosition" size="small" :disabled="assetReuseSubtitleMode === 'off'">
+                        <el-option
+                          v-for="item in assetReuseTextPositionOptions"
+                          :key="item.value"
+                          :label="item.label"
+                          :value="item.value"
+                        />
+                      </el-select>
+                    </label>
+                    <label class="reuse-setting-field">
+                      <span>字幕字号</span>
+                      <el-input-number
+                        v-model="assetReuseSubtitleFontSize"
+                        size="small"
+                        :min="20"
+                        :max="80"
+                        :step="2"
+                        :disabled="assetReuseSubtitleMode === 'off'"
+                      />
+                    </label>
+                    <label class="reuse-setting-field">
+                      <span>字幕文字颜色</span>
+                      <input
+                        v-model="assetReuseSubtitleTextColor"
+                        class="reuse-color-input"
+                        type="color"
+                        :disabled="assetReuseSubtitleMode === 'off'"
+                      />
+                    </label>
+                    <label class="reuse-setting-field">
+                      <span>字幕描边颜色</span>
+                      <input
+                        v-model="assetReuseSubtitleOutlineColor"
+                        class="reuse-color-input"
+                        type="color"
+                        :disabled="assetReuseSubtitleMode === 'off'"
+                      />
+                    </label>
+                    <div v-if="assetReuseSubtitleMode !== 'off'" class="reuse-style-preview">
+                      <span>字幕样式预览</span>
+                      <div class="reuse-overlay-preview" :class="`pos-${assetReuseSubtitlePosition}`">
+                        <b :style="assetReuseSubtitlePreviewStyle">{{ assetReuseSubtitlePreviewText }}</b>
+                      </div>
+                    </div>
+                    <label class="reuse-setting-switch">
+                      <span>大字报</span>
+                      <el-switch v-model="assetReuseHeadlineEnabled" />
+                    </label>
+                    <label v-if="assetReuseHeadlineEnabled" class="reuse-setting-field reuse-setting-field--wide">
+                      <span>大字报文案</span>
+                      <el-input v-model="assetReuseHeadlineText" maxlength="120" show-word-limit size="small" placeholder="例如：限时到店试驾权益" />
+                    </label>
+                    <label v-if="assetReuseHeadlineEnabled" class="reuse-setting-field">
+                      <span>大字报字体</span>
+                      <el-select v-model="assetReuseHeadlineFontFamily" size="small">
+                        <el-option
+                          v-for="item in CAR_TEXT_FONT_OPTIONS"
+                          :key="item.value"
+                          :label="item.label"
+                          :value="item.value"
+                        />
+                      </el-select>
+                    </label>
+                    <label v-if="assetReuseHeadlineEnabled" class="reuse-setting-field">
+                      <span>大字报位置</span>
+                      <el-select v-model="assetReuseHeadlinePosition" size="small">
+                        <el-option
+                          v-for="item in assetReuseTextPositionOptions"
+                          :key="item.value"
+                          :label="item.label"
+                          :value="item.value"
+                        />
+                      </el-select>
+                    </label>
+                    <label v-if="assetReuseHeadlineEnabled" class="reuse-setting-field">
+                      <span>大字报字号</span>
+                      <el-input-number
+                        v-model="assetReuseHeadlineFontSize"
+                        size="small"
+                        :min="48"
+                        :max="120"
+                        :step="4"
+                      />
+                    </label>
+                    <label v-if="assetReuseHeadlineEnabled" class="reuse-setting-field">
+                      <span>大字报文字颜色</span>
+                      <input v-model="assetReuseHeadlineTextColor" class="reuse-color-input" type="color" />
+                    </label>
+                    <label v-if="assetReuseHeadlineEnabled" class="reuse-setting-field">
+                      <span>大字报描边颜色</span>
+                      <input v-model="assetReuseHeadlineOutlineColor" class="reuse-color-input" type="color" />
+                    </label>
+                    <div v-if="assetReuseHeadlineEnabled" class="reuse-style-preview">
+                      <span>大字报样式预览</span>
+                      <div class="reuse-overlay-preview" :class="`pos-${assetReuseHeadlinePosition}`">
+                        <b :style="assetReuseHeadlinePreviewStyle">{{ assetReuseHeadlinePreviewText }}</b>
+                      </div>
+                    </div>
+                  </div>
                 </div>
               </details>
             </section>
