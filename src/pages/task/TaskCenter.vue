@@ -134,7 +134,7 @@
               :disabled="resultLoading"
               @click="openResult(card.task)"
             >
-              {{ card.active ? '查看进度' : '查看结果' }}
+              {{ myVideoActionLabel(card) }}
             </button>
             <RouterLink
               v-if="card.assetId"
@@ -252,13 +252,13 @@
               重试
             </button>
             <button
-              v-if="task.status === 'SUCCESS' || canOpenRunningProgress(task)"
+              v-if="canOpenTaskResult(task)"
               type="button"
               class="app-secondary-button task-open-asset"
               :disabled="resultLoading"
               @click="openResult(task)"
             >
-              {{ resultLoading && selectedTaskId === task.taskId ? '加载中...' : task.status === 'SUCCESS' ? '查看结果' : '查看进度' }}
+              {{ openTaskResultLabel(task) }}
             </button>
           </div>
         </div>
@@ -1531,6 +1531,46 @@ function canOpenRunningProgress(task: TaskItem) {
   return isCarSalesTask(task) && isActiveTask(task)
 }
 
+function hasReusableCarSalesSegments(task: TaskItem | null | undefined) {
+  if (!task || !isCarSalesTask(task)) {
+    return false
+  }
+  const output = taskOutputObject(task)
+  const segments = Array.isArray(output?.segmentVideos) ? output.segmentVideos.filter(isRecord) : []
+  if (segments.length > 0) {
+    return true
+  }
+  const completed = Number(output?.completedSegmentCount ?? Number.NaN)
+  return Number.isFinite(completed) && completed > 0
+}
+
+function canOpenTaskResult(task: TaskItem) {
+  return task.status === 'SUCCESS' || canOpenRunningProgress(task) || hasReusableCarSalesSegments(task)
+}
+
+function openTaskResultLabel(task: TaskItem) {
+  if (resultLoading.value && selectedTaskId.value === task.taskId) {
+    return '加载中...'
+  }
+  if (task.status === 'SUCCESS') {
+    return '查看结果'
+  }
+  if (hasReusableCarSalesSegments(task)) {
+    return '查看片段'
+  }
+  return '查看进度'
+}
+
+function myVideoActionLabel(card: MyVideoResultCard) {
+  if (card.active) {
+    return '查看进度'
+  }
+  if (card.task.status !== 'SUCCESS' && hasReusableCarSalesSegments(card.task)) {
+    return '查看片段'
+  }
+  return '查看结果'
+}
+
 function buildMyVideoResultCard(task: TaskItem): MyVideoResultCard {
   const output = taskOutputObject(task)
   const input = taskInputObject(task)
@@ -1965,12 +2005,12 @@ async function refreshSelectedResult(silent: boolean) {
   try {
     const [detail, taskResult] = await Promise.all([
       getTaskDetail(task.taskId).catch(() => task),
-      getTaskResult<unknown>(task.taskId),
+      getTaskResult<unknown>(task.taskId).catch(() => null),
     ])
     selectedResultTask.value = detail
     const parsedOutput = parseJsonObject(detail.outputJson)
     selectedOutputJson.value = parsedOutput ?? selectedOutputJson.value
-    selectedTaskResult.value = isRecord(taskResult.result) ? taskResult.result : parsedOutput
+    selectedTaskResult.value = isRecord(taskResult?.result) ? taskResult.result : parsedOutput
     if (detail.status === 'SUCCESS') {
       await markTaskViewed(task.taskId)
     }
