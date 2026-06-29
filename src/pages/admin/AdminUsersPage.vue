@@ -169,14 +169,7 @@ const emptyText = computed(() => getEmptyText(loading.value, total.value, hasFil
 
 const editorVisible = ref(false)
 const editingUserId = ref<number | null>(null)
-const userForm = reactive<AdminUserSaveRequest>({
-  username: '',
-  password: '',
-  displayName: '',
-  role: 'USER',
-  status: 'ENABLED',
-  remark: '',
-})
+const userForm = reactive<AdminUserSaveRequest>(emptyUserForm())
 
 const creditVisible = ref(false)
 const creditSaving = ref(false)
@@ -215,10 +208,23 @@ function hasFilter() {
   return Boolean(filters.keyword || filters.role || filters.status)
 }
 
+function emptyUserForm(): AdminUserSaveRequest {
+  return {
+    username: '',
+    password: '',
+    displayName: '',
+    role: 'USER',
+    status: 'ENABLED',
+    phone: '',
+    email: '',
+    remark: '',
+  }
+}
+
 function openCreate() {
   editingUserId.value = null
   protectedEditingUser.value = false
-  Object.assign(userForm, { username: '', password: '', displayName: '', role: 'USER', status: 'ENABLED', remark: '' })
+  Object.assign(userForm, emptyUserForm())
   editorVisible.value = true
 }
 
@@ -254,6 +260,8 @@ async function saveUser(payload: AdminUserSaveRequest) {
     ElMessage.success('账号已保存')
     editorVisible.value = false
     await loadUsers()
+  } catch (unknownError) {
+    ElMessage.error(unknownError instanceof Error ? unknownError.message : '账号保存失败')
   } finally {
     saving.value = false
   }
