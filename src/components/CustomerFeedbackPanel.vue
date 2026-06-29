@@ -1,5 +1,5 @@
 <template>
-  <div class="feedback-panel">
+  <div class="feedback-panel" @paste="handlePaste">
     <el-alert
       v-if="error"
       class="feedback-alert"
@@ -78,8 +78,19 @@
 
       <div v-if="attachments.length" class="feedback-attachments">
         <div v-for="file in attachments" :key="file.fileId" class="feedback-attachment">
-          <a :href="file.previewUrl" target="_blank" rel="noreferrer">{{ file.originalFileName }}</a>
-          <span>{{ formatFileSize(file.fileSize) }}</span>
+          <a
+            v-if="isImageAttachment(file)"
+            class="feedback-attachment-thumb"
+            :href="file.previewUrl"
+            target="_blank"
+            rel="noreferrer"
+          >
+            <img :src="file.previewUrl" :alt="file.originalFileName" loading="lazy" />
+          </a>
+          <div class="feedback-attachment-main">
+            <a :href="file.previewUrl" target="_blank" rel="noreferrer">{{ file.originalFileName }}</a>
+            <span>{{ formatFileSize(file.fileSize) }}</span>
+          </div>
           <button type="button" class="feedback-attachment-remove" @click="removeAttachment(file.fileId)">
             <el-icon><Close /></el-icon>
           </button>
@@ -104,6 +115,17 @@
           <el-tag :type="statusTagType(item.status)" effect="light">{{ statusLabel(item.status) }}</el-tag>
         </div>
         <p>{{ item.adminReply || item.content }}</p>
+        <div v-if="imageAttachments(item.attachments).length" class="feedback-history-images">
+          <a
+            v-for="file in imageAttachments(item.attachments)"
+            :key="file.fileId"
+            :href="file.previewUrl"
+            target="_blank"
+            rel="noreferrer"
+          >
+            <img :src="file.previewUrl" :alt="file.originalFileName" loading="lazy" />
+          </a>
+        </div>
         <div class="feedback-history-meta">
           <span>{{ categoryLabel(item.category) }}</span>
           <span>{{ formatDateTime(item.createdAt) }}</span>
@@ -122,6 +144,7 @@ import { createFeedback, listMyFeedback } from '../services/feedbackApi'
 import { uploadFile } from '../services/uploadApi'
 import type { UploadedFileItem } from '../types/uploadTypes'
 import type {
+  CustomerFeedbackAttachmentItem,
   CustomerFeedbackCategory,
   CustomerFeedbackItem,
   CustomerFeedbackPriority,
@@ -155,6 +178,7 @@ const submitting = ref(false)
 const historyLoading = ref(false)
 const error = ref('')
 const history = ref<CustomerFeedbackItem[]>([])
+const imageNamePattern = /\.(avif|bmp|gif|heic|heif|jpe?g|png|webp)$/i
 
 watch(
   () => props.panelActive,
@@ -175,6 +199,17 @@ async function handleFileChange(event: Event) {
   const files = Array.from(input.files || [])
   input.value = ''
   if (!files.length) return
+  await uploadSelectedFiles(files)
+}
+
+async function handlePaste(event: ClipboardEvent) {
+  const files = Array.from(event.clipboardData?.files || []).filter((file) => file.type.startsWith('image/'))
+  if (!files.length) return
+  event.preventDefault()
+  await uploadSelectedFiles(files)
+}
+
+async function uploadSelectedFiles(files: File[]) {
   if (attachments.value.length + files.length > 8) {
     ElMessage.warning('最多添加 8 个附件')
     return
@@ -293,6 +328,14 @@ function formatFileSize(size?: number | null) {
   if (size < 1024 * 1024) return `${(size / 1024).toFixed(1)} KB`
   return `${(size / 1024 / 1024).toFixed(1)} MB`
 }
+
+function isImageAttachment(file: Pick<UploadedFileItem, 'mimeType' | 'originalFileName'> | CustomerFeedbackAttachmentItem) {
+  return Boolean(file.mimeType?.toLowerCase().startsWith('image/')) || imageNamePattern.test(file.originalFileName)
+}
+
+function imageAttachments(files?: CustomerFeedbackAttachmentItem[]) {
+  return (files || []).filter(isImageAttachment).slice(0, 4)
+}
 </script>
 
 <style scoped>
@@ -357,23 +400,45 @@ function formatFileSize(size?: number | null) {
 .feedback-attachment {
   min-height: 38px;
   gap: 8px;
-  justify-content: space-between;
   border: 1px solid #edf0f5;
   border-radius: 6px;
   background: #f8fafc;
-  padding: 0 10px;
+  padding: 8px 10px;
 }
 
-.feedback-attachment a {
+.feedback-attachment-thumb {
+  display: block;
+  flex: 0 0 auto;
+  width: 54px;
+  height: 54px;
+  overflow: hidden;
+  border-radius: 6px;
+  background: #e5e7eb;
+}
+
+.feedback-attachment-thumb img,
+.feedback-history-images img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.feedback-attachment-main {
   min-width: 0;
   flex: 1;
+  display: grid;
+  gap: 4px;
+}
+
+.feedback-attachment-main a {
+  min-width: 0;
   overflow: hidden;
   color: var(--hs-primary);
   text-overflow: ellipsis;
   white-space: nowrap;
 }
 
-.feedback-attachment span {
+.feedback-attachment-main span {
   color: var(--hs-text-muted);
   font-size: 12px;
 }
@@ -457,6 +522,21 @@ function formatFileSize(size?: number | null) {
   line-height: 1.5;
   -webkit-box-orient: vertical;
   -webkit-line-clamp: 2;
+}
+
+.feedback-history-images {
+  display: flex;
+  gap: 8px;
+}
+
+.feedback-history-images a {
+  display: block;
+  width: 58px;
+  height: 58px;
+  overflow: hidden;
+  border: 1px solid #e5e7eb;
+  border-radius: 6px;
+  background: #f8fafc;
 }
 
 .feedback-history-meta {

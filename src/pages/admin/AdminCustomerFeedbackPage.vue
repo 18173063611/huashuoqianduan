@@ -150,6 +150,12 @@
               target="_blank"
               rel="noreferrer"
             >
+              <img
+                v-if="isImageAttachment(file)"
+                :src="file.previewUrl"
+                :alt="file.originalFileName"
+                loading="lazy"
+              />
               <span>{{ file.originalFileName }}</span>
               <small>{{ formatFileSize(file.fileSize) }}</small>
             </a>
@@ -199,6 +205,7 @@ import { Refresh, Search, View } from '@element-plus/icons-vue'
 import { getAdminFeedback, listAdminFeedback, updateAdminFeedback } from '../../services/adminApi'
 import type {
   CustomerFeedbackAdminQuery,
+  CustomerFeedbackAttachmentItem,
   CustomerFeedbackCategory,
   CustomerFeedbackItem,
   CustomerFeedbackPriority,
@@ -236,6 +243,7 @@ const saving = ref(false)
 const error = ref('')
 const total = ref(0)
 const emptyText = computed(() => getEmptyText(loading.value, total.value, hasFilter(), '暂无客服工单'))
+const imageNamePattern = /\.(avif|bmp|gif|heic|heif|jpe?g|png|webp)$/i
 
 async function loadFeedback() {
   loading.value = true
@@ -371,6 +379,10 @@ function formatFileSize(size?: number | null) {
   return `${(size / 1024 / 1024).toFixed(1)} MB`
 }
 
+function isImageAttachment(file: CustomerFeedbackAttachmentItem) {
+  return Boolean(file.mimeType?.toLowerCase().startsWith('image/')) || imageNamePattern.test(file.originalFileName)
+}
+
 onMounted(loadFeedback)
 </script>
 
@@ -503,21 +515,29 @@ onMounted(loadFeedback)
 
 .feedback-attachments {
   display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
   gap: 8px;
 }
 
 .feedback-attachment {
-  display: flex;
-  min-height: 38px;
+  display: grid;
+  min-height: 44px;
+  grid-template-columns: auto minmax(0, 1fr) auto;
   align-items: center;
-  justify-content: space-between;
-  gap: 10px;
+  gap: 8px;
   border: 1px solid #edf0f5;
   border-radius: 6px;
   background: #f8fafc;
   color: var(--hs-primary);
-  padding: 0 10px;
+  padding: 8px 10px;
   text-decoration: none;
+}
+
+.feedback-attachment img {
+  width: 58px;
+  height: 58px;
+  border-radius: 6px;
+  object-fit: cover;
 }
 
 .feedback-attachment span {
