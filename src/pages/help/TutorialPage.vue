@@ -1,74 +1,201 @@
 <template>
   <section class="tutorial-page">
-    <header class="tutorial-hero">
-      <div>
-        <span class="tutorial-eyebrow">使用教程</span>
-        <h1>汽车 AI 视频系统快速上手</h1>
-        <p>按“选车型素材、定脚本分镜、选数字人和声音、生成并下载”的流程，帮助门店快速产出汽车销售短视频。</p>
+    <header class="tutorial-hero" id="top">
+      <div class="hero-copy">
+        <span class="tutorial-eyebrow">产品教程中心</span>
+        <h1>汽车 AI 视频制作平台使用教程</h1>
+        <p>
+          从车型素材、文案分镜到视频生成，按流程完成第一条汽车销售视频。
+          先理解产品价值，再选择适合自己的创作链路。
+        </p>
+        <div class="hero-tags" aria-label="三条核心创作链路">
+          <span v-for="tag in heroTags" :key="tag">{{ tag }}</span>
+        </div>
+        <div class="hero-actions">
+          <a class="primary-action" href="#quick-start">5 分钟生成第一条视频</a>
+          <a class="secondary-action" href="#overview">查看三条创作链路</a>
+        </div>
       </div>
-      <div class="tutorial-hero-card">
-        <strong>推荐路径</strong>
-        <span>AI智能创作 → 方案确认 → 视频生成 → 资产复用</span>
-      </div>
+
+      <aside class="hero-panel" aria-label="产品发布会核心数据">
+        <div class="hero-panel-head">
+          <strong>从 PPT 主线整理</strong>
+          <span>需求 → 素材 → 方案 → 生成 → 复用</span>
+        </div>
+        <div class="hero-metrics">
+          <article v-for="item in heroMetrics" :key="item.value">
+            <strong>{{ item.value }}</strong>
+            <span>{{ item.label }}</span>
+          </article>
+        </div>
+        <div class="hero-preview">
+          <img :src="shot('dashboard.png')" alt="汽车 AI 视频工作台真实界面" loading="eager" />
+          <span class="hero-badge">真实线上工作台</span>
+        </div>
+      </aside>
     </header>
 
-    <section class="tutorial-overview">
-      <article v-for="item in overviewCards" :key="item.title">
-        <span>{{ item.index }}</span>
-        <strong>{{ item.title }}</strong>
-        <p>{{ item.description }}</p>
-      </article>
-    </section>
-
-    <nav class="tutorial-anchor-bar" aria-label="教程章节">
-      <a v-for="item in tutorialModules" :key="item.id" :href="`#${item.id}`">{{ item.navLabel }}</a>
+    <nav class="tutorial-nav" aria-label="教程模块导航">
+      <a v-for="item in navItems" :key="item.id" :href="`#${item.id}`">
+        {{ item.label }}
+      </a>
     </nav>
 
-    <div class="tutorial-flow">
-      <article v-for="module in tutorialModules" :id="module.id" :key="module.id" class="tutorial-module">
-        <div class="tutorial-module-copy">
-          <span class="tutorial-step">{{ module.step }}</span>
-          <h2>{{ module.title }}</h2>
-          <p class="tutorial-conclusion">{{ module.conclusion }}</p>
-          <p class="tutorial-description">{{ module.description }}</p>
+    <section class="product-overview" id="overview">
+      <div class="section-heading">
+        <span class="tutorial-eyebrow">01 · 产品概览</span>
+        <h2>不是单个视频生成器，而是一站式 AI 视频工作台</h2>
+        <p>
+          系统围绕车型素材、文案分镜、视频任务和结果复用形成闭环。
+          用户带着一个销售需求进入，最终得到可下载、可沉淀、可再次组合的内容资产。
+        </p>
+      </div>
 
-          <div class="tutorial-list">
+      <div class="overview-grid">
+        <article v-for="item in painCards" :key="item.title" class="pain-card">
+          <span>{{ item.index }}</span>
+          <strong>{{ item.title }}</strong>
+          <p>{{ item.description }}</p>
+        </article>
+      </div>
+
+      <div class="path-card-grid">
+        <article v-for="path in creationPaths" :key="path.title" class="path-card">
+          <div class="path-icon">{{ path.index }}</div>
+          <div>
+            <h3>{{ path.title }}</h3>
+            <p>{{ path.summary }}</p>
+            <strong>适合：{{ path.audience }}</strong>
+          </div>
+          <RouterLink :to="path.to">{{ path.cta }}</RouterLink>
+        </article>
+      </div>
+    </section>
+
+    <section class="quick-start" id="quick-start">
+      <div class="section-heading compact">
+        <span class="tutorial-eyebrow">02 · 新手最快路径</span>
+        <h2>5 分钟生成第一条汽车销售视频</h2>
+        <p>第一次使用时，不需要先学完所有功能。按最短路径走完一条 AI 智能创作即可。</p>
+      </div>
+      <div class="quick-timeline">
+        <article v-for="(step, index) in quickStartSteps" :key="step">
+          <span>{{ String(index + 1).padStart(2, '0') }}</span>
+          <strong>{{ step }}</strong>
+        </article>
+      </div>
+      <RouterLink class="inline-cta" to="/render">进入 AI 智能创作</RouterLink>
+    </section>
+
+    <div class="tutorial-sections">
+      <article
+        v-for="section in tutorialSections"
+        :id="section.id"
+        :key="section.id"
+        class="tutorial-section"
+      >
+        <div class="section-copy">
+          <span class="section-index">{{ section.index }}</span>
+          <span class="tutorial-eyebrow">{{ section.eyebrow }}</span>
+          <h2>{{ section.title }}</h2>
+          <p class="section-summary">{{ section.summary }}</p>
+          <p class="section-audience">
+            <strong>适合谁：</strong>{{ section.audience }}
+          </p>
+
+          <div class="section-steps">
             <strong>操作步骤</strong>
             <ol>
-              <li v-for="step in module.steps" :key="step">{{ step }}</li>
+              <li v-for="step in section.steps" :key="step">{{ step }}</li>
             </ol>
           </div>
 
-          <div v-if="module.notes.length" class="tutorial-note">
-            <strong>注意事项</strong>
-            <p v-for="note in module.notes" :key="note">{{ note }}</p>
+          <div v-if="section.highlights?.length" class="highlight-grid">
+            <article v-for="item in section.highlights" :key="item.title">
+              <strong>{{ item.title }}</strong>
+              <p>{{ item.description }}</p>
+            </article>
           </div>
+
+          <RouterLink v-if="section.ctaTo" class="inline-cta" :to="section.ctaTo">
+            {{ section.cta }}
+          </RouterLink>
+          <a v-else class="inline-cta" :href="section.ctaHref">{{ section.cta }}</a>
         </div>
 
-        <figure class="tutorial-shot">
-          <div class="tutorial-shot-frame">
-            <img :src="module.image" :alt="module.title" loading="lazy" />
+        <figure class="section-shot">
+          <div class="shot-frame" :class="section.imageFit">
+            <img :src="section.image" :alt="section.imageAlt" loading="lazy" />
             <span
-              v-for="mark in module.marks"
-              :key="mark.label"
-              class="tutorial-mark"
-              :style="{ left: mark.left, top: mark.top }"
+              v-for="callout in section.callouts"
+              :key="callout.label"
+              class="shot-callout"
+              :style="{ left: callout.left, top: callout.top }"
             >
-              {{ mark.label }}
+              {{ callout.label }}
             </span>
           </div>
-          <figcaption>{{ module.caption }}</figcaption>
+          <figcaption>{{ section.caption }}</figcaption>
+          <ul class="shot-callout-list" aria-label="截图标注列表">
+            <li v-for="callout in section.callouts" :key="`${section.id}-${callout.label}`">
+              {{ callout.label }}
+            </li>
+          </ul>
         </figure>
       </article>
     </div>
 
-    <section class="tutorial-faq" id="faq">
-      <div class="tutorial-faq-head">
-        <span class="tutorial-eyebrow">FAQ</span>
-        <h2>常见问题与上线前注意事项</h2>
-        <p>这些规则来自系统真实链路，遇到问题时优先按任务中心和资产中心定位。</p>
+    <section class="advanced-cards" id="advanced">
+      <div class="section-heading compact">
+        <span class="tutorial-eyebrow">07 · 高级参数</span>
+        <h2>把视频质量约束前置</h2>
+        <p>高级参数不是复杂设置，而是把数字人、字幕、大字报、场景图和音频策略提前说清楚。</p>
       </div>
-      <div class="tutorial-faq-grid">
+      <div class="control-grid">
+        <article v-for="item in advancedControls" :key="item.title">
+          <span>{{ item.index }}</span>
+          <strong>{{ item.title }}</strong>
+          <p>{{ item.description }}</p>
+        </article>
+      </div>
+      <figure class="wide-shot">
+        <img :src="shot('advanced-parameters-top.png')" alt="高级参数真实界面" loading="lazy" />
+        <figcaption>高级参数入口覆盖数字人、字幕、大字报、BGM 和生成模型。</figcaption>
+      </figure>
+    </section>
+
+    <section class="task-result" id="task-result">
+      <div class="section-heading compact">
+        <span class="tutorial-eyebrow">08 · 任务与结果</span>
+        <h2>任务中心让生成过程可见，结果可以继续复用</h2>
+        <p>提交后不再猜测是否成功。排队、运行、成功、失败和积分记录都能回溯。</p>
+      </div>
+      <div class="result-grid">
+        <article v-for="item in resultSteps" :key="item.title">
+          <span>{{ item.index }}</span>
+          <strong>{{ item.title }}</strong>
+          <p>{{ item.description }}</p>
+        </article>
+      </div>
+      <div class="result-shots">
+        <figure>
+          <img :src="shot('task-center.png')" alt="任务中心真实界面" loading="lazy" />
+          <figcaption>任务中心查看排队、运行、成功、失败和退款状态。</figcaption>
+        </figure>
+        <figure>
+          <img :src="shot('recent-results.png')" alt="最近生成真实界面" loading="lazy" />
+          <figcaption>最近生成区域可打开视频、查看结果并继续复用。</figcaption>
+        </figure>
+      </div>
+    </section>
+
+    <section class="tutorial-faq" id="faq">
+      <div class="section-heading compact">
+        <span class="tutorial-eyebrow">09 · 常见问题</span>
+        <h2>第一次使用最容易问的 6 个问题</h2>
+        <p>保留必要答案，避免把教程页重新变成长篇说明书。</p>
+      </div>
+      <div class="faq-grid">
         <article v-for="item in faqs" :key="item.question">
           <strong>{{ item.question }}</strong>
           <p>{{ item.answer }}</p>
@@ -79,255 +206,274 @@
 </template>
 
 <script setup lang="ts">
-interface TutorialMark {
+interface TutorialCallout {
   label: string
   left: string
   top: string
 }
 
-interface TutorialModule {
-  id: string
-  step: string
-  navLabel: string
+interface TutorialHighlight {
   title: string
-  conclusion: string
   description: string
+}
+
+interface TutorialSection {
+  id: string
+  index: string
+  eyebrow: string
+  title: string
+  summary: string
+  audience: string
   steps: string[]
-  notes: string[]
+  highlights?: TutorialHighlight[]
   image: string
+  imageAlt: string
+  imageFit: 'fit-wide' | 'fit-tall'
   caption: string
-  marks: TutorialMark[]
+  callouts: TutorialCallout[]
+  cta: string
+  ctaTo?: string
+  ctaHref?: string
 }
 
 const screenshotBase = '/tutorial/screenshots'
+const shot = (name: string) => `${screenshotBase}/${name}`
 
-const overviewCards = [
+const heroTags = ['AI 智能创作', '爆款对标创作', '资产复用创作']
+
+const heroMetrics = [
+  { value: '3 条', label: '创作链路' },
+  { value: '6-8 段', label: '标准分镜' },
+  { value: '30s', label: '销售节奏' },
+]
+
+const navItems = [
+  { id: 'overview', label: '产品概览' },
+  { id: 'quick-start', label: '5 分钟路径' },
+  { id: 'ai-create', label: 'AI 智能创作' },
+  { id: 'plan-confirm', label: '文案分镜' },
+  { id: 'benchmark', label: '爆款对标' },
+  { id: 'asset-reuse', label: '资产复用' },
+  { id: 'advanced', label: '高级参数' },
+  { id: 'task-result', label: '任务与结果' },
+  { id: 'faq', label: '常见问题' },
+]
+
+const painCards = [
   {
-    index: '01',
-    title: '三条创作链路',
-    description: 'AI智能创作、爆款对标创作、资产复用创作，覆盖从灵感到成片的主要场景。',
+    index: 'WHY 01',
+    title: '素材散落',
+    description: '车型图、场景图、数字人和成片结果分散，二次复用成本高。',
   },
   {
-    index: '02',
-    title: '公共资产复用',
-    description: '车型素材包、文案、分镜、数字人、BGM 和场景图都可以在资产中心统一管理。',
+    index: 'WHY 02',
+    title: '脚本难写',
+    description: '销售知道卖点，但很难快速组织成口播文案和分镜结构。',
   },
   {
-    index: '03',
-    title: '生成前可确认',
-    description: '关键文案、分镜和高级参数在生成前确认，减少无效提交和重复扣费。',
+    index: 'WHY 03',
+    title: '质量不可控',
+    description: '人物、字幕、BGM、比例等约束常常在生成后才发现问题。',
   },
   {
-    index: '04',
-    title: '结果可沉淀',
-    description: '生成完成后可在我的视频和资产中心查看、下载、复用或发布到公共资产。',
+    index: 'WHY 04',
+    title: '结果难追踪',
+    description: '任务排队、失败、退款和积分记录需要统一回看。',
   },
 ]
 
-const tutorialModules: TutorialModule[] = [
+const creationPaths = [
   {
-    id: 'overview',
-    step: '01',
-    navLabel: '系统概览',
-    title: '先理解系统能做什么',
-    conclusion: '系统把汽车销售视频生产拆成素材、文案分镜、参数和任务结果四个可复用环节。',
-    description: '进入工作台后，左侧是创作中心与 AI 资产生产工具，顶部可进入任务中心、积分和资产中心。',
-    steps: [
-      '从左侧进入 AI智能创作、爆款对标创作或资产复用创作。',
-      '通过顶部资产中心查看已有车型素材、文案、分镜、数字人和视频结果。',
-      '通过任务中心跟踪生成进度，成功后回到结果或资产页下载。',
-    ],
-    notes: ['普通用户优先使用 AI智能创作；已有文案、分镜或历史素材时再使用资产复用。'],
-    image: `${screenshotBase}/dashboard.png`,
-    caption: '工作台首页展示创作入口、参数区、推荐模板和最近生成。',
-    marks: [
-      { label: '创作入口', left: '4%', top: '17%' },
-      { label: '生成参数', left: '55%', top: '47%' },
-      { label: '最近结果', left: '30%', top: '79%' },
-    ],
+    index: 'AI',
+    title: 'AI 智能创作',
+    summary: '从车型素材包和简单需求直接生成视频方案。',
+    audience: '从 0 开始做一条汽车销售视频',
+    cta: '进入创作',
+    to: '/render',
   },
   {
-    id: 'login',
-    step: '02',
-    navLabel: '登录设置',
-    title: '登录后再管理资产和任务',
-    conclusion: '登录态用于同步积分、任务结果和资产库，避免生成结果找不到。',
-    description: '系统支持账号登录；登录后顶部会显示积分余额，生成前会显示预计积分。',
-    steps: [
-      '打开登录页，输入账号和密码。',
-      '登录后回到创作页面，确认右上角显示账号与积分。',
-      '如果需要查看扣费记录，进入顶部“积分”或资产中心的积分明细。',
-    ],
-    notes: ['未登录时只能浏览部分公开入口，上传素材、资产管理和生成任务需要登录。'],
-    image: `${screenshotBase}/login.png`,
-    caption: '登录页保留注册入口，登录后进入统一工作台。',
-    marks: [
-      { label: '登录方式', left: '58%', top: '14%' },
-      { label: '账号密码', left: '57%', top: '38%' },
-      { label: '提交登录', left: '58%', top: '64%' },
-    ],
+    index: 'HOT',
+    title: '爆款对标创作',
+    summary: '提炼参考视频结构，再替换成本次目标车型。',
+    audience: '参考优秀案例，复刻结构和节奏',
+    cta: '进入对标',
+    to: '/benchmark-create',
   },
   {
-    id: 'create',
-    step: '03',
-    navLabel: '创建项目',
-    title: '从 AI 智能创作创建汽车视频',
-    conclusion: '选择车型素材包后，即可用需求描述、时长、语言、比例和高级参数进入方案确认。',
-    description: 'AI智能创作适合从车型资料快速生成销售视频，也可以先不写需求，让系统基于车型素材包生成文案和分镜。',
+    index: 'USE',
+    title: '资产复用创作',
+    summary: '调用沉淀素材，快速组合生成新片。',
+    audience: '复用已有文案、分镜、数字人、BGM 和车型素材',
+    cta: '进入复用',
+    to: '/asset-reuse',
+  },
+]
+
+const quickStartSteps = [
+  '进入 AI 智能创作',
+  '选择车型素材包',
+  '输入一句视频目标',
+  '确认文案分镜',
+  '提交生成',
+  '到任务中心查看结果',
+  '下载或复用视频',
+]
+
+const tutorialSections: TutorialSection[] = [
+  {
+    id: 'ai-create',
+    index: '03',
+    eyebrow: '链路一 · AI 智能创作',
+    title: '选择车型和目标，让系统先生成方案',
+    summary: '减少从 0 写脚本的压力，让销售只负责选择车型和确认方向。',
+    audience: '门店销售、运营人员，需要快速产出一条车型讲解或活动促销短视频。',
     steps: [
-      '在输入框描述想突出空间、续航、智能座舱或到店权益等方向。',
-      '点击“选择”从资产中心选择车型素材包。',
-      '设置时长、讲述语言和视频比例；需要数字人、字幕、BGM 或场景图时打开高级参数。',
-      '点击“立即生成”进入文案和分镜确认弹窗，确认后再提交视频生成。',
+      '从左侧菜单进入 AI 智能创作。',
+      '从资产中心选择车型素材包。',
+      '输入活动、客户、卖点或门店政策。',
+      '设置时长、语言、比例、数字人等参数。',
+      '确认文案分镜后提交生成。',
     ],
-    notes: ['不要把车型素材、口播音频和场景图混在同一个上传入口里；系统会按角色传入生成链路。'],
-    image: `${screenshotBase}/create-video.png`,
-    caption: 'AI智能创作的核心配置区。',
-    marks: [
-      { label: '需求描述', left: '9%', top: '15%' },
-      { label: '车型素材包', left: '15%', top: '73%' },
-      { label: '高级参数', left: '77%', top: '75%' },
-      { label: '立即生成', left: '92%', top: '75%' },
+    image: shot('create-video.png'),
+    imageAlt: 'AI 智能创作页面真实截图',
+    imageFit: 'fit-wide',
+    caption: 'AI 智能创作把需求描述、车型素材包和生成参数放在同一入口。',
+    callouts: [
+      { label: '输入视频目标', left: '22%', top: '30%' },
+      { label: '选择车型素材包', left: '18%', top: '76%' },
+      { label: '设置时长/语言/比例', left: '70%', top: '72%' },
+      { label: '立即生成', left: '90%', top: '72%' },
     ],
+    cta: '去生成第一条视频',
+    ctaTo: '/render',
   },
   {
-    id: 'materials',
-    step: '04',
-    navLabel: '选择素材',
-    title: '在资产中心选择可复用素材',
-    conclusion: '资产中心按文案、分镜、音频/BGM、数字人、视频素材、车型素材包和场景图片分类。',
-    description: '用户上传的私有资产和开发者发布的公共资产可以统一筛选；视频生成时按资产角色加入本次任务。',
+    id: 'plan-confirm',
+    index: '04',
+    eyebrow: '生成前确认 · 文案与分镜',
+    title: '不是盲目生成，而是先确认口播、镜头和约束',
+    summary: '文案负责口播和字幕，分镜负责镜头结构和时长；确认无误后才进入视频任务。',
+    audience: '希望减少返工、需要控制口播内容、镜头顺序和视频时长的用户。',
     steps: [
-      '进入顶部“资产中心”，在素材资产里选择资产类型。',
-      '用公共/私有、来源、分组和搜索条件缩小范围。',
-      '预览确认后复制链接、发布公共资产或在生成页作为对应角色加入。',
+      '先确认口播文案和字幕内容。',
+      '检查分镜结构、镜头顺序和每段时长。',
+      '确认数字人、车辆、字幕、大字报、BGM 等约束。',
+      '确认积分和预估时长后提交视频任务。',
     ],
-    notes: ['场景图片是一张一张的背景约束图；车型素材包是一组车辆图片和车型信息，二者不要混用。'],
-    image: `${screenshotBase}/asset-materials.png`,
-    caption: '资产中心支持按资产类型和来源筛选。',
-    marks: [
-      { label: '资产类型', left: '46%', top: '18%' },
-      { label: '筛选搜索', left: '54%', top: '24%' },
-      { label: '资产卡片', left: '30%', top: '59%' },
-      { label: '发布公共', left: '81%', top: '91%' },
+    highlights: [
+      { title: '输入需求', description: '车型、活动、卖点或参考视频进入方案生成。' },
+      { title: '生成文案分镜', description: '系统先输出可编辑的口播文案和镜头结构。' },
+      { title: '用户确认', description: '确认文字、镜头、素材和参数后再提交。' },
+      { title: '提交任务', description: '视频任务进入队列，状态可追踪。' },
     ],
-  },
-  {
-    id: 'script-storyboard',
-    step: '05',
-    navLabel: '文案分镜',
-    title: '文案和分镜要配套确认',
-    conclusion: '文案用于口播和字幕，分镜控制镜头结构、时长和画面节奏，两者确认后再生成视频。',
-    description: '系统会从车型素材、用户需求和高级参数中生成方案；用户也可以从资产中心选择已有文案和分镜。',
-    steps: [
-      '在生成前确认弹窗中查看口播文案是否完整、语气是否符合目标客户。',
-      '检查分镜是否 5-8 段、总时长是否等于目标时长。',
-      '如果选择数字人，确认分镜中有统一的数字人出镜描述。',
-      '确认无误后点击弹窗中的“确认生成”，系统会自动衔接视频制作任务。',
+    image: shot('asset-reuse.png'),
+    imageAlt: '文案分镜与方案确认真实截图',
+    imageFit: 'fit-tall',
+    caption: '方案确认把文案、分镜、素材和生成参数放在提交前统一检查。',
+    callouts: [
+      { label: '文案资产', left: '58%', top: '22%' },
+      { label: '分镜结构', left: '58%', top: '11%' },
+      { label: '素材组合', left: '86%', top: '17%' },
+      { label: '进入确认', left: '88%', top: '70%' },
     ],
-    notes: ['如果用户上传了自己的口播音频，文案只作为参考，不应覆盖用户音频。'],
-    image: `${screenshotBase}/asset-reuse.png`,
-    caption: '资产复用创作展示文案、分镜、时长和素材组合关系。',
-    marks: [
-      { label: '文案/分镜', left: '48%', top: '47%' },
-      { label: '视频预览', left: '88%', top: '55%' },
-      { label: '生成参数', left: '38%', top: '83%' },
-    ],
-  },
-  {
-    id: 'advanced',
-    step: '06',
-    navLabel: '高级参数',
-    title: '选择数字人、字幕、大字报、BGM 和场景图',
-    conclusion: '高级参数决定视频是否有数字人、字幕位置、字体样式、BGM 和背景场景约束。',
-    description: '高级参数会随任务一起提交，适合在门店活动、到店促销、数字人口播和无口播视频之间切换。',
-    steps: [
-      '开启或关闭数字人出镜；使用数字人时选择系统虚拟数字人全身照素材。',
-      '选择场景图片，约束展厅、道路、户外或夜景门店背景。',
-      '配置字幕策略、字体、位置和字号；需要大字报时单独开启并设置位置。',
-      '选择背景音乐策略，也可以上传本地 BGM 后作为后期混音素材。',
-    ],
-    notes: ['BGM 只控制背景音乐，不应关闭口播；用户上传口播音频时，视频模型不应再生成自己的口播。'],
-    image: `${screenshotBase}/advanced-parameters.png`,
-    caption: '高级参数抽屉覆盖数字人、场景图、字幕和音频风格。',
-    marks: [
-      { label: '数字人', left: '18%', top: '9%' },
-      { label: '场景图', left: '18%', top: '26%' },
-      { label: '字幕字体', left: '16%', top: '52%' },
-      { label: '大字报', left: '16%', top: '70%' },
-    ],
+    cta: '查看资产复用流程',
+    ctaTo: '/asset-reuse',
   },
   {
     id: 'benchmark',
-    step: '07',
-    navLabel: '爆款对标',
-    title: '用参考视频提炼可复用方案',
-    conclusion: '爆款对标用于解析参考视频，再把文案、结构和风格转成可确认的汽车销售视频方案。',
-    description: '支持链接或本地视频解析；解析结果进入文案、分镜、车辆素材和高级参数确认，不直接覆盖最终生成逻辑。',
+    index: '05',
+    eyebrow: '链路二 · 爆款对标创作',
+    title: '参考视频只学结构，最终仍围绕目标车型生成',
+    summary: '上传参考视频或链接，系统提炼口播、节奏和画面结构，再绑定本次目标车型。',
+    audience: '已有优秀案例，希望复刻结构和节奏，但替换成自己车型的门店。',
     steps: [
-      '选择链接解析或本地上传，按平台规则输入参考视频。',
-      '解析后检查口播文案、关键词和分镜结构。',
-      '选择目标车型素材包，必要时补充场景图、数字人和 BGM。',
-      '进入方案确认后提交视频生成。',
+      '上传参考视频或填写参考链接。',
+      '系统提炼口播、节奏和画面结构。',
+      '选择目标车型素材包。',
+      '确认生成方案。',
+      '提交生成目标车型的视频。',
     ],
-    notes: ['无口播参考视频也可以生成视频，此时应以画面分镜为主，不强制生成口播。'],
-    image: `${screenshotBase}/benchmark-create.png`,
-    caption: '爆款对标创作页展示解析入口、车辆素材和生成参数。',
-    marks: [
-      { label: '解析来源', left: '19%', top: '17%' },
-      { label: '车辆素材', left: '76%', top: '18%' },
-      { label: '参数确认', left: '76%', top: '42%' },
-      { label: '结果区域', left: '43%', top: '73%' },
+    image: shot('benchmark-create.png'),
+    imageAlt: '爆款对标创作页面真实截图',
+    imageFit: 'fit-tall',
+    caption: '爆款对标创作支持链接解析、本地上传、车型绑定和参数确认。',
+    callouts: [
+      { label: '参考视频入口', left: '32%', top: '13%' },
+      { label: '车型素材包', left: '78%', top: '15%' },
+      { label: '生成参数', left: '78%', top: '33%' },
+      { label: '解析结果', left: '35%', top: '66%' },
     ],
+    cta: '进入爆款对标',
+    ctaTo: '/benchmark-create',
   },
   {
-    id: 'result',
-    step: '08',
-    navLabel: '预览下载',
-    title: '在任务中心和最近生成查看结果',
-    conclusion: '视频生成后会进入我的视频和资产中心，用户可以预览、打开视频、查看资产或继续复用。',
-    description: '任务中心会展示排队、运行、成功、失败等状态；成功任务会沉淀为资产，方便后续下载和复用。',
+    id: 'asset-reuse',
+    index: '06',
+    eyebrow: '链路三 · 资产复用',
+    title: '让一次生成变成长期可复用内容库',
+    summary: '车型素材、文案、分镜、场景图、数字人、BGM 和结果视频都可以沉淀为资产。',
+    audience: '已经有历史视频、文案、分镜或公共素材，希望快速组合新成片的用户。',
     steps: [
-      '提交后打开任务中心查看进度。',
-      '生成完成后在“我的最近生成”点击查看结果或打开视频。',
-      '进入资产中心查看生成资产，必要时发布为公共资产或复制链接。',
-      '如果失败，查看错误提示后重试或调整素材。',
+      '进入资产中心。',
+      '通过筛选找到车型素材、文案、分镜或视频结果。',
+      '选择已有资产重新组合。',
+      '进入二次创作或下载复用。',
     ],
-    notes: ['长任务可能需要等待模型平台回调；页面提示“查看进度”时可进入任务中心持续观察。'],
-    image: `${screenshotBase}/recent-results.png`,
-    caption: '最近生成区域用于快速打开视频和查看资产。',
-    marks: [
-      { label: '视频封面', left: '13%', top: '42%' },
-      { label: '查看结果', left: '77%', top: '44%' },
-      { label: '打开视频', left: '91%', top: '43%' },
+    image: shot('asset-materials.png'),
+    imageAlt: '资产中心素材筛选真实截图',
+    imageFit: 'fit-wide',
+    caption: '资产中心按类型、来源和公共/私有状态筛选素材。',
+    callouts: [
+      { label: '素材分类', left: '43%', top: '19%' },
+      { label: '筛选条件', left: '52%', top: '27%' },
+      { label: '资产卡片', left: '34%', top: '60%' },
+      { label: '加入生成', left: '83%', top: '62%' },
     ],
+    cta: '打开资产中心',
+    ctaTo: '/assets?tab=materials',
   },
+]
+
+const advancedControls = [
+  { index: '01', title: '数字人出镜', description: '选择系统虚拟数字人全身照，减少人物风格跳变。' },
+  { index: '02', title: '字幕与大字报', description: '字体、位置、字号和样式适配横竖屏安全区。' },
+  { index: '03', title: '场景图与背景环境', description: '用展厅、道路、户外等图片约束视频背景。' },
+  { index: '04', title: 'BGM 与口播音频', description: 'BGM 只做背景音乐，用户口播音频优先生效。' },
+  { index: '05', title: '横屏/竖屏比例', description: '按投放平台选择 9:16、16:9 等成片比例。' },
+  { index: '06', title: '视频时长与语言', description: '总时长和讲述语言会带入文案、分镜和生成任务。' },
+]
+
+const resultSteps = [
+  { index: '01', title: '进入任务中心', description: '提交后任务自动进入队列，用户可以查看进度。' },
+  { index: '02', title: '查看状态', description: '排队、运行、成功、失败和退款状态都有记录。' },
+  { index: '03', title: '预览下载', description: '成功后可打开视频、预览成片或下载使用。' },
+  { index: '04', title: '继续复用', description: '生成结果可进入资产中心，后续继续组合新内容。' },
 ]
 
 const faqs = [
   {
-    question: '没有素材可以直接生成吗？',
-    answer: '汽车销售视频建议至少选择车型素材包。只有车型素材包齐全，系统才能稳定约束车型外观、内饰和卖点。',
+    question: '没有素材可以生成吗？',
+    answer: '建议至少选择车型素材包。车型图和参数越完整，车辆一致性和卖点表达越稳定。',
   },
   {
-    question: '已经上传口播音频，还需要文案吗？',
-    answer: '不强制。用户自带口播音频优先，文案不应再覆盖口播；字幕可以基于音频或确认后的文本生成。',
+    question: '为什么要先确认文案和分镜？',
+    answer: '文案决定口播和字幕，分镜决定镜头结构和时长。先确认可以减少方向错误导致的重复生成。',
   },
   {
-    question: '为什么要确认文案和分镜？',
-    answer: '文案影响口播和字幕，分镜影响镜头结构和时长。生成前确认可以减少错误方向导致的重复生成。',
+    question: '生成失败怎么办？',
+    answer: '先在任务中心查看失败状态和提示，再检查车型素材、数字人图片、音频或参考视频是否可用。',
   },
   {
-    question: '场景图片和车辆图片有什么区别？',
-    answer: '场景图片用于约束背景环境，车辆图片用于约束具体车型。二者在生成链路中角色不同，不能互相替代。',
+    question: '生成的视频在哪里查看？',
+    answer: '可以在任务中心、我的视频、最近生成和资产中心查看，成功后支持打开、预览和下载。',
   },
   {
-    question: '生成失败后积分如何处理？',
-    answer: '任务会在提交前预扣，失败后按后端结算策略退款或保留日志。可在积分记录和任务中心查看明细。',
+    question: '积分在哪里查看？',
+    answer: '顶部积分入口和资产中心积分明细可以查看余额、预扣、消耗、退款等记录。',
   },
   {
-    question: '成片在哪里下载？',
-    answer: '生成成功后可在我的视频、最近生成、资产中心结果资产中打开视频、复制链接或下载。',
+    question: '生成后还能再次编辑或复用吗？',
+    answer: '可以。成片、文案、分镜、车型素材和场景图都可以沉淀为资产，再进入资产复用创作。',
   },
 ]
 </script>
@@ -335,125 +481,222 @@ const faqs = [
 <style scoped>
 .tutorial-page {
   display: grid;
-  width: min(1280px, calc(100% - 56px));
+  width: min(1320px, calc(100% - 56px));
   gap: 18px;
-  margin: 24px auto 36px;
-}
-
-.tutorial-hero,
-.tutorial-overview article,
-.tutorial-module,
-.tutorial-faq {
-  border: 1px solid #e5e7eb;
-  border-radius: 8px;
-  background: #fff;
-  box-shadow: 0 14px 34px rgba(15, 23, 42, 0.04);
+  margin: 24px auto 40px;
+  color: #101828;
 }
 
 .tutorial-hero {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) 300px;
-  align-items: center;
-  gap: 24px;
-  padding: 24px;
+  grid-template-columns: minmax(0, 1fr) 430px;
+  gap: 22px;
+  overflow: hidden;
+  border: 1px solid #dbe7ff;
+  border-radius: 8px;
+  background: linear-gradient(135deg, #f8fbff 0%, #eef5ff 58%, #f7fafc 100%);
+  padding: 26px;
+}
+
+.hero-copy {
+  display: grid;
+  align-content: center;
+  gap: 16px;
 }
 
 .tutorial-eyebrow {
   color: #2563eb;
   font-size: 12px;
   font-weight: 900;
+  letter-spacing: 0;
 }
 
 .tutorial-hero h1,
-.tutorial-faq-head h2 {
-  margin: 7px 0;
-  color: #111827;
-  font-size: 28px;
-  line-height: 1.25;
-  font-weight: 900;
+.section-heading h2,
+.section-copy h2 {
+  margin: 0;
+  color: #0f172a;
+  font-weight: 950;
+  line-height: 1.18;
+}
+
+.tutorial-hero h1 {
+  max-width: 760px;
+  font-size: 38px;
 }
 
 .tutorial-hero p,
-.tutorial-faq-head p,
-.tutorial-description,
-.tutorial-conclusion,
-.tutorial-module li,
-.tutorial-note p,
-.tutorial-faq p,
-.tutorial-shot figcaption {
+.section-heading p,
+.section-summary,
+.section-audience,
+.section-steps li,
+.path-card p,
+.pain-card p,
+.control-grid p,
+.result-grid p,
+.faq-grid p,
+.hero-panel span,
+.hero-metrics span,
+.section-shot figcaption,
+.wide-shot figcaption,
+.result-shots figcaption {
+  margin: 0;
   color: #64748b;
-  font-size: 13px;
+  font-size: 14px;
   line-height: 1.7;
 }
 
-.tutorial-hero-card {
-  display: grid;
-  gap: 9px;
+.tutorial-hero p {
+  max-width: 760px;
+  color: #475569;
+  font-size: 16px;
+}
+
+.hero-tags,
+.hero-actions,
+.tutorial-nav,
+.quick-timeline,
+.result-shots,
+.shot-callout-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+
+.hero-tags span {
+  display: inline-flex;
+  min-height: 30px;
+  align-items: center;
   border: 1px solid #bfdbfe;
-  border-radius: 8px;
-  background: #eff6ff;
-  padding: 18px;
-}
-
-.tutorial-hero-card strong {
+  border-radius: 999px;
+  background: #fff;
   color: #1d4ed8;
-  font-size: 15px;
-}
-
-.tutorial-hero-card span {
-  color: #1f2a44;
+  padding: 0 12px;
   font-size: 13px;
-  font-weight: 750;
-  line-height: 1.6;
+  font-weight: 850;
 }
 
-.tutorial-overview {
-  display: grid;
-  grid-template-columns: repeat(4, minmax(0, 1fr));
-  gap: 12px;
+.primary-action,
+.secondary-action,
+.inline-cta,
+.path-card a {
+  display: inline-flex;
+  min-height: 38px;
+  width: fit-content;
+  align-items: center;
+  justify-content: center;
+  border-radius: 7px;
+  padding: 0 16px;
+  font-size: 14px;
+  font-weight: 900;
+  text-decoration: none;
 }
 
-.tutorial-overview article {
-  display: grid;
-  gap: 8px;
-  padding: 16px;
+.primary-action,
+.inline-cta {
+  border: 1px solid #2563eb;
+  background: #2563eb;
+  color: #fff;
 }
 
-.tutorial-overview span {
+.secondary-action,
+.path-card a {
+  border: 1px solid #dbe7ff;
+  background: #fff;
   color: #2563eb;
+}
+
+.hero-panel,
+.product-overview,
+.quick-start,
+.tutorial-section,
+.advanced-cards,
+.task-result,
+.tutorial-faq {
+  border: 1px solid #e5edf8;
+  border-radius: 8px;
+  background: #fff;
+  box-shadow: 0 14px 34px rgba(15, 23, 42, 0.04);
+}
+
+.hero-panel {
+  display: grid;
+  gap: 14px;
+  padding: 14px;
+}
+
+.hero-panel-head {
+  display: grid;
+  gap: 4px;
+}
+
+.hero-panel-head strong {
+  color: #0f172a;
+  font-size: 15px;
+  font-weight: 950;
+}
+
+.hero-metrics {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.hero-metrics article {
+  display: grid;
+  gap: 4px;
+  border: 1px solid #e3eaf6;
+  border-radius: 8px;
+  background: #f8fafc;
+  padding: 10px;
+}
+
+.hero-metrics strong {
+  color: #1d4ed8;
+  font-size: 20px;
+  font-weight: 950;
+}
+
+.hero-preview {
+  position: relative;
+  overflow: hidden;
+  border: 1px solid #dbe7ff;
+  border-radius: 8px;
+  background: #f8fbff;
+  aspect-ratio: 16 / 9;
+}
+
+.hero-preview img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  object-position: top left;
+}
+
+.hero-badge {
+  position: absolute;
+  left: 12px;
+  bottom: 12px;
+  border-radius: 999px;
+  background: rgba(37, 99, 235, 0.92);
+  color: #fff;
+  padding: 6px 10px;
   font-size: 12px;
   font-weight: 900;
 }
 
-.tutorial-overview strong,
-.tutorial-list strong,
-.tutorial-note strong,
-.tutorial-faq strong {
-  color: #111827;
-  font-size: 15px;
-  font-weight: 900;
-}
-
-.tutorial-overview p,
-.tutorial-faq p {
-  margin: 0;
-}
-
-.tutorial-anchor-bar {
+.tutorial-nav {
   position: sticky;
-  z-index: 3;
+  z-index: 5;
   top: 64px;
-  display: flex;
-  flex-wrap: wrap;
-  gap: 8px;
-  border: 1px solid #e5e7eb;
+  border: 1px solid #e5edf8;
   border-radius: 8px;
-  background: rgba(255, 255, 255, 0.92);
+  background: rgba(255, 255, 255, 0.94);
   padding: 10px;
-  backdrop-filter: blur(16px);
+  backdrop-filter: blur(14px);
 }
 
-.tutorial-anchor-bar a {
+.tutorial-nav a {
   display: inline-flex;
   min-height: 32px;
   align-items: center;
@@ -467,167 +710,413 @@ const faqs = [
   text-decoration: none;
 }
 
-.tutorial-flow {
-  display: grid;
-  gap: 18px;
-}
-
-.tutorial-module {
-  display: grid;
-  grid-template-columns: minmax(330px, 0.8fr) minmax(0, 1.2fr);
-  gap: 22px;
-  scroll-margin-top: 132px;
-  padding: 18px;
-}
-
-.tutorial-module-copy {
-  display: grid;
-  align-content: start;
-  gap: 12px;
-}
-
-.tutorial-step {
-  display: inline-grid;
-  width: 38px;
-  height: 38px;
-  place-items: center;
-  border-radius: 999px;
-  background: #2563eb;
-  color: #fff;
-  font-size: 14px;
-  font-weight: 900;
-}
-
-.tutorial-module h2 {
-  margin: 0;
-  color: #111827;
-  font-size: 22px;
-  font-weight: 900;
-}
-
-.tutorial-conclusion {
-  margin: 0;
-  color: #1f2a44;
-  font-weight: 800;
-}
-
-.tutorial-description {
-  margin: 0;
-}
-
-.tutorial-list,
-.tutorial-note {
-  display: grid;
-  gap: 8px;
-  border-radius: 8px;
-  background: #f8fafc;
-  padding: 12px;
-}
-
-.tutorial-list ol {
-  display: grid;
-  gap: 7px;
-  margin: 0;
-  padding-left: 18px;
-}
-
-.tutorial-note {
-  border: 1px solid #dbeafe;
-  background: #eff6ff;
-}
-
-.tutorial-note p {
-  margin: 0;
-}
-
-.tutorial-shot {
-  display: grid;
-  align-content: start;
-  gap: 9px;
-  margin: 0;
-}
-
-.tutorial-shot-frame {
-  position: relative;
-  overflow: hidden;
-  border: 1px solid #dbe7ff;
-  border-radius: 8px;
-  background: #f8fbff;
-}
-
-.tutorial-shot-frame img {
-  display: block;
-  width: 100%;
-  height: auto;
-}
-
-.tutorial-mark {
-  position: absolute;
-  min-width: 74px;
-  transform: translate(-50%, -50%);
-  border: 2px solid #ffffff;
-  border-radius: 999px;
-  background: #2563eb;
-  box-shadow: 0 8px 20px rgba(37, 99, 235, 0.28);
-  color: #fff;
-  padding: 6px 10px;
-  text-align: center;
-  font-size: 12px;
-  font-weight: 900;
-  white-space: nowrap;
-}
-
-.tutorial-shot figcaption {
-  margin: 0;
-  text-align: center;
-}
-
+.product-overview,
+.quick-start,
+.advanced-cards,
+.task-result,
 .tutorial-faq {
   display: grid;
-  gap: 16px;
-  padding: 20px;
+  gap: 18px;
+  scroll-margin-top: 130px;
+  padding: 22px;
 }
 
-.tutorial-faq-grid {
+.section-heading {
   display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
+  max-width: 880px;
+  gap: 10px;
+}
+
+.section-heading.compact {
+  max-width: 760px;
+}
+
+.section-heading h2 {
+  font-size: 28px;
+}
+
+.overview-grid,
+.path-card-grid,
+.control-grid,
+.result-grid,
+.faq-grid {
+  display: grid;
   gap: 12px;
 }
 
-.tutorial-faq-grid article {
+.overview-grid {
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+}
+
+.pain-card,
+.path-card,
+.control-grid article,
+.result-grid article,
+.faq-grid article {
   display: grid;
-  gap: 9px;
-  border: 1px solid #e5e7eb;
+  gap: 8px;
+  border: 1px solid #e5edf8;
   border-radius: 8px;
   background: #f8fafc;
   padding: 14px;
 }
 
+.pain-card span,
+.control-grid span,
+.result-grid span {
+  color: #2563eb;
+  font-size: 12px;
+  font-weight: 950;
+}
+
+.pain-card strong,
+.path-card h3,
+.control-grid strong,
+.result-grid strong,
+.faq-grid strong,
+.section-steps strong,
+.highlight-grid strong {
+  color: #0f172a;
+  font-size: 15px;
+  font-weight: 950;
+}
+
+.path-card-grid {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+
+.path-card {
+  align-content: start;
+  background: #fff;
+}
+
+.path-icon {
+  display: grid;
+  width: 44px;
+  height: 44px;
+  place-items: center;
+  border-radius: 8px;
+  background: #eff6ff;
+  color: #2563eb;
+  font-size: 13px;
+  font-weight: 950;
+}
+
+.path-card h3 {
+  margin: 0 0 6px;
+  font-size: 18px;
+}
+
+.path-card strong {
+  color: #334155;
+  font-size: 13px;
+  line-height: 1.6;
+}
+
+.quick-start {
+  background: #f8fbff;
+}
+
+.quick-timeline {
+  display: grid;
+  grid-template-columns: repeat(7, minmax(0, 1fr));
+}
+
+.quick-timeline article {
+  display: grid;
+  gap: 8px;
+  border: 1px solid #dbe7ff;
+  border-radius: 8px;
+  background: #fff;
+  padding: 12px;
+}
+
+.quick-timeline span {
+  color: #2563eb;
+  font-size: 12px;
+  font-weight: 950;
+}
+
+.quick-timeline strong {
+  color: #0f172a;
+  font-size: 13px;
+  line-height: 1.45;
+}
+
+.tutorial-sections {
+  display: grid;
+  gap: 18px;
+}
+
+.tutorial-section {
+  display: grid;
+  grid-template-columns: minmax(360px, 0.78fr) minmax(0, 1.22fr);
+  gap: 24px;
+  scroll-margin-top: 130px;
+  padding: 20px;
+}
+
+.section-copy {
+  display: grid;
+  align-content: start;
+  gap: 12px;
+}
+
+.section-index {
+  display: grid;
+  width: 42px;
+  height: 42px;
+  place-items: center;
+  border-radius: 999px;
+  background: #2563eb;
+  color: #fff;
+  font-size: 14px;
+  font-weight: 950;
+}
+
+.section-copy h2 {
+  font-size: 24px;
+}
+
+.section-summary {
+  color: #1f2937;
+  font-weight: 800;
+}
+
+.section-audience {
+  border-left: 3px solid #22c55e;
+  padding-left: 10px;
+}
+
+.section-audience strong {
+  color: #166534;
+}
+
+.section-steps {
+  display: grid;
+  gap: 10px;
+  border: 1px solid #e5edf8;
+  border-radius: 8px;
+  background: #f8fafc;
+  padding: 14px;
+}
+
+.section-steps ol {
+  display: grid;
+  gap: 8px;
+  margin: 0;
+  padding-left: 20px;
+}
+
+.highlight-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.highlight-grid article {
+  border: 1px solid #dbeafe;
+  border-radius: 8px;
+  background: #eff6ff;
+  padding: 12px;
+}
+
+.highlight-grid p {
+  margin: 5px 0 0;
+  color: #475569;
+  font-size: 13px;
+  line-height: 1.6;
+}
+
+.section-shot,
+.wide-shot,
+.result-shots figure {
+  display: grid;
+  align-content: start;
+  gap: 8px;
+  margin: 0;
+}
+
+.shot-frame {
+  position: relative;
+  overflow: hidden;
+  border: 1px solid #dbe7ff;
+  border-radius: 8px;
+  background: #eef4ff;
+}
+
+.shot-frame img {
+  display: block;
+  width: 100%;
+  height: 100%;
+}
+
+.shot-frame.fit-wide {
+  aspect-ratio: 16 / 8.8;
+}
+
+.shot-frame.fit-wide img {
+  object-fit: cover;
+  object-position: top left;
+}
+
+.shot-frame.fit-tall {
+  max-height: 520px;
+}
+
+.shot-frame.fit-tall img {
+  height: auto;
+  object-fit: contain;
+}
+
+.shot-callout {
+  position: absolute;
+  transform: translate(-50%, -50%);
+  border: 2px solid #fff;
+  border-radius: 999px;
+  background: #2563eb;
+  box-shadow: 0 10px 22px rgba(37, 99, 235, 0.28);
+  color: #fff;
+  padding: 6px 10px;
+  font-size: 12px;
+  font-weight: 950;
+  white-space: nowrap;
+}
+
+.shot-callout-list {
+  display: none;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.shot-callout-list li {
+  border-radius: 999px;
+  background: #eff6ff;
+  color: #2563eb;
+  padding: 6px 10px;
+  font-size: 12px;
+  font-weight: 850;
+}
+
+.control-grid {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+
+.wide-shot {
+  overflow: hidden;
+  border: 1px solid #dbe7ff;
+  border-radius: 8px;
+  background: #f8fbff;
+  padding: 12px;
+}
+
+.wide-shot img {
+  width: 100%;
+  max-height: 420px;
+  object-fit: contain;
+  object-position: top center;
+}
+
+.result-grid {
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+}
+
+.result-shots {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+}
+
+.result-shots figure {
+  overflow: hidden;
+  border: 1px solid #dbe7ff;
+  border-radius: 8px;
+  background: #f8fbff;
+  padding: 10px;
+}
+
+.result-shots img {
+  width: 100%;
+  aspect-ratio: 16 / 9;
+  border-radius: 6px;
+  object-fit: cover;
+  object-position: top left;
+}
+
+.faq-grid {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+
+.faq-grid article {
+  background: #fff;
+}
+
 @media (max-width: 1180px) {
-  .tutorial-overview,
-  .tutorial-faq-grid {
+  .tutorial-hero,
+  .tutorial-section,
+  .result-shots {
+    grid-template-columns: 1fr;
+  }
+
+  .overview-grid,
+  .path-card-grid,
+  .control-grid,
+  .result-grid,
+  .faq-grid {
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 
-  .tutorial-module {
-    grid-template-columns: 1fr;
+  .quick-timeline {
+    grid-template-columns: repeat(4, minmax(0, 1fr));
   }
 }
 
 @media (max-width: 760px) {
   .tutorial-page {
     width: calc(100% - 24px);
-    margin-top: 16px;
+    margin-top: 14px;
   }
 
   .tutorial-hero,
-  .tutorial-overview,
-  .tutorial-faq-grid {
+  .product-overview,
+  .quick-start,
+  .tutorial-section,
+  .advanced-cards,
+  .task-result,
+  .tutorial-faq {
+    padding: 16px;
+  }
+
+  .tutorial-hero h1 {
+    font-size: 28px;
+  }
+
+  .section-heading h2,
+  .section-copy h2 {
+    font-size: 22px;
+  }
+
+  .tutorial-nav {
+    position: static;
+  }
+
+  .overview-grid,
+  .path-card-grid,
+  .control-grid,
+  .result-grid,
+  .faq-grid,
+  .quick-timeline,
+  .highlight-grid,
+  .hero-metrics {
     grid-template-columns: 1fr;
   }
 
-  .tutorial-anchor-bar {
-    position: static;
+  .shot-callout {
+    display: none;
+  }
+
+  .shot-callout-list {
+    display: flex;
   }
 }
 </style>

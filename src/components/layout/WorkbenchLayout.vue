@@ -140,6 +140,7 @@ import { useRoute, useRouter } from 'vue-router'
 import {
   ArrowDown,
   DataAnalysis,
+  Document,
   FolderOpened,
   MagicStick,
   Microphone,
