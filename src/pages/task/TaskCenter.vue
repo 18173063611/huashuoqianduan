@@ -230,6 +230,15 @@
               取消
             </button>
             <button
+              v-if="canReplaceDigitalHuman(task)"
+              type="button"
+              class="app-secondary-button task-replace-host"
+              :disabled="loading || replacingDigitalHumanTaskId === task.taskId"
+              @click="openDigitalHumanReplacement(task)"
+            >
+              {{ replacingDigitalHumanTaskId === task.taskId ? '提交中...' : '更换数字人' }}
+            </button>
+            <button
               v-if="
                 task.status === 'RETRYABLE' ||
                 task.status === 'FAILED' ||
@@ -255,6 +264,13 @@
         </div>
       </div>
     </template>
+
+    <AvatarSelectDrawer
+      v-model="digitalHumanReplaceDrawerOpen"
+      :selected-avatar-id="digitalHumanReplacementSelectedAvatarId"
+      @select="handleDigitalHumanReplacementSelect"
+      @create="openAvatarCreationFromTaskCenter"
+    />
 
     <div v-if="resultModalOpen" class="task-result-mask" @click.self="closeResultModal()">
       <section class="task-result-modal" role="dialog" aria-modal="true" aria-label="任务结果">
@@ -634,7 +650,9 @@ import { RouterLink, useRoute, useRouter } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import TaskRowSmoothProgress from '../../components/TaskRowSmoothProgress.vue'
 import AssetPicker from '../render/AssetPicker.vue'
+import AvatarSelectDrawer from '../render/AvatarSelectDrawer.vue'
 import { API_ORIGIN, getAuthToken } from '../../services/request'
+import { getAssetDetail } from '../../services/assetApi'
 import {
   cancelTask,
   getTaskDetail,
@@ -644,7 +662,12 @@ import {
   markTaskViewed,
   retryTask,
 } from '../../services/taskApi'
-import { adoptCarSalesSegment, composeCarSalesSegments, regenerateCarSalesSegment } from '../../services/videoApi'
+import {
+  adoptCarSalesSegment,
+  composeCarSalesSegments,
+  regenerateCarSalesSegment,
+  replaceCarSalesDigitalHumanAndRetry,
+} from '../../services/videoApi'
 import {
   readRenderTaskSnapshot,
   savePendingRenderTaskImport,
@@ -656,6 +679,7 @@ import {
   type PendingCarSalesPlanTask,
 } from '../../services/carSalesPlanTaskStore'
 import type { AssetItem } from '../../types/assetTypes'
+import type { AvatarItem } from '../../types/avatarTypes'
 import type { TaskItem, TaskResultItem, TaskSummaryResponse } from '../../types/taskTypes'
 import { isStoryboardScriptTask, isVideoResultTaskType, taskTypeLabel } from '../../utils/taskDisplay'
 import { formatFriendlyDateTime } from '../../utils/timeFormat'
@@ -750,6 +774,10 @@ const summary = ref<TaskSummaryResponse | null>(null)
 const loading = ref(false)
 /** 重试请求进行中时记录 taskId，用于仅禁用对应行的重试按钮 */
 const retryingTaskId = ref<number | null>(null)
+const replacingDigitalHumanTaskId = ref<number | null>(null)
+const digitalHumanReplaceDrawerOpen = ref(false)
+const digitalHumanReplacementTask = ref<TaskItem | null>(null)
+const digitalHumanReplacementSelectedAvatarId = ref<number | null>(null)
 const errorMessage = ref('')
 const taskTypeFilter = ref('')
 const statusFilter = ref(parseRouteStatusFilter(route.query.status))
@@ -1299,6 +1327,57 @@ async function handleCancel(taskId: number) {
   }
 }
 
+function openDigitalHumanReplacement(task: TaskItem) {
+  digitalHumanReplacementTask.value = task
+  digitalHumanReplacementSelectedAvatarId.value = currentTaskDigitalHumanAvatarId(task)
+  digitalHumanReplaceDrawerOpen.value = true
+}
+
+async function handleDigitalHumanReplacementSelect(avatar: AvatarItem) {
+  const task = digitalHumanReplacementTask.value
+  if (!task || !avatar.assetId) {
+    return
+  }
+  replacingDigitalHumanTaskId.value = task.taskId
+  loading.value = true
+  errorMessage.value = ''
+  try {
+    const asset = await getAssetDetail(avatar.assetId).catch(() => null)
+    const hostImageUrl = (
+      asset?.fileUrl ||
+      asset?.thumbnailUrl ||
+      avatar.previewUrl ||
+      ''
+    ).trim()
+    if (!hostImageUrl) {
+      throw new Error('该数字人缺少可用于视频生成的图片地址，请换一个数字人形象')
+    }
+    await replaceCarSalesDigitalHumanAndRetry(task.taskId, {
+      assetId: avatar.assetId,
+      avatarId: avatar.avatarId,
+      digitalHumanId: String(avatar.assetId),
+      avatarName: avatar.avatarName,
+      hostImageUrl,
+    })
+    digitalHumanReplaceDrawerOpen.value = false
+    digitalHumanReplacementTask.value = null
+    ElMessage.success('已更换数字人并重新提交，车辆、分镜、字幕和音频参数保持不变')
+    await loadData(false)
+  } catch (error) {
+    await loadData(false)
+    errorMessage.value = error instanceof Error ? error.message : '更换数字人后重新生成失败'
+  } finally {
+    loading.value = false
+    replacingDigitalHumanTaskId.value = null
+  }
+}
+
+function openAvatarCreationFromTaskCenter() {
+  digitalHumanReplaceDrawerOpen.value = false
+  void router.push({ name: 'avatar' })
+  emit('closePanel')
+}
+
 function displayTitle(task: TaskItem) {
   if (task.taskTitle && task.taskTitle.trim()) {
     return task.taskTitle
@@ -1380,6 +1459,44 @@ function canCancelTask(task: TaskItem | null | undefined) {
 
 function isCarSalesTask(task: TaskItem | null | undefined) {
   return String(task?.taskType || '').trim().toUpperCase() === 'SEEDANCE_CAR_SALES_VIDEO'
+}
+
+function canReplaceDigitalHuman(task: TaskItem | null | undefined) {
+  if (!task || !isCarSalesTask(task)) {
+    return false
+  }
+  const status = String(task.status || '').toUpperCase()
+  if (!['FAILED', 'RETRYABLE', 'CANCELED'].includes(status)) {
+    return false
+  }
+  return isDigitalHumanSafetyFailure(task)
+}
+
+function isDigitalHumanSafetyFailure(task: TaskItem) {
+  const haystack = [
+    task.errorMessage,
+    task.errorCode,
+    task.outputJson,
+  ]
+    .filter(Boolean)
+    .join('\n')
+    .toLowerCase()
+  return (
+    haystack.includes('疑似真人') ||
+    haystack.includes('真人参考图') ||
+    haystack.includes('安全策略') ||
+    haystack.includes('real person') ||
+    haystack.includes('contain real person')
+  )
+}
+
+function currentTaskDigitalHumanAvatarId(task: TaskItem | null | undefined) {
+  if (!task) {
+    return null
+  }
+  const input = taskInputObject(task)
+  const raw = Number(stringField(input, 'digitalHumanId') || input?.digitalHumanId)
+  return Number.isFinite(raw) && raw > 0 ? raw : null
 }
 
 function canOpenRunningProgress(task: TaskItem) {
@@ -2699,7 +2816,8 @@ section.app-card.app-page-stack {
 
 .task-open-asset,
 .task-retry,
-.task-cancel {
+.task-cancel,
+.task-replace-host {
   white-space: nowrap;
 }
 

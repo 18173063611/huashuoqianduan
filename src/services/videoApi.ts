@@ -152,6 +152,25 @@ export function composeCarSalesSegments(taskId: number, payload: CarSalesSegment
   })
 }
 
+export interface CarSalesDigitalHumanReplacementRequest {
+  assetId?: number | null
+  avatarId?: number | null
+  digitalHumanId?: string | null
+  avatarName?: string | null
+  hostImageUrl: string
+}
+
+export function replaceCarSalesDigitalHumanAndRetry(
+  taskId: number,
+  payload: CarSalesDigitalHumanReplacementRequest,
+) {
+  return request<TaskItem>(`/video/car-sales/${taskId}/digital-human/retry`, {
+    method: 'POST',
+    body: JSON.stringify(payload),
+    headers: videoGenerateHeaders(),
+  })
+}
+
 export function generateDigitalHumanVideo(payload: DigitalHumanVideoRequest, idempotencyKey?: string | null) {
   return request<DigitalHumanGenerateResponse>('/video/generate/digital-human', {
     method: 'POST',
