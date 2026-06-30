@@ -633,6 +633,13 @@
                           {{ item.label }}
                         </option>
                       </select>
+                      <div class="benchmark-font-preview">
+                        <div>
+                          <strong>真实字体预览</strong>
+                          <em :class="`state-${benchmarkSubtitleFontLoadState}`">{{ fontLoadStateLabel(benchmarkSubtitleFontLoadState) }}</em>
+                        </div>
+                        <p :style="fontPreviewStyle(benchmarkAdvancedSettings.subtitleOverlay.fontFamily)">{{ benchmarkFontPreviewSample }}</p>
+                      </div>
                     </label>
                     <label class="benchmark-inline-field">
                       <span>位置</span>
@@ -657,6 +664,21 @@
                         @input="patchBenchmarkSubtitleOverlay({ fontSize: numberFromBenchmarkEvent($event, 36, 20, 80) })"
                       />
                     </label>
+                    <label class="benchmark-inline-field">
+                      <span>描边开关</span>
+                      <div class="benchmark-stroke-segmented">
+                        <button
+                          v-for="item in benchmarkStrokeModeOptions"
+                          :key="item.value"
+                          type="button"
+                          :class="{ active: benchmarkSubtitleStrokeMode === item.value }"
+                          :title="item.hint"
+                          @click="patchBenchmarkSubtitleOverlay({ strokeMode: item.value })"
+                        >
+                          {{ item.label }}
+                        </button>
+                      </div>
+                    </label>
                   </div>
                   <div class="benchmark-color-grid">
                     <div class="benchmark-color-field">
@@ -674,7 +696,7 @@
                         />
                       </div>
                     </div>
-                    <div class="benchmark-color-field">
+                    <div class="benchmark-color-field" :class="{ disabled: benchmarkSubtitleStrokeMode === 'none' }">
                       <span>描边颜色</span>
                       <div class="benchmark-color-swatches">
                         <button
@@ -685,6 +707,7 @@
                           :class="{ active: benchmarkColorPresetActive(benchmarkAdvancedSettings.subtitleOverlay.outlineColor, item.value) }"
                           :style="{ backgroundColor: item.value }"
                           :title="item.label"
+                          :disabled="benchmarkSubtitleStrokeMode === 'none'"
                           @click="patchBenchmarkSubtitleOverlay({ outlineColor: item.value })"
                         />
                       </div>
@@ -1337,7 +1360,20 @@ import {
   type CarSalesPlanDraft,
   type CarSalesPlanDraftAsset,
 } from '../render/carSalesPlanDraft'
-import { CAR_TEXT_COLOR_PRESETS, CAR_TEXT_FONT_OPTIONS } from '../../constants/carSalesTextStyles'
+import {
+  CAR_TEXT_COLOR_PRESETS,
+  CAR_TEXT_FONT_OPTIONS,
+  CAR_TEXT_FONT_SAMPLE,
+  CAR_TEXT_STROKE_MODE_OPTIONS,
+} from '../../constants/carSalesTextStyles'
+import {
+  fontLoadStateLabel,
+  fontPreviewStyle,
+  loadTextOverlayFont,
+  normalizeTextStrokeMode,
+  overlayPreviewStyle,
+  type FontLoadState,
+} from '../../utils/textOverlayStyle'
 
 const DEFAULT_CAR_SALES_MODEL = 'doubao-seedance-2-0-pro-250528'
 
@@ -1357,6 +1393,9 @@ const isBenchmarkCreationEntry = computed(() => {
 const benchmarkPageTitle = computed(() => isBenchmarkCreationEntry.value ? '爆款对标创作' : '爆款对标')
 const benchmarkTextFontOptions = CAR_TEXT_FONT_OPTIONS
 const benchmarkTextColorPresets = CAR_TEXT_COLOR_PRESETS
+const benchmarkStrokeModeOptions = CAR_TEXT_STROKE_MODE_OPTIONS
+const benchmarkFontPreviewSample = CAR_TEXT_FONT_SAMPLE
+const benchmarkSubtitleFontLoadState = ref<FontLoadState>('loading')
 const benchmarkTextPositionOptions: Array<{ value: CarSalesTextOverlaySettings['position']; label: string }> = [
   { value: 'top', label: '顶部' },
   { value: 'middle', label: '中部' },
@@ -1570,10 +1609,21 @@ const benchmarkHeadlinePreviewText = computed(() =>
   benchmarkAdvancedSettings.value.headlineOverlay.text.trim() || '限时到店礼遇',
 )
 const benchmarkSubtitlePreviewStyle = computed(() =>
-  benchmarkOverlayPreviewStyle(benchmarkAdvancedSettings.value.subtitleOverlay, 'subtitle'),
+  overlayPreviewStyle(benchmarkAdvancedSettings.value.subtitleOverlay, 'subtitle', {
+    subtitleFallbackSize: 36,
+    subtitleScale: 0.7,
+    subtitleMax: 34,
+  }),
 )
 const benchmarkHeadlinePreviewStyle = computed(() =>
-  benchmarkOverlayPreviewStyle(benchmarkAdvancedSettings.value.headlineOverlay, 'headline'),
+  overlayPreviewStyle(benchmarkAdvancedSettings.value.headlineOverlay, 'headline', {
+    headlineFallbackSize: 64,
+    headlineScale: 0.56,
+    headlineMax: 58,
+  }),
+)
+const benchmarkSubtitleStrokeMode = computed(() =>
+  normalizeTextStrokeMode(benchmarkAdvancedSettings.value.subtitleOverlay.strokeMode),
 )
 const referenceVideoDurationSeconds = computed(() =>
   normalizeBenchmarkDurationSeconds(douyinParse.value?.durationSeconds || 0),
@@ -1611,6 +1661,7 @@ function createDefaultBenchmarkAdvancedSettings(): CarSalesAdvancedSettings {
       fontSize: 36,
       textColor: '#ffffff',
       outlineColor: '#111827',
+      strokeMode: 'thin',
       position: 'bottom',
     },
     headlineOverlay: {
@@ -1742,24 +1793,14 @@ function benchmarkColorPresetActive(current: string | undefined, preset: string)
   return normalizeBenchmarkHexColor(current || '', '').toLowerCase() === normalizeBenchmarkHexColor(preset, '').toLowerCase()
 }
 
-function benchmarkOverlayPreviewStyle(
-  overlay: CarSalesTextOverlaySettings,
-  kind: 'subtitle' | 'headline',
-) {
-  const baseSize = Number(overlay.fontSize) || (kind === 'headline' ? 64 : 36)
-  const previewSize = kind === 'headline'
-    ? Math.max(24, Math.min(58, Math.round(baseSize * 0.56)))
-    : Math.max(16, Math.min(34, Math.round(baseSize * 0.7)))
-  const outlineWidth = kind === 'headline' ? 2 : 1
-  const outlineColor = normalizeBenchmarkHexColor(overlay.outlineColor, '#111827')
-  return {
-    color: normalizeBenchmarkHexColor(overlay.textColor, '#ffffff'),
-    fontFamily: overlay.fontFamily,
-    fontSize: `${previewSize}px`,
-    WebkitTextStroke: `${outlineWidth}px ${outlineColor}`,
-    textShadow: `0 ${outlineWidth}px 0 ${outlineColor}, 0 -${outlineWidth}px 0 ${outlineColor}, ${outlineWidth}px 0 0 ${outlineColor}, -${outlineWidth}px 0 0 ${outlineColor}`,
-  }
-}
+watch(
+  () => benchmarkAdvancedSettings.value.subtitleOverlay.fontFamily,
+  async (fontFamily) => {
+    benchmarkSubtitleFontLoadState.value = 'loading'
+    benchmarkSubtitleFontLoadState.value = await loadTextOverlayFont(fontFamily, benchmarkFontPreviewSample)
+  },
+  { immediate: true },
+)
 
 function handleBenchmarkBgmFileInput(event: Event) {
   const input = event.target as HTMLInputElement
@@ -3224,6 +3265,7 @@ function normalizeBenchmarkOverlay(
     fontSize: overlay.fontSize ?? fallback.fontSize,
     textColor: overlay.textColor ?? fallback.textColor,
     outlineColor: overlay.outlineColor ?? fallback.outlineColor,
+    strokeMode: normalizeTextStrokeMode(overlay.strokeMode, normalizeTextStrokeMode(fallback.strokeMode)),
     position: normalizeBenchmarkOverlayPosition(overlay.position, fallback.position),
   }
 }
@@ -5976,6 +6018,86 @@ function applyScript() {
 .benchmark-color-swatch.active {
   border-color: #2563eb;
   box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.16), inset 0 0 0 1px rgba(15, 23, 42, 0.08);
+}
+
+.benchmark-color-field.disabled {
+  opacity: 0.58;
+}
+
+.benchmark-color-swatch:disabled {
+  cursor: not-allowed;
+  opacity: 0.45;
+}
+
+.benchmark-font-preview {
+  display: grid;
+  gap: 6px;
+  border: 1px solid #dbeafe;
+  border-radius: 8px;
+  background: #fff;
+  padding: 8px 10px;
+}
+
+.benchmark-font-preview div {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.benchmark-font-preview strong {
+  color: #101828;
+  font-size: 12px;
+  font-weight: 850;
+}
+
+.benchmark-font-preview em {
+  border-radius: 999px;
+  background: #f1f5f9;
+  color: #667085;
+  padding: 2px 7px;
+  font-size: 11px;
+  font-style: normal;
+  font-weight: 850;
+}
+
+.benchmark-font-preview em.state-ready {
+  background: #dcfce7;
+  color: #15803d;
+}
+
+.benchmark-font-preview em.state-loading {
+  background: #eff6ff;
+  color: #2563eb;
+}
+
+.benchmark-font-preview p {
+  margin: 0;
+  color: #101828;
+  font-size: 18px;
+  font-weight: 850;
+  line-height: 1.45;
+}
+
+.benchmark-stroke-segmented {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 6px;
+}
+
+.benchmark-stroke-segmented button {
+  min-height: 38px;
+  border: 1px solid #dfe7f3;
+  border-radius: 7px;
+  background: #fff;
+  color: #667085;
+  font-weight: 850;
+}
+
+.benchmark-stroke-segmented button.active {
+  border-color: #93c5fd;
+  background: #eff6ff;
+  color: #2563eb;
 }
 
 .benchmark-overlay-preview {

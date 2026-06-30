@@ -257,6 +257,7 @@ export interface QuickRenderTextOverlayRequest {
   fontSize?: number
   textColor?: string
   outlineColor?: string
+  strokeMode?: 'none' | 'thin' | 'strong'
   position?: 'top' | 'middle' | 'bottom'
 }
 
@@ -408,6 +409,7 @@ export interface CarSalesTextOverlayRequest {
   fontSize?: number
   textColor?: string
   outlineColor?: string
+  strokeMode?: 'none' | 'thin' | 'strong'
   position?: 'top' | 'middle' | 'bottom'
 }
 

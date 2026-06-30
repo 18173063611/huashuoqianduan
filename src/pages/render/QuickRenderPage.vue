@@ -834,6 +834,7 @@ function createDefaultAdvancedSettings(preferences: CarSalesGenerationPreference
       fontSize: 36,
       textColor: '#ffffff',
       outlineColor: '#111827',
+      strokeMode: 'thin',
       position: 'bottom',
     },
     headlineOverlay: {
@@ -2620,6 +2621,7 @@ function overlayForRequest(overlay: CarSalesAdvancedSettings['headlineOverlay'])
     fontSize: overlay.fontSize,
     textColor: overlay.textColor,
     outlineColor: overlay.outlineColor,
+    strokeMode: overlay.strokeMode,
     position: overlay.position,
   }
 }

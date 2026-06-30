@@ -101,6 +101,13 @@
                     {{ item.label }}
                   </option>
                 </select>
+                <div class="car-font-preview">
+                  <div>
+                    <strong>真实字体预览</strong>
+                    <em :class="`state-${subtitleFontLoadState}`">{{ fontLoadStateLabel(subtitleFontLoadState) }}</em>
+                  </div>
+                  <p :style="fontPreviewStyle(settings.subtitleOverlay.fontFamily)">{{ fontPreviewSample }}</p>
+                </div>
               </label>
               <label class="car-field">
                 <span>字幕位置</span>
@@ -121,6 +128,21 @@
                   @input="patchOverlay('subtitleOverlay', { fontSize: numberFromEvent($event, 36) })"
                 />
               </label>
+              <div class="car-field">
+                <span>描边开关</span>
+                <div class="car-stroke-segmented">
+                  <button
+                    v-for="item in textStrokeModeOptions"
+                    :key="item.value"
+                    type="button"
+                    :class="{ active: normalizedSubtitleStrokeMode === item.value }"
+                    :title="item.hint"
+                    @click="patchOverlay('subtitleOverlay', { strokeMode: item.value })"
+                  >
+                    {{ item.label }}
+                  </button>
+                </div>
+              </div>
             </div>
             <div class="car-color-grid">
               <div class="car-color-field">
@@ -138,7 +160,7 @@
                   />
                 </div>
               </div>
-              <div class="car-color-field">
+              <div class="car-color-field" :class="{ disabled: normalizedSubtitleStrokeMode === 'none' }">
                 <span>描边颜色</span>
                 <div class="car-color-swatches">
                   <button
@@ -149,6 +171,7 @@
                     :class="{ active: colorPresetActive(settings.subtitleOverlay.outlineColor, item.value) }"
                     :style="{ backgroundColor: item.value }"
                     :title="item.label"
+                    :disabled="normalizedSubtitleStrokeMode === 'none'"
                     @click="patchOverlay('subtitleOverlay', { outlineColor: item.value })"
                   />
                 </div>
@@ -391,14 +414,29 @@
 </template>
 
 <script setup lang="ts">
-import { computed } from 'vue'
-import { CAR_TEXT_COLOR_PRESETS, CAR_TEXT_FONT_OPTIONS } from '../../constants/carSalesTextStyles'
+import { computed, ref, watch } from 'vue'
+import {
+  CAR_TEXT_COLOR_PRESETS,
+  CAR_TEXT_FONT_OPTIONS,
+  CAR_TEXT_FONT_SAMPLE,
+  CAR_TEXT_STROKE_MODE_OPTIONS,
+} from '../../constants/carSalesTextStyles'
 import {
   CAR_NATIVE_SPEECH_STYLE_OPTIONS,
   CAR_NATIVE_VOICE_STYLE_OPTIONS,
   normalizeCarNativeSpeechStyle,
   normalizeCarNativeVoiceStyle,
 } from '../../constants/carSalesVoiceStyles'
+import {
+  fontLoadStateLabel,
+  fontPreviewStyle,
+  loadTextOverlayFont,
+  normalizeHexColor,
+  normalizeTextStrokeMode,
+  overlayPreviewStyle as buildOverlayPreviewStyle,
+  type FontLoadState,
+  type TextStrokeMode,
+} from '../../utils/textOverlayStyle'
 
 export type OverlayPosition = 'top' | 'middle' | 'bottom'
 
@@ -409,6 +447,7 @@ export interface CarSalesTextOverlaySettings {
   fontSize: number
   textColor: string
   outlineColor: string
+  strokeMode?: TextStrokeMode
   position: OverlayPosition
 }
 
@@ -467,6 +506,9 @@ const maleVoiceStyleOptions = computed(() => CAR_NATIVE_VOICE_STYLE_OPTIONS.filt
 const speechStyleOptions = computed(() => CAR_NATIVE_SPEECH_STYLE_OPTIONS)
 const textFontOptions = CAR_TEXT_FONT_OPTIONS
 const textColorPresets = CAR_TEXT_COLOR_PRESETS
+const textStrokeModeOptions = CAR_TEXT_STROKE_MODE_OPTIONS
+const fontPreviewSample = CAR_TEXT_FONT_SAMPLE
+const subtitleFontLoadState = ref<FontLoadState>('loading')
 const subtitlePreviewText = computed(() => {
   if (props.settings.subtitleMode === 'upload' && props.settings.customSubtitle.trim()) {
     return props.settings.customSubtitle.trim().split(/\n+/)[0]
@@ -476,8 +518,9 @@ const subtitlePreviewText = computed(() => {
 const headlinePreviewText = computed(() =>
   props.settings.headlineOverlay.text.trim() || '限时到店礼遇\n预约试驾享权益',
 )
-const subtitlePreviewStyle = computed(() => overlayPreviewStyle(props.settings.subtitleOverlay, 'subtitle'))
-const headlinePreviewStyle = computed(() => overlayPreviewStyle(props.settings.headlineOverlay, 'headline'))
+const normalizedSubtitleStrokeMode = computed(() => normalizeTextStrokeMode(props.settings.subtitleOverlay.strokeMode))
+const subtitlePreviewStyle = computed(() => buildOverlayPreviewStyle(props.settings.subtitleOverlay, 'subtitle'))
+const headlinePreviewStyle = computed(() => buildOverlayPreviewStyle(props.settings.headlineOverlay, 'headline'))
 const selectedVoiceStyleHint = computed(() => {
   const value = normalizeCarNativeVoiceStyle(props.settings.nativeVoiceStyle)
   return CAR_NATIVE_VOICE_STYLE_OPTIONS.find((item) => item.value === value)?.hint || ''
@@ -500,6 +543,15 @@ const selectedBgmHint = computed(() => {
   if (props.hasBgmMaterial) return '已加入本次生成，只作为背景音乐后期混入'
   return '可从资产中心选择或上传本地 BGM，不参与口播、字幕或口型'
 })
+
+watch(
+  () => props.settings.subtitleOverlay.fontFamily,
+  async (fontFamily) => {
+    subtitleFontLoadState.value = 'loading'
+    subtitleFontLoadState.value = await loadTextOverlayFont(fontFamily, fontPreviewSample)
+  },
+  { immediate: true },
+)
 
 function patch(partial: Partial<CarSalesAdvancedSettings>) {
   emit('update:settings', {
@@ -540,37 +592,12 @@ function numberFromEvent(event: Event, fallback: number) {
   return Number.isFinite(value) ? value : fallback
 }
 
-function normalizeHexColor(value: string | undefined, fallback: string) {
-  const clean = (value || '').trim()
-  if (/^#[0-9a-fA-F]{6}$/.test(clean)) return clean
-  if (/^#[0-9a-fA-F]{3}$/.test(clean)) {
-    return `#${clean[1]}${clean[1]}${clean[2]}${clean[2]}${clean[3]}${clean[3]}`
-  }
-  return fallback
-}
-
 function colorPresetActive(current: string | undefined, preset: string) {
   return normalizeHexColor(current, '').toLowerCase() === normalizeHexColor(preset, '').toLowerCase()
 }
 
 function overlayPositionClass(position: OverlayPosition | undefined) {
   return `pos-${position === 'top' || position === 'middle' || position === 'bottom' ? position : 'bottom'}`
-}
-
-function overlayPreviewStyle(overlay: CarSalesTextOverlaySettings, kind: 'subtitle' | 'headline') {
-  const baseSize = Number(overlay.fontSize) || (kind === 'headline' ? 64 : 36)
-  const previewSize = kind === 'headline'
-    ? Math.max(22, Math.min(44, Math.round(baseSize * 0.52)))
-    : Math.max(16, Math.min(30, Math.round(baseSize * 0.58)))
-  const outlineWidth = kind === 'headline' ? 2 : 1
-  const outlineColor = normalizeHexColor(overlay.outlineColor, '#111827')
-  return {
-    color: normalizeHexColor(overlay.textColor, '#ffffff'),
-    fontFamily: overlay.fontFamily,
-    fontSize: `${previewSize}px`,
-    WebkitTextStroke: `${outlineWidth}px ${outlineColor}`,
-    textShadow: `0 ${outlineWidth}px 0 ${outlineColor}, 0 -${outlineWidth}px 0 ${outlineColor}, ${outlineWidth}px 0 0 ${outlineColor}, -${outlineWidth}px 0 0 ${outlineColor}`,
-  }
 }
 
 function handleBgmFileChange(event: Event) {
@@ -903,6 +930,81 @@ function handleBgmFileChange(event: Event) {
   font-weight: 800;
 }
 
+.car-color-field.disabled {
+  opacity: 0.58;
+}
+
+.car-font-preview {
+  display: grid;
+  gap: 6px;
+  border: 1px solid #dbeafe;
+  border-radius: 8px;
+  background: #fff;
+  padding: 8px 10px;
+}
+
+.car-font-preview div {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.car-font-preview strong {
+  color: var(--hs-text);
+  font-size: 12px;
+  font-weight: 800;
+}
+
+.car-font-preview em {
+  border-radius: 999px;
+  background: #f1f5f9;
+  color: var(--hs-text-muted);
+  padding: 2px 7px;
+  font-size: 11px;
+  font-style: normal;
+  font-weight: 800;
+}
+
+.car-font-preview em.state-ready {
+  background: #dcfce7;
+  color: #15803d;
+}
+
+.car-font-preview em.state-loading {
+  background: #eff6ff;
+  color: #2563eb;
+}
+
+.car-font-preview p {
+  margin: 0;
+  color: #111827;
+  font-size: 18px;
+  font-weight: 800;
+  line-height: 1.45;
+}
+
+.car-stroke-segmented {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 6px;
+}
+
+.car-stroke-segmented button {
+  min-height: 36px;
+  border: 1px solid var(--hs-border);
+  border-radius: 6px;
+  background: #fff;
+  color: var(--hs-text-muted);
+  font-weight: 800;
+}
+
+.car-stroke-segmented button.active {
+  border-color: #93c5fd;
+  background: #eff6ff;
+  color: #2563eb;
+}
+
 .car-color-swatches {
   display: flex;
   flex-wrap: wrap;
@@ -922,6 +1024,11 @@ function handleBgmFileChange(event: Event) {
 .car-color-swatch.active {
   border-color: #2563eb;
   box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.16), inset 0 0 0 1px rgba(15, 23, 42, 0.08);
+}
+
+.car-color-swatch:disabled {
+  cursor: not-allowed;
+  opacity: 0.45;
 }
 
 .car-overlay-preview {

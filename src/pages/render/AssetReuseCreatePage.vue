@@ -224,6 +224,13 @@
                         :value="item.value"
                       />
                     </el-select>
+                    <div class="reuse-font-preview">
+                      <div>
+                        <strong>真实字体预览</strong>
+                        <em :class="`state-${assetReuseSubtitleFontLoadState}`">{{ fontLoadStateLabel(assetReuseSubtitleFontLoadState) }}</em>
+                      </div>
+                      <p :style="fontPreviewStyle(assetReuseSubtitleFontFamily)">{{ assetReuseFontPreviewSample }}</p>
+                    </div>
                   </label>
                   <label class="reuse-setting-field">
                     <span>字幕位置</span>
@@ -247,6 +254,22 @@
                       :disabled="assetReuseSubtitleMode === 'off'"
                     />
                   </label>
+                  <label class="reuse-setting-field">
+                    <span>字幕描边</span>
+                    <div class="reuse-stroke-segmented">
+                      <button
+                        v-for="item in assetReuseStrokeModeOptions"
+                        :key="item.value"
+                        type="button"
+                        :class="{ active: assetReuseSubtitleStrokeMode === item.value }"
+                        :title="item.hint"
+                        :disabled="assetReuseSubtitleMode === 'off'"
+                        @click="assetReuseSubtitleStrokeMode = item.value"
+                      >
+                        {{ item.label }}
+                      </button>
+                    </div>
+                  </label>
                   <div class="reuse-setting-field reuse-color-field">
                     <span>字幕文字颜色</span>
                     <div class="reuse-color-swatches">
@@ -263,7 +286,7 @@
                       />
                     </div>
                   </div>
-                  <div class="reuse-setting-field reuse-color-field">
+                  <div class="reuse-setting-field reuse-color-field" :class="{ disabled: assetReuseSubtitleStrokeMode === 'none' }">
                     <span>字幕描边颜色</span>
                     <div class="reuse-color-swatches">
                       <button
@@ -274,7 +297,7 @@
                         :class="{ active: assetReuseColorPresetActive(assetReuseSubtitleOutlineColor, item.value) }"
                         :style="{ backgroundColor: item.value }"
                         :title="item.label"
-                        :disabled="assetReuseSubtitleMode === 'off'"
+                        :disabled="assetReuseSubtitleMode === 'off' || assetReuseSubtitleStrokeMode === 'none'"
                         @click="assetReuseSubtitleOutlineColor = item.value"
                       />
                     </div>
@@ -710,6 +733,13 @@
                           :value="item.value"
                         />
                       </el-select>
+                      <div class="reuse-font-preview">
+                        <div>
+                          <strong>真实字体预览</strong>
+                          <em :class="`state-${assetReuseSubtitleFontLoadState}`">{{ fontLoadStateLabel(assetReuseSubtitleFontLoadState) }}</em>
+                        </div>
+                        <p :style="fontPreviewStyle(assetReuseSubtitleFontFamily)">{{ assetReuseFontPreviewSample }}</p>
+                      </div>
                     </label>
                     <label class="reuse-setting-field">
                       <span>字幕位置</span>
@@ -733,6 +763,22 @@
                         :disabled="assetReuseSubtitleMode === 'off'"
                       />
                     </label>
+                    <label class="reuse-setting-field">
+                      <span>字幕描边</span>
+                      <div class="reuse-stroke-segmented">
+                        <button
+                          v-for="item in assetReuseStrokeModeOptions"
+                          :key="item.value"
+                          type="button"
+                          :class="{ active: assetReuseSubtitleStrokeMode === item.value }"
+                          :title="item.hint"
+                          :disabled="assetReuseSubtitleMode === 'off'"
+                          @click="assetReuseSubtitleStrokeMode = item.value"
+                        >
+                          {{ item.label }}
+                        </button>
+                      </div>
+                    </label>
                     <div class="reuse-setting-field reuse-color-field">
                       <span>字幕文字颜色</span>
                       <div class="reuse-color-swatches">
@@ -749,7 +795,7 @@
                         />
                       </div>
                     </div>
-                    <div class="reuse-setting-field reuse-color-field">
+                    <div class="reuse-setting-field reuse-color-field" :class="{ disabled: assetReuseSubtitleStrokeMode === 'none' }">
                       <span>字幕描边颜色</span>
                       <div class="reuse-color-swatches">
                         <button
@@ -760,7 +806,7 @@
                           :class="{ active: assetReuseColorPresetActive(assetReuseSubtitleOutlineColor, item.value) }"
                           :style="{ backgroundColor: item.value }"
                           :title="item.label"
-                          :disabled="assetReuseSubtitleMode === 'off'"
+                          :disabled="assetReuseSubtitleMode === 'off' || assetReuseSubtitleStrokeMode === 'none'"
                           @click="assetReuseSubtitleOutlineColor = item.value"
                         />
                       </div>
@@ -1039,7 +1085,12 @@ import {
   normalizeCarNativeSpeechStyle,
   normalizeCarNativeVoiceStyle,
 } from '../../constants/carSalesVoiceStyles'
-import { CAR_TEXT_COLOR_PRESETS, CAR_TEXT_FONT_OPTIONS } from '../../constants/carSalesTextStyles'
+import {
+  CAR_TEXT_COLOR_PRESETS,
+  CAR_TEXT_FONT_OPTIONS,
+  CAR_TEXT_FONT_SAMPLE,
+  CAR_TEXT_STROKE_MODE_OPTIONS,
+} from '../../constants/carSalesTextStyles'
 import { useAuthRequired } from '../../composables/useAuthRequired'
 import type { AssetItem, AssetType } from '../../types/assetTypes'
 import type { QuickRenderAssetRole } from '../../types/videoTypes'
@@ -1049,6 +1100,15 @@ import {
   isCarModelBundleAsset,
 } from '../../utils/assetWorkflow'
 import { normalizePublicMediaUrl } from '../../utils/mediaUrl'
+import {
+  fontLoadStateLabel,
+  fontPreviewStyle,
+  loadTextOverlayFont,
+  normalizeTextStrokeMode,
+  overlayPreviewStyle,
+  type FontLoadState,
+  type TextStrokeMode,
+} from '../../utils/textOverlayStyle'
 import AiPlanPreviewDrawer from './AiPlanPreviewDrawer.vue'
 import AssetPicker from './AssetPicker.vue'
 import {
@@ -1330,9 +1390,13 @@ const assetReuseSubtitleFontSize = ref(42)
 const assetReuseHeadlineFontSize = ref(84)
 const assetReuseSubtitleTextColor = ref('#FFFFFF')
 const assetReuseSubtitleOutlineColor = ref('#111111')
+const assetReuseSubtitleStrokeMode = ref<TextStrokeMode>('thin')
 const assetReuseHeadlineTextColor = ref('#FFFFFF')
 const assetReuseHeadlineOutlineColor = ref('#111111')
 const assetReuseColorPresets = CAR_TEXT_COLOR_PRESETS
+const assetReuseStrokeModeOptions = CAR_TEXT_STROKE_MODE_OPTIONS
+const assetReuseFontPreviewSample = CAR_TEXT_FONT_SAMPLE
+const assetReuseSubtitleFontLoadState = ref<FontLoadState>('loading')
 const assetReuseTextPositionOptions: Array<{ value: OverlayPosition; label: string }> = [
   { value: 'top', label: '顶部' },
   { value: 'middle', label: '中部' },
@@ -1519,20 +1583,34 @@ const assetReuseHeadlinePreviewText = computed(() =>
   assetReuseHeadlineText.value.trim() || '限时到店礼遇',
 )
 const assetReuseSubtitlePreviewStyle = computed(() =>
-  assetReuseOverlayPreviewStyle({
+  overlayPreviewStyle({
     fontFamily: assetReuseSubtitleFontFamily.value,
     fontSize: assetReuseSubtitleFontSize.value,
     textColor: assetReuseSubtitleTextColor.value,
     outlineColor: assetReuseSubtitleOutlineColor.value,
+    strokeMode: assetReuseSubtitleStrokeMode.value,
   }, 'subtitle'),
 )
 const assetReuseHeadlinePreviewStyle = computed(() =>
-  assetReuseOverlayPreviewStyle({
+  overlayPreviewStyle({
     fontFamily: assetReuseHeadlineFontFamily.value,
     fontSize: assetReuseHeadlineFontSize.value,
     textColor: assetReuseHeadlineTextColor.value,
     outlineColor: assetReuseHeadlineOutlineColor.value,
-  }, 'headline'),
+  }, 'headline', {
+    headlineFallbackSize: 84,
+    headlineScale: 0.56,
+    headlineMax: 58,
+  }),
+)
+
+watch(
+  assetReuseSubtitleFontFamily,
+  async (fontFamily) => {
+    assetReuseSubtitleFontLoadState.value = 'loading'
+    assetReuseSubtitleFontLoadState.value = await loadTextOverlayFont(fontFamily, assetReuseFontPreviewSample)
+  },
+  { immediate: true },
 )
 
 function addSelectedAsset(asset: AssetItem, role: QuickRenderAssetRole, replaceRoles = singletonRolesFor(role)) {
@@ -1645,25 +1723,6 @@ function assetReuseColorPresetActive(current: string, preset: string) {
   return normalizeAssetReuseHexColor(current, '').toLowerCase() === normalizeAssetReuseHexColor(preset, '').toLowerCase()
 }
 
-function assetReuseOverlayPreviewStyle(
-  overlay: Pick<NonNullable<CarSalesPlanDraft['subtitleOverlay']>, 'fontFamily' | 'fontSize' | 'textColor' | 'outlineColor'>,
-  kind: 'subtitle' | 'headline',
-) {
-  const baseSize = Number(overlay.fontSize) || (kind === 'headline' ? 84 : 42)
-  const previewSize = kind === 'headline'
-    ? Math.max(24, Math.min(58, Math.round(baseSize * 0.56)))
-    : Math.max(16, Math.min(34, Math.round(baseSize * 0.7)))
-  const outlineWidth = kind === 'headline' ? 2 : 1
-  const outlineColor = normalizeAssetReuseHexColor(overlay.outlineColor, '#111111')
-  return {
-    color: normalizeAssetReuseHexColor(overlay.textColor, '#FFFFFF'),
-    fontFamily: overlay.fontFamily,
-    fontSize: `${previewSize}px`,
-    WebkitTextStroke: `${outlineWidth}px ${outlineColor}`,
-    textShadow: `0 ${outlineWidth}px 0 ${outlineColor}, 0 -${outlineWidth}px 0 ${outlineColor}, ${outlineWidth}px 0 0 ${outlineColor}, -${outlineWidth}px 0 0 ${outlineColor}`,
-  }
-}
-
 function assetReuseOverlayStyleLabel(overlay: CarSalesPlanDraft['subtitleOverlay']) {
   if (!overlay) return undefined
   return `${positionLabel(normalizeOverlayPosition(overlay.position, 'bottom'))}/${normalizeOverlayFontSize(overlay.fontSize, 42, 12, 160)}px`
@@ -1703,6 +1762,7 @@ function resetAssetReuseGenerationControls() {
   assetReuseHeadlineFontSize.value = 84
   assetReuseSubtitleTextColor.value = '#FFFFFF'
   assetReuseSubtitleOutlineColor.value = '#111111'
+  assetReuseSubtitleStrokeMode.value = 'thin'
   assetReuseHeadlineTextColor.value = '#FFFFFF'
   assetReuseHeadlineOutlineColor.value = '#111111'
 }
@@ -1722,6 +1782,7 @@ function applyImportedRenderConfigToControls(config: ImportedRenderConfig) {
   assetReuseSubtitleFontSize.value = normalizeOverlayFontSize(config.subtitleOverlay?.fontSize, assetReuseSubtitleFontSize.value, 20, 80)
   assetReuseSubtitleTextColor.value = normalizeAssetReuseHexColor(config.subtitleOverlay?.textColor, assetReuseSubtitleTextColor.value)
   assetReuseSubtitleOutlineColor.value = normalizeAssetReuseHexColor(config.subtitleOverlay?.outlineColor, assetReuseSubtitleOutlineColor.value)
+  assetReuseSubtitleStrokeMode.value = normalizeTextStrokeMode(config.subtitleOverlay?.strokeMode, assetReuseSubtitleStrokeMode.value)
   assetReuseAudioPolicy.value = normalizeImportedAudioPolicy(config.audioPolicy) || assetReuseAudioPolicy.value
   assetReuseModel.value = config.model || assetReuseModel.value
   assetReuseTargetDuration.value = normalizeAssetReuseTargetDuration(
@@ -1797,6 +1858,7 @@ function buildAssetReuseSubtitleOverlay(): CarSalesPlanDraft['subtitleOverlay'] 
     fontSize: normalizeOverlayFontSize(assetReuseSubtitleFontSize.value, 42, 20, 80),
     textColor: normalizeAssetReuseHexColor(assetReuseSubtitleTextColor.value, '#FFFFFF'),
     outlineColor: normalizeAssetReuseHexColor(assetReuseSubtitleOutlineColor.value, '#111111'),
+    strokeMode: assetReuseSubtitleStrokeMode.value,
     position: assetReuseSubtitlePosition.value,
   }
 }
@@ -3450,9 +3512,89 @@ onMounted(async () => {
   box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.16), inset 0 0 0 1px rgba(15, 23, 42, 0.08);
 }
 
+.reuse-color-field.disabled {
+  opacity: 0.58;
+}
+
 .reuse-color-swatch:disabled {
   opacity: 0.45;
   cursor: not-allowed;
+}
+
+.reuse-font-preview {
+  display: grid;
+  gap: 6px;
+  border: 1px solid #dbeafe;
+  border-radius: 8px;
+  background: #fff;
+  padding: 8px 10px;
+}
+
+.reuse-font-preview div {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.reuse-font-preview strong {
+  color: #344054;
+  font-size: 12px;
+  font-weight: 850;
+}
+
+.reuse-font-preview em {
+  border-radius: 999px;
+  background: #f1f5f9;
+  color: #667085;
+  padding: 2px 7px;
+  font-size: 11px;
+  font-style: normal;
+  font-weight: 850;
+}
+
+.reuse-font-preview em.state-ready {
+  background: #dcfce7;
+  color: #15803d;
+}
+
+.reuse-font-preview em.state-loading {
+  background: #eff6ff;
+  color: #2563eb;
+}
+
+.reuse-font-preview p {
+  margin: 0;
+  color: #101828;
+  font-size: 18px;
+  font-weight: 850;
+  line-height: 1.45;
+}
+
+.reuse-stroke-segmented {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 6px;
+}
+
+.reuse-stroke-segmented button {
+  min-height: 32px;
+  border: 1px solid #dfe7f3;
+  border-radius: 7px;
+  background: #fff;
+  color: #667085;
+  font-weight: 850;
+}
+
+.reuse-stroke-segmented button.active {
+  border-color: #93c5fd;
+  background: #eff6ff;
+  color: #2563eb;
+}
+
+.reuse-stroke-segmented button:disabled {
+  cursor: not-allowed;
+  opacity: 0.48;
 }
 
 .reuse-style-preview {
