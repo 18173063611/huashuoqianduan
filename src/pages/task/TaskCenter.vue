@@ -777,6 +777,45 @@ const IMPORTABLE_RENDER_TASK_TYPES = new Set([
   'IMAGE_TO_VIDEO_SEEDANCE_2_0_FAST',
 ])
 
+const VIDEO_COVER_FIELD_NAMES = [
+  'coverUrl',
+  'coverImageUrl',
+  'thumbnailUrl',
+  'posterUrl',
+  'poster',
+  'poster_url',
+  'previewImageUrl',
+  'imageUrl',
+  'firstFrameUrl',
+  'first_frame_url',
+  'lastFrameUrl',
+  'last_frame_url',
+]
+
+const VIDEO_COVER_NESTED_RECORD_FIELDS = [
+  'asset',
+  'outputAsset',
+  'resultAsset',
+  'metadata',
+  'video',
+  'cover',
+  'poster',
+  'thumbnail',
+]
+
+const VIDEO_COVER_ARRAY_FIELDS = [
+  'segmentVideos',
+  'segments',
+  'videoSegments',
+  'segmentResults',
+  'resultSegments',
+  'assets',
+  'outputAssets',
+  'resultAssets',
+]
+
+const IMAGE_URL_PATTERN = /\.(png|jpe?g|webp|gif|avif)(\?|#|$)/i
+
 const route = useRoute()
 const router = useRouter()
 
@@ -784,6 +823,7 @@ const hasToken = ref(false)
 const tasks = ref<TaskItem[]>([])
 const pendingPlanTasks = ref<PendingCarSalesPlanTask[]>(visiblePendingPlanTasks())
 const summary = ref<TaskSummaryResponse | null>(null)
+const myVideoResultAssets = ref<Record<number, AssetItem>>({})
 const loading = ref(false)
 /** 重试请求进行中时记录 taskId，用于仅禁用对应行的重试按钮 */
 const retryingTaskId = ref<number | null>(null)
@@ -894,39 +934,17 @@ const selectedVideoCoverUrl = computed(() => {
     objectField(resultObject.value, 'resultAsset') ||
     objectField(outputObject.value, 'outputAsset') ||
     objectField(outputObject.value, 'resultAsset')
-  const fromResult =
-    firstStringField(resultObject.value, [
-      'coverUrl',
-      'coverImageUrl',
-      'thumbnailUrl',
-      'posterUrl',
-      'previewImageUrl',
-      'firstFrameUrl',
-      'lastFrameUrl',
-    ]) ||
-    firstStringField(outputObject.value, [
-      'coverUrl',
-      'coverImageUrl',
-      'thumbnailUrl',
-      'posterUrl',
-      'previewImageUrl',
-      'firstFrameUrl',
-      'lastFrameUrl',
-    ]) ||
-    firstStringField(resultAsset, ['thumbnailUrl', 'coverUrl', 'fileUrl']) ||
-    firstStringField(resultOutputAsset, ['thumbnailUrl', 'coverUrl', 'fileUrl'])
-  const fromInput = firstStringField(selectedTaskParameterObject.value, [
-    'coverUrl',
-    'coverImageUrl',
-    'thumbnailUrl',
-    'posterUrl',
-    'firstFrameUrl',
-    'lastFrameUrl',
-  ])
-  const fromSegment = carSalesSegmentVideos.value
-    .map((segment) => firstStringField(segment, ['coverUrl', 'thumbnailUrl', 'posterUrl', 'firstFrameUrl', 'lastFrameUrl']))
-    .find(Boolean)
-  return normalizePreviewUrl(fromResult || fromInput || fromSegment || '')
+  const selectedAsset = myVideoResultAssets.value[selectedResultAssetId.value || -1]
+  return normalizePreviewUrl(
+    coverUrlFromRecord(resultObject.value) ||
+      coverUrlFromRecord(outputObject.value) ||
+      coverUrlFromRecord(resultAsset) ||
+      coverUrlFromRecord(resultOutputAsset) ||
+      coverUrlFromAsset(selectedAsset) ||
+      coverUrlFromRecord(selectedTaskParameterObject.value) ||
+      firstCoverUrlFromRecords(carSalesSegmentVideos.value) ||
+      '',
+  )
 })
 const canRegenerateCarSalesSegment = computed(() => {
   const task = selectedResultTask.value
@@ -1210,6 +1228,9 @@ async function loadData(silent: boolean) {
         failedCount: list.filter((t) => ['FAILED', 'RETRYABLE', 'CANCELED'].includes(String(t.status))).length,
         records: list,
       }
+      if (isMyVideosPage.value) {
+        await loadMyVideoResultAssets(list)
+      }
     } else {
       const list = await listTasks({
         ...(typeArg ? { taskType: typeArg } : {}),
@@ -1223,6 +1244,9 @@ async function loadData(silent: boolean) {
       } else {
         const sum = await getTaskSummary()
         summary.value = sum
+      }
+      if (isMyVideosPage.value) {
+        await loadMyVideoResultAssets(tasks.value)
       }
     }
     await openPendingRouteTask()
@@ -1317,6 +1341,29 @@ async function hydrateLiveCarSalesRows(list: TaskItem[]) {
       outputJson: result.result == null ? task.outputJson : JSON.stringify(result.result),
     }
   })
+}
+
+async function loadMyVideoResultAssets(list: TaskItem[]) {
+  const assetIds = Array.from(new Set(
+    list
+      .filter((task) => isVideoResultTaskType(task.taskType))
+      .map((task) => taskVideoAssetId(task))
+      .filter((assetId): assetId is number => typeof assetId === 'number' && assetId > 0),
+  )).filter((assetId) => !myVideoResultAssets.value[assetId])
+  if (!assetIds.length) {
+    return
+  }
+  const settled = await Promise.allSettled(assetIds.map(async (assetId) => ({
+    assetId,
+    asset: await getAssetDetail(assetId),
+  })))
+  const nextAssets = { ...myVideoResultAssets.value }
+  settled.forEach((item) => {
+    if (item.status === 'fulfilled') {
+      nextAssets[item.value.assetId] = item.value.asset
+    }
+  })
+  myVideoResultAssets.value = nextAssets
 }
 
 async function handleRetry(taskId: number) {
@@ -1574,11 +1621,7 @@ function myVideoActionLabel(card: MyVideoResultCard) {
 function buildMyVideoResultCard(task: TaskItem): MyVideoResultCard {
   const output = taskOutputObject(task)
   const input = taskInputObject(task)
-  const assetId =
-    resultAssetId(task) ??
-    numberField(output, 'resultAssetId') ??
-    numberField(output, 'finalAssetId') ??
-    null
+  const assetId = taskVideoAssetId(task)
   const duration =
     numberField(output, 'durationSeconds') ??
     numberField(output, 'totalDurationSeconds') ??
@@ -1603,6 +1646,135 @@ function taskInputObject(task: TaskItem) {
   return isRecord(parsed) ? parsed : null
 }
 
+function taskVideoAssetId(task: TaskItem): number | null {
+  const output = taskOutputObject(task)
+  const resultAsset =
+    objectField(output, 'asset') ||
+    objectField(output, 'outputAsset') ||
+    objectField(output, 'resultAsset')
+  return (
+    resultAssetId(task) ??
+    numberField(output, 'resultAssetId') ??
+    numberField(output, 'finalAssetId') ??
+    numberField(resultAsset, 'assetId') ??
+    null
+  )
+}
+
+function coverUrlFromAsset(asset: AssetItem | null | undefined) {
+  if (!asset) {
+    return ''
+  }
+  const metadata = parseRecordCandidate(asset.metadataJson)
+  return firstNonEmptyText(
+    asset.thumbnailUrl || '',
+    coverUrlFromRecord(metadata),
+    imageLikeAssetFileUrl(asset),
+  )
+}
+
+function firstCoverUrlFromRecords(records: Record<string, unknown>[]) {
+  for (const record of records) {
+    const cover = coverUrlFromRecord(record)
+    if (cover) {
+      return cover
+    }
+  }
+  return ''
+}
+
+function coverUrlFromRecord(record: Record<string, unknown> | null | undefined, depth = 0): string {
+  if (!record || depth > 3) {
+    return ''
+  }
+  const direct = firstStringField(record, VIDEO_COVER_FIELD_NAMES)
+  if (direct) {
+    return direct
+  }
+  const previewImage = imageUrlCandidate(stringField(record, 'previewUrl'))
+  if (previewImage) {
+    return previewImage
+  }
+  const fileImage = imageLikeFileUrl(record)
+  if (fileImage) {
+    return fileImage
+  }
+  const metadata = parseRecordCandidate(record.metadataJson) || parseRecordCandidate(record.metadata)
+  const fromMetadata = coverUrlFromRecord(metadata, depth + 1)
+  if (fromMetadata) {
+    return fromMetadata
+  }
+  for (const field of VIDEO_COVER_NESTED_RECORD_FIELDS) {
+    const nested = parseRecordCandidate(record[field])
+    const cover = coverUrlFromRecord(nested, depth + 1)
+    if (cover) {
+      return cover
+    }
+  }
+  for (const field of VIDEO_COVER_ARRAY_FIELDS) {
+    const raw = record[field]
+    if (!Array.isArray(raw)) {
+      continue
+    }
+    const cover = firstCoverUrlFromRecords(raw.filter(isRecord))
+    if (cover) {
+      return cover
+    }
+  }
+  return ''
+}
+
+function imageLikeFileUrl(record: Record<string, unknown> | null | undefined) {
+  const url = firstStringField(record, ['fileUrl', 'url'])
+  if (!url) {
+    return ''
+  }
+  const mimeType = stringField(record, 'mimeType').toLowerCase()
+  const assetType = stringField(record, 'assetType').toUpperCase()
+  if (assetType === 'IMAGE' || assetType === 'COVER' || mimeType.startsWith('image/')) {
+    return url
+  }
+  return imageUrlCandidate(url)
+}
+
+function imageLikeAssetFileUrl(asset: AssetItem) {
+  const url = asset.fileUrl || ''
+  if (!url) {
+    return ''
+  }
+  const mimeType = String(asset.mimeType || '').toLowerCase()
+  if (asset.assetType === 'IMAGE' || asset.assetType === 'COVER' || mimeType.startsWith('image/')) {
+    return url
+  }
+  return imageUrlCandidate(url)
+}
+
+function imageUrlCandidate(url: string) {
+  const value = String(url || '').trim()
+  if (!value) {
+    return ''
+  }
+  if (/^data:image\//i.test(value)) {
+    return value
+  }
+  return IMAGE_URL_PATTERN.test(value) ? value : ''
+}
+
+function parseRecordCandidate(value: unknown) {
+  if (isRecord(value)) {
+    return value
+  }
+  if (typeof value !== 'string' || !value.trim()) {
+    return null
+  }
+  const parsed = parseJsonObject(value)
+  return isRecord(parsed) ? parsed : null
+}
+
+function firstNonEmptyText(...values: string[]) {
+  return values.map((value) => value.trim()).find(Boolean) || ''
+}
+
 function taskVideoCoverUrl(task: TaskItem) {
   const output = taskOutputObject(task)
   const input = taskInputObject(task)
@@ -1610,24 +1782,15 @@ function taskVideoCoverUrl(task: TaskItem) {
   const resultOutputAsset =
     objectField(output, 'outputAsset') ||
     objectField(output, 'resultAsset')
+  const hydratedAsset = myVideoResultAssets.value[taskVideoAssetId(task) || -1]
   const segments = Array.isArray(output?.segmentVideos) ? output.segmentVideos.filter(isRecord) : []
-  const fromSegment = segments
-    .map((segment) => firstStringField(segment, ['coverUrl', 'thumbnailUrl', 'posterUrl', 'firstFrameUrl', 'lastFrameUrl']))
-    .find(Boolean)
   return normalizePreviewUrl(
-    firstStringField(output, [
-      'coverUrl',
-      'coverImageUrl',
-      'thumbnailUrl',
-      'posterUrl',
-      'previewImageUrl',
-      'firstFrameUrl',
-      'lastFrameUrl',
-    ]) ||
-      firstStringField(resultAsset, ['thumbnailUrl', 'coverUrl', 'fileUrl']) ||
-      firstStringField(resultOutputAsset, ['thumbnailUrl', 'coverUrl', 'fileUrl']) ||
-      firstStringField(input, ['coverUrl', 'coverImageUrl', 'thumbnailUrl', 'posterUrl', 'firstFrameUrl', 'lastFrameUrl']) ||
-      fromSegment ||
+    coverUrlFromRecord(output) ||
+      coverUrlFromRecord(resultAsset) ||
+      coverUrlFromRecord(resultOutputAsset) ||
+      coverUrlFromAsset(hydratedAsset) ||
+      coverUrlFromRecord(input) ||
+      firstCoverUrlFromRecords(segments) ||
       '',
   )
 }
@@ -2400,10 +2563,14 @@ function orderLabel(order: number) {
 }
 
 function normalizePreviewUrl(url: string) {
-  if (!url) {
+  const value = String(url || '').trim()
+  if (!value) {
     return ''
   }
-  return url.startsWith('http') ? url : `${API_ORIGIN}${url.startsWith('/') ? url : `/${url}`}`
+  if (/^(https?:|data:|blob:)/i.test(value)) {
+    return value
+  }
+  return `${API_ORIGIN}${value.startsWith('/') ? value : `/${value}`}`
 }
 </script>
 

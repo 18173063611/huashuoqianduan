@@ -77,12 +77,11 @@
               </select>
             </label>
             <label class="system-field">
-              <span>音频策略</span>
+              <span>默认口播</span>
               <select v-model="preferences.audioPolicy">
-                <option value="auto">智能匹配</option>
-                <option value="none">关闭音频</option>
-                <option value="bgm">仅背景音乐</option>
-                <option value="voiceover">优先口播</option>
+                <option value="auto">视频生成口播</option>
+                <option value="voiceover">选择已有口播</option>
+                <option value="bgm">不使用口播</option>
               </select>
             </label>
             <label class="system-field">
@@ -275,10 +274,10 @@ const subtitleModeLabel = computed(() => {
 
 const audioPolicyLabel = computed(() => {
   const map: Record<string, string> = {
-    auto: '智能匹配',
-    none: '关闭音频',
-    bgm: '仅背景音乐',
-    voiceover: '优先口播',
+    auto: '视频生成口播',
+    none: '不使用口播',
+    bgm: '不使用口播',
+    voiceover: '选择已有口播',
     EXTERNAL_AUDIO: '外部音频',
     VIDEO_NATIVE_AUDIO: '音视频同步',
     external_audio: '外部音频',

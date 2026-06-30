@@ -5,6 +5,9 @@ import {
   normalizeCarNativeSpeechStyle,
   normalizeCarNativeVoiceStyle,
 } from '../../constants/carSalesVoiceStyles'
+import {
+  carSalesSpokenLanguageName,
+} from '../../constants/carSalesLanguages'
 import type { AssetItem, AssetType } from '../../types/assetTypes'
 import type { BillingEstimateResponse } from '../../types/creditTypes'
 import type { StoryboardShotItem } from '../../types/scriptTypes'
@@ -918,6 +921,9 @@ function scriptMatchesTargetLanguage(script: string, language: string | undefine
   if (language === 'en-US') {
     return !/[\u4E00-\u9FFF]/.test(text) && /[A-Za-z]/.test(text)
   }
+  if (language && language !== 'zh-CN') {
+    return !/[\u4E00-\u9FFF]/.test(text)
+  }
   return true
 }
 
@@ -1018,7 +1024,7 @@ async function rewriteUnpunctuatedPlanScript(
 }
 
 function punctuationRewriteStyle(draft: CarSalesPlanDraft) {
-  const language = draft.nativeVoiceLanguage === 'en-US' ? 'English' : 'Chinese'
+  const language = carSalesSpokenLanguageName(draft.nativeVoiceLanguage)
   return [
     'punctuation-only',
     language,
@@ -1475,7 +1481,9 @@ function buildPlanConfigItems(draft: CarSalesPlanDraft) {
 }
 
 function rewriteStyleBySource(source: CarSalesPlanSource, language?: string) {
-  const languagePrefix = language === 'en-US' ? 'English voiceover, English subtitles, ' : ''
+  const languagePrefix = language && language !== 'zh-CN'
+    ? `${carSalesSpokenLanguageName(language)} voiceover, ${carSalesSpokenLanguageName(language)} subtitles, `
+    : ''
   if (source === 'benchmark') return `${languagePrefix}爆款汽车销售短视频`
   if (source === 'asset-reuse') return `${languagePrefix}资产复用汽车销售短视频`
   return `${languagePrefix}汽车销售短视频`
@@ -1511,10 +1519,9 @@ function subtitleModeLabel(mode: CarSalesPlanDraft['subtitleMode']) {
 }
 
 function audioPolicyLabel(policy: CarSalesPlanDraft['audioPolicy']) {
-  if (policy === 'none') return '静音'
-  if (policy === 'bgm') return '无口播仅BGM'
-  if (policy === 'voiceover') return '口播优先'
-  return '智能匹配'
+  if (policy === 'none' || policy === 'bgm') return '不使用口播'
+  if (policy === 'voiceover') return '选择已有口播'
+  return '视频生成口播'
 }
 
 function videoTypeLabel(type: string) {

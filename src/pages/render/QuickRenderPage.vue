@@ -388,6 +388,9 @@
       :selected-scene-name="selectedSceneMaterial?.asset.fileName || ''"
       :selected-scene-preview-url="selectedScenePreviewUrl"
       :has-scene-material="hasSceneMaterial"
+      :selected-voice-name="selectedVoiceMaterial?.asset.fileName || ''"
+      :has-voice-material="Boolean(selectedVoiceMaterial)"
+      :voice-uploading="voiceUploading"
       :selected-bgm-name="selectedBgmMaterial?.asset.fileName || ''"
       :has-bgm-material="Boolean(selectedBgmMaterial)"
       :bgm-uploading="bgmUploading"
@@ -398,6 +401,9 @@
       @clear-avatar="clearSelectedAvatar"
       @select-scene-asset="openAssetDrawer('scene')"
       @clear-scene="clearSelectedSceneAssets"
+      @select-voice-asset="openAssetDrawer('voice')"
+      @upload-voice="handleAdvancedVoiceUpload"
+      @clear-voice="clearSelectedVoiceAssets"
       @select-bgm-asset="openAssetDrawer('bgm')"
       @upload-bgm="handleAdvancedBgmUpload"
       @clear-bgm="clearSelectedBgmAssets"
@@ -471,6 +477,13 @@ import {
   normalizeCarNativeSpeechStyle,
   normalizeCarNativeVoiceStyle,
 } from '../../constants/carSalesVoiceStyles'
+import {
+  CAR_SALES_LANGUAGE_OPTIONS,
+  carSalesLanguageLabel,
+  carSalesNarrationRewriteInstruction,
+  carSalesNarrationRewriteStyle,
+  type CarSalesLanguageCode,
+} from '../../constants/carSalesLanguages'
 import {
   getLatestPendingCarSalesPlanTask,
   getPendingCarSalesPlanTask,
@@ -790,11 +803,12 @@ const quickPickedTextUrl = ref('')
 const quickPickedVideoUrl = ref('')
 const aspectRatio = ref<'9:16' | '16:9' | 'auto'>(carSalesPreferences.aspectRatio)
 const subtitleLanguage = ref(carSalesPreferences.voiceLanguage)
-const voiceLanguage = ref<'zh-CN' | 'en-US'>(carSalesPreferences.voiceLanguage)
+const voiceLanguage = ref<CarSalesLanguageCode>(carSalesPreferences.voiceLanguage)
 const goalText = ref('')
 const targetDuration = ref(normalizeTargetDuration(carSalesPreferences.duration))
 const uploading = ref(false)
 const bgmUploading = ref(false)
+const voiceUploading = ref(false)
 const busy = ref(false)
 const cancelingRenderTask = ref(false)
 const regeneratingRenderTask = ref(false)
@@ -860,6 +874,12 @@ function createDefaultAdvancedSettings(preferences: CarSalesGenerationPreference
   }
 }
 
+function normalizeQuickUiAudioPolicy(value: unknown): CarSalesAdvancedSettings['audioPolicy'] {
+  return value === 'none'
+    ? 'bgm'
+    : (value || 'auto') as CarSalesAdvancedSettings['audioPolicy']
+}
+
 function resetAdvancedSettings() {
   advancedSettings.value = createDefaultAdvancedSettings()
 }
@@ -907,6 +927,7 @@ const vehicleImageCountLabel = computed(() => {
 })
 const submitBlockReason = computed(() => {
   if (uploading.value) return '等待素材上传完成'
+  if (advancedSettings.value.audioPolicy === 'voiceover' && !selectedVoiceMaterial.value) return '选择或上传口播音频'
   if (!hasCarModelBundle.value) return '选择车型素材包'
   return ''
 })
@@ -967,12 +988,9 @@ const subtitleMode = computed<'off' | 'auto' | 'upload'>(() => {
   if (uploadedSubtitleText.value) return 'upload'
   return 'auto'
 })
-const voiceLanguageOptions = [
-  { value: 'zh-CN', label: '中文讲述' },
-  { value: 'en-US', label: '英语讲述' },
-]
+const voiceLanguageOptions = CAR_SALES_LANGUAGE_OPTIONS
 const voiceLanguageLabel = computed(
-  () => voiceLanguageOptions.find((item) => item.value === voiceLanguage.value)?.label || '中文讲述',
+  () => carSalesLanguageLabel(voiceLanguage.value),
 )
 const QUICK_CAR_MIN_SEGMENT_DURATION = 4
 const QUICK_CAR_MAX_SEGMENT_DURATION = 15
@@ -1092,10 +1110,10 @@ const subtitleDecisionHint = computed(() => {
 })
 
 const audioDecisionLabel = computed(() => {
-  if (audioPolicy.value === 'none') return '关闭音频'
-  if (audioPolicy.value === 'bgm') return '仅 BGM'
-  if (audioPolicy.value === 'voiceover') return '口播优先'
-  if (materials.value.some((item) => item.role === 'voiceover')) return '口播优先'
+  if (audioPolicy.value === 'none') return '关闭全部音频'
+  if (audioPolicy.value === 'bgm') return '不使用口播'
+  if (audioPolicy.value === 'voiceover') return '已有口播'
+  if (materials.value.some((item) => item.role === 'voiceover')) return '已有口播'
   if (materials.value.some((item) => item.role === 'reference_audio')) return '参考音频'
   if (materials.value.some((item) => item.role === 'voice_script' || item.role === 'benchmark_json')) return '文案驱动'
   if (hasCarModelBundle.value) return 'AI文案'
@@ -1105,8 +1123,8 @@ const audioDecisionLabel = computed(() => {
 
 const audioDecisionHint = computed(() => {
   if (audioPolicy.value === 'none') return '高级参数已关闭口播与 BGM'
-  if (audioPolicy.value === 'bgm') return hasBgmMaterial.value ? '仅混入已选 BGM' : '等待补充 BGM 素材'
-  if (audioPolicy.value === 'voiceover') return '优先使用口播音频或文案驱动口播'
+  if (audioPolicy.value === 'bgm') return hasBgmMaterial.value ? '不生成口播，仅混入已选 BGM' : '不生成口播，可单独添加 BGM'
+  if (audioPolicy.value === 'voiceover') return selectedVoiceMaterial.value ? '使用已选择口播音频作为主音轨' : '请上传或从资产中心选择口播音频'
   if (materials.value.some((item) => item.role === 'voiceover')) return '口播音频会作为成片主音轨'
   if (materials.value.some((item) => item.role === 'reference_audio')) return '单段可参考音频，多段转后期配音'
   if (materials.value.some((item) => item.role === 'voice_script' || item.role === 'benchmark_json')) return '使用口播文案拆分到各片段'
@@ -2149,6 +2167,12 @@ async function handleClassifiedAssetSelect(payload: CarSalesAssetSelectPayload) 
         bgmStyle: 'auto',
       }
     }
+    if (role === 'voiceover' || role === 'reference_audio') {
+      advancedSettings.value = {
+        ...advancedSettings.value,
+        audioPolicy: 'voiceover',
+      }
+    }
   } catch (error) {
     errorMessage.value = error instanceof Error ? error.message : '资产加入失败'
   } finally {
@@ -2194,6 +2218,36 @@ function clearSelectedSceneAssets() {
   quickPickedSceneImageUrl.value = ''
 }
 
+async function handleAdvancedVoiceUpload(file: File) {
+  if (!requireAuth('登录后可上传口播音频')) return
+  voiceUploading.value = true
+  errorMessage.value = ''
+  try {
+    const asset = await uploadMaterialAsset(file, {
+      metadataJson: JSON.stringify({
+        from: 'quick_render_voice_upload',
+        assetRole: 'voiceover',
+        originalFileName: file.name,
+        source: 'quick_render',
+      }),
+    })
+    await appendMaterial(asset, {
+      name: file.name,
+      type: file.type || asset.mimeType || 'audio/*',
+    }, 'voiceover')
+    rememberClassifiedAssetUrl(asset, 'voiceover')
+    advancedSettings.value = {
+      ...advancedSettings.value,
+      audioPolicy: 'voiceover',
+    }
+    ElMessage.success('口播音频已上传并加入本次生成')
+  } catch (error) {
+    errorMessage.value = error instanceof Error ? error.message : '口播音频上传失败'
+  } finally {
+    voiceUploading.value = false
+  }
+}
+
 async function handleAdvancedBgmUpload(file: File) {
   if (!requireAuth('登录后可上传 BGM')) return
   bgmUploading.value = true
@@ -2227,6 +2281,17 @@ async function handleAdvancedBgmUpload(file: File) {
 function clearSelectedBgmAssets() {
   materials.value = materials.value.filter((item) => item.role !== 'bgm')
   quickPickedAudioUrl.value = selectedVoiceMaterial.value ? assetUrlForSelection(selectedVoiceMaterial.value.asset) : ''
+}
+
+function clearSelectedVoiceAssets() {
+  materials.value = materials.value.filter((item) => item.role !== 'voiceover' && item.role !== 'reference_audio')
+  quickPickedAudioUrl.value = selectedBgmMaterial.value ? assetUrlForSelection(selectedBgmMaterial.value.asset) : ''
+  if (advancedSettings.value.audioPolicy === 'voiceover') {
+    advancedSettings.value = {
+      ...advancedSettings.value,
+      audioPolicy: 'auto',
+    }
+  }
 }
 
 function goAvatarCreatePage() {
@@ -3298,7 +3363,7 @@ function restorePlanTaskSettings(task: PendingCarSalesPlanTask) {
       ...defaults.headlineOverlay,
       ...(headlineOverlay || {}),
     },
-    audioPolicy: (draft?.audioPolicy || request?.audioPolicy || defaults.audioPolicy) as CarSalesAdvancedSettings['audioPolicy'],
+    audioPolicy: normalizeQuickUiAudioPolicy(draft?.audioPolicy || request?.audioPolicy || defaults.audioPolicy),
     bgmStyle: (draft?.bgmStyle || request?.bgmStyle || defaults.bgmStyle) as CarSalesAdvancedSettings['bgmStyle'],
     videoStyle: defaults.videoStyle,
     tone: (draft?.tone || request?.tone || defaults.tone) as CarSalesAdvancedSettings['tone'],
@@ -4586,6 +4651,9 @@ function narrationLanguageMismatch(text: string, targetLanguage: string) {
   if (targetLanguage === 'en-US') {
     return stats.cjk > 0
   }
+  if (targetLanguage !== 'zh-CN') {
+    return true
+  }
   if (stats.cjk === 0) {
     return stats.latin >= 4
   }
@@ -4615,14 +4683,11 @@ function stableTextKey(text: string) {
 }
 
 function narrationRewriteStyle(language: string) {
-  return language === 'en-US' ? '自然英语口播翻译' : '自然中文口播翻译'
+  return carSalesNarrationRewriteStyle(language)
 }
 
 function narrationRewriteInstruction(language: string) {
-  if (language === 'en-US') {
-    return '将原文改写式翻译成自然、简洁、可直接讲述的英文口播。保留品牌、车型、价格、数字和单位，不添加不存在的卖点，不要生硬直译，只输出英文文案。'
-  }
-  return '将原文改写式翻译成自然、简洁、可直接讲述的中文普通话口播。保留品牌、车型、价格、数字和单位，不添加不存在的卖点，不要生硬直译，只输出中文文案。'
+  return carSalesNarrationRewriteInstruction(language)
 }
 
 function formatSize(size: number | null | undefined) {

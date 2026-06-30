@@ -170,7 +170,7 @@
                 </el-select>
               </label>
               <label class="reuse-setting-field">
-                <span>音频策略</span>
+                <span>口播</span>
                 <el-select v-model="assetReuseAudioPolicy" size="small">
                   <el-option
                     v-for="item in ASSET_REUSE_AUDIO_POLICY_OPTIONS"
@@ -594,7 +594,7 @@
               <details class="reuse-optional-group">
                 <summary>
                   <span>音频与人物 <em>可选</em></span>
-                  <small>口播、背景音乐、人物出镜集中在这里；默认不使用数字人，音频智能匹配。</small>
+                  <small>口播、背景音乐、人物出镜集中在这里；口播和 BGM 分开配置。</small>
                 </summary>
                 <div class="reuse-optional-body">
                   <div class="workflow-toggle-row">
@@ -644,6 +644,16 @@
                       <button v-if="selectedVoice" type="button" class="workflow-mini-button" @click="removeSelected(selectedVoice.asset.assetId)">
                         不使用口播音频
                       </button>
+                      <label class="reuse-upload-audio" :class="{ disabled: assetReuseVoiceUploading }">
+                        <input
+                          type="file"
+                          accept="audio/*"
+                          :disabled="assetReuseVoiceUploading"
+                          @change="handleAssetReuseVoiceUpload"
+                        />
+                        <span>{{ assetReuseVoiceUploading ? '上传中...' : '上传本地口播' }}</span>
+                        <small>{{ selectedVoiceName || '作为口播主音轨参与字幕、节奏和最终合成；BGM 请单独选择' }}</small>
+                      </label>
                     </div>
                   </details>
 
@@ -1086,6 +1096,11 @@ import {
   normalizeCarNativeVoiceStyle,
 } from '../../constants/carSalesVoiceStyles'
 import {
+  CAR_SALES_LANGUAGE_OPTIONS,
+  normalizeCarSalesLanguage,
+  type CarSalesLanguageCode,
+} from '../../constants/carSalesLanguages'
+import {
   CAR_TEXT_COLOR_PRESETS,
   CAR_TEXT_FONT_OPTIONS,
   CAR_TEXT_FONT_SAMPLE,
@@ -1268,20 +1283,16 @@ const ASSET_REUSE_ASPECT_RATIO_OPTIONS: Array<{ value: CarSalesPlanDraft['aspect
   { value: '16:9', label: '横屏 16:9' },
   { value: 'auto', label: '跟随素材' },
 ]
-const ASSET_REUSE_LANGUAGE_OPTIONS = [
-  { value: 'zh-CN', label: '中文讲述' },
-  { value: 'en-US', label: '英文讲述' },
-]
+const ASSET_REUSE_LANGUAGE_OPTIONS = CAR_SALES_LANGUAGE_OPTIONS
 const ASSET_REUSE_SUBTITLE_MODE_OPTIONS: Array<{ value: CarSalesPlanDraft['subtitleMode']; label: string }> = [
   { value: 'auto', label: '自动字幕' },
   { value: 'upload', label: '自定义字幕' },
   { value: 'off', label: '关闭字幕' },
 ]
 const ASSET_REUSE_AUDIO_POLICY_OPTIONS: Array<{ value: CarSalesPlanDraft['audioPolicy']; label: string }> = [
-  { value: 'auto', label: '智能匹配' },
-  { value: 'voiceover', label: '使用口播音频' },
-  { value: 'bgm', label: '仅背景音乐' },
-  { value: 'none', label: '无口播/无音频' },
+  { value: 'auto', label: '视频生成口播' },
+  { value: 'voiceover', label: '选择已有口播' },
+  { value: 'bgm', label: '不使用口播' },
 ]
 const ASSET_REUSE_MODEL_OPTIONS = [
   ...(DEFAULT_ASSET_REUSE_MODEL !== SEEDANCE_2_MODEL && DEFAULT_ASSET_REUSE_MODEL !== DEFAULT_CAR_SALES_MODEL
@@ -1369,9 +1380,9 @@ const selectedCoverAssetId = ref<number | null>(null)
 const draftPrompt = ref('')
 const hostAppearanceEnabled = ref(false)
 const assetReuseAspectRatio = ref<CarSalesPlanDraft['aspectRatio']>('9:16')
-const assetReuseVoiceLanguage = ref<'zh-CN' | 'en-US'>('zh-CN')
+const assetReuseVoiceLanguage = ref<CarSalesLanguageCode>(normalizeCarSalesLanguage(carSalesPreferences.voiceLanguage))
 const assetReuseSubtitleMode = ref<CarSalesPlanDraft['subtitleMode']>('auto')
-const assetReuseSubtitleLanguage = ref('zh-CN')
+const assetReuseSubtitleLanguage = ref<CarSalesLanguageCode>('zh-CN')
 const assetReuseBurnInSubtitle = ref(true)
 const assetReuseAudioPolicy = ref<CarSalesPlanDraft['audioPolicy']>('auto')
 const assetReuseModel = ref(DEFAULT_ASSET_REUSE_MODEL)
@@ -1407,6 +1418,7 @@ const planPreviewOpen = ref(false)
 const planPreviewLoading = ref(false)
 const planSubmitting = ref(false)
 const assetReuseBgmUploading = ref(false)
+const assetReuseVoiceUploading = ref(false)
 const cancelingRenderTask = ref(false)
 const activeRenderTaskId = ref<number | null>(null)
 const activeRenderTaskStatus = ref('')
@@ -1470,9 +1482,10 @@ const hasCoreContent = computed(() => Boolean(
   || importedScriptText.value.trim()
   || importedStoryboard.value.length,
 ))
+const hasRequiredVoiceAsset = computed(() => assetReuseAudioPolicy.value !== 'voiceover' || Boolean(selectedVoice.value))
 const hasAudioOrHost = computed(() => Boolean(selectedHost.value || selectedVoice.value || selectedBgm.value))
 const canPreparePlan = computed(() =>
-  hasReusableVehicle.value && hasCoreContent.value && !planPreviewLoading.value && !planSubmitting.value,
+  hasReusableVehicle.value && hasCoreContent.value && hasRequiredVoiceAsset.value && !planPreviewLoading.value && !planSubmitting.value,
 )
 const selectedCarBundleUrl = computed(() => selectedAssetUrl(selectedCarBundle.value))
 const selectedCarBundleName = computed(() => selectedCarBundle.value?.asset.fileName || '')
@@ -1636,6 +1649,9 @@ function removeSelected(assetId: number) {
   if (selectedCoverAssetId.value === assetId) {
     selectedCoverAssetId.value = firstCoverCandidateId()
   }
+  if ((removed?.role === 'voiceover' || removed?.role === 'reference_audio') && assetReuseAudioPolicy.value === 'voiceover') {
+    assetReuseAudioPolicy.value = 'auto'
+  }
 }
 
 function removeSelectedCarBundle() {
@@ -1680,7 +1696,7 @@ function selectedAssetUrl(item: SelectedAsset | null) {
   return assetCoverPreviewUrl(item.asset) || normalizePublicMediaUrl(item.asset.fileUrl || '')
 }
 
-function optionLabel<T extends string | number>(options: Array<{ value: T; label: string }>, value: T) {
+function optionLabel<T extends string | number>(options: ReadonlyArray<{ value: T; label: string }>, value: T) {
   return options.find((item) => item.value === value)?.label || String(value)
 }
 
@@ -1769,12 +1785,12 @@ function resetAssetReuseGenerationControls() {
 
 function applyImportedRenderConfigToControls(config: ImportedRenderConfig) {
   const voiceLanguage = normalizeImportedVoiceLanguage(config.nativeVoiceLanguage || config.language)
+  const subtitleLanguage = normalizeImportedVoiceLanguage(config.subtitleLanguage) || voiceLanguage
   assetReuseAspectRatio.value = config.aspectRatio || assetReuseAspectRatio.value
   assetReuseVoiceLanguage.value = voiceLanguage || assetReuseVoiceLanguage.value
   assetReuseSubtitleMode.value = config.subtitleMode
     || (config.enableSubtitle === false ? 'off' : assetReuseSubtitleMode.value)
-  assetReuseSubtitleLanguage.value = config.subtitleLanguage
-    || voiceLanguage
+  assetReuseSubtitleLanguage.value = subtitleLanguage
     || assetReuseSubtitleLanguage.value
   assetReuseBurnInSubtitle.value = config.burnInSubtitle ?? config.enableSubtitle ?? assetReuseBurnInSubtitle.value
   assetReuseSubtitleFontFamily.value = config.subtitleOverlay?.fontFamily || assetReuseSubtitleFontFamily.value
@@ -1995,6 +2011,7 @@ function handleVoiceAssetSelect(payload: AssetPickerPayload) {
     role === 'reference_audio' ? 'reference_audio' : 'voiceover',
     ['voiceover', 'reference_audio'],
   )
+  assetReuseAudioPolicy.value = 'voiceover'
 }
 
 function handleBgmAssetSelect(payload: AssetPickerPayload) {
@@ -2004,6 +2021,32 @@ function handleBgmAssetSelect(payload: AssetPickerPayload) {
     ...importedRenderConfig.value,
     bgmStyle: 'auto',
     enableBgm: true,
+  }
+}
+
+async function handleAssetReuseVoiceUpload(event: Event) {
+  const input = event.target as HTMLInputElement
+  const file = input.files?.[0]
+  input.value = ''
+  if (!file) return
+  if (!requireAuth('登录后可上传口播音频')) return
+  assetReuseVoiceUploading.value = true
+  try {
+    const asset = await uploadMaterialAsset(file, {
+      metadataJson: JSON.stringify({
+        from: 'asset_reuse_voice_upload',
+        assetRole: 'voiceover',
+        originalFileName: file.name,
+        source: 'asset_reuse',
+      }),
+    })
+    addSelectedAsset(asset, 'voiceover', ['voiceover', 'reference_audio'])
+    assetReuseAudioPolicy.value = 'voiceover'
+    ElMessage.success('口播音频已上传并加入本次生成')
+  } catch (error) {
+    ElMessage.error(error instanceof Error ? error.message : '口播音频上传失败')
+  } finally {
+    assetReuseVoiceUploading.value = false
   }
 }
 
@@ -2592,8 +2635,10 @@ function normalizeImportedSubtitleMode(value: unknown): CarSalesPlanDraft['subti
 
 function normalizeImportedAudioPolicy(value: unknown): CarSalesPlanDraft['audioPolicy'] | undefined {
   const text = stringValue(value)
+  if (text === 'none') {
+    return 'bgm'
+  }
   return text === 'auto'
-    || text === 'none'
     || text === 'voiceover'
     || text === 'bgm'
     || text === 'EXTERNAL_AUDIO'
@@ -2609,10 +2654,14 @@ function normalizeImportedModel(value: unknown) {
   return !text || text === 'auto' ? DEFAULT_CAR_SALES_MODEL : text
 }
 
-function normalizeImportedVoiceLanguage(value: unknown): 'zh-CN' | 'en-US' | '' {
+function normalizeImportedVoiceLanguage(value: unknown): CarSalesLanguageCode | '' {
   const text = stringValue(value).toLowerCase()
   if (text.startsWith('en')) return 'en-US'
-  if (text.startsWith('zh') || text.includes('cn')) return 'zh-CN'
+  if (text.startsWith('fr')) return 'fr-FR'
+  if (text.startsWith('es')) return 'es-ES'
+  if (text.startsWith('ar')) return 'ar-SA'
+  if (text.startsWith('fa') || text.startsWith('per') || text.includes('persian') || text.includes('波斯')) return 'fa-IR'
+  if (text.startsWith('zh') || text.includes('cn') || text.includes('中文')) return 'zh-CN'
   return ''
 }
 
@@ -2655,7 +2704,9 @@ async function prepareAssetReusePlanPreview() {
       ? '请先选择车型素材包或车辆素材。'
       : !hasCoreContent.value
         ? '请先选择可复用文案/分镜，或填写本次生成目标。'
-        : ''
+        : !hasRequiredVoiceAsset.value
+          ? '已选择“选择已有口播”，请先上传本地口播或从资产中心选择口播音频。'
+          : ''
     if (planPreviewError.value) {
       ElMessage.warning(planPreviewError.value)
     }
@@ -3007,6 +3058,10 @@ async function confirmAssetReusePlan() {
   if (!assetReusePlanDraft.value || !planPreview.value || planSubmitting.value) return
   if (!assetReusePlanDraft.value.assets.some((asset) => asset.role === 'car_model_bundle' || asset.role.startsWith('car_') || asset.role.startsWith('scene_'))) {
     planPreviewError.value = '汽车销售生成至少需要 1 张车辆图片。请返回选择车辆图片或车型素材包后再提交。'
+    return
+  }
+  if (assetReusePlanDraft.value.audioPolicy === 'voiceover' && !assetReusePlanDraft.value.assets.some((asset) => asset.role === 'voiceover' || asset.role === 'reference_audio')) {
+    planPreviewError.value = '已选择“选择已有口播”，请先上传本地口播或从资产中心选择口播音频。'
     return
   }
   planSubmitting.value = true

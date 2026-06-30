@@ -6,6 +6,10 @@ import {
   normalizeCarNativeSpeechStyle,
   normalizeCarNativeVoiceStyle,
 } from '../constants/carSalesVoiceStyles'
+import {
+  CAR_SALES_LANGUAGE_CODES,
+  type CarSalesLanguageCode,
+} from '../constants/carSalesLanguages'
 
 export interface SystemFavoriteItem {
   kind: SystemFavoriteKind
@@ -28,7 +32,7 @@ export interface SystemRecentToolItem {
 
 export type CarSalesPreferenceAspectRatio = '9:16' | '16:9' | 'auto'
 export type CarSalesPreferenceDuration = number
-export type CarSalesPreferenceLanguage = 'zh-CN' | 'en-US'
+export type CarSalesPreferenceLanguage = CarSalesLanguageCode
 export type CarSalesPreferenceSubtitleMode = 'auto' | 'off' | 'upload'
 export type CarSalesPreferenceAudioPolicy =
   | 'auto'
@@ -202,10 +206,12 @@ export function loadCarSalesPreferences(): CarSalesGenerationPreferences {
     ...defaultCarSalesPreferences,
     aspectRatio: literalIn(raw.aspectRatio, ['9:16', '16:9', 'auto'] as const, defaultCarSalesPreferences.aspectRatio),
     duration: durationValue(raw.duration),
-    voiceLanguage: literalIn(raw.voiceLanguage, ['zh-CN', 'en-US'] as const, defaultCarSalesPreferences.voiceLanguage),
+    voiceLanguage: literalIn(raw.voiceLanguage, CAR_SALES_LANGUAGE_CODES, defaultCarSalesPreferences.voiceLanguage),
     subtitleMode: literalIn(raw.subtitleMode, ['auto', 'off', 'upload'] as const, defaultCarSalesPreferences.subtitleMode),
     burnInSubtitle: typeof raw.burnInSubtitle === 'boolean' ? raw.burnInSubtitle : defaultCarSalesPreferences.burnInSubtitle,
-    audioPolicy: literalIn(raw.audioPolicy, ['auto', 'none', 'voiceover', 'bgm', 'EXTERNAL_AUDIO', 'VIDEO_NATIVE_AUDIO', 'external_audio', 'video_native_audio'] as const, defaultCarSalesPreferences.audioPolicy),
+    audioPolicy: normalizeCarSalesPreferenceAudioPolicy(
+      literalIn(raw.audioPolicy, ['auto', 'none', 'voiceover', 'bgm', 'EXTERNAL_AUDIO', 'VIDEO_NATIVE_AUDIO', 'external_audio', 'video_native_audio'] as const, defaultCarSalesPreferences.audioPolicy),
+    ),
     videoStyle: literalIn(raw.videoStyle, ['realistic', 'premium', 'energetic', 'family', 'tech'] as const, defaultCarSalesPreferences.videoStyle),
     nativeVoiceStyle: normalizeCarNativeVoiceStyle(raw.nativeVoiceStyle),
     nativeSpeechStyle: normalizeCarNativeSpeechStyle(raw.nativeSpeechStyle),
@@ -216,6 +222,10 @@ export function loadCarSalesPreferences(): CarSalesGenerationPreferences {
     preferredAvatarId: numberOrNull(raw.preferredAvatarId),
     preferredVoiceId: numberOrNull(raw.preferredVoiceId),
   }
+}
+
+function normalizeCarSalesPreferenceAudioPolicy(policy: CarSalesPreferenceAudioPolicy): CarSalesPreferenceAudioPolicy {
+  return policy === 'none' ? 'bgm' : policy
 }
 
 export function saveCarSalesPreferences(preferences: CarSalesGenerationPreferences) {

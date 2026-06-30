@@ -268,15 +268,28 @@
           <section class="car-advanced-section">
             <h3>音频与风格</h3>
             <label class="car-field">
-              <span>口播/音频策略</span>
-              <select :value="settings.audioPolicy" @change="patch({ audioPolicy: ($event.target as HTMLSelectElement).value as CarSalesAdvancedSettings['audioPolicy'] })">
-                <option value="auto">生成口播/智能匹配</option>
-                <option value="voiceover">优先使用口播音频</option>
-                <option value="bgm">无口播，仅背景音乐</option>
-                <option value="none">静音（关闭口播和背景音乐）</option>
+              <span>口播</span>
+              <select :value="voicePolicyValue" @change="patch({ audioPolicy: ($event.target as HTMLSelectElement).value as CarSalesAdvancedSettings['audioPolicy'] })">
+                <option value="auto">视频生成口播</option>
+                <option value="voiceover">选择已有口播</option>
+                <option value="bgm">不使用口播</option>
               </select>
-              <small>只关闭背景音乐时，请在“背景音乐”里选择关闭背景音乐。</small>
+              <small>口播只控制人声；背景音乐请在“背景音乐”里单独选择或关闭。</small>
             </label>
+            <div v-if="settings.audioPolicy === 'voiceover' || hasVoiceMaterial" class="car-bgm-picker">
+              <div class="car-avatar-meta">
+                <strong>{{ selectedVoiceName || '未选择口播音频' }}</strong>
+                <small>{{ selectedVoiceHint }}</small>
+              </div>
+              <div class="car-avatar-actions car-bgm-actions">
+                <button type="button" @click="$emit('select-voice-asset')">选择已有口播</button>
+                <label class="car-upload-button" :class="{ disabled: voiceUploading }">
+                  <input type="file" accept="audio/*" :disabled="voiceUploading" @change="handleVoiceFileChange" />
+                  <span>{{ voiceUploading ? '上传中...' : '上传本地口播' }}</span>
+                </label>
+                <button v-if="hasVoiceMaterial" type="button" @click="$emit('clear-voice')">清除</button>
+              </div>
+            </div>
             <div class="car-grid-two">
               <label class="car-field">
                 <span>视频风格</span>
@@ -481,6 +494,9 @@ const props = defineProps<{
   selectedSceneName?: string
   selectedScenePreviewUrl?: string
   hasSceneMaterial?: boolean
+  selectedVoiceName?: string
+  hasVoiceMaterial?: boolean
+  voiceUploading?: boolean
   selectedBgmName?: string
   hasBgmMaterial?: boolean
   bgmUploading?: boolean
@@ -495,6 +511,9 @@ const emit = defineEmits<{
   'clear-avatar': []
   'select-scene-asset': []
   'clear-scene': []
+  'select-voice-asset': []
+  'upload-voice': [file: File]
+  'clear-voice': []
   'select-bgm-asset': []
   'upload-bgm': [file: File]
   'clear-bgm': []
@@ -525,6 +544,7 @@ const selectedVoiceStyleHint = computed(() => {
   const value = normalizeCarNativeVoiceStyle(props.settings.nativeVoiceStyle)
   return CAR_NATIVE_VOICE_STYLE_OPTIONS.find((item) => item.value === value)?.hint || ''
 })
+const voicePolicyValue = computed(() => props.settings.audioPolicy === 'none' ? 'bgm' : props.settings.audioPolicy)
 const selectedSpeechStyleHint = computed(() => {
   const value = normalizeCarNativeSpeechStyle(props.settings.nativeSpeechStyle)
   return CAR_NATIVE_SPEECH_STYLE_OPTIONS.find((item) => item.value === value)?.hint || ''
@@ -538,6 +558,10 @@ const selectedAvatarHint = computed(() => {
 const selectedSceneHint = computed(() => {
   if (props.hasSceneMaterial) return '已加入本次生成，会随 sceneImageUrls 传给视频生成'
   return '可从资产中心选择公共场景图，补充展厅、道路、门店等背景约束'
+})
+const selectedVoiceHint = computed(() => {
+  if (props.hasVoiceMaterial) return '已加入本次生成，会作为口播主音轨参与字幕、节奏和最终合成'
+  return '可从资产中心选择音频，或上传本地口播音频'
 })
 const selectedBgmHint = computed(() => {
   if (props.hasBgmMaterial) return '已加入本次生成，只作为背景音乐后期混入'
@@ -605,6 +629,15 @@ function handleBgmFileChange(event: Event) {
   const file = input.files?.[0]
   if (file) {
     emit('upload-bgm', file)
+  }
+  input.value = ''
+}
+
+function handleVoiceFileChange(event: Event) {
+  const input = event.target as HTMLInputElement
+  const file = input.files?.[0]
+  if (file) {
+    emit('upload-voice', file)
   }
   input.value = ''
 }

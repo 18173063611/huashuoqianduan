@@ -148,6 +148,7 @@ export type CarSalesAssetCategoryKey =
   | 'scene'
   | 'carBundle'
   | 'avatar'
+  | 'voice'
   | 'bgm'
   | 'script'
   | 'video'
@@ -257,17 +258,26 @@ const categories: AssetCategory[] = [
     defaultRole: 'host_image',
   },
   {
-    key: 'bgm',
-    label: '背景音乐',
-    hint: 'BGM / 口播音频',
-    description: '可选择 BGM、口播音频或参考音频；音频策略仍由高级参数决定。',
-    placeholder: '搜索 BGM、口播、参考音频...',
+    key: 'voice',
+    label: '口播音频',
+    hint: '已有口播',
+    description: '选择已生成、已上传或试听保存的口播音频，作为本次视频的口播主音轨。',
+    placeholder: '搜索口播、配音、旁白音频...',
     assetTypes: ['AUDIO'],
     roles: [
-      { value: 'bgm', label: 'BGM' },
       { value: 'voiceover', label: '口播音频' },
       { value: 'reference_audio', label: '参考音频' },
     ],
+    defaultRole: 'voiceover',
+  },
+  {
+    key: 'bgm',
+    label: '背景音乐',
+    hint: 'BGM',
+    description: '只选择背景音乐素材，作为视频后期背景音乐混入，不影响口播和字幕。',
+    placeholder: '搜索 BGM、背景音乐...',
+    assetTypes: ['AUDIO'],
+    roles: [{ value: 'bgm', label: 'BGM' }],
     defaultRole: 'bgm',
   },
   {

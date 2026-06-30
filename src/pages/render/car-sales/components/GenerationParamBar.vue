@@ -62,7 +62,7 @@ import { ref, watch } from 'vue'
 const props = defineProps<{
   targetDuration: number
   voiceLanguage: string
-  voiceLanguageOptions: Array<{ value: string; label: string }>
+  voiceLanguageOptions: ReadonlyArray<{ value: string; label: string }>
   aspectRatio: '9:16' | '16:9' | 'auto'
   busy: boolean
   canSubmit: boolean

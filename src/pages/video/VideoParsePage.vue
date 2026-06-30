@@ -194,8 +194,9 @@
               <label>
                 <span>讲述语言</span>
                 <select v-model="rewriteTargetLanguage">
-                  <option value="中文">中文讲述</option>
-                  <option value="英文">英文讲述</option>
+                  <option v-for="item in rewriteTargetLanguageOptions" :key="item.value" :value="item.value">
+                    {{ item.label }}
+                  </option>
                 </select>
               </label>
               <label>
@@ -222,12 +223,11 @@
                 </select>
               </label>
               <label>
-                <span>音频策略</span>
+                <span>口播</span>
                 <select v-model="benchmarkAdvancedSettings.audioPolicy">
-                  <option value="auto">生成口播/智能匹配</option>
-                  <option value="voiceover">优先使用口播音频</option>
-                  <option value="bgm">无口播，仅背景音乐</option>
-                  <option value="none">静音</option>
+                  <option value="auto">视频生成口播</option>
+                  <option value="voiceover">选择已有口播</option>
+                  <option value="bgm">不使用口播</option>
                 </select>
               </label>
               <p v-if="benchmarkDurationNotice" class="info-text">{{ benchmarkDurationNotice }}</p>
@@ -357,8 +357,9 @@
                   <option value="汽车销售顾问">汽车销售顾问</option>
                 </select>
                 <select v-model="rewriteTargetLanguage" class="rewrite-style-select" :disabled="transcriptAreaReadonly">
-                  <option value="中文">中文</option>
-                  <option value="英文">英文</option>
+                  <option v-for="item in rewriteTargetLanguageOptions" :key="item.value" :value="item.value">
+                    {{ item.shortLabel }}
+                  </option>
                 </select>
                 <button
                   class="secondary-button"
@@ -473,8 +474,9 @@
             <label>
               <span>讲述语言</span>
               <select v-model="rewriteTargetLanguage">
-                <option value="中文">中文讲述</option>
-                <option value="英文">英文讲述</option>
+                <option v-for="item in rewriteTargetLanguageOptions" :key="item.value" :value="item.value">
+                  {{ item.label }}
+                </option>
               </select>
             </label>
             <label>
@@ -500,15 +502,14 @@
                 <option value="doubao-seedance-1-5-pro-251215">Seedance 1.5 Pro</option>
               </select>
             </label>
-            <label>
-              <span>音频策略</span>
-              <select v-model="benchmarkAdvancedSettings.audioPolicy">
-                <option value="auto">生成口播/智能匹配</option>
-                <option value="voiceover">优先使用口播音频</option>
-                <option value="bgm">无口播，仅背景音乐</option>
-                <option value="none">静音</option>
-              </select>
-            </label>
+              <label>
+                <span>口播</span>
+                <select v-model="benchmarkAdvancedSettings.audioPolicy">
+                  <option value="auto">视频生成口播</option>
+                  <option value="voiceover">选择已有口播</option>
+                  <option value="bgm">不使用口播</option>
+                </select>
+              </label>
             <p v-if="benchmarkDurationNotice" class="info-text">{{ benchmarkDurationNotice }}</p>
             <button type="button" class="secondary-button" @click="benchmarkAdvancedDrawerOpen = true">高级参数</button>
           </div>
@@ -541,10 +542,10 @@
                 </div>
                 <div class="benchmark-inline-card">
                   <div>
-                    <strong>口播/配音音频</strong>
+                    <strong>口播音频</strong>
                     <span>{{ benchmarkVoiceSummary }}</span>
                   </div>
-                  <button type="button" class="secondary-button" @click="openBenchmarkAssetDrawer('bgm')">选择</button>
+                  <button type="button" class="secondary-button" @click="openBenchmarkAssetDrawer('voice')">选择已有口播</button>
                   <button
                     v-if="benchmarkSelectedVoiceAsset"
                     type="button"
@@ -554,6 +555,11 @@
                     移除
                   </button>
                 </div>
+                <label class="benchmark-upload-button" :class="{ disabled: benchmarkVoiceUploading }">
+                  <input type="file" accept="audio/*" :disabled="benchmarkVoiceUploading" @change="handleBenchmarkVoiceFileInput" />
+                  <span>{{ benchmarkVoiceUploading ? '上传中...' : '上传本地口播' }}</span>
+                  <small>作为口播主音轨参与字幕、节奏和最终合成；BGM 请在下方单独选择。</small>
+                </label>
               </div>
             </details>
 
@@ -1119,8 +1125,9 @@
                       class="rewrite-style-select"
                       :disabled="transcriptAreaReadonly"
                     >
-                      <option value="中文">中文</option>
-                      <option value="英文">英文</option>
+                      <option v-for="item in rewriteTargetLanguageOptions" :key="item.value" :value="item.value">
+                        {{ item.shortLabel }}
+                      </option>
                     </select>
                   </label>
                 </div>
@@ -1255,6 +1262,9 @@
       :selected-scene-name="benchmarkSelectedSceneAsset?.fileName || ''"
       :selected-scene-preview-url="benchmarkSelectedScenePreviewUrl"
       :has-scene-material="Boolean(benchmarkSelectedSceneAsset)"
+      :selected-voice-name="benchmarkSelectedVoiceAsset?.fileName || ''"
+      :has-voice-material="Boolean(benchmarkSelectedVoiceAsset)"
+      :voice-uploading="benchmarkVoiceUploading"
       :selected-bgm-name="benchmarkSelectedBgmAsset?.fileName || ''"
       :has-bgm-material="Boolean(benchmarkSelectedBgmAsset)"
       :bgm-uploading="benchmarkBgmUploading"
@@ -1265,6 +1275,9 @@
       @clear-avatar="clearBenchmarkHostAsset"
       @select-scene-asset="openBenchmarkAssetDrawer('scene')"
       @clear-scene="clearBenchmarkSceneAssets"
+      @select-voice-asset="openBenchmarkAssetDrawer('voice')"
+      @upload-voice="handleBenchmarkVoiceUpload"
+      @clear-voice="clearBenchmarkVoiceAssets"
       @select-bgm-asset="openBenchmarkAssetDrawer('bgm')"
       @upload-bgm="handleBenchmarkBgmUpload"
       @clear-bgm="clearBenchmarkBgmAssets"
@@ -1319,6 +1332,10 @@ import {
   normalizeCarNativeSpeechStyle,
   normalizeCarNativeVoiceStyle,
 } from '../../constants/carSalesVoiceStyles'
+import {
+  CAR_SALES_LANGUAGE_OPTIONS,
+  carSalesLanguageFromWriterTarget,
+} from '../../constants/carSalesLanguages'
 import BillingEstimateBanner from '../../components/business/BillingEstimateBanner.vue'
 import VideoPlatformTabs from '../../components/business/VideoPlatformTabs.vue'
 import { useAuthRequired } from '../../composables/useAuthRequired'
@@ -1495,6 +1512,11 @@ const downloadTotalBytes = ref<number | null>(null)
 const downloadProgressPercent = ref<number | null>(null)
 const platformAutoHint = ref('')
 const rewriteStyle = ref('')
+const rewriteTargetLanguageOptions = CAR_SALES_LANGUAGE_OPTIONS.map((item) => ({
+  value: item.writerTarget,
+  label: item.label,
+  shortLabel: item.writerTarget,
+}))
 const rewriteTargetLanguage = ref('中文')
 const rewriteTab = ref<'ai' | 'custom'>('ai')
 const rewriteIntroduce = ref('')
@@ -1525,6 +1547,7 @@ const benchmarkAspectRatio = ref<'9:16' | '16:9' | 'auto'>('9:16')
 const benchmarkTargetDuration = ref<number>(30)
 const benchmarkDraftAssets = ref<CarSalesPlanDraftAsset[]>([])
 const benchmarkBgmUploading = ref(false)
+const benchmarkVoiceUploading = ref(false)
 const parseAbort = ref<AbortController | null>(null)
 const parseCanceling = ref(false)
 let stopParseTracking: (() => void) | null = null
@@ -1592,7 +1615,7 @@ const benchmarkBgmSummary = computed(() => {
 })
 const benchmarkSubtitleSummary = computed(() => {
   if (benchmarkAdvancedSettings.value.subtitleMode === 'off') return '关闭字幕'
-  const language = rewriteTargetLanguage.value === '英文' ? '英文讲述' : '中文讲述'
+  const language = CAR_SALES_LANGUAGE_OPTIONS.find((item) => item.writerTarget === rewriteTargetLanguage.value)?.label || '中文讲述'
   return `${benchmarkAdvancedSettings.value.subtitleMode === 'upload' ? '自定义字幕' : '自动字幕'} / ${language} / ${benchmarkAdvancedSettings.value.burnInSubtitle ? '烧录到视频' : '不烧录'}`
 })
 const benchmarkHeadlineSummary = computed(() =>
@@ -1807,6 +1830,15 @@ function handleBenchmarkBgmFileInput(event: Event) {
   const file = input.files?.[0]
   if (file) {
     void handleBenchmarkBgmUpload(file)
+  }
+  input.value = ''
+}
+
+function handleBenchmarkVoiceFileInput(event: Event) {
+  const input = event.target as HTMLInputElement
+  const file = input.files?.[0]
+  if (file) {
+    void handleBenchmarkVoiceUpload(file)
   }
   input.value = ''
 }
@@ -2940,6 +2972,13 @@ async function prepareBenchmarkPlanPreview() {
     planPreviewOpen.value = false
     return
   }
+  if (benchmarkAdvancedSettings.value.audioPolicy === 'voiceover' && !benchmarkSelectedVoiceAsset.value) {
+    const message = '已选择“选择已有口播”，请先上传本地口播或从资产中心选择口播音频。'
+    planPreviewError.value = message
+    applyMessage.value = message
+    planPreviewOpen.value = false
+    return
+  }
 
   const draft = buildBenchmarkPlanDraft()
   benchmarkPlanDraft.value = draft
@@ -3165,8 +3204,8 @@ function buildBenchmarkPlanDraft(): CarSalesPlanDraft {
     assets: [...benchmarkDraftAssets.value],
     aspectRatio: benchmarkAspectRatio.value,
     subtitleMode,
-    subtitleLanguage: rewriteTargetLanguage.value === '英文' ? 'en-US' : 'zh-CN',
-    nativeVoiceLanguage: rewriteTargetLanguage.value === '英文' ? 'en-US' : 'zh-CN',
+    subtitleLanguage: carSalesLanguageFromWriterTarget(rewriteTargetLanguage.value),
+    nativeVoiceLanguage: carSalesLanguageFromWriterTarget(rewriteTargetLanguage.value),
     nativeVoiceStyle: settings.nativeVoiceStyle,
     nativeSpeechStyle: settings.nativeSpeechStyle,
     autoTtsVoiceId: carSalesPreferences.preferredVoiceId,
@@ -3188,7 +3227,7 @@ function buildBenchmarkPlanDraft(): CarSalesPlanDraft {
     hostImageUrl: hostAsset?.fileUrl || hostAsset?.thumbnailUrl || undefined,
     voiceId: voiceAsset ? String(voiceAsset.assetId) : undefined,
     tone: settings.tone,
-    language: rewriteTargetLanguage.value === '英文' ? 'en-US' : 'zh-CN',
+    language: carSalesLanguageFromWriterTarget(rewriteTargetLanguage.value),
     duration: durationSeconds,
     enableSubtitle: subtitleMode !== 'off',
     subtitleStyle: `${settings.subtitleOverlay.position}/${settings.subtitleOverlay.fontSize}px`,
@@ -3239,7 +3278,7 @@ function applyBenchmarkDraftSettings(draft: CarSalesPlanDraft) {
     burnInSubtitle: draft.burnInSubtitle,
     subtitleOverlay: normalizeBenchmarkOverlay(draft.subtitleOverlay, benchmarkAdvancedSettings.value.subtitleOverlay),
     headlineOverlay: normalizeBenchmarkOverlay(draft.headlineOverlay, benchmarkAdvancedSettings.value.headlineOverlay),
-    audioPolicy: draft.audioPolicy,
+    audioPolicy: normalizeBenchmarkUiAudioPolicy(draft.audioPolicy),
     bgmStyle: (draft.bgmStyle as CarSalesAdvancedSettings['bgmStyle']) || 'auto',
     tone: (draft.tone as CarSalesAdvancedSettings['tone']) || 'professional',
     nativeVoiceStyle: normalizeCarNativeVoiceStyle(draft.nativeVoiceStyle),
@@ -3251,6 +3290,12 @@ function applyBenchmarkDraftSettings(draft: CarSalesPlanDraft) {
     generateTags: draft.generateTags ?? true,
   }
   benchmarkDraftAssets.value = draft.assets || []
+}
+
+function normalizeBenchmarkUiAudioPolicy(value: CarSalesPlanDraft['audioPolicy']): CarSalesAdvancedSettings['audioPolicy'] {
+  return value === 'none'
+    ? 'bgm'
+    : value as CarSalesAdvancedSettings['audioPolicy']
 }
 
 function normalizeBenchmarkOverlay(
@@ -3281,8 +3326,13 @@ function normalizeBenchmarkOverlayPosition(
 
 function handleBenchmarkAssetSelect(payload: CarSalesAssetSelectPayload) {
   const next = planAssetFromAssetItem(payload.asset, payload.role)
+  const replacementRoles = payload.role === 'voiceover' || payload.role === 'reference_audio'
+    ? ['voiceover', 'reference_audio']
+    : payload.role === 'bgm'
+      ? ['bgm']
+      : []
   benchmarkDraftAssets.value = [
-    ...benchmarkDraftAssets.value.filter((item) => item.assetId !== next.assetId),
+    ...benchmarkDraftAssets.value.filter((item) => item.assetId !== next.assetId && !replacementRoles.includes(item.role)),
     next,
   ]
   if (payload.role === 'host_image' || payload.role === 'host_video') {
@@ -3298,6 +3348,12 @@ function handleBenchmarkAssetSelect(payload: CarSalesAssetSelectPayload) {
       bgmStyle: 'auto',
     }
   }
+  if (payload.role === 'voiceover' || payload.role === 'reference_audio') {
+    benchmarkAdvancedSettings.value = {
+      ...benchmarkAdvancedSettings.value,
+      audioPolicy: 'voiceover',
+    }
+  }
   benchmarkAssetDrawerOpen.value = false
   applyMessage.value = `已加入素材：${payload.asset.fileName}`
 }
@@ -3307,6 +3363,12 @@ function removeBenchmarkDraftAsset(assetId: number) {
   benchmarkDraftAssets.value = benchmarkDraftAssets.value.filter((item) => item.assetId !== assetId)
   if (removed && (removed.role === 'host_image' || removed.role === 'host_video')) {
     clearBenchmarkHostAsset()
+  }
+  if (removed && (removed.role === 'voiceover' || removed.role === 'reference_audio') && benchmarkAdvancedSettings.value.audioPolicy === 'voiceover') {
+    benchmarkAdvancedSettings.value = {
+      ...benchmarkAdvancedSettings.value,
+      audioPolicy: 'auto',
+    }
   }
 }
 
@@ -3321,6 +3383,37 @@ function clearBenchmarkHostAsset() {
 
 function clearBenchmarkSceneAssets() {
   benchmarkDraftAssets.value = benchmarkDraftAssets.value.filter((item) => !item.role.startsWith('scene_'))
+}
+
+async function handleBenchmarkVoiceUpload(file: File) {
+  if (!requireAuth('登录后可上传口播音频')) return
+  benchmarkVoiceUploading.value = true
+  applyMessage.value = ''
+  try {
+    const asset = await uploadMaterialAsset(file, {
+      metadataJson: JSON.stringify({
+        from: 'benchmark_voice_upload',
+        assetRole: 'voiceover',
+        originalFileName: file.name,
+        source: 'benchmark',
+      }),
+    })
+    const next = planAssetFromAssetItem(asset, 'voiceover')
+    benchmarkDraftAssets.value = [
+      ...benchmarkDraftAssets.value.filter((item) => item.role !== 'voiceover' && item.role !== 'reference_audio' && item.assetId !== next.assetId),
+      next,
+    ]
+    benchmarkAdvancedSettings.value = {
+      ...benchmarkAdvancedSettings.value,
+      audioPolicy: 'voiceover',
+    }
+    applyMessage.value = `口播音频已上传并加入本次生成：${asset.fileName}`
+    ElMessage.success('口播音频已上传到资产中心')
+  } catch (error) {
+    applyMessage.value = error instanceof Error ? error.message : '口播音频上传失败'
+  } finally {
+    benchmarkVoiceUploading.value = false
+  }
 }
 
 async function handleBenchmarkBgmUpload(file: File) {
@@ -3356,6 +3449,16 @@ async function handleBenchmarkBgmUpload(file: File) {
 
 function clearBenchmarkBgmAssets() {
   benchmarkDraftAssets.value = benchmarkDraftAssets.value.filter((item) => item.role !== 'bgm')
+}
+
+function clearBenchmarkVoiceAssets() {
+  benchmarkDraftAssets.value = benchmarkDraftAssets.value.filter((item) => item.role !== 'voiceover' && item.role !== 'reference_audio')
+  if (benchmarkAdvancedSettings.value.audioPolicy === 'voiceover') {
+    benchmarkAdvancedSettings.value = {
+      ...benchmarkAdvancedSettings.value,
+      audioPolicy: 'auto',
+    }
+  }
 }
 
 function updatePlanScript(value: string) {
@@ -3404,6 +3507,10 @@ async function confirmBenchmarkPlan() {
   }
   if (!benchmarkPlanDraft.value.assets.some((asset) => asset.role === 'car_model_bundle' || asset.role.startsWith('car_') || asset.role.startsWith('scene_'))) {
     planPreviewError.value = '汽车销售生成至少需要车型素材包或 1 张车辆图片。请返回页面选择车型素材包/车辆图片后再提交。'
+    return
+  }
+  if (benchmarkPlanDraft.value.audioPolicy === 'voiceover' && !benchmarkPlanDraft.value.assets.some((asset) => asset.role === 'voiceover' || asset.role === 'reference_audio')) {
+    planPreviewError.value = '已选择“选择已有口播”，请先上传本地口播或从资产中心选择口播音频。'
     return
   }
   planSubmitting.value = true
