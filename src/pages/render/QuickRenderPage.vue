@@ -6873,12 +6873,13 @@ onBeforeUnmount(stopAllTracking)
 
 .quick-control-bar {
   align-items: stretch;
-  flex-wrap: wrap;
+  flex-wrap: nowrap;
   gap: 6px;
   max-width: 100%;
 }
 
 .quick-control-field {
+  flex: 1 1 112px;
   min-width: 118px;
   min-height: 50px;
   gap: 6px;
@@ -6897,6 +6898,7 @@ onBeforeUnmount(stopAllTracking)
 }
 
 .quick-drawer-button {
+  flex: 0 0 auto;
   min-width: 96px;
   min-height: 50px;
   border-radius: 10px;
@@ -6905,6 +6907,7 @@ onBeforeUnmount(stopAllTracking)
 }
 
 .quick-generate-button {
+  flex: 0 0 auto;
   min-width: 160px;
   min-height: 50px;
   border-radius: 10px;
@@ -7086,7 +7089,32 @@ onBeforeUnmount(stopAllTracking)
   }
 
   .quick-control-bar {
-    flex-wrap: wrap;
+    flex-wrap: nowrap;
+    justify-content: flex-end;
+  }
+}
+
+@media (max-width: 1080px) {
+  .quick-control-field {
+    min-width: 104px;
+    padding: 0 8px;
+  }
+
+  .quick-control-field select {
+    min-width: 48px;
+  }
+
+  .quick-duration-input {
+    width: 44px;
+  }
+
+  .quick-drawer-button {
+    min-width: 88px;
+    padding: 0 10px;
+  }
+
+  .quick-generate-button {
+    min-width: 146px;
   }
 }
 

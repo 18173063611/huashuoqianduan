@@ -66,8 +66,12 @@
             <p class="car-advanced-note">场景图会作为展厅、户外、道路或夜景门店背景传入视频生成，参与分镜背景匹配。</p>
           </section>
 
-          <section class="car-advanced-section">
-            <h3>字幕</h3>
+          <details class="car-advanced-section car-advanced-fold" open>
+            <summary>
+              <span>字幕</span>
+              <small>{{ subtitleFoldSummary }}</small>
+            </summary>
+            <div class="car-advanced-fold-body">
             <label class="car-field">
               <span>字幕策略</span>
               <select :value="settings.subtitleMode" @change="patch({ subtitleMode: ($event.target as HTMLSelectElement).value as CarSalesAdvancedSettings['subtitleMode'] })">
@@ -101,13 +105,6 @@
                     {{ item.label }}
                   </option>
                 </select>
-                <div class="car-font-preview">
-                  <div>
-                    <strong>真实字体预览</strong>
-                    <em :class="`state-${subtitleFontLoadState}`">{{ fontLoadStateLabel(subtitleFontLoadState) }}</em>
-                  </div>
-                  <p :style="fontPreviewStyle(settings.subtitleOverlay.fontFamily)">{{ fontPreviewSample }}</p>
-                </div>
               </label>
               <label class="car-field">
                 <span>字幕位置</span>
@@ -180,10 +177,15 @@
             <div v-if="settings.subtitleMode !== 'off'" class="car-overlay-preview" :class="overlayPositionClass(settings.subtitleOverlay.position)">
               <span :style="subtitlePreviewStyle">{{ subtitlePreviewText }}</span>
             </div>
-          </section>
+            </div>
+          </details>
 
-          <section class="car-advanced-section">
-            <h3>大字报</h3>
+          <details class="car-advanced-section car-advanced-fold">
+            <summary>
+              <span>大字报</span>
+              <small>{{ headlineFoldSummary }}</small>
+            </summary>
+            <div class="car-advanced-fold-body">
             <label class="car-check">
               <input
                 type="checkbox"
@@ -260,10 +262,11 @@
                 </div>
               </div>
             </div>
-            <div v-if="settings.headlineOverlay.enabled" class="car-overlay-preview" :class="overlayPositionClass(settings.headlineOverlay.position)">
+            <div class="car-overlay-preview" :class="overlayPositionClass(settings.headlineOverlay.position)">
               <span :style="headlinePreviewStyle">{{ headlinePreviewText }}</span>
             </div>
-          </section>
+            </div>
+          </details>
 
           <section class="car-advanced-section">
             <h3>音频与风格</h3>
@@ -427,11 +430,10 @@
 </template>
 
 <script setup lang="ts">
-import { computed, ref, watch } from 'vue'
+import { computed } from 'vue'
 import {
   CAR_TEXT_COLOR_PRESETS,
   CAR_TEXT_FONT_OPTIONS,
-  CAR_TEXT_FONT_SAMPLE,
   CAR_TEXT_STROKE_MODE_OPTIONS,
 } from '../../constants/carSalesTextStyles'
 import {
@@ -441,13 +443,9 @@ import {
   normalizeCarNativeVoiceStyle,
 } from '../../constants/carSalesVoiceStyles'
 import {
-  fontLoadStateLabel,
-  fontPreviewStyle,
-  loadTextOverlayFont,
   normalizeHexColor,
   normalizeTextStrokeMode,
   overlayPreviewStyle as buildOverlayPreviewStyle,
-  type FontLoadState,
   type TextStrokeMode,
 } from '../../utils/textOverlayStyle'
 
@@ -526,8 +524,6 @@ const speechStyleOptions = computed(() => CAR_NATIVE_SPEECH_STYLE_OPTIONS)
 const textFontOptions = CAR_TEXT_FONT_OPTIONS
 const textColorPresets = CAR_TEXT_COLOR_PRESETS
 const textStrokeModeOptions = CAR_TEXT_STROKE_MODE_OPTIONS
-const fontPreviewSample = CAR_TEXT_FONT_SAMPLE
-const subtitleFontLoadState = ref<FontLoadState>('loading')
 const subtitlePreviewText = computed(() => {
   if (props.settings.subtitleMode === 'upload' && props.settings.customSubtitle.trim()) {
     return props.settings.customSubtitle.trim().split(/\n+/)[0]
@@ -540,6 +536,17 @@ const headlinePreviewText = computed(() =>
 const normalizedSubtitleStrokeMode = computed(() => normalizeTextStrokeMode(props.settings.subtitleOverlay.strokeMode))
 const subtitlePreviewStyle = computed(() => buildOverlayPreviewStyle(props.settings.subtitleOverlay, 'subtitle'))
 const headlinePreviewStyle = computed(() => buildOverlayPreviewStyle(props.settings.headlineOverlay, 'headline'))
+const subtitleFoldSummary = computed(() => {
+  if (props.settings.subtitleMode === 'off') return '已关闭'
+  const position = overlayPositionLabel(props.settings.subtitleOverlay.position)
+  const stroke = textStrokeModeOptions.find((item) => item.value === normalizedSubtitleStrokeMode.value)?.label || '轻描边'
+  return `${position} · ${props.settings.subtitleOverlay.fontSize || 36}px · ${stroke}`
+})
+const headlineFoldSummary = computed(() => {
+  if (!props.settings.headlineOverlay.enabled) return '未启用'
+  const position = overlayPositionLabel(props.settings.headlineOverlay.position)
+  return `${position} · ${props.settings.headlineOverlay.fontSize || 64}px · ${headlinePreviewText.value.split(/\n+/)[0]}`
+})
 const selectedVoiceStyleHint = computed(() => {
   const value = normalizeCarNativeVoiceStyle(props.settings.nativeVoiceStyle)
   return CAR_NATIVE_VOICE_STYLE_OPTIONS.find((item) => item.value === value)?.hint || ''
@@ -567,15 +574,6 @@ const selectedBgmHint = computed(() => {
   if (props.hasBgmMaterial) return '已加入本次生成，只作为背景音乐后期混入'
   return '可从资产中心选择或上传本地 BGM，不参与口播、字幕或口型'
 })
-
-watch(
-  () => props.settings.subtitleOverlay.fontFamily,
-  async (fontFamily) => {
-    subtitleFontLoadState.value = 'loading'
-    subtitleFontLoadState.value = await loadTextOverlayFont(fontFamily, fontPreviewSample)
-  },
-  { immediate: true },
-)
 
 function patch(partial: Partial<CarSalesAdvancedSettings>) {
   emit('update:settings', {
@@ -622,6 +620,12 @@ function colorPresetActive(current: string | undefined, preset: string) {
 
 function overlayPositionClass(position: OverlayPosition | undefined) {
   return `pos-${position === 'top' || position === 'middle' || position === 'bottom' ? position : 'bottom'}`
+}
+
+function overlayPositionLabel(position: OverlayPosition | undefined) {
+  if (position === 'top') return '顶部'
+  if (position === 'middle') return '中部'
+  return '底部'
 }
 
 function handleBgmFileChange(event: Event) {
@@ -725,6 +729,66 @@ function handleVoiceFileChange(event: Event) {
   color: var(--hs-text);
   font-size: 14px;
   font-weight: 800;
+}
+
+.car-advanced-fold {
+  gap: 0;
+}
+
+.car-advanced-fold summary {
+  display: flex;
+  min-height: 28px;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  cursor: pointer;
+  list-style: none;
+}
+
+.car-advanced-fold summary::-webkit-details-marker {
+  display: none;
+}
+
+.car-advanced-fold summary::after {
+  content: "展开";
+  flex: 0 0 auto;
+  border-radius: 999px;
+  background: #eff6ff;
+  color: #155eef;
+  padding: 4px 10px;
+  font-size: 12px;
+  font-weight: 850;
+}
+
+.car-advanced-fold[open] summary {
+  margin-bottom: 12px;
+}
+
+.car-advanced-fold[open] summary::after {
+  content: "收起";
+}
+
+.car-advanced-fold summary span {
+  color: var(--hs-text);
+  font-size: 14px;
+  font-weight: 850;
+}
+
+.car-advanced-fold summary small {
+  flex: 1 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  color: var(--hs-text-muted);
+  font-size: 12px;
+  font-weight: 700;
+  text-align: right;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.car-advanced-fold-body {
+  display: grid;
+  gap: 12px;
 }
 
 .car-segmented {
@@ -965,56 +1029,6 @@ function handleVoiceFileChange(event: Event) {
 
 .car-color-field.disabled {
   opacity: 0.58;
-}
-
-.car-font-preview {
-  display: grid;
-  gap: 6px;
-  border: 1px solid #dbeafe;
-  border-radius: 8px;
-  background: #fff;
-  padding: 8px 10px;
-}
-
-.car-font-preview div {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 8px;
-}
-
-.car-font-preview strong {
-  color: var(--hs-text);
-  font-size: 12px;
-  font-weight: 800;
-}
-
-.car-font-preview em {
-  border-radius: 999px;
-  background: #f1f5f9;
-  color: var(--hs-text-muted);
-  padding: 2px 7px;
-  font-size: 11px;
-  font-style: normal;
-  font-weight: 800;
-}
-
-.car-font-preview em.state-ready {
-  background: #dcfce7;
-  color: #15803d;
-}
-
-.car-font-preview em.state-loading {
-  background: #eff6ff;
-  color: #2563eb;
-}
-
-.car-font-preview p {
-  margin: 0;
-  color: #111827;
-  font-size: 18px;
-  font-weight: 800;
-  line-height: 1.45;
 }
 
 .car-stroke-segmented {
