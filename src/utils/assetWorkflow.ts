@@ -369,12 +369,25 @@ export function matchesAssetWorkflowStage(asset: AssetItem, stage: AssetWorkflow
     return isSceneMaterialBundleAsset(asset) || isSceneReferenceImageAsset(asset)
   }
   if (stage === 'voice') {
-    return ['TTS_GENERATE', 'VOICE_SAMPLE'].includes(sourceType) || (asset.assetType === 'AUDIO' && sourceType === 'AI_GENERATED')
+    const role = normalizedAssetRole(asset)
+    return (
+      ['TTS_GENERATE', 'VOICE_SAMPLE'].includes(sourceType) ||
+      ['voiceover', 'bgm', 'reference_audio'].includes(role) ||
+      asset.assetType === 'AUDIO'
+    )
   }
   if (stage === 'digitalHuman') {
-    return ['AVATAR_GENERATE', 'DIGITAL_HUMAN_GENERATE'].includes(sourceType)
+    const role = normalizedAssetRole(asset)
+    return ['AVATAR_GENERATE', 'DIGITAL_HUMAN_GENERATE'].includes(sourceType) || role === 'host_image' || role === 'host_video'
   }
   if (stage === 'video') {
+    const role = normalizedAssetRole(asset)
+    if (asset.assetType === 'VIDEO' && ['USER_UPLOAD', 'AI_GENERATED'].includes(sourceType)) {
+      return true
+    }
+    if (role === 'material_video' || role === 'reference_video') {
+      return true
+    }
     return [
       'SEEDANCE_TEXT_VIDEO',
       'SEEDANCE_FIRST_FRAME_VIDEO',

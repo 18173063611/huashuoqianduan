@@ -533,7 +533,7 @@ export async function ensureCarSalesPlanDraftAsset(draft: CarSalesPlanDraft, pla
         metadataJson: JSON.stringify({
           ...baseMetadata,
           assetRole: 'voice_script',
-          assetGroup: '口播文案',
+          assetGroup: '爆款对标',
           contentKind: 'voice_script',
         }),
       },

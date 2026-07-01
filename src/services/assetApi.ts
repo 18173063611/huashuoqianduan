@@ -112,6 +112,7 @@ export function uploadMaterialAsset(file: File, options?: UploadMaterialAssetOpt
   return request<AssetItem>('/assets/upload', {
     method: 'POST',
     body: formData,
+    timeoutMs: 180000,
   })
 }
 

@@ -192,6 +192,7 @@
           class="asset-hidden-file-input"
           type="file"
           multiple
+          :accept="materialUploadAccept"
           @change="handleMaterialUploadChange"
         />
         <button class="app-secondary-button" type="button" :disabled="loading" @click="refreshCurrent">
@@ -232,17 +233,13 @@
     </p>
 
     <section v-if="showMaterialContextActions" class="asset-context-actions" aria-label="当前功能操作">
-      <template v-if="selectedWorkflowStage === 'material'">
+      <template v-if="showMaterialUploadAction">
         <div>
-          <strong>上传素材</strong>
-          <span>图片、视频、文案和音频会进入当前账号资产，可选择是否直接发布为公共素材。</span>
+          <strong>上传{{ materialUploadTargetLabel }}</strong>
+          <span>{{ materialUploadHint }}</span>
         </div>
-        <label v-if="hasToken" class="asset-upload-toggle">
-          <input v-model="uploadPublishToPublic" type="checkbox" :disabled="loading" />
-          <span>上传后发布公共</span>
-        </label>
         <button class="app-primary-button" type="button" :disabled="loading" @click="openMaterialUpload">
-          {{ loading ? '处理中...' : '上传素材' }}
+          {{ loading ? '处理中...' : `上传${materialUploadTargetLabel}` }}
         </button>
       </template>
       <template v-else-if="selectedWorkflowStage === 'carBundle'">
@@ -353,8 +350,10 @@
     <div v-else-if="isAvatarAssetMode" class="avatar-asset-list">
       <article
         v-for="avatar in filteredAssetAvatars"
+        :id="avatarRowDomId(avatar.avatarId)"
         :key="avatar.avatarId"
         class="avatar-asset-card"
+        :class="{ 'asset-row-highlight': highlightedAvatarId === avatar.avatarId }"
       >
         <div class="avatar-asset-cover">
           <img v-if="avatar.previewUrl" :src="resolveFileUrl(avatar.previewUrl)" :alt="avatar.avatarName" />
@@ -857,7 +856,7 @@ import {
   uploadMaterialAsset,
 } from '../../services/assetApi'
 import type { AssetListScope, AssetListSort } from '../../services/assetApi'
-import { deleteAvatar, getAvatars } from '../../services/avatarApi'
+import { deleteAvatar, getAvatars, uploadAvatar } from '../../services/avatarApi'
 import { API_ORIGIN, getAuthToken } from '../../services/request'
 import carPlaceholderImage from '../../assets/car.png'
 import { getAuthUser, type AuthUser } from '../../services/authSession'
@@ -1009,8 +1008,6 @@ const UNGROUPED_GROUP_KEY = '__ungrouped'
 const GROUP_BENCHMARK = '爆款对标'
 const GROUP_STORYBOARD = '分镜脚本'
 const CAR_MODEL_BUNDLE_GROUP = '汽车素材包'
-const SCRIPT_ASSET_GROUP = '文案资产'
-const STORYBOARD_ASSET_GROUP = '分镜资产'
 const ASSET_PAGE_SIZE = 24
 const INLINE_PREVIEW_BATCH_SIZE = 6
 
@@ -1138,6 +1135,15 @@ const BUSINESS_VIEW_OPTIONS = [
 
 type BusinessViewKey = (typeof BUSINESS_VIEW_OPTIONS)[number]['key']
 
+const WORKFLOW_STAGE_BY_BUSINESS_VIEW: Partial<Record<BusinessViewKey, WorkflowStageKey>> = {
+  copy: 'benchmark',
+  storyboard: 'storyboard',
+  audio: 'voice',
+  avatar: 'digitalHuman',
+  video: 'video',
+  template: 'template',
+}
+
 const ASSET_GROUP_PRESETS = [
   CAR_MODEL_BUNDLE_GROUP,
   SCENE_MATERIAL_BUNDLE_GROUP,
@@ -1158,6 +1164,7 @@ const assetHasMore = ref(false)
 const assetPageNo = ref(1)
 const errorMessage = ref('')
 const highlightedId = ref<number | null>(null)
+const highlightedAvatarId = ref<number | null>(null)
 const jumpHint = ref('')
 const selectedType = ref<'' | AssetType>('')
 const selectedSourceType = ref<string>('')
@@ -1298,10 +1305,72 @@ const assetKindStatusText = computed(() => {
   }
   return businessViewStatusText.value
 })
+const showMaterialUploadAction = computed(() =>
+  activeCategory.value === 'materials' &&
+  listScope.value === 'private' &&
+  selectedWorkflowStage.value !== 'carBundle',
+)
 const showMaterialContextActions = computed(() =>
   activeCategory.value === 'materials' &&
-  selectedWorkflowStage.value === 'carBundle',
+  (showMaterialUploadAction.value || selectedWorkflowStage.value === 'carBundle'),
 )
+const materialUploadTargetLabel = computed(() => {
+  if (selectedWorkflowStage.value) {
+    return selectedAssetKindLabel.value
+  }
+  return selectedBusinessViewOption.value.label
+})
+const materialUploadHint = computed(() => {
+  if (selectedWorkflowStage.value === 'benchmark' || selectedBusinessView.value === 'copy') {
+    return '上传本地 TXT、MD 或 JSON 文案文件，保存到私有素材的文案资产。'
+  }
+  if (selectedWorkflowStage.value === 'storyboard' || selectedBusinessView.value === 'storyboard') {
+    return '上传本地 TXT、MD 或 JSON 分镜文件，保存到私有素材的分镜资产。'
+  }
+  if (selectedWorkflowStage.value === 'voice' || selectedBusinessView.value === 'audio') {
+    return '上传本地口播音频、BGM 或音效文件，保存到私有素材的音频资产。'
+  }
+  if (selectedWorkflowStage.value === 'video' || selectedBusinessView.value === 'video') {
+    return '上传本地视频素材，保存到当前账号的私有视频素材。'
+  }
+  if (selectedWorkflowStage.value === 'digitalHuman' || selectedBusinessView.value === 'avatar') {
+    return '上传本地 JPG、PNG 或 WebP 数字人形象图片，保存到私有数字人资产。'
+  }
+  if (selectedWorkflowStage.value === 'sceneBundle') {
+    return '上传本地场景图片，保存到私有素材的场景图片。'
+  }
+  return '上传本地文件，保存到当前账号的私有素材。'
+})
+const materialUploadAccept = computed(() => {
+  if (selectedWorkflowStage.value === 'benchmark' || selectedBusinessView.value === 'copy') {
+    return '.txt,.md,.json,.csv,.srt,.vtt,text/*,application/json'
+  }
+  if (selectedWorkflowStage.value === 'storyboard' || selectedBusinessView.value === 'storyboard') {
+    return '.txt,.md,.json,.csv,.srt,.vtt,text/*,application/json'
+  }
+  if (selectedWorkflowStage.value === 'voice' || selectedBusinessView.value === 'audio') {
+    return 'audio/*'
+  }
+  if (selectedWorkflowStage.value === 'video' || selectedBusinessView.value === 'video') {
+    return 'video/*'
+  }
+  if (selectedWorkflowStage.value === 'digitalHuman' || selectedBusinessView.value === 'avatar') {
+    return '.jpg,.jpeg,.png,.webp,image/jpeg,image/png,image/webp'
+  }
+  if (selectedWorkflowStage.value === 'sceneBundle' || selectedBusinessView.value === 'image') {
+    return 'image/*'
+  }
+  return ''
+})
+const selectedUploadBusinessView = computed<BusinessViewKey>(() => {
+  if (selectedWorkflowStage.value === 'benchmark') return 'copy'
+  if (selectedWorkflowStage.value === 'storyboard') return 'storyboard'
+  if (selectedWorkflowStage.value === 'voice') return 'audio'
+  if (selectedWorkflowStage.value === 'digitalHuman') return 'avatar'
+  if (selectedWorkflowStage.value === 'video') return 'video'
+  if (selectedWorkflowStage.value === 'template') return 'template'
+  return selectedBusinessView.value
+})
 const contentEditorTitle = computed(() => {
   const asset = contentEditingAsset.value
   if (!asset) return '编辑资产内容'
@@ -1940,12 +2009,19 @@ async function handleMaterialUploadChange(event: Event) {
   loading.value = true
   errorMessage.value = ''
   jumpHint.value = ''
-  const publishAfterUpload = uploadPublishToPublic.value
-  const uploadMetadata = currentWritableAssetMetadata()
+  const avatarUploadMode = isAvatarAssetMode.value
+  const publishAfterUpload = false
   let latestAssetId: number | null = null
   let latestAsset: AssetItem | null = null
+  let latestAvatarId: number | null = null
   try {
     for (const file of files) {
+      if (avatarUploadMode) {
+        const uploadedAvatar = await uploadAvatar(avatarNameFromFile(file), file)
+        latestAvatarId = uploadedAvatar.avatarId
+        continue
+      }
+      const uploadMetadata = currentWritableAssetMetadata(file)
       const uploaded = await uploadMaterialAsset(file, {
         publish: publishAfterUpload,
         metadataJson: uploadMetadata ? JSON.stringify(uploadMetadata) : undefined,
@@ -1955,20 +2031,30 @@ async function handleMaterialUploadChange(event: Event) {
     }
     selectedType.value = ''
     selectedSourceType.value = ''
-    selectedWorkflowStage.value = 'material'
-    selectedBusinessView.value = latestAsset ? businessViewForAsset(latestAsset) : selectedBusinessView.value
+    if (!selectedWorkflowStage.value) {
+      selectedBusinessView.value = latestAsset ? businessViewForAsset(latestAsset) : selectedUploadBusinessView.value
+    }
     keyword.value = ''
     sortKey.value = 'createdAtDesc'
-    listScope.value = publishAfterUpload ? 'global' : 'private'
-    jumpHint.value =
-      files.length > 1
-        ? publishAfterUpload
-          ? `已上传并发布 ${files.length} 个素材到公共素材。`
-          : `已上传 ${files.length} 个素材到私有资产。`
-        : publishAfterUpload
-          ? '已上传并发布到公共素材。'
-          : '已上传到私有资产。'
+    listScope.value = 'private'
+    jumpHint.value = avatarUploadMode
+      ? files.length > 1 ? `已上传 ${files.length} 个数字人形象到私有资产。` : '已上传到私有数字人资产。'
+      : files.length > 1 ? `已上传 ${files.length} 个素材到私有资产。` : '已上传到私有资产。'
     await loadAssets()
+    if (avatarUploadMode) {
+      if (latestAvatarId != null) {
+        highlightedAvatarId.value = latestAvatarId
+        clearHighlightTimer()
+        await nextTick()
+        document.getElementById(avatarRowDomId(latestAvatarId))?.scrollIntoView({ behavior: 'smooth', block: 'center' })
+        highlightClearTimer = window.setTimeout(() => {
+          highlightedAvatarId.value = null
+          jumpHint.value = ''
+          highlightClearTimer = null
+        }, 6000)
+      }
+      return
+    }
     if (latestAssetId != null) {
       highlightedId.value = latestAssetId
       clearHighlightTimer()
@@ -2084,14 +2170,17 @@ function syncAssetViewFromRoute() {
   const view = parseBusinessViewQuery(route.query.assetView ?? route.query.view)
   const stage = parseWorkflowStageQuery(route.query.workflowStage)
   try {
-    if (view && selectedBusinessView.value !== view) {
-      selectedBusinessView.value = view
-      selectedType.value = ''
-      selectedSourceType.value = ''
-      selectedAssetGroup.value = ''
-      selectedWorkflowStage.value = ''
-      keyword.value = ''
-      changed = true
+    if (view) {
+      const stageForView = WORKFLOW_STAGE_BY_BUSINESS_VIEW[view] || ''
+      if (selectedBusinessView.value !== view || selectedWorkflowStage.value !== stageForView) {
+        selectedBusinessView.value = view
+        selectedType.value = ''
+        selectedSourceType.value = ''
+        selectedAssetGroup.value = ''
+        selectedWorkflowStage.value = stageForView
+        keyword.value = ''
+        changed = true
+      }
     }
     if (stage && selectedWorkflowStage.value !== stage) {
       selectWorkflowStage(stage)
@@ -2119,6 +2208,7 @@ function selectWorkflowStage(stage: WorkflowStageKey) {
   selectedWorkflowStage.value = stage
   if (stage) {
     selectedSourceType.value = ''
+    selectedType.value = ''
   }
   if (stage === 'benchmark') {
     selectedBusinessView.value = 'copy'
@@ -2157,8 +2247,6 @@ function selectSpecificSourceType() {
 
 function assetTypeForCurrentQuery(): AssetType | undefined {
   if (
-    selectedWorkflowStage.value === 'benchmark' ||
-    selectedWorkflowStage.value === 'storyboard' ||
     selectedWorkflowStage.value === 'template' ||
     selectedWorkflowStage.value === 'carBundle'
   ) {
@@ -2183,10 +2271,10 @@ function sourceTypeForCurrentQuery() {
 
 function assetGroupForCurrentQuery() {
   if (selectedWorkflowStage.value === 'benchmark') {
-    return SCRIPT_ASSET_GROUP
+    return GROUP_BENCHMARK
   }
   if (selectedWorkflowStage.value === 'storyboard') {
-    return STORYBOARD_ASSET_GROUP
+    return GROUP_STORYBOARD
   }
   if (selectedWorkflowStage.value === 'carBundle') {
     return CAR_MODEL_BUNDLE_GROUP
@@ -2203,21 +2291,50 @@ function currentWritableAssetGroup() {
     return group
   }
   const stage = currentWorkflowStageOption()
-  return stage && 'defaultAssetGroup' in stage ? stage.defaultAssetGroup : ''
+  if (stage && 'defaultAssetGroup' in stage) {
+    return stage.defaultAssetGroup
+  }
+  if (selectedUploadBusinessView.value === 'copy') {
+    return GROUP_BENCHMARK
+  }
+  if (selectedUploadBusinessView.value === 'storyboard') {
+    return GROUP_STORYBOARD
+  }
+  return ''
 }
 
-function currentWritableAssetMetadata() {
+function currentWritableAssetMetadata(file?: File) {
   const meta: Record<string, string> = {}
   const group = currentWritableAssetGroup()
   const stage = currentWorkflowStageOption()
-  const role = stage && 'defaultAssetRole' in stage ? stage.defaultAssetRole : ''
+  const role = currentWritableAssetRole(file, stage)
   if (group) {
     meta.assetGroup = group
   }
   if (role) {
     meta.assetRole = role
   }
+  meta.from = 'asset_center_upload'
+  meta.source = selectedWorkflowStage.value || selectedUploadBusinessView.value
+  if (file?.name) {
+    meta.originalFileName = file.name
+  }
   return Object.keys(meta).length ? meta : null
+}
+
+function currentWritableAssetRole(file: File | undefined, stage: ReturnType<typeof currentWorkflowStageOption>) {
+  if (stage && 'defaultAssetRole' in stage) {
+    return stage.defaultAssetRole
+  }
+  const view = selectedUploadBusinessView.value
+  if (view === 'copy') return 'voice_script'
+  if (view === 'storyboard') return 'storyboard_json'
+  if (view === 'audio') return 'reference_audio'
+  if (view === 'video') return 'material_video'
+  if (view === 'avatar') {
+    return file?.type?.startsWith('video/') ? 'host_video' : 'host_image'
+  }
+  return ''
 }
 
 function currentWorkflowStageOption() {
@@ -2503,6 +2620,15 @@ async function moveHighlightAssetIntoCurrentView(assetId: number) {
 
 function assetRowDomId(assetId: number) {
   return `asset-row-${assetId}`
+}
+
+function avatarRowDomId(avatarId: number) {
+  return `avatar-row-${avatarId}`
+}
+
+function avatarNameFromFile(file: File) {
+  const baseName = file.name.replace(/\.[^.]+$/, '').trim()
+  return baseName || '上传形象'
 }
 
 function resolveFileUrl(url: string) {
