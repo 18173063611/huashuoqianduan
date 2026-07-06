@@ -176,6 +176,7 @@ export const defaultPetDraft: PetCreationDraft = {
   visualSettings: {
     expressionIntensity: 70,
     cameraRhythm: 'balanced',
+    backgroundPrompt: '',
   },
   consistency: {
     keepAppearance: true,
@@ -262,15 +263,16 @@ export function mockResetPetDraft() {
 
 export function mockGeneratePetStoryboard(payload: PetCreationDraft) {
   const prompt = payload.prompt.trim() || '萌宠偷偷做了一件小坏事，被主人发现后努力解释'
+  const backgroundHint = payload.visualSettings.backgroundPrompt?.trim()
   const nextDraft = clonePetDraft({
     ...payload,
-    scriptText: `${prompt}。整体节奏轻松可爱，前 3 秒抛出反差，中段展示宠物表情和动作，结尾用一句撒娇字幕收束。`,
+    scriptText: `${prompt}${backgroundHint ? `，背景设定为${backgroundHint}` : ''}。整体节奏轻松可爱，前 3 秒抛出反差，中段展示宠物表情和动作，结尾用一句撒娇字幕收束。`,
     shots: [
       {
         id: 'shot-generated-1',
         index: 1,
         durationSeconds: 3,
-        frameDescription: `开场展示主题：${prompt}`,
+        frameDescription: backgroundHint ? `在${backgroundHint}中开场展示主题：${prompt}` : `开场展示主题：${prompt}`,
         characterAction: '宠物看向镜头，表情带一点心虚和好奇',
         cameraMove: '轻微推进',
         subtitle: '事情不是你想的那样',
@@ -324,9 +326,10 @@ export function mockGeneratePetStoryboard(payload: PetCreationDraft) {
 
 export function mockGeneratePetScript(payload: PetCreationDraft) {
   const prompt = payload.prompt.trim() || '宠物日常小剧场'
+  const backgroundHint = payload.visualSettings.backgroundPrompt?.trim()
   const nextDraft = clonePetDraft({
     ...payload,
-    scriptText: `${prompt}。开头用一句反差字幕吸引注意，中段让宠物用拟人化口吻解释原因，结尾保留一个适合转发的可爱包袱。`,
+    scriptText: `${prompt}${backgroundHint ? `，画面背景保持${backgroundHint}` : ''}。开头用一句反差字幕吸引注意，中段让宠物用拟人化口吻解释原因，结尾保留一个适合转发的可爱包袱。`,
   })
   writeJson(PET_DRAFT_STORAGE_KEY, nextDraft)
   return Promise.resolve(clonePetDraft(nextDraft))

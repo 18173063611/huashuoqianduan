@@ -8,6 +8,23 @@
 
     <PetMaterialPicker v-model="draft.materials" />
 
+    <section id="pet-background-scene" class="pet-panel pet-background-panel">
+      <div class="pet-role-panel-head">
+        <h3>背景图编辑与场景要求</h3>
+        <span>结合“场景参考”素材一起写入生成 prompt</span>
+      </div>
+      <textarea
+        v-model="draft.visualSettings.backgroundPrompt"
+        maxlength="160"
+        placeholder="例如：温暖客厅背景，浅景深，干净柔和，宠物主体清晰突出"
+      />
+      <div class="pet-background-presets">
+        <button type="button" @click="setBackgroundPreset('温暖客厅背景，浅景深，干净柔和，宠物主体清晰突出')">温暖客厅</button>
+        <button type="button" @click="setBackgroundPreset('阳光草地背景，色彩明亮，宠物动作自然可爱')">阳光草地</button>
+        <button type="button" @click="setBackgroundPreset('宠物友好咖啡店背景，暖色灯光，画面干净有生活感')">宠物咖啡店</button>
+      </div>
+    </section>
+
     <div class="pet-role-layout">
       <section v-for="(role, index) in draft.roles" :key="role.id" class="pet-panel">
         <div class="pet-role-panel-head">
@@ -96,7 +113,7 @@
 
 <script setup lang="ts">
 import { onMounted, ref } from 'vue'
-import { useRouter } from 'vue-router'
+import { useRoute, useRouter } from 'vue-router'
 import { ElMessage } from 'element-plus'
 import { usePetCreationState } from './usePetCreationState'
 import PetMaterialPicker from './components/PetMaterialPicker.vue'
@@ -104,6 +121,7 @@ import type { PetRole } from './petCreationTypes'
 import type { WorkbenchRouteName } from '../../router'
 import { hasMainPetMaterial, mainPetMaterialWarning, petErrorMessage } from './petCreationValidation'
 
+const route = useRoute()
 const router = useRouter()
 const { draft, loadDraft, saveDraft } = usePetCreationState()
 const saving = ref(false)
@@ -141,6 +159,10 @@ function removeSecondRole() {
   draft.roles.splice(1, 1)
 }
 
+function setBackgroundPreset(value: string) {
+  draft.visualSettings.backgroundPrompt = value
+}
+
 async function saveAndGo(routeName: WorkbenchRouteName) {
   if (saving.value) return
   if (!hasMainPetMaterial(draft)) {
@@ -162,6 +184,9 @@ onMounted(async () => {
     await loadDraft()
   } catch (error) {
     ElMessage.error(petErrorMessage(error, '宠物草稿恢复失败，请返回首页重试。'))
+  }
+  if (route.query.focus === 'scene') {
+    window.setTimeout(() => document.getElementById('pet-background-scene')?.scrollIntoView({ behavior: 'smooth', block: 'center' }), 80)
   }
 })
 </script>
@@ -235,8 +260,15 @@ onMounted(async () => {
   gap: 12px;
 }
 
+.pet-role-panel-head span {
+  color: #667085;
+  font-size: 12px;
+  font-weight: 750;
+}
+
 .pet-role-panel-head button,
-.pet-secondary-role-button {
+.pet-secondary-role-button,
+.pet-background-presets button {
   min-height: 34px;
   border: 1px solid #dfe7f5;
   border-radius: 8px;
@@ -273,6 +305,24 @@ onMounted(async () => {
 .pet-panel input,
 .pet-panel select {
   padding: 0 12px;
+}
+
+.pet-background-panel textarea {
+  min-height: 92px;
+  resize: vertical;
+  border: 1px solid #dfe7f5;
+  border-radius: 8px;
+  background: #fbfdff;
+  color: #172033;
+  padding: 12px;
+  font-size: 13px;
+  line-height: 1.65;
+}
+
+.pet-background-presets {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
 }
 
 .pet-switch-grid label {

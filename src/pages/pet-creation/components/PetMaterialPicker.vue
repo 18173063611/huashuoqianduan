@@ -3,7 +3,7 @@
     <header class="pet-material-picker-head">
       <div>
         <h3>宠物素材包</h3>
-        <p>为主宠物、第二只宠物、道具和场景分别补充参考图，生成时会写入宠物草稿材料列表。</p>
+        <p>为主宠物、第二只宠物、道具和背景场景分别补充参考图，生成时会写入宠物草稿材料列表。</p>
       </div>
       <button type="button" @click="loadAssets">{{ loadingAssets ? '加载中' : '刷新资产' }}</button>
     </header>
@@ -99,7 +99,7 @@ const materialSlots: Array<{ role: PetMaterialRole; label: string; shortLabel: s
   { role: 'main_pet', label: '主宠物', shortLabel: '主', hint: '必填，建议上传清晰正面照' },
   { role: 'second_pet', label: '第二只宠物', shortLabel: '副', hint: '可选，用于双宠物对话' },
   { role: 'prop', label: '道具参考', shortLabel: '道具', hint: '可选，补充玩具、零食等道具' },
-  { role: 'scene', label: '场景参考', shortLabel: '场景', hint: '可选，补充客厅、门店等背景' },
+  { role: 'scene', label: '背景/场景参考', shortLabel: '背景', hint: '可选，补充客厅、草地、宠物店等背景图' },
 ]
 
 const activeRole = ref<PetMaterialRole>('main_pet')

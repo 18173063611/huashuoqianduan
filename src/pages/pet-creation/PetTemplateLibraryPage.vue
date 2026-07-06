@@ -31,6 +31,7 @@
             :key="template.id"
             :template="template"
             :index="index"
+            @use-template="handleUseTemplate"
           />
         </div>
       </main>
@@ -57,9 +58,15 @@
 
 <script setup lang="ts">
 import { computed, ref } from 'vue'
+import { useRouter } from 'vue-router'
+import { ElMessage } from 'element-plus'
 import PetTemplateCard from './components/PetTemplateCard.vue'
 import { petTemplateFilters, petTemplates } from './petTemplateConfig'
+import { usePetCreationState } from './usePetCreationState'
+import type { PetTemplate } from './petCreationTypes'
 
+const router = useRouter()
+const { applyTemplate, loadDraft, saveDraft } = usePetCreationState()
 const selectedFilter = ref('热门玩法')
 const templateGuideSteps = [
   { index: '01', title: '上传宠物图', text: '上传宠物照片或视频，支持多图参考。' },
@@ -73,6 +80,14 @@ const filteredTemplates = computed(() => {
     (template) => template.category === selectedFilter.value || template.tags.includes(selectedFilter.value),
   )
 })
+
+async function handleUseTemplate(template: PetTemplate) {
+  await loadDraft()
+  applyTemplate(template)
+  await saveDraft()
+  ElMessage.success(`已应用「${template.title}」模板`)
+  void router.push({ name: 'pet-render', query: { templateId: template.id } })
+}
 </script>
 
 <style scoped>

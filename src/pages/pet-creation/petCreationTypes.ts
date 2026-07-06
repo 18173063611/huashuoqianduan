@@ -21,6 +21,17 @@ export interface PetTemplate {
   aspectRatio: PetAspectRatio
   style: PetCreationStyle
   tags: string[]
+  generationMode?: PetGenerationMode
+  promptPreset?: string
+  scriptPreset?: string
+  dialogueLines?: PetDialogueLine[]
+  shots?: PetStoryboardShot[]
+  subtitleEnabled?: boolean
+  voiceEnabled?: boolean
+  lipSyncEnabled?: boolean
+  bgmEnabled?: boolean
+  visualSettings?: Partial<PetCreationDraft['visualSettings']>
+  consistency?: Partial<PetCreationDraft['consistency']>
 }
 
 export interface PetRole {
@@ -92,6 +103,7 @@ export interface PetCreationDraft {
   visualSettings: {
     expressionIntensity: number
     cameraRhythm: PetCameraRhythm
+    backgroundPrompt: string
   }
   consistency: {
     keepAppearance: boolean

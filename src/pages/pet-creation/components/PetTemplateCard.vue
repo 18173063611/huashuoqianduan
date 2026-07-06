@@ -11,9 +11,9 @@
         <span v-for="tag in template.tags" :key="tag">{{ tag }}</span>
       </div>
       <small>推荐 {{ template.durationSeconds }} 秒 / {{ template.aspectRatio }}</small>
-      <RouterLink class="pet-template-card-action" :to="{ name: 'pet-render', query: { templateId: template.id } }">
+      <button class="pet-template-card-action" type="button" @click="$emit('use-template', template)">
         使用模板
-      </RouterLink>
+      </button>
     </div>
   </article>
 </template>
@@ -25,6 +25,10 @@ import type { PetTemplate } from '../petCreationTypes'
 const props = defineProps<{
   template: PetTemplate
   index?: number
+}>()
+
+defineEmits<{
+  'use-template': [template: PetTemplate]
 }>()
 
 const indexLabel = computed(() => String((props.index || 0) + 1).padStart(2, '0'))
@@ -135,11 +139,13 @@ const coverStyle = computed(() => {
   min-height: 34px;
   align-items: center;
   justify-content: center;
+  border: 0;
   border-radius: 8px;
   background: #2563eb;
   color: #ffffff;
   font-size: 13px;
   font-weight: 850;
   text-decoration: none;
+  cursor: pointer;
 }
 </style>

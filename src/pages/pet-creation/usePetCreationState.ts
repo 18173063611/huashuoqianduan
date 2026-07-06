@@ -8,6 +8,10 @@ function cloneDraft(draft: PetCreationDraft): PetCreationDraft {
   return JSON.parse(JSON.stringify(draft)) as PetCreationDraft
 }
 
+function cloneTemplateValue<T>(value: T): T {
+  return JSON.parse(JSON.stringify(value)) as T
+}
+
 export function usePetCreationState(initialDraft: PetCreationDraft = defaultPetDraft) {
   const draft = reactive<PetCreationDraft>(cloneDraft(initialDraft))
   const selectedTemplate = computed(() => findPetTemplate(draft.templateId))
@@ -29,9 +33,42 @@ export function usePetCreationState(initialDraft: PetCreationDraft = defaultPetD
   function applyTemplate(template: PetTemplate) {
     draft.templateId = template.id
     draft.videoType = template.videoType
+    if (template.generationMode) {
+      draft.generationMode = template.generationMode
+    }
     draft.durationSeconds = template.durationSeconds
     draft.aspectRatio = template.aspectRatio
     draft.style = template.style
+    if (template.promptPreset) {
+      draft.prompt = template.promptPreset
+    }
+    if (template.scriptPreset !== undefined) {
+      draft.scriptText = template.scriptPreset
+    }
+    if (template.dialogueLines) {
+      draft.dialogueLines = cloneTemplateValue(template.dialogueLines)
+    }
+    if (template.shots) {
+      draft.shots = cloneTemplateValue(template.shots)
+    }
+    if (typeof template.subtitleEnabled === 'boolean') {
+      draft.subtitleEnabled = template.subtitleEnabled
+    }
+    if (typeof template.voiceEnabled === 'boolean') {
+      draft.voiceEnabled = template.voiceEnabled
+    }
+    if (typeof template.lipSyncEnabled === 'boolean') {
+      draft.lipSyncEnabled = template.lipSyncEnabled
+    }
+    if (typeof template.bgmEnabled === 'boolean') {
+      draft.bgmEnabled = template.bgmEnabled
+    }
+    if (template.visualSettings) {
+      Object.assign(draft.visualSettings, cloneTemplateValue(template.visualSettings))
+    }
+    if (template.consistency) {
+      Object.assign(draft.consistency, cloneTemplateValue(template.consistency))
+    }
   }
 
   function resetDraft() {

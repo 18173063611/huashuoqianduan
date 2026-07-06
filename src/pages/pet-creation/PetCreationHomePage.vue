@@ -39,6 +39,25 @@
             <span>补充第二只宠物、道具和场景参考。</span>
           </button>
         </div>
+
+        <div class="pet-quick-workflow">
+          <button type="button" :disabled="Boolean(aiAssistBusy) || creating" @click="handleGenerateScriptQuick">
+            <strong>AI 生成文案/对话</strong>
+            <span>根据提示词补齐宠物口播、对话和脚本文案。</span>
+          </button>
+          <button type="button" :disabled="Boolean(aiAssistBusy) || creating" @click="handleGenerateStoryboardQuick">
+            <strong>AI 生成分镜</strong>
+            <span>把剧情拆成镜头、动作、字幕和运镜节奏。</span>
+          </button>
+          <button type="button" :disabled="Boolean(aiAssistBusy) || creating" @click="handleBenchmarkStoryboard">
+            <strong>爆款对标分镜</strong>
+            <span>套用短视频钩子、递进和反转收尾结构。</span>
+          </button>
+          <button type="button" :disabled="Boolean(aiAssistBusy) || creating" @click="goBackgroundEdit">
+            <strong>编辑背景图</strong>
+            <span>选择场景参考图，并补充背景生成要求。</span>
+          </button>
+        </div>
       </div>
 
       <aside class="pet-param-panel">
@@ -134,6 +153,15 @@
           <input v-model="draft.bgmEnabled" type="checkbox" @change="saveDraft" />
           背景音乐
         </label>
+        <label class="pet-advanced-wide">
+          背景图/场景要求
+          <textarea
+            v-model="draft.visualSettings.backgroundPrompt"
+            maxlength="160"
+            placeholder="例如：温暖客厅背景，浅景深，宠物主体清晰突出"
+            @change="saveDraft"
+          />
+        </label>
       </div>
     </section>
 
@@ -156,6 +184,7 @@
           :key="template.id"
           :template="template"
           :index="index"
+          @use-template="handleUseTemplate"
         />
       </div>
     </section>
@@ -220,6 +249,8 @@ import {
   downloadPetWork,
   estimatePetVideoCost,
   forkPetWork,
+  generatePetScript,
+  generatePetStoryboard,
   getPetCreationApiMode,
   listPetTemplates,
   listPetWorks,
@@ -228,7 +259,7 @@ import {
 } from '../../services/petCreationApi'
 import { usePetCreationState } from './usePetCreationState'
 import type { PetAspectRatio, PetCreationDraft, PetTemplate, PetVideoEstimate, PetVideoPreview, PetWork } from './petCreationTypes'
-import { petErrorMessage, validatePetCreationDraft } from './petCreationValidation'
+import { hasPrompt, petErrorMessage, promptRequiredMessage, validatePetCreationDraft } from './petCreationValidation'
 import { usePetApiFallbackNotice } from './usePetApiFallbackNotice'
 
 const route = useRoute()
@@ -242,6 +273,7 @@ const templatesLoading = ref(false)
 const recentLoading = ref(false)
 const recentError = ref('')
 const workActionKey = ref('')
+const aiAssistBusy = ref('')
 const planOpen = ref(false)
 const planEstimate = ref<PetVideoEstimate | null>(null)
 const planPreview = ref<PetVideoPreview | null>(null)
@@ -271,6 +303,65 @@ function applyTemplateFromQuery() {
   if (!template) return
   applyTemplate(template)
   void saveDraft()
+}
+
+async function handleUseTemplate(template: PetTemplate) {
+  applyTemplate(template)
+  await saveDraft()
+  ElMessage.success(`已应用「${template.title}」模板`)
+  if (route.name !== 'pet-render' || route.query.templateId !== template.id) {
+    void router.replace({ name: 'pet-render', query: { ...route.query, templateId: template.id } })
+  }
+}
+
+async function handleGenerateScriptQuick() {
+  if (aiAssistBusy.value || creating.value) return
+  if (!hasPrompt(draft)) {
+    ElMessage.warning(promptRequiredMessage())
+    return
+  }
+  aiAssistBusy.value = 'script'
+  try {
+    await saveDraft()
+    const nextDraft = await generatePetScript(cloneDraft(snapshotDraft()))
+    Object.assign(draft, nextDraft)
+    await saveDraft()
+    ElMessage.success('已生成宠物文案/对话，可继续调整后生成分镜。')
+  } catch (error) {
+    ElMessage.error(petErrorMessage(error, '生成宠物文案失败，请稍后重试。'))
+  } finally {
+    aiAssistBusy.value = ''
+  }
+}
+
+async function handleGenerateStoryboardQuick() {
+  if (aiAssistBusy.value || creating.value) return
+  if (!hasPrompt(draft)) {
+    ElMessage.warning(promptRequiredMessage())
+    return
+  }
+  aiAssistBusy.value = 'storyboard'
+  try {
+    await saveDraft()
+    const nextDraft = await generatePetStoryboard(cloneDraft(snapshotDraft()))
+    Object.assign(draft, nextDraft)
+    await saveDraft()
+    ElMessage.success('已生成宠物分镜，可在脚本分镜页继续精修。')
+  } catch (error) {
+    ElMessage.error(petErrorMessage(error, '生成宠物分镜失败，请稍后重试。'))
+  } finally {
+    aiAssistBusy.value = ''
+  }
+}
+
+async function handleBenchmarkStoryboard() {
+  if (aiAssistBusy.value || creating.value) return
+  const basePrompt = draft.prompt.trim() || '主宠被发现做了一件小坏事，努力用可爱表情解释'
+  draft.prompt = `${basePrompt}。参考爆款萌宠短视频结构：前三秒抛出反差钩子，中段用宠物表情和动作递进，结尾用治愈或反转包袱收束。`
+  draft.visualSettings.cameraRhythm = 'short_drama'
+  draft.visualSettings.expressionIntensity = Math.max(draft.visualSettings.expressionIntensity, 82)
+  draft.subtitleEnabled = true
+  await handleGenerateStoryboardQuick()
 }
 
 async function openPlanPreview() {
@@ -381,6 +472,15 @@ async function goRoleSetup() {
   void router.push({ name: 'pet-role-setup' })
 }
 
+async function goBackgroundEdit() {
+  advancedOpen.value = true
+  if (!draft.visualSettings.backgroundPrompt.trim()) {
+    draft.visualSettings.backgroundPrompt = '温暖客厅背景，浅景深，干净柔和，宠物主体清晰突出'
+  }
+  await saveDraft()
+  void router.push({ name: 'pet-role-setup', query: { focus: 'scene' } })
+}
+
 function setDuration(seconds: (typeof durationOptions)[number]) {
   draft.durationSeconds = seconds
   void saveDraft()
@@ -487,17 +587,14 @@ onMounted(async () => {
   }
   templatesLoading.value = true
   try {
-    const [templateList] = await Promise.all([
-      listPetTemplates(),
-      refreshRecentWorks(),
-    ])
-    templates.value = templateList
+    templates.value = await listPetTemplates()
   } catch (error) {
     templates.value = []
     ElMessage.error(petErrorMessage(error, '萌宠模板加载失败，请稍后重试。'))
   } finally {
     templatesLoading.value = false
   }
+  void refreshRecentWorks()
   applyTemplateFromQuery()
 })
 
@@ -603,6 +700,48 @@ watch(
   display: grid;
   grid-template-columns: repeat(3, minmax(0, 1fr));
   gap: 12px;
+}
+
+.pet-quick-workflow {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.pet-quick-workflow button {
+  display: grid;
+  min-height: 74px;
+  align-content: center;
+  gap: 6px;
+  border: 1px solid #d7e2f5;
+  border-radius: 8px;
+  background: #ffffff;
+  color: #172033;
+  padding: 12px;
+  text-align: left;
+  cursor: pointer;
+}
+
+.pet-quick-workflow button:hover {
+  border-color: #93c5fd;
+  background: #f8fbff;
+}
+
+.pet-quick-workflow button:disabled {
+  cursor: not-allowed;
+  opacity: 0.65;
+}
+
+.pet-quick-workflow strong {
+  color: #1d4ed8;
+  font-size: 13px;
+  font-weight: 900;
+}
+
+.pet-quick-workflow span {
+  color: #667085;
+  font-size: 12px;
+  line-height: 1.45;
 }
 
 .pet-create-row {
@@ -788,6 +927,22 @@ watch(
   font-size: 13px;
 }
 
+.pet-advanced-panel .pet-advanced-wide {
+  grid-column: 1 / -1;
+}
+
+.pet-advanced-panel textarea {
+  min-height: 68px;
+  resize: vertical;
+  border: 1px solid #dfe7f5;
+  border-radius: 8px;
+  background: #ffffff;
+  color: #172033;
+  padding: 10px 12px;
+  font-size: 13px;
+  line-height: 1.6;
+}
+
 .pet-primary-button {
   min-height: 44px;
   border: 0;
@@ -890,6 +1045,10 @@ watch(
     grid-template-columns: 1fr;
   }
 
+  .pet-quick-workflow {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
   .pet-create-row {
     align-items: stretch;
     flex-direction: column;
@@ -897,6 +1056,12 @@ watch(
 
   .pet-primary-button {
     width: 100%;
+  }
+}
+
+@media (max-width: 640px) {
+  .pet-quick-workflow {
+    grid-template-columns: 1fr;
   }
 }
 </style>
