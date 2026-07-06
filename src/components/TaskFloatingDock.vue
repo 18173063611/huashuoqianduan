@@ -14,6 +14,7 @@
           <span class="task-dock-sr-only">提交反馈</span>
         </button>
         <button
+          v-if="!petOnlyWorkspace"
           type="button"
           class="task-dock-fab"
           :class="{ 'task-dock-fab--open': activePanel === 'task' }"
@@ -68,12 +69,15 @@
 </template>
 
 <script setup lang="ts">
-import { computed, onBeforeUnmount, ref, watch } from 'vue'
+import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { ChatDotRound, Close, Tickets } from '@element-plus/icons-vue'
 import CustomerFeedbackPanel from './CustomerFeedbackPanel.vue'
 import TaskCenter from '../pages/task/TaskCenter.vue'
 import { getAuthToken } from '../services/request'
+import { getAuthUser } from '../services/authSession'
 import { getTaskSummary } from '../services/taskApi'
+import { subscribeAuthRefresh } from '../services/authRefreshHub'
+import { isPetOnlyWorkspaceUser } from '../config/petCreationAccess'
 import { useAuthRequired } from '../composables/useAuthRequired'
 
 const emit = defineEmits<{
@@ -85,7 +89,10 @@ type ActivePanel = 'task' | 'feedback' | null
 
 const activePanel = ref<ActivePanel>(null)
 const processingCount = ref(0)
+const currentUser = ref(getAuthUser())
+const petOnlyWorkspace = computed(() => isPetOnlyWorkspaceUser(currentUser.value))
 let pollTimer: number | null = null
+let unsubscribeAuthRefresh: (() => void) | null = null
 let badgeRefreshInFlight = false
 
 const sheetTitle = computed(() => (activePanel.value === 'feedback' ? '客服反馈' : '进行中的任务'))
@@ -96,7 +103,7 @@ const sheetLead = computed(() =>
 )
 
 function canPoll() {
-  return !!getAuthToken()
+  return !!getAuthToken() && !petOnlyWorkspace.value
 }
 
 async function refreshBadge() {
@@ -105,6 +112,7 @@ async function refreshBadge() {
   }
   if (!canPoll()) {
     processingCount.value = 0
+    if (activePanel.value === 'task') activePanel.value = null
     return
   }
   badgeRefreshInFlight = true
@@ -137,7 +145,26 @@ watch(
   { immediate: true },
 )
 
-onBeforeUnmount(stopPolling)
+function syncAuthUser() {
+  currentUser.value = getAuthUser()
+  if (petOnlyWorkspace.value) {
+    processingCount.value = 0
+    if (activePanel.value === 'task') activePanel.value = null
+  }
+}
+
+onMounted(() => {
+  unsubscribeAuthRefresh = subscribeAuthRefresh(() => {
+    syncAuthUser()
+    startPolling()
+  })
+})
+
+onBeforeUnmount(() => {
+  stopPolling()
+  unsubscribeAuthRefresh?.()
+  unsubscribeAuthRefresh = null
+})
 
 function onOpenAsset(assetId: number) {
   activePanel.value = null
@@ -145,6 +172,7 @@ function onOpenAsset(assetId: number) {
 }
 
 function togglePanel(panel: Exclude<ActivePanel, null>) {
+  if (panel === 'task' && petOnlyWorkspace.value) return
   if (panel === 'task' && !requireAuth('登录后可查看任务中心')) return
   activePanel.value = activePanel.value === panel ? null : panel
 }

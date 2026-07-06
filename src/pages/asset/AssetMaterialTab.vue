@@ -1,6 +1,11 @@
 <template>
   <div class="asset-hub-tab-scroll">
-    <AssetCenter panel-mode="materials" :highlight-asset-id="highlightAssetId" @highlight-consumed="$emit('highlightConsumed')" />
+    <AssetCenter
+      panel-mode="materials"
+      :business-domain="businessDomain"
+      :highlight-asset-id="highlightAssetId"
+      @highlight-consumed="$emit('highlightConsumed')"
+    />
   </div>
 </template>
 
@@ -9,6 +14,7 @@ import AssetCenter from './AssetCenter.vue'
 
 defineProps<{
   highlightAssetId?: number | null
+  businessDomain?: 'pet'
 }>()
 
 defineEmits<{

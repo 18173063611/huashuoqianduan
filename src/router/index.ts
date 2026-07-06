@@ -4,6 +4,7 @@ import { clearAuthSession, getAuthUser, setAuthUser, type AuthClientType } from 
 import { me } from '../services/authApi'
 import { getAuthToken } from '../services/request'
 import { recordRecentTool } from '../services/systemWorkspaceStore'
+import { canAccessPetCreation, isPetOnlyWorkspaceUser } from '../config/petCreationAccess'
 
 export type WorkbenchRouteName =
   | 'video-parse'
@@ -15,6 +16,14 @@ export type WorkbenchRouteName =
   | 'avatar'
   | 'render'
   | 'render-manual'
+  | 'pet-render'
+  | 'pet-dialogue-create'
+  | 'pet-role-setup'
+  | 'pet-storyboard'
+  | 'pet-generation-status'
+  | 'pet-templates'
+  | 'pet-works'
+  | 'pet-assets'
   | 'my-videos'
   | 'AssetCenter'
   | 'system-credits'
@@ -201,6 +210,94 @@ const routes: RouteRecordRaw[] = [
         name: 'render',
         component: () => import('../pages/render/car-sales/CarSalesCreatePage.vue'),
         meta: { public: true, menuKey: 'render' },
+      },
+      {
+        path: 'pet-render',
+        name: 'pet-render',
+        component: () => import('../pages/pet-creation/PetCreationHomePage.vue'),
+        meta: {
+          ...businessRouteMeta,
+          menuKey: 'pet-render',
+          title: 'AI萌宠创作',
+          requiresPetCreationAccess: true,
+        },
+      },
+      {
+        path: 'pet-render/dialogue',
+        name: 'pet-dialogue-create',
+        component: () => import('../pages/pet-creation/PetDialogueCreatePage.vue'),
+        meta: {
+          ...businessRouteMeta,
+          menuKey: 'pet-render',
+          title: '宠物对话视频创建',
+          requiresPetCreationAccess: true,
+        },
+      },
+      {
+        path: 'pet-render/role',
+        name: 'pet-role-setup',
+        component: () => import('../pages/pet-creation/PetRoleSetupPage.vue'),
+        meta: {
+          ...businessRouteMeta,
+          menuKey: 'pet-render',
+          title: '素材上传与角色设定',
+          requiresPetCreationAccess: true,
+        },
+      },
+      {
+        path: 'pet-render/storyboard',
+        name: 'pet-storyboard',
+        component: () => import('../pages/pet-creation/PetStoryboardPage.vue'),
+        meta: {
+          ...businessRouteMeta,
+          menuKey: 'pet-render',
+          title: '脚本与分镜生成',
+          requiresPetCreationAccess: true,
+        },
+      },
+      {
+        path: 'pet-render/progress/:taskId?',
+        name: 'pet-generation-status',
+        component: () => import('../pages/pet-creation/PetGenerationStatusPage.vue'),
+        meta: {
+          ...businessRouteMeta,
+          menuKey: 'pet-render',
+          title: '视频生成中',
+          requiresPetCreationAccess: true,
+        },
+      },
+      {
+        path: 'pet-templates',
+        name: 'pet-templates',
+        component: () => import('../pages/pet-creation/PetTemplateLibraryPage.vue'),
+        meta: {
+          ...businessRouteMeta,
+          menuKey: 'pet-templates',
+          title: '萌宠模板库',
+          requiresPetCreationAccess: true,
+        },
+      },
+      {
+        path: 'pet-works',
+        name: 'pet-works',
+        component: () => import('../pages/pet-creation/PetWorksPage.vue'),
+        meta: {
+          ...businessRouteMeta,
+          menuKey: 'pet-works',
+          title: '我的宠物作品',
+          requiresPetCreationAccess: true,
+        },
+      },
+      {
+        path: 'pet-assets',
+        name: 'pet-assets',
+        component: () => import('../pages/pet-creation/PetAssetCenterPage.vue'),
+        meta: {
+          ...businessRouteMeta,
+          menuKey: 'pet-assets',
+          title: '宠物资产中心',
+          requiresPetCreationAccess: true,
+        },
       },
       {
         path: 'my-videos',
@@ -449,6 +546,28 @@ const router = createRouter({
   routes,
 })
 
+const PET_ONLY_BLOCKED_ROUTE_NAMES = new Set([
+  'render',
+  'render-manual',
+  'benchmark-create-page',
+  'asset-reuse',
+  'video-parse',
+  'script-rewrite',
+  'storyboard',
+  'avatar',
+  'voice',
+  'my-videos',
+  'AssetCenter',
+  'help-tutorials',
+  'help-faq',
+  'help-changelog',
+  'help-contact',
+])
+
+function petOnlyRedirectFor(toName: unknown) {
+  return PET_ONLY_BLOCKED_ROUTE_NAMES.has(String(toName || '')) ? { name: 'pet-render' as const } : null
+}
+
 router.beforeEach(async (to) => {
   if (to.name === 'render' && to.query.mode === 'manual' && !getAuthToken('USER_WEB')) {
     return {
@@ -457,11 +576,20 @@ router.beforeEach(async (to) => {
     }
   }
 
+  const cachedWorkbenchUser = getAuthUser('USER_WEB')
+  const cachedPetOnlyRedirect = cachedWorkbenchUser && isPetOnlyWorkspaceUser(cachedWorkbenchUser)
+    ? petOnlyRedirectFor(to.name)
+    : null
+  if (cachedPetOnlyRedirect) {
+    return cachedPetOnlyRedirect
+  }
+
   if (!to.matched.some((record) => record.meta.requiresAuth)) {
     return true
   }
 
   const needsAdmin = to.matched.some((record) => record.meta.requiresAdmin)
+  const needsPetCreationAccess = to.matched.some((record) => record.meta.requiresPetCreationAccess)
   const clientType: AuthClientType = needsAdmin ? 'ADMIN_WEB' : 'USER_WEB'
   const token = getAuthToken(clientType)
   const redirectToAuthEntry = () => {
@@ -476,6 +604,7 @@ router.beforeEach(async (to) => {
       query: { login: 'required', redirect: to.fullPath },
     }
   }
+  const redirectNoPetAccess = () => ({ name: 'render' as const })
 
   if (!token) {
     return redirectToAuthEntry()
@@ -493,10 +622,43 @@ router.beforeEach(async (to) => {
         query: { redirect: to.fullPath },
       }
     }
+    if (needsPetCreationAccess) {
+      if (canAccessPetCreation(cachedUser)) return true
+      try {
+        const user = await me(clientType)
+        setAuthUser(user, clientType)
+        if (user.status && user.status !== 'ENABLED') {
+          clearAuthSession(clientType)
+          return redirectToAuthEntry()
+        }
+        return canAccessPetCreation(user) ? true : redirectNoPetAccess()
+      } catch {
+        clearAuthSession(clientType)
+        return redirectToAuthEntry()
+      }
+    }
+    const petOnlyRedirect = isPetOnlyWorkspaceUser(cachedUser) ? petOnlyRedirectFor(to.name) : null
+    if (petOnlyRedirect) {
+      return petOnlyRedirect
+    }
     return true
   }
 
   if (clientType === 'USER_WEB') {
+    if (needsPetCreationAccess) {
+      try {
+        const user = await me(clientType)
+        setAuthUser(user, clientType)
+        if (user.status && user.status !== 'ENABLED') {
+          clearAuthSession(clientType)
+          return redirectToAuthEntry()
+        }
+        return canAccessPetCreation(user) ? true : redirectNoPetAccess()
+      } catch {
+        clearAuthSession(clientType)
+        return redirectToAuthEntry()
+      }
+    }
     return true
   }
 
@@ -522,6 +684,14 @@ router.beforeEach(async (to) => {
 
 const recentToolTitles: Partial<Record<WorkbenchRouteName, string>> = {
   render: 'AI 智能创作',
+  'pet-render': 'AI 萌宠创作',
+  'pet-dialogue-create': '宠物对话视频创建',
+  'pet-role-setup': '素材上传与角色设定',
+  'pet-storyboard': '脚本与分镜生成',
+  'pet-generation-status': '视频生成中',
+  'pet-templates': '萌宠模板库',
+  'pet-works': '我的宠物作品',
+  'pet-assets': '宠物资产中心',
   'video-parse': '爆款对标',
   'benchmark-create-page': '爆款对标创作',
   'asset-reuse': '资产复用创作',
@@ -544,6 +714,14 @@ const recentToolTitles: Partial<Record<WorkbenchRouteName, string>> = {
 
 const recentToolSubtitles: Partial<Record<WorkbenchRouteName, string>> = {
   render: '创作中心',
+  'pet-render': '宠物创作中心',
+  'pet-dialogue-create': '宠物创作中心',
+  'pet-role-setup': '宠物创作中心',
+  'pet-storyboard': '宠物创作中心',
+  'pet-generation-status': '宠物创作中心',
+  'pet-templates': '宠物创作中心',
+  'pet-works': '宠物创作中心',
+  'pet-assets': '宠物创作中心',
   'video-parse': 'AI 资产生产工具',
   'benchmark-create-page': '创作中心',
   'asset-reuse': '创作中心',

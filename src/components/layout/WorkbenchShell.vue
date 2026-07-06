@@ -16,9 +16,12 @@
 <script setup lang="ts">
 import { computed, ref, watch } from 'vue'
 import { RouterView, useRoute, useRouter } from 'vue-router'
+import { ElMessage } from 'element-plus'
 import TaskFloatingDock from '../TaskFloatingDock.vue'
 import WorkbenchLayout from './WorkbenchLayout.vue'
 import { useAuthRequired } from '../../composables/useAuthRequired'
+import { getAuthUser } from '../../services/authSession'
+import { canAccessPetCreation, isPetCreationMenuKey, isPetOnlyWorkspaceUser } from '../../config/petCreationAccess'
 
 type MenuKey = string
 
@@ -28,7 +31,7 @@ const { requireAuth } = useAuthRequired()
 const publicMenuKeys = new Set(['render', 'help-tutorials', 'help-faq', 'help-changelog', 'help-contact'])
 const pendingActiveKey = ref<string | null>(null)
 
-const assetHubActive = computed(() => route.name === 'AssetCenter')
+const assetHubActive = computed(() => route.name === 'AssetCenter' || route.name === 'pet-assets')
 
 const activeKey = computed<string>(() => {
   if (pendingActiveKey.value) {
@@ -51,6 +54,9 @@ const activeKey = computed<string>(() => {
     const view = firstQueryValue(route.query.assetView || route.query.view)
     const assetKey = assetViewToMenuKey[view]
     return assetKey || 'assets-images'
+  }
+  if (route.name === 'pet-assets') {
+    return 'pet-assets'
   }
   const menuKey = route.meta.menuKey
   if (isWorkbenchRouteMenuKey(menuKey)) {
@@ -95,6 +101,17 @@ watch(
 )
 
 function navigateToMenu(key: MenuKey) {
+  if (isPetOnlyWorkspaceUser(getAuthUser()) && !isPetCreationMenuKey(key) && !key.startsWith('my-videos') && !key.startsWith('system-')) {
+    ElMessage.warning('当前账号仅开通宠物创作中心')
+    return
+  }
+  if (isPetCreationMenuKey(key)) {
+    if (!requireAuth('登录后可使用宠物创作中心')) return
+    if (!canAccessPetCreation(getAuthUser())) {
+      ElMessage.warning('当前账号暂未开通宠物创作中心')
+      return
+    }
+  }
   if (!publicMenuKeys.has(key) && !requireAuth(authActionLabelForMenu(key))) {
     return
   }
@@ -158,10 +175,11 @@ function goAssetHub(assetId?: number) {
   if (assetId != null && assetId > 0) {
     q.highlight = String(assetId)
   }
-  void router.push({ name: 'AssetCenter', query: q })
+  void router.push({ name: isPetOnlyWorkspaceUser(getAuthUser()) ? 'pet-assets' : 'AssetCenter', query: q })
 }
 
 function authActionLabelForMenu(key: MenuKey) {
+  if (isPetCreationMenuKey(key)) return '登录后可使用宠物创作中心'
   if (key.startsWith('my-videos')) return '登录后可查看我的视频'
   if (key.startsWith('assets-')) return '登录后可管理资产中心素材'
   if (key.startsWith('system-')) return '登录后可使用系统管理功能'

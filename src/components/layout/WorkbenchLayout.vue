@@ -74,7 +74,7 @@
         <div class="app-topbar-actions">
           <button type="button" class="app-ghost-button app-task-entry" aria-label="任务队列" @click="openTaskCenter">
             <el-icon :size="16"><Tickets /></el-icon>
-            <span>任务中心</span>
+            <span>{{ taskCenterLabel }}</span>
           </button>
           <button type="button" class="app-credit-pill" title="当前账号积分" @click="openCreditCenter">
             <el-icon :size="16"><Wallet /></el-icon>
@@ -91,7 +91,7 @@
             @click="openAssetCenter"
           >
             <el-icon :size="16"><FolderOpened /></el-icon>
-            <span>资产中心</span>
+            <span>{{ assetCenterLabel }}</span>
           </button>
           <button type="button" class="app-icon-button" aria-label="通知" @click="openNotifications">
             <el-icon :size="16"><Bell /></el-icon>
@@ -156,6 +156,7 @@ import { subscribeAuthRefresh } from '../../services/authRefreshHub'
 import { getAuthUser } from '../../services/authSession'
 import { getAuthToken } from '../../services/request'
 import type { UserMe } from '../../types/userTypes'
+import { canAccessPetCreation, canAccessVehicleCreation, isPetOnlyWorkspaceUser } from '../../config/petCreationAccess'
 import { useAuthRequired } from '../../composables/useAuthRequired'
 import LoginRequiredModal from './LoginRequiredModal.vue'
 
@@ -174,12 +175,12 @@ interface MenuSection {
   items: MenuItem[]
 }
 
-type MenuSectionKey = 'creation' | 'ai-tools' | 'tutorial'
+type MenuSectionKey = 'creation' | 'pet-creation' | 'ai-tools' | 'tutorial'
 
-const menuSections: MenuSection[] = [
+const allMenuSections: MenuSection[] = [
   {
     key: 'creation',
-    label: '创作中心',
+    label: '车辆创作中心',
     icon: MagicStick,
     items: [
       {
@@ -202,6 +203,41 @@ const menuSections: MenuSection[] = [
         icon: FolderOpened,
         title: '资产复用创作',
         subtitle: '从已有文案、分镜、数字人和素材中组合生成新视频。',
+      },
+    ],
+  },
+  {
+    key: 'pet-creation',
+    label: '宠物创作中心',
+    icon: MagicStick,
+    items: [
+      {
+        key: 'pet-render',
+        label: 'AI萌宠创作',
+        icon: MagicStick,
+        title: 'AI萌宠创作',
+        subtitle: '上传宠物图片、选择剧情模板或输入创意，生成萌宠短视频。',
+      },
+      {
+        key: 'pet-templates',
+        label: '萌宠模板库',
+        icon: Document,
+        title: '萌宠模板库',
+        subtitle: '选择小猫对话、小狗反应、宠物口播等模板快速开始。',
+      },
+      {
+        key: 'pet-works',
+        label: '我的宠物作品',
+        icon: FolderOpened,
+        title: '我的宠物作品',
+        subtitle: '管理宠物视频草稿、历史生成和可复用项目。',
+      },
+      {
+        key: 'pet-assets',
+        label: '宠物资产中心',
+        icon: FolderOpened,
+        title: '宠物资产中心',
+        subtitle: '管理主宠物、第二只宠物、道具和场景参考图，只展示宠物相关素材。',
       },
     ],
   },
@@ -256,8 +292,6 @@ const menuSections: MenuSection[] = [
   },
 ]
 
-const menuItems = menuSections.flatMap((section) => section.items)
-
 type MenuItemKey = MenuItem['key']
 
 const props = defineProps<{
@@ -281,14 +315,27 @@ const userMenuPlacement = ref<'sidebar' | 'top' | null>(null)
 const authRefreshTick = ref(0)
 const brokenAvatarUrl = ref('')
 
+const petOnlyWorkspace = computed(() => isPetOnlyWorkspaceUser(currentUser.value))
+const menuSections = computed(() => {
+  if (petOnlyWorkspace.value) {
+    return allMenuSections.filter((section) => section.key === 'pet-creation')
+  }
+  return allMenuSections.filter((section) => {
+    if (section.key === 'pet-creation') return canAccessPetCreation(currentUser.value)
+    if (section.key === 'creation') return canAccessVehicleCreation(currentUser.value)
+    return true
+  })
+})
+const menuItems = computed(() => menuSections.value.flatMap((section) => section.items))
+
 const authed = computed(() => {
   void authRefreshTick.value
   return Boolean(getAuthToken())
 })
-const currentMenuItem = computed(() => menuItems.find((item) => item.key === props.activeKey))
+const currentMenuItem = computed(() => menuItems.value.find((item) => item.key === props.activeKey))
 const activeSectionKey = computed<MenuSectionKey | ''>(() => {
   if (props.activeKey === 'render-manual') return 'creation'
-  return menuSections.find((section) => section.items.some((item) => item.key === props.activeKey))?.key || ''
+  return menuSections.value.find((section) => section.items.some((item) => item.key === props.activeKey))?.key || ''
 })
 const showPageHeading = computed(() => {
   if (route.name === 'render') return false
@@ -299,14 +346,18 @@ const showPageHeading = computed(() => {
   return true
 })
 const pageTitle = computed(() => {
-  if (props.assetHubActive) return '资产中心'
+  if (props.assetHubActive) return petOnlyWorkspace.value ? '宠物资产中心' : '资产中心'
   const metaTitle = route.meta.title
   return typeof metaTitle === 'string' && metaTitle ? metaTitle : currentMenuItem.value?.title || '工作台'
 })
 const pageSubtitle = computed(() => {
-  if (props.assetHubActive) return '搜索、筛选和验收生成资产。'
+  if (props.assetHubActive) {
+    return petOnlyWorkspace.value ? '只展示宠物创作相关素材，避免混入车辆资产。' : '搜索、筛选和验收生成资产。'
+  }
   return currentMenuItem.value?.subtitle || '围绕 AI 视频创作组织素材、任务和结果。'
 })
+const assetCenterLabel = computed(() => petOnlyWorkspace.value ? '宠物资产' : '资产中心')
+const taskCenterLabel = computed(() => petOnlyWorkspace.value ? '宠物作品' : '任务中心')
 const userInitial = computed(() => {
   const name = authed.value ? currentUser.value?.displayName || currentUser.value?.username || 'U' : '登'
   return name.trim().slice(0, 1).toUpperCase()
@@ -353,6 +404,10 @@ function promptLogin(actionName = '登录后可继续使用') {
 function openTaskCenter() {
   if (!requireAuth('登录后可查看任务进度和生成结果')) return
   userMenuPlacement.value = null
+  if (petOnlyWorkspace.value) {
+    void router.push({ name: 'pet-works' })
+    return
+  }
   void router.push({ name: 'my-videos' })
 }
 
@@ -365,6 +420,10 @@ function openCreditCenter() {
 function openAssetCenter() {
   if (!requireAuth('登录后可管理资产中心素材')) return
   userMenuPlacement.value = null
+  if (petOnlyWorkspace.value) {
+    void router.push({ name: 'pet-assets' })
+    return
+  }
   emit('openAssets')
 }
 

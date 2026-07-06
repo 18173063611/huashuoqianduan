@@ -20,6 +20,8 @@ export interface AuthUser {
   phone?: string | null
   email?: string | null
   remark?: string | null
+  permissions?: string[] | null
+  features?: string[] | null
   creditBalance?: number
   creditFrozenBalance?: number
   creditTotalConsumed?: number

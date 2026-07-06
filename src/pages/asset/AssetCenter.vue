@@ -899,6 +899,8 @@ const props = defineProps<{
    * materials | voices：仅展示对应面板（用于资产中心页一级 Tab 内嵌）。
    */
   panelMode?: 'full' | 'materials' | 'voices'
+  /** pet：仅查询和上传宠物创作资产；缺省保持原资产中心行为。 */
+  businessDomain?: 'pet'
 }>()
 
 const emit = defineEmits<{
@@ -953,14 +955,19 @@ const router = useRouter()
 
 const embedPanel = computed(() => props.panelMode === 'materials' || props.panelMode === 'voices')
 const showCategoryTabs = computed(() => !props.panelMode || props.panelMode === 'full')
+const isPetAssetMode = computed(() => props.businessDomain === 'pet')
 
 const headTitle = computed(() => {
+  if (isPetAssetMode.value) return '宠物素材资产'
   if (props.panelMode === 'materials') return '素材资产'
   if (props.panelMode === 'voices') return voicesHeadTitle.value
   return activeCategory.value === 'materials' ? '素材资产' : voicesHeadTitle.value
 })
 
 const headSubtitle = computed(() => {
+  if (isPetAssetMode.value) {
+    return '只展示宠物创作相关图片、视频、音频和参考素材；上传内容会自动进入宠物资产域。'
+  }
   if (props.panelMode === 'materials') {
     return '筛选全部、公共或私有素材，预览、复制链接，并管理当前账号下的资产。'
   }
@@ -996,6 +1003,9 @@ const KNOWN_SOURCE_TYPES = [
   'SEEDANCE_FIRST_LAST_FRAME_VIDEO',
   'SEEDANCE_REFERENCE_VIDEO',
   'SEEDANCE_CAR_SALES_VIDEO',
+  'PET_REFERENCE_IMAGE',
+  'PET_REFERENCE_VIDEO',
+  'PET_VIDEO_RESULT',
   'TEXT_TO_VIDEO_SEEDANCE_1_5',
   'TEXT_TO_VIDEO_SEEDANCE_2_0',
   'IMAGE_TO_VIDEO_SEEDANCE_1_5',
@@ -1289,7 +1299,12 @@ const assetGroupOptions = computed(() => {
   return Array.from(set)
 })
 
-const workflowStageOptions = computed(() => WORKFLOW_STAGE_OPTIONS.filter((item) => item.key !== 'material'))
+const workflowStageOptions = computed(() => {
+  const hidden = isPetAssetMode.value
+    ? new Set<WorkflowStageKey>(['benchmark', 'storyboard', 'digitalHuman', 'carBundle', 'sceneBundle', 'template', 'material'])
+    : new Set<WorkflowStageKey>(['material'])
+  return WORKFLOW_STAGE_OPTIONS.filter((item) => !hidden.has(item.key))
+})
 const selectedBusinessViewOption = computed(
   () => BUSINESS_VIEW_OPTIONS.find((item) => item.key === selectedBusinessView.value) || BUSINESS_VIEW_OPTIONS[0],
 )
@@ -1300,6 +1315,9 @@ const businessViewStatusText = computed(() => {
 })
 const assetKindStatusText = computed(() => {
   const scope = listScopeLabel(listScope.value)
+  if (isPetAssetMode.value) {
+    return `${scope} · 主宠物、第二只宠物、道具参考、场景参考和生成结果`
+  }
   if (!selectedWorkflowStage.value) {
     return `${scope} · 文案、分镜、车型素材包、数字人形象等可复用资产`
   }
@@ -1321,6 +1339,9 @@ const materialUploadTargetLabel = computed(() => {
   return selectedBusinessViewOption.value.label
 })
 const materialUploadHint = computed(() => {
+  if (isPetAssetMode.value) {
+    return '上传清晰宠物图片、道具参考或场景参考，保存到当前账号的宠物资产中心。'
+  }
   if (selectedWorkflowStage.value === 'benchmark' || selectedBusinessView.value === 'copy') {
     return '上传本地 TXT、MD 或 JSON 文案文件，保存到私有素材的文案资产。'
   }
@@ -1690,6 +1711,7 @@ function currentAssetQueryKey() {
     selectedAssetGroup: selectedAssetGroup.value,
     selectedPublicAssetProvider: selectedPublicAssetProvider.value,
     selectedWorkflowStage: selectedWorkflowStage.value,
+    businessDomain: props.businessDomain || '',
     sortKey: sortKey.value,
     keyword: keyword.value.trim(),
   })
@@ -1750,6 +1772,7 @@ async function loadAssets(options?: { append?: boolean }) {
       sort: sortKey.value,
       pageNo: nextPageNo,
       pageSize: ASSET_PAGE_SIZE,
+      businessDomain: props.businessDomain,
     })
     if (seq !== assetLoadSeq) return
     const filteredRows = rows.filter(matchesPublicAssetProvider).filter(matchesWorkflowStage).filter(matchesBusinessView)
@@ -2308,13 +2331,18 @@ function currentWritableAssetMetadata(file?: File) {
   const group = currentWritableAssetGroup()
   const stage = currentWorkflowStageOption()
   const role = currentWritableAssetRole(file, stage)
+  if (isPetAssetMode.value) {
+    meta.businessDomain = 'pet'
+    meta.domain = 'pet_creation'
+    meta.assetGroup = '宠物素材'
+  }
   if (group) {
     meta.assetGroup = group
   }
   if (role) {
     meta.assetRole = role
   }
-  meta.from = 'asset_center_upload'
+  meta.from = isPetAssetMode.value ? 'pet_asset_center_upload' : 'asset_center_upload'
   meta.source = selectedWorkflowStage.value || selectedUploadBusinessView.value
   if (file?.name) {
     meta.originalFileName = file.name

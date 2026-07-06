@@ -122,6 +122,8 @@ export function applyLogin(
       phone: res.phone,
       email: res.email,
       remark: res.remark,
+      permissions: res.permissions,
+      features: res.features,
       creditBalance: res.creditBalance,
       creditFrozenBalance: res.creditFrozenBalance,
       creditTotalConsumed: res.creditTotalConsumed,

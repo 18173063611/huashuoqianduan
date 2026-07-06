@@ -16,12 +16,14 @@ export interface ListAssetsParams {
   pageNo?: number
   pageSize?: number
   includePreview?: boolean
+  businessDomain?: 'pet'
 }
 
 export interface UploadMaterialAssetOptions {
   projectId?: number | null
   publish?: boolean
   metadataJson?: string
+  businessDomain?: 'pet'
 }
 
 const ASSET_CONTENT_TIMEOUT_MS = 8000
@@ -77,6 +79,9 @@ export async function getAssets(params?: ListAssetsParams) {
   if (params?.includePreview === false) {
     search.set('includePreview', 'false')
   }
+  if (params?.businessDomain) {
+    search.set('businessDomain', params.businessDomain)
+  }
   if (params?.scope && params.scope !== 'all') {
     search.set('scope', params.scope)
   }
@@ -108,6 +113,9 @@ export function uploadMaterialAsset(file: File, options?: UploadMaterialAssetOpt
   }
   if (options?.metadataJson && options.metadataJson.trim()) {
     formData.append('metadataJson', options.metadataJson.trim())
+  }
+  if (options?.businessDomain) {
+    formData.append('businessDomain', options.businessDomain)
   }
   return request<AssetItem>('/assets/upload', {
     method: 'POST',
