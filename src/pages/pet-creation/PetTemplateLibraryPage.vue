@@ -37,7 +37,7 @@
       </main>
 
       <aside class="pet-playbook">
-        <h3>玩法说明</h3>
+        <h3>{{ playbookTitle }}</h3>
         <ol>
           <li v-for="step in templateGuideSteps" :key="step.title">
             <i>{{ step.index }}</i>
@@ -64,29 +64,39 @@ import PetTemplateCard from './components/PetTemplateCard.vue'
 import { petTemplateFilters, petTemplates } from './petTemplateConfig'
 import { usePetCreationState } from './usePetCreationState'
 import type { PetTemplate } from './petCreationTypes'
+import { petTemplateGuideByWorkflow, petTemplateWorkflowFor, routeForPetTemplate } from './petTemplateWorkflow'
 
 const router = useRouter()
 const { applyTemplate, loadDraft, saveDraft } = usePetCreationState()
 const selectedFilter = ref('热门玩法')
-const templateGuideSteps = [
-  { index: '01', title: '上传宠物图', text: '上传宠物照片或视频，支持多图参考。' },
-  { index: '02', title: '填写台词', text: '输入或 AI 生成台词，设置宠物对话内容。' },
-  { index: '03', title: '选择配音', text: '选择适合的音色，让宠物开口说话。' },
-  { index: '04', title: '生成视频', text: '一键生成高清视频，支持多平台比例复用。' },
-]
 const filteredTemplates = computed(() => {
   if (selectedFilter.value === '热门玩法') return petTemplates
   return petTemplates.filter(
     (template) => template.category === selectedFilter.value || template.tags.includes(selectedFilter.value),
   )
 })
+const genericGuideSteps = [
+  { index: '01', title: '选择玩法', text: '先判断本次是对话、剧情、图生视频、表情反应还是背景场景。' },
+  { index: '02', title: '进入生产页', text: '模板会自动进入对话、素材、分镜或背景编辑等对应页面。' },
+  { index: '03', title: '补齐素材', text: '按玩法补主宠物、第二只宠物、道具、场景和台词。' },
+  { index: '04', title: '确认生成', text: '生成前核对草稿、分镜、积分和真实接口预检。' },
+]
+const activeWorkflow = computed(() => selectedFilter.value === '热门玩法' ? 'smart' : filteredTemplates.value[0]?.workflow || 'smart')
+const playbookTitle = computed(() => {
+  if (selectedFilter.value === '热门玩法') return '玩法选择流程'
+  const template = filteredTemplates.value[0] || petTemplates[0]
+  return template ? `${petTemplateWorkflowFor(template).label}流程` : '玩法说明'
+})
+const templateGuideSteps = computed(() =>
+  selectedFilter.value === '热门玩法' ? genericGuideSteps : petTemplateGuideByWorkflow[activeWorkflow.value],
+)
 
 async function handleUseTemplate(template: PetTemplate) {
   await loadDraft()
   applyTemplate(template)
   await saveDraft()
   ElMessage.success(`已应用「${template.title}」模板`)
-  void router.push({ name: 'pet-render', query: { templateId: template.id } })
+  void router.push(routeForPetTemplate(template))
 }
 </script>
 

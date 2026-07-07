@@ -2,8 +2,8 @@
   <section class="pet-material-picker">
     <header class="pet-material-picker-head">
       <div>
-        <h3>宠物素材包</h3>
-        <p>为主宠物、第二只宠物、道具和背景场景分别补充参考图，生成时会写入宠物草稿材料列表。</p>
+        <h3>宠物生产素材</h3>
+        <p>按宠物视频生产角色管理素材：主宠物、第二只宠物、产品/道具、背景/场景和口播/BGM 音频均写入宠物草稿。</p>
       </div>
       <button type="button" @click="loadAssets">{{ loadingAssets ? '加载中' : '刷新资产' }}</button>
     </header>
@@ -15,8 +15,12 @@
         class="pet-material-slot"
         :class="{ active: slot.role === activeRole }"
       >
-        <button type="button" @click="activeRole = slot.role">
-          <img v-if="materialByRole[slot.role]?.url" :src="materialByRole[slot.role]?.url" :alt="slot.label" />
+        <button type="button" class="pet-material-preview" @click="setActiveRole(slot.role)">
+          <img
+            v-if="slot.kind === 'image' && materialByRole[slot.role]?.url"
+            :src="materialByRole[slot.role]?.url"
+            :alt="slot.label"
+          />
           <span v-else>{{ slot.shortLabel }}</span>
         </button>
         <div>
@@ -35,12 +39,12 @@
     </div>
 
     <div class="pet-material-actions">
-      <label class="pet-upload-action">
-        <input type="file" accept="image/*" @change="handleUploadChange" />
-        <span>{{ uploading ? '上传中...' : `上传到${activeSlotLabel}` }}</span>
+      <label class="pet-upload-action" :class="{ disabled: uploading }">
+        <input type="file" :accept="activeSlot.accept" :disabled="uploading" @change="handleUploadChange" />
+        <span>{{ uploading ? '上传中...' : `上传${activeSlotLabel}` }}</span>
       </label>
       <div class="pet-url-action">
-        <input v-model.trim="manualUrl" placeholder="粘贴图片 URL，作为当前槽位参考图" />
+        <input v-model.trim="manualUrl" :placeholder="activeSlot.urlPlaceholder" />
         <button type="button" @click="addManualUrl">添加 URL</button>
       </div>
     </div>
@@ -51,7 +55,7 @@
       <input
         v-model.trim="keyword"
         :disabled="loadingAssets"
-        placeholder="搜索资产中心图片素材"
+        :placeholder="activeSlot.placeholder"
         @keydown.enter.prevent="loadAssets"
       />
       <select v-model="scope" :disabled="loadingAssets">
@@ -62,14 +66,18 @@
       <button type="button" :disabled="loadingAssets" @click="loadAssets">搜索</button>
     </div>
 
-    <div v-if="loadingAssets" class="pet-asset-empty">正在加载资产中心素材。</div>
+    <p class="pet-material-tip">{{ activeSlot.description }}</p>
+
+    <div v-if="loadingAssets" class="pet-asset-empty">正在加载宠物资产中心素材。</div>
     <div v-else-if="assetOptions.length === 0" class="pet-asset-empty">
-      暂无可选图片素材，可先上传图片或粘贴图片 URL。
+      当前分类暂无可选素材，可先上传文件或粘贴 URL。
     </div>
     <div v-else class="pet-asset-grid">
       <article v-for="asset in assetOptions" :key="asset.assetId" class="pet-asset-card">
-        <img v-if="assetPreviewUrl(asset)" :src="assetPreviewUrl(asset)" :alt="asset.fileName" />
-        <span v-else>图片</span>
+        <div class="pet-asset-preview-box">
+          <img v-if="assetPreviewUrl(asset)" :src="assetPreviewUrl(asset)" :alt="asset.fileName" />
+          <span v-else>{{ assetKindLabel(asset) }}</span>
+        </div>
         <strong>{{ asset.fileName }}</strong>
         <small>{{ assetSubtitle(asset) }}</small>
         <button type="button" @click="selectAsset(asset)">加入{{ activeSlotLabel }}</button>
@@ -79,13 +87,28 @@
 </template>
 
 <script setup lang="ts">
-import { computed, onMounted, ref } from 'vue'
+import { computed, onMounted, ref, watch } from 'vue'
 import { getAssets, uploadMaterialAsset, type AssetListScope } from '../../../services/assetApi'
 import { normalizePublicMediaUrl } from '../../../utils/mediaUrl'
-import type { AssetItem } from '../../../types/assetTypes'
+import type { AssetItem, AssetType } from '../../../types/assetTypes'
 import type { PetReferenceMaterial } from '../petCreationTypes'
 
 type PetMaterialRole = PetReferenceMaterial['role']
+
+interface PetMaterialSlot {
+  role: PetMaterialRole
+  label: string
+  shortLabel: string
+  hint: string
+  description: string
+  placeholder: string
+  urlPlaceholder: string
+  assetTypes: AssetType[]
+  accept: string
+  kind: 'image' | 'audio'
+  assetGroup: string
+  metadataRole: string
+}
 
 const props = defineProps<{
   modelValue: PetReferenceMaterial[]
@@ -95,11 +118,77 @@ const emit = defineEmits<{
   'update:modelValue': [value: PetReferenceMaterial[]]
 }>()
 
-const materialSlots: Array<{ role: PetMaterialRole; label: string; shortLabel: string; hint: string }> = [
-  { role: 'main_pet', label: '主宠物', shortLabel: '主', hint: '必填，建议上传清晰正面照' },
-  { role: 'second_pet', label: '第二只宠物', shortLabel: '副', hint: '可选，用于双宠物对话' },
-  { role: 'prop', label: '道具参考', shortLabel: '道具', hint: '可选，补充玩具、零食等道具' },
-  { role: 'scene', label: '背景/场景参考', shortLabel: '背景', hint: '可选，补充客厅、草地、宠物店等背景图' },
+const materialSlots: PetMaterialSlot[] = [
+  {
+    role: 'main_pet',
+    label: '主宠物参考',
+    shortLabel: '主宠',
+    hint: '必填，建议正面清晰照',
+    description: '主宠物参考图是身份锚点，市场同类产品也通常要求清晰、无遮挡、面部可见的宠物照片。',
+    placeholder: '搜索主宠物、猫、狗、正面照...',
+    urlPlaceholder: '粘贴主宠物图片 URL',
+    assetTypes: ['IMAGE', 'COVER'],
+    accept: 'image/*',
+    kind: 'image',
+    assetGroup: '宠物主图',
+    metadataRole: 'main_pet',
+  },
+  {
+    role: 'second_pet',
+    label: '第二只宠物参考',
+    shortLabel: '副宠',
+    hint: '可选，用于双宠物对话',
+    description: '双宠物对话、合作短剧和互相吐槽模板需要第二只宠物参考图，避免角色漂移。',
+    placeholder: '搜索第二只宠物、搭档、双宠...',
+    urlPlaceholder: '粘贴第二只宠物图片 URL',
+    assetTypes: ['IMAGE', 'COVER'],
+    accept: 'image/*',
+    kind: 'image',
+    assetGroup: '宠物主图',
+    metadataRole: 'second_pet',
+  },
+  {
+    role: 'prop',
+    label: '产品/道具参考',
+    shortLabel: '产品',
+    hint: '可选，宠物用品、零食、玩具、梳毛工具等',
+    description: '产品图会以 prop 素材传入真实接口，只作为宠物用品或道具展示，不能替换主宠物身份。',
+    placeholder: '搜索宠物用品、零食、玩具、道具...',
+    urlPlaceholder: '粘贴产品/道具图片 URL',
+    assetTypes: ['IMAGE', 'COVER'],
+    accept: 'image/*',
+    kind: 'image',
+    assetGroup: '宠物产品/道具',
+    metadataRole: 'prop',
+  },
+  {
+    role: 'scene',
+    label: '背景/场景参考',
+    shortLabel: '背景',
+    hint: '可选，客厅、草地、宠物店、咖啡店等',
+    description: '背景图只作为场景参考，配合“背景图/场景要求”使用，不能覆盖宠物外观、毛色和脸型。',
+    placeholder: '搜索客厅、草地、宠物店、背景...',
+    urlPlaceholder: '粘贴背景/场景图片 URL',
+    assetTypes: ['IMAGE', 'COVER'],
+    accept: 'image/*',
+    kind: 'image',
+    assetGroup: '宠物背景/场景',
+    metadataRole: 'scene',
+  },
+  {
+    role: 'audio',
+    label: '口播/BGM 音频',
+    shortLabel: '音频',
+    hint: '可选，口播、参考音频或 BGM，最多 1 条',
+    description: '音频素材会以 audio 角色传入宠物任务；开启配音时作为口播参考，开启 BGM 时作为背景音乐参考。',
+    placeholder: '搜索宠物口播、BGM、配音、参考音频...',
+    urlPlaceholder: '粘贴音频 URL，支持 mp3 / wav / m4a',
+    assetTypes: ['AUDIO'],
+    accept: 'audio/*',
+    kind: 'audio',
+    assetGroup: '宠物音频',
+    metadataRole: 'audio',
+  },
 ]
 
 const activeRole = ref<PetMaterialRole>('main_pet')
@@ -111,6 +200,9 @@ const uploading = ref(false)
 const errorMessage = ref('')
 const assetOptions = ref<AssetItem[]>([])
 
+const activeSlot = computed(() => materialSlots.find((slot) => slot.role === activeRole.value) || materialSlots[0])
+const activeSlotLabel = computed(() => activeSlot.value.label)
+
 const materialByRole = computed(() =>
   props.modelValue.reduce<Partial<Record<PetMaterialRole, PetReferenceMaterial>>>((map, material) => {
     map[material.role] = material
@@ -118,17 +210,32 @@ const materialByRole = computed(() =>
   }, {}),
 )
 
-const activeSlotLabel = computed(
-  () => materialSlots.find((slot) => slot.role === activeRole.value)?.label || '当前槽位',
-)
+function setActiveRole(role: PetMaterialRole) {
+  if (activeRole.value === role) return
+  activeRole.value = role
+  manualUrl.value = ''
+  errorMessage.value = ''
+}
+
+function assetUrl(asset: AssetItem) {
+  return normalizePublicMediaUrl(asset.fileUrl || asset.thumbnailUrl || '')
+}
 
 function assetPreviewUrl(asset: AssetItem) {
+  if (activeSlot.value.kind === 'audio') return ''
   return normalizePublicMediaUrl(asset.thumbnailUrl || asset.fileUrl || '')
+}
+
+function assetKindLabel(asset: AssetItem) {
+  if (asset.assetType === 'AUDIO') return '音频'
+  if (asset.assetType === 'TEXT') return '文案'
+  if (asset.assetType === 'JSON') return 'JSON'
+  return '素材'
 }
 
 function assetSubtitle(asset: AssetItem) {
   const sizeKb = asset.fileSize > 0 ? `${Math.ceil(asset.fileSize / 1024)}KB` : '未知大小'
-  return `${asset.sourceType || '素材'} · ${sizeKb}`
+  return `${asset.sourceType || '素材'} · ${asset.assetType} · ${sizeKb}`
 }
 
 function upsertMaterial(material: PetReferenceMaterial) {
@@ -141,29 +248,45 @@ function removeMaterial(role: PetMaterialRole) {
 }
 
 function selectAsset(asset: AssetItem) {
+  const url = assetUrl(asset)
+  if (!url && !asset.assetId) {
+    errorMessage.value = '该素材缺少可用 URL'
+    return
+  }
   upsertMaterial({
     id: `asset-${asset.assetId}-${activeRole.value}`,
     role: activeRole.value,
     assetId: String(asset.assetId),
-    url: assetPreviewUrl(asset),
+    url,
     label: asset.fileName || activeSlotLabel.value,
   })
+  errorMessage.value = ''
 }
 
 function addManualUrl() {
   const url = normalizePublicMediaUrl(manualUrl.value)
   if (!url) {
-    errorMessage.value = '请先输入图片 URL'
+    errorMessage.value = activeSlot.value.kind === 'audio' ? '请先输入音频 URL' : '请先输入图片 URL'
     return
   }
   upsertMaterial({
     id: `url-${activeRole.value}-${Date.now()}`,
     role: activeRole.value,
     url,
-    label: `${activeSlotLabel.value} URL 参考图`,
+    label: `${activeSlotLabel.value} URL 参考`,
   })
   manualUrl.value = ''
   errorMessage.value = ''
+}
+
+function uploadMetadata() {
+  return JSON.stringify({
+    businessDomain: 'pet',
+    domain: 'pet_creation',
+    assetGroup: activeSlot.value.assetGroup,
+    assetRole: activeSlot.value.metadataRole,
+    materialRole: activeRole.value,
+  })
 }
 
 async function handleUploadChange(event: Event) {
@@ -171,20 +294,23 @@ async function handleUploadChange(event: Event) {
   const file = input.files?.[0]
   input.value = ''
   if (!file) return
+  if (activeSlot.value.kind === 'audio' && !file.type.startsWith('audio/')) {
+    errorMessage.value = '当前槽位只支持上传音频文件'
+    return
+  }
+  if (activeSlot.value.kind === 'image' && !file.type.startsWith('image/')) {
+    errorMessage.value = '当前槽位只支持上传图片文件'
+    return
+  }
   uploading.value = true
   errorMessage.value = ''
   try {
     const asset = await uploadMaterialAsset(file, {
       businessDomain: 'pet',
-      metadataJson: JSON.stringify({
-        businessDomain: 'pet',
-        domain: 'pet_creation',
-        assetGroup: '宠物素材',
-        assetRole: activeRole.value,
-        materialRole: activeRole.value,
-      }),
+      metadataJson: uploadMetadata(),
     })
     selectAsset(asset)
+    await loadAssets()
   } catch (error) {
     errorMessage.value = error instanceof Error ? error.message : '上传宠物素材失败'
   } finally {
@@ -192,26 +318,44 @@ async function handleUploadChange(event: Event) {
   }
 }
 
+function dedupeAssets(list: AssetItem[]) {
+  const seen = new Set<number>()
+  return list.filter((asset) => {
+    if (seen.has(asset.assetId)) return false
+    seen.add(asset.assetId)
+    return true
+  })
+}
+
 async function loadAssets() {
   loadingAssets.value = true
   errorMessage.value = ''
+  const slot = activeSlot.value
   try {
-    assetOptions.value = await getAssets({
-      assetType: 'IMAGE',
-      keyword: keyword.value,
-      scope: scope.value,
-      pageNo: 1,
-      pageSize: 12,
-      businessDomain: 'pet',
-    })
+    const lists = await Promise.all(
+      slot.assetTypes.map((assetType) =>
+        getAssets({
+          assetType,
+          keyword: keyword.value,
+          scope: scope.value,
+          pageNo: 1,
+          pageSize: 24,
+          businessDomain: 'pet',
+        }),
+      ),
+    )
+    assetOptions.value = dedupeAssets(lists.flat())
   } catch (error) {
     assetOptions.value = []
-    void error
-    errorMessage.value = ''
+    errorMessage.value = error instanceof Error ? error.message : '宠物资产加载失败'
   } finally {
     loadingAssets.value = false
   }
 }
+
+watch(activeRole, () => {
+  void loadAssets()
+})
 
 onMounted(() => {
   void loadAssets()
@@ -256,7 +400,8 @@ onMounted(() => {
 .pet-material-picker-head p,
 .pet-material-slot p,
 .pet-asset-card small,
-.pet-asset-empty {
+.pet-asset-empty,
+.pet-material-tip {
   margin: 0;
   color: #667085;
   font-size: 13px;
@@ -297,7 +442,7 @@ onMounted(() => {
   background: #eff6ff;
 }
 
-.pet-material-slot > button:first-child {
+.pet-material-preview {
   display: grid;
   width: 56px;
   height: 56px;
@@ -306,11 +451,11 @@ onMounted(() => {
   border-radius: 8px;
   background: #ffffff;
   color: #2563eb;
-  padding: 0;
+  padding: 0 !important;
 }
 
-.pet-material-slot img,
-.pet-asset-card img {
+.pet-material-preview img,
+.pet-asset-preview-box img {
   width: 100%;
   height: 100%;
   object-fit: cover;
@@ -335,6 +480,11 @@ onMounted(() => {
 .pet-upload-action {
   display: inline-flex;
   cursor: pointer;
+}
+
+.pet-upload-action.disabled {
+  cursor: wait;
+  opacity: 0.66;
 }
 
 .pet-upload-action input {
@@ -375,6 +525,14 @@ onMounted(() => {
   font-size: 13px;
 }
 
+.pet-material-tip {
+  border: 1px solid #dbeafe;
+  border-radius: 8px;
+  background: #eff6ff;
+  color: #1d4ed8;
+  padding: 9px 11px;
+}
+
 .pet-asset-empty {
   border: 1px dashed #dfe7f5;
   border-radius: 8px;
@@ -396,8 +554,7 @@ onMounted(() => {
   padding: 10px;
 }
 
-.pet-asset-card img,
-.pet-asset-card > span {
+.pet-asset-preview-box {
   display: grid;
   width: 100%;
   aspect-ratio: 16 / 10;

@@ -9,6 +9,8 @@ export type PetDialogueEmotion = '委屈' | '开心' | '吐槽' | '认真解释'
 export type PetVoiceSpeed = 'slow' | 'normal' | 'fast'
 export type PetSubtitlePosition = 'bottom' | 'middle' | 'top'
 export type PetCameraRhythm = 'slow' | 'balanced' | 'fast' | 'short_drama'
+export type PetTemplateWorkflow = 'smart' | 'dialogue' | 'storyboard' | 'material' | 'background'
+export type PetTextStrokeMode = 'none' | 'thin' | 'strong'
 
 export interface PetTemplate {
   id: string
@@ -21,6 +23,7 @@ export interface PetTemplate {
   aspectRatio: PetAspectRatio
   style: PetCreationStyle
   tags: string[]
+  workflow: PetTemplateWorkflow
   generationMode?: PetGenerationMode
   promptPreset?: string
   scriptPreset?: string
@@ -53,6 +56,16 @@ export interface PetReferenceMaterial {
   assetId?: string
   url: string
   label: string
+}
+
+export interface PetSubtitleStyle {
+  position: PetSubtitlePosition
+  highlighted: boolean
+  fontFamily?: string
+  fontSize?: number
+  textColor?: string
+  outlineColor?: string
+  strokeMode?: PetTextStrokeMode
 }
 
 export interface PetStoryboardShot {
@@ -96,14 +109,12 @@ export interface PetCreationDraft {
   voiceEnabled: boolean
   lipSyncEnabled: boolean
   bgmEnabled: boolean
-  subtitleStyle: {
-    position: PetSubtitlePosition
-    highlighted: boolean
-  }
+  subtitleStyle: PetSubtitleStyle
   visualSettings: {
     expressionIntensity: number
     cameraRhythm: PetCameraRhythm
     backgroundPrompt: string
+    productPrompt?: string
   }
   consistency: {
     keepAppearance: boolean

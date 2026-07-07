@@ -172,11 +172,17 @@ export const defaultPetDraft: PetCreationDraft = {
   subtitleStyle: {
     position: 'bottom',
     highlighted: true,
+    fontFamily: 'Microsoft YaHei',
+    fontSize: 34,
+    textColor: '#ffffff',
+    outlineColor: '#111827',
+    strokeMode: 'thin',
   },
   visualSettings: {
     expressionIntensity: 70,
     cameraRhythm: 'balanced',
     backgroundPrompt: '',
+    productPrompt: '',
   },
   consistency: {
     keepAppearance: true,

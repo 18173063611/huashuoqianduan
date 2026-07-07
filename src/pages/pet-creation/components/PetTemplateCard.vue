@@ -10,9 +10,12 @@
       <div class="pet-template-card-tags">
         <span v-for="tag in template.tags" :key="tag">{{ tag }}</span>
       </div>
-      <small>推荐 {{ template.durationSeconds }} 秒 / {{ template.aspectRatio }}</small>
+      <small>
+        推荐 {{ template.durationSeconds }} 秒 / {{ template.aspectRatio }}
+        <em>{{ workflow.label }}</em>
+      </small>
       <button class="pet-template-card-action" type="button" @click="$emit('use-template', template)">
-        使用模板
+        {{ workflow.actionLabel }}
       </button>
     </div>
   </article>
@@ -21,6 +24,7 @@
 <script setup lang="ts">
 import { computed } from 'vue'
 import type { PetTemplate } from '../petCreationTypes'
+import { petTemplateWorkflowFor } from '../petTemplateWorkflow'
 
 const props = defineProps<{
   template: PetTemplate
@@ -32,6 +36,7 @@ defineEmits<{
 }>()
 
 const indexLabel = computed(() => String((props.index || 0) + 1).padStart(2, '0'))
+const workflow = computed(() => petTemplateWorkflowFor(props.template))
 
 const coverStyle = computed(() => {
   if (!props.template.coverUrl) return undefined
@@ -129,9 +134,22 @@ const coverStyle = computed(() => {
 }
 
 .pet-template-card small {
+  display: grid;
+  gap: 5px;
   color: #7f8aaa;
   font-size: 12px;
   font-weight: 750;
+}
+
+.pet-template-card small em {
+  justify-self: start;
+  border-radius: 999px;
+  background: #f3f7ff;
+  color: #2563eb;
+  padding: 3px 8px;
+  font-style: normal;
+  font-size: 11px;
+  font-weight: 850;
 }
 
 .pet-template-card-action {

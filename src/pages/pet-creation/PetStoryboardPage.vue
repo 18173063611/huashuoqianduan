@@ -14,19 +14,31 @@
       <button type="button" :disabled="busy" @click="handleGenerateStoryboard">
         {{ busy ? '处理中...' : '生成分镜' }}
       </button>
+      <button type="button" :disabled="busy" @click="handleBenchmarkStoryboard">
+        {{ busy ? '处理中...' : '爆款对标分镜' }}
+      </button>
     </div>
 
     <div class="pet-storyboard-layout">
-      <section class="pet-panel pet-script-panel">
-        <h3>AI 生成脚本 ✦</h3>
-        <textarea v-model="draft.scriptText" class="pet-script-input" placeholder="生成脚本后会显示在这里，也可以手动编辑。" />
-        <div class="pet-topic-tags">
-          <span>#猫咪日常</span>
-          <span>#萌宠视频</span>
-          <span>#治愈系宠物</span>
-          <span>#猫咪偷偷出门</span>
-        </div>
-      </section>
+      <div class="pet-storyboard-side">
+        <section class="pet-panel pet-script-panel">
+          <h3>AI 生成脚本 ✦</h3>
+          <textarea v-model="draft.scriptText" class="pet-script-input" placeholder="生成脚本后会显示在这里，也可以手动编辑。" />
+          <div class="pet-topic-tags">
+            <span>#猫咪日常</span>
+            <span>#萌宠视频</span>
+            <span>#治愈系宠物</span>
+            <span>#猫咪偷偷出门</span>
+          </div>
+        </section>
+
+        <PetPostProductionPanel
+          :draft="draft"
+          compact
+          show-sync-button
+          @change="saveDraft"
+        />
+      </div>
 
       <section class="pet-panel pet-shot-panel">
         <div class="pet-panel-head">
@@ -101,9 +113,10 @@
 
 <script setup lang="ts">
 import { computed, ref, onMounted } from 'vue'
-import { useRouter } from 'vue-router'
+import { useRoute, useRouter } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import PetPlanPreviewDrawer from './components/PetPlanPreviewDrawer.vue'
+import PetPostProductionPanel from './components/PetPostProductionPanel.vue'
 import {
   createPetVideoTask,
   estimatePetVideoCost,
@@ -122,9 +135,11 @@ import {
   validStoryboardShots,
 } from './petCreationValidation'
 import { usePetApiFallbackNotice } from './usePetApiFallbackNotice'
+import { findPetTemplate } from './petTemplateConfig'
 
+const route = useRoute()
 const router = useRouter()
-const { draft, loadDraft, saveDraft, snapshotDraft } = usePetCreationState()
+const { draft, applyTemplate, loadDraft, saveDraft, snapshotDraft } = usePetCreationState()
 const busy = ref(false)
 const creating = ref(false)
 const planOpen = ref(false)
@@ -135,6 +150,13 @@ const apiMode = getPetCreationApiMode()
 const totalShotSeconds = computed(() => draft.shots.reduce((sum, shot) => sum + Number(shot.durationSeconds || 0), 0))
 
 usePetApiFallbackNotice()
+
+async function applyRouteTemplateIfNeeded() {
+  const template = findPetTemplate(String(route.query.templateId || ''))
+  if (!template || draft.templateId === template.id) return
+  applyTemplate(template)
+  await saveDraft()
+}
 
 async function handleGenerateScript() {
   if (busy.value || creating.value) return
@@ -170,6 +192,16 @@ async function handleGenerateStoryboard() {
   } finally {
     busy.value = false
   }
+}
+
+async function handleBenchmarkStoryboard() {
+  if (busy.value || creating.value) return
+  const basePrompt = draft.prompt.trim() || '主宠被发现做了一件小坏事，努力用可爱表情解释'
+  draft.prompt = `${basePrompt}。参考爆款萌宠短视频结构：前三秒抛出反差钩子，中段用宠物表情和动作递进，结尾用治愈或反转包袱收束。`
+  draft.visualSettings.cameraRhythm = 'short_drama'
+  draft.visualSettings.expressionIntensity = Math.max(draft.visualSettings.expressionIntensity, 84)
+  draft.subtitleEnabled = true
+  await handleGenerateStoryboard()
 }
 
 async function saveAndGoRole() {
@@ -278,6 +310,7 @@ async function confirmCreateTask() {
 onMounted(async () => {
   try {
     await loadDraft()
+    await applyRouteTemplateIfNeeded()
   } catch (error) {
     ElMessage.error(petErrorMessage(error, '宠物草稿恢复失败，请返回首页重试。'))
   }
@@ -342,7 +375,7 @@ onMounted(async () => {
 
 .pet-storyboard-toolbar {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) 160px 160px;
+  grid-template-columns: minmax(0, 1fr) repeat(3, 160px);
   gap: 12px;
 }
 
@@ -376,6 +409,12 @@ onMounted(async () => {
 .pet-storyboard-layout {
   display: grid;
   grid-template-columns: minmax(320px, 0.45fr) minmax(0, 1fr);
+  gap: 16px;
+}
+
+.pet-storyboard-side {
+  display: grid;
+  align-content: start;
   gap: 16px;
 }
 

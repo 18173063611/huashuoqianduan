@@ -85,7 +85,7 @@
             <section class="pet-plan-card">
               <div class="pet-plan-card-head">
                 <span>宠物素材</span>
-                <small>主宠 {{ materialGroups.main.length }} / 第二宠 {{ materialGroups.second.length }}</small>
+                <small>主宠 {{ materialGroups.main.length }} / 第二宠 {{ materialGroups.second.length }} / 产品 {{ materialGroups.prop.length }} / 场景 {{ materialGroups.scene.length }} / 音频 {{ materialGroups.audio.length }}</small>
               </div>
               <div class="pet-plan-materials">
                 <span v-for="material in materialGroups.all" :key="material.id">
@@ -116,6 +116,17 @@
                 <span>配音：{{ draft.voiceEnabled ? '开启' : '关闭' }}</span>
                 <span>口型同步：{{ draft.lipSyncEnabled ? '开启' : '关闭' }}</span>
                 <span>BGM：{{ draft.bgmEnabled ? '开启' : '关闭' }}</span>
+              </div>
+            </section>
+
+            <section class="pet-plan-card">
+              <div class="pet-plan-card-head">
+                <span>背景与产品要求</span>
+                <small>{{ draft.consistency.keepScene ? '保持场景' : '场景可调整' }}</small>
+              </div>
+              <div class="pet-plan-list">
+                <span>{{ draft.visualSettings.backgroundPrompt || '未设置背景要求' }}</span>
+                <span>{{ draft.visualSettings.productPrompt || '未设置产品/道具要求' }}</span>
               </div>
             </section>
           </div>
@@ -209,6 +220,9 @@ const materialGroups = computed(() => ({
   all: props.draft.materials,
   main: props.draft.materials.filter((item) => item.role === 'main_pet'),
   second: props.draft.materials.filter((item) => item.role === 'second_pet'),
+  prop: props.draft.materials.filter((item) => item.role === 'prop'),
+  scene: props.draft.materials.filter((item) => item.role === 'scene'),
+  audio: props.draft.materials.filter((item) => item.role === 'audio'),
 }))
 
 const modeLabel = computed(() => {
@@ -250,7 +264,7 @@ function materialRoleLabel(role: string) {
   const map: Record<string, string> = {
     main_pet: '主宠物',
     second_pet: '第二宠物',
-    prop: '道具',
+    prop: '产品/道具',
     scene: '场景',
     audio: '音频',
   }

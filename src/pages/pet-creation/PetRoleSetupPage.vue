@@ -8,22 +8,12 @@
 
     <PetMaterialPicker v-model="draft.materials" />
 
-    <section id="pet-background-scene" class="pet-panel pet-background-panel">
-      <div class="pet-role-panel-head">
-        <h3>背景图编辑与场景要求</h3>
-        <span>结合“场景参考”素材一起写入生成 prompt</span>
-      </div>
-      <textarea
-        v-model="draft.visualSettings.backgroundPrompt"
-        maxlength="160"
-        placeholder="例如：温暖客厅背景，浅景深，干净柔和，宠物主体清晰突出"
-      />
-      <div class="pet-background-presets">
-        <button type="button" @click="setBackgroundPreset('温暖客厅背景，浅景深，干净柔和，宠物主体清晰突出')">温暖客厅</button>
-        <button type="button" @click="setBackgroundPreset('阳光草地背景，色彩明亮，宠物动作自然可爱')">阳光草地</button>
-        <button type="button" @click="setBackgroundPreset('宠物友好咖啡店背景，暖色灯光，画面干净有生活感')">宠物咖啡店</button>
-      </div>
-    </section>
+    <PetPostProductionPanel
+      id="pet-background-scene"
+      :draft="draft"
+      show-sync-button
+      @change="saveDraft"
+    />
 
     <div class="pet-role-layout">
       <section v-for="(role, index) in draft.roles" :key="role.id" class="pet-panel">
@@ -117,13 +107,15 @@ import { useRoute, useRouter } from 'vue-router'
 import { ElMessage } from 'element-plus'
 import { usePetCreationState } from './usePetCreationState'
 import PetMaterialPicker from './components/PetMaterialPicker.vue'
+import PetPostProductionPanel from './components/PetPostProductionPanel.vue'
 import type { PetRole } from './petCreationTypes'
 import type { WorkbenchRouteName } from '../../router'
 import { hasMainPetMaterial, mainPetMaterialWarning, petErrorMessage } from './petCreationValidation'
+import { findPetTemplate } from './petTemplateConfig'
 
 const route = useRoute()
 const router = useRouter()
-const { draft, loadDraft, saveDraft } = usePetCreationState()
+const { draft, applyTemplate, loadDraft, saveDraft } = usePetCreationState()
 const saving = ref(false)
 
 function parseTags(value: string) {
@@ -159,8 +151,11 @@ function removeSecondRole() {
   draft.roles.splice(1, 1)
 }
 
-function setBackgroundPreset(value: string) {
-  draft.visualSettings.backgroundPrompt = value
+async function applyRouteTemplateIfNeeded() {
+  const template = findPetTemplate(String(route.query.templateId || ''))
+  if (!template || draft.templateId === template.id) return
+  applyTemplate(template)
+  await saveDraft()
 }
 
 async function saveAndGo(routeName: WorkbenchRouteName) {
@@ -182,6 +177,7 @@ async function saveAndGo(routeName: WorkbenchRouteName) {
 onMounted(async () => {
   try {
     await loadDraft()
+    await applyRouteTemplateIfNeeded()
   } catch (error) {
     ElMessage.error(petErrorMessage(error, '宠物草稿恢复失败，请返回首页重试。'))
   }

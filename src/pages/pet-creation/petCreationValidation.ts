@@ -182,6 +182,12 @@ function validateBaseParams(draft: PetCreationDraft, issues: PetValidationIssue[
   if (!ALLOWED_RATIOS.has(draft.aspectRatio)) pushIssue(issues, 'aspectRatio', '视频比例仅支持 9:16、16:9、1:1。')
   if (!ALLOWED_DURATIONS.has(draft.durationSeconds)) pushIssue(issues, 'durationSeconds', '视频时长仅支持 5、10、15、30 秒。')
   if (!ALLOWED_STYLES.has(draft.style)) pushIssue(issues, 'style', '画面风格不在宠物创作支持范围内。')
+  if ((draft.visualSettings.backgroundPrompt || '').trim().length > 160) {
+    pushIssue(issues, 'visualSettings.backgroundPrompt', '背景图/场景要求不能超过 160 字。')
+  }
+  if ((draft.visualSettings.productPrompt || '').trim().length > 160) {
+    pushIssue(issues, 'visualSettings.productPrompt', '产品/道具展示要求不能超过 160 字。')
+  }
 }
 
 function validateMaterials(draft: PetCreationDraft, mode: PetGenerationMode, issues: PetValidationIssue[]) {
@@ -222,7 +228,7 @@ function validateMaterials(draft: PetCreationDraft, mode: PetGenerationMode, iss
   }
   enforceCount(issues, counts, 'main_pet', 3, '主宠物素材最多 3 张。')
   enforceCount(issues, counts, 'second_pet', 3, '第二只宠物素材最多 3 张。')
-  enforceCount(issues, counts, 'prop', 4, '道具参考素材最多 4 张。')
+  enforceCount(issues, counts, 'prop', 4, '产品/道具参考素材最多 4 张。')
   enforceCount(issues, counts, 'scene', 4, '场景参考素材最多 4 张。')
   enforceCount(issues, counts, 'audio', 1, '音频参考素材最多 1 条。')
 }

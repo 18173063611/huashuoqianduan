@@ -67,60 +67,12 @@
         </div>
       </section>
 
-      <section class="pet-panel">
-        <h3>预览设置</h3>
-        <label class="pet-inline-check">
-          <input v-model="draft.voiceEnabled" type="checkbox" />
-          AI 配音
-        </label>
-        <label class="pet-inline-check">
-          <input v-model="draft.lipSyncEnabled" type="checkbox" />
-          全局口型同步
-        </label>
-        <label class="pet-inline-check">
-          <input v-model="draft.subtitleEnabled" type="checkbox" />
-          字幕显示
-        </label>
-        <label>
-          字幕样式
-          <select v-model="draft.subtitleStyle.highlighted">
-            <option :value="true">卡片字幕</option>
-            <option :value="false">默认字幕</option>
-          </select>
-        </label>
-        <label>
-          字幕位置
-          <select v-model="draft.subtitleStyle.position">
-            <option value="bottom">底部</option>
-            <option value="middle">中部</option>
-            <option value="top">顶部</option>
-          </select>
-        </label>
-        <label>
-          表情强度 {{ draft.visualSettings.expressionIntensity }}
-          <input v-model.number="draft.visualSettings.expressionIntensity" type="range" min="0" max="100" />
-        </label>
-        <label>
-          镜头节奏
-          <select v-model="draft.visualSettings.cameraRhythm">
-            <option value="slow">慢节奏</option>
-            <option value="balanced">均衡</option>
-            <option value="fast">快节奏</option>
-            <option value="short_drama">短剧感</option>
-          </select>
-        </label>
-        <label>
-          画面风格
-          <select v-model="draft.style">
-            <option value="cute">可爱</option>
-            <option value="funny">搞笑</option>
-            <option value="healing">治愈</option>
-            <option value="realistic">写实</option>
-            <option value="anime">动漫</option>
-            <option value="anthropomorphic">拟人</option>
-          </select>
-        </label>
-      </section>
+      <PetPostProductionPanel
+        :draft="draft"
+        compact
+        show-sync-button
+        @change="saveDraft"
+      />
     </div>
 
     <div class="pet-actions">
@@ -148,9 +100,10 @@
 
 <script setup lang="ts">
 import { onMounted, ref } from 'vue'
-import { useRouter } from 'vue-router'
+import { useRoute, useRouter } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import PetPlanPreviewDrawer from './components/PetPlanPreviewDrawer.vue'
+import PetPostProductionPanel from './components/PetPostProductionPanel.vue'
 import { createPetVideoTask, estimatePetVideoCost, getPetCreationApiMode, previewPetVideoTask } from '../../services/petCreationApi'
 import { usePetCreationState } from './usePetCreationState'
 import type { PetDialogueLine, PetType, PetVideoEstimate, PetVideoPreview } from './petCreationTypes'
@@ -163,9 +116,11 @@ import {
   validDialogueLines,
 } from './petCreationValidation'
 import { usePetApiFallbackNotice } from './usePetApiFallbackNotice'
+import { findPetTemplate } from './petTemplateConfig'
 
+const route = useRoute()
 const router = useRouter()
-const { draft, loadDraft, saveDraft, snapshotDraft } = usePetCreationState()
+const { draft, applyTemplate, loadDraft, saveDraft, snapshotDraft } = usePetCreationState()
 const saving = ref(false)
 const creating = ref(false)
 const planOpen = ref(false)
@@ -188,6 +143,13 @@ function roleCover(type: PetType, index: number) {
   if (type === 'dog') return dogRoleCover
   if (type === 'cat') return catRoleCover
   return index % 2 === 0 ? catRoleCover : dogRoleCover
+}
+
+async function applyRouteTemplateIfNeeded() {
+  const template = findPetTemplate(String(route.query.templateId || ''))
+  if (!template || draft.templateId === template.id) return
+  applyTemplate(template)
+  await saveDraft()
 }
 
 function addDialogueLine() {
@@ -336,6 +298,7 @@ async function confirmCreateTask() {
 onMounted(async () => {
   try {
     await loadDraft()
+    await applyRouteTemplateIfNeeded()
   } catch (error) {
     ElMessage.error(petErrorMessage(error, '宠物草稿恢复失败，请返回首页重试。'))
   }
