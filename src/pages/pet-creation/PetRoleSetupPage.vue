@@ -8,7 +8,8 @@
 
     <div class="pet-role-workbench">
       <div class="pet-role-main">
-        <PetMaterialPicker v-model="draft.materials" />
+        <PetMaterialPicker v-model="draft.materials" @change="handleMaterialChange" />
+        <p v-if="materialSaving" class="pet-material-saving">正在保存宠物素材...</p>
 
         <PetPostProductionPanel
           id="pet-background-scene"
@@ -114,7 +115,7 @@ import { ElMessage } from 'element-plus'
 import { usePetCreationState } from './usePetCreationState'
 import PetMaterialPicker from './components/PetMaterialPicker.vue'
 import PetPostProductionPanel from './components/PetPostProductionPanel.vue'
-import type { PetRole } from './petCreationTypes'
+import type { PetReferenceMaterial, PetRole } from './petCreationTypes'
 import type { WorkbenchRouteName } from '../../router'
 import { hasMainPetMaterial, mainPetMaterialWarning, petErrorMessage } from './petCreationValidation'
 import { findPetTemplate } from './petTemplateConfig'
@@ -123,6 +124,15 @@ const route = useRoute()
 const router = useRouter()
 const { draft, applyTemplate, loadDraft, saveDraft } = usePetCreationState()
 const saving = ref(false)
+const materialSaving = ref(false)
+
+const MATERIAL_ROLE_LABELS: Record<PetReferenceMaterial['role'], string> = {
+  main_pet: '主宠物参考',
+  second_pet: '第二只宠物参考',
+  prop: '产品/道具参考',
+  scene: '背景/场景参考',
+  audio: '口播/BGM 音频',
+}
 
 function parseTags(value: string) {
   return value
@@ -155,6 +165,36 @@ function addSecondRole() {
 
 function removeSecondRole() {
   draft.roles.splice(1, 1)
+  syncRoleReferenceAssets()
+}
+
+function syncRoleReferenceAssets(materials: PetReferenceMaterial[] = draft.materials) {
+  const assetIdsByRole = (role: PetReferenceMaterial['role']) =>
+    materials
+      .filter((material) => material.role === role && material.assetId)
+      .map((material) => String(material.assetId))
+
+  if (draft.roles[0]) {
+    draft.roles[0].referenceAssetIds = assetIdsByRole('main_pet')
+  }
+  if (draft.roles[1]) {
+    draft.roles[1].referenceAssetIds = assetIdsByRole('second_pet')
+  }
+}
+
+async function handleMaterialChange(materials: PetReferenceMaterial[], material: PetReferenceMaterial | null) {
+  draft.materials = materials
+  syncRoleReferenceAssets(materials)
+  materialSaving.value = true
+  try {
+    await saveDraft()
+    const label = material ? MATERIAL_ROLE_LABELS[material.role] : '宠物素材'
+    ElMessage.success(material ? `已加入${label}` : '已更新宠物素材')
+  } catch (error) {
+    ElMessage.error(petErrorMessage(error, '保存宠物素材失败，请稍后重试。'))
+  } finally {
+    materialSaving.value = false
+  }
 }
 
 async function applyRouteTemplateIfNeeded() {
@@ -183,6 +223,7 @@ async function saveAndGo(routeName: WorkbenchRouteName) {
 onMounted(async () => {
   try {
     await loadDraft()
+    syncRoleReferenceAssets()
     await applyRouteTemplateIfNeeded()
   } catch (error) {
     ElMessage.error(petErrorMessage(error, '宠物草稿恢复失败，请返回首页重试。'))
@@ -232,6 +273,13 @@ onMounted(async () => {
   color: #667085;
   font-size: 13px;
   line-height: 1.65;
+}
+
+.pet-material-saving {
+  margin: -8px 0 0;
+  color: #2563eb;
+  font-size: 13px;
+  font-weight: 800;
 }
 
 .pet-role-workbench {

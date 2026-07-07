@@ -80,7 +80,14 @@
         </div>
         <strong>{{ asset.fileName }}</strong>
         <small>{{ assetSubtitle(asset) }}</small>
-        <button type="button" @click="selectAsset(asset)">加入{{ activeSlotLabel }}</button>
+        <button
+          type="button"
+          class="pet-asset-select-button"
+          :class="{ selected: isSelectedAsset(asset) }"
+          @click="selectAsset(asset)"
+        >
+          {{ isSelectedAsset(asset) ? `已加入${activeSlotLabel}` : `加入${activeSlotLabel}` }}
+        </button>
       </article>
     </div>
   </section>
@@ -116,6 +123,7 @@ const props = defineProps<{
 
 const emit = defineEmits<{
   'update:modelValue': [value: PetReferenceMaterial[]]
+  change: [value: PetReferenceMaterial[], material: PetReferenceMaterial | null]
 }>()
 
 const materialSlots: PetMaterialSlot[] = [
@@ -240,11 +248,19 @@ function assetSubtitle(asset: AssetItem) {
 
 function upsertMaterial(material: PetReferenceMaterial) {
   const next = props.modelValue.filter((item) => item.role !== material.role)
-  emit('update:modelValue', [...next, material])
+  const nextMaterials = [...next, material]
+  emit('update:modelValue', nextMaterials)
+  emit('change', nextMaterials, material)
 }
 
 function removeMaterial(role: PetMaterialRole) {
-  emit('update:modelValue', props.modelValue.filter((item) => item.role !== role))
+  const nextMaterials = props.modelValue.filter((item) => item.role !== role)
+  emit('update:modelValue', nextMaterials)
+  emit('change', nextMaterials, null)
+}
+
+function isSelectedAsset(asset: AssetItem) {
+  return materialByRole.value[activeRole.value]?.assetId === String(asset.assetId)
 }
 
 function selectAsset(asset: AssetItem) {
@@ -420,6 +436,12 @@ onMounted(() => {
   font-size: 13px;
   font-weight: 850;
   cursor: pointer;
+}
+
+.pet-asset-select-button.selected {
+  border-color: #93c5fd;
+  background: #eff6ff;
+  color: #1d4ed8;
 }
 
 .pet-material-slots {
