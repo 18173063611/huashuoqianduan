@@ -23,8 +23,8 @@
         <div class="pet-role-layout">
           <section v-for="(role, index) in draft.roles" :key="role.id" class="pet-panel">
             <div class="pet-role-panel-head">
-              <h3>{{ index === 0 ? '主宠物信息' : '第二只宠物信息' }}</h3>
-              <button v-if="index > 0" type="button" @click="removeSecondRole">移除</button>
+              <h3>{{ roleTitle(index) }}</h3>
+              <button v-if="index > 0" type="button" @click="removeRole(index)">移除</button>
             </div>
             <label>
               宠物名称
@@ -65,8 +65,8 @@
           </section>
         </div>
 
-        <button v-if="draft.roles.length < 2" class="pet-secondary-role-button" type="button" @click="addSecondRole">
-          添加第二只宠物
+        <button v-if="draft.roles.length < MAX_PET_ROLES" class="pet-secondary-role-button" type="button" @click="addPetRole">
+          添加宠物角色
         </button>
 
         <section class="pet-panel">
@@ -99,7 +99,7 @@
 
     <div class="pet-actions">
       <button type="button" :disabled="saving" @click="saveAndGo('pet-dialogue-create')">
-        {{ saving ? '保存中...' : '进入对话创建' }}
+        {{ saving ? '保存中...' : primaryActionLabel }}
       </button>
       <button type="button" :disabled="saving" @click="saveAndGo('pet-storyboard')">
         {{ saving ? '保存中...' : '进入脚本分镜' }}
@@ -109,7 +109,7 @@
 </template>
 
 <script setup lang="ts">
-import { onMounted, ref } from 'vue'
+import { computed, onMounted, ref } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { ElMessage } from 'element-plus'
 import { usePetCreationState } from './usePetCreationState'
@@ -125,13 +125,30 @@ const router = useRouter()
 const { draft, applyTemplate, loadDraft, saveDraft } = usePetCreationState()
 const saving = ref(false)
 const materialSaving = ref(false)
+const MAX_PET_ROLES = 6
+const PET_ROLE_NAME_SEEDS = ['布丁', '豆包', '可乐', '团子', '小七']
 
 const MATERIAL_ROLE_LABELS: Record<PetReferenceMaterial['role'], string> = {
   main_pet: '主宠物参考',
-  second_pet: '第二只宠物参考',
+  second_pet: '第二/更多宠物参考',
   prop: '产品/道具参考',
   scene: '背景/场景参考',
   audio: '口播/BGM 音频',
+}
+
+const returnToPath = computed(() => {
+  const value = Array.isArray(route.query.returnTo) ? route.query.returnTo[0] : route.query.returnTo
+  if (!value) return ''
+  if (value === '/pet-render' || value.startsWith('/pet-render/')) return value
+  return ''
+})
+
+const primaryActionLabel = computed(() => (returnToPath.value ? '保存并返回对话创建' : '进入对话创建'))
+
+function roleTitle(index: number) {
+  if (index === 0) return '主宠物信息'
+  if (index === 1) return '第二只宠物信息'
+  return `第 ${index + 1} 只宠物信息`
 }
 
 function parseTags(value: string) {
@@ -147,24 +164,39 @@ function updateTags(roleId: string, field: 'personalityTags' | 'roleTags', event
   role[field] = parseTags((event.target as HTMLInputElement).value)
 }
 
-function addSecondRole() {
-  const secondRole: PetRole = {
-    id: `second-pet-${Date.now()}`,
-    name: '布丁',
-    type: 'dog',
-    breed: '柯基',
+function addPetRole() {
+  if (draft.roles.length >= MAX_PET_ROLES) {
+    ElMessage.warning(`最多支持 ${MAX_PET_ROLES} 个宠物角色。`)
+    return
+  }
+  const roleIndex = draft.roles.length
+  const roleName = PET_ROLE_NAME_SEEDS[roleIndex - 1] || `宠物${roleIndex + 1}`
+  const petRole: PetRole = {
+    id: `pet-role-${Date.now()}-${roleIndex}`,
+    name: roleName,
+    type: roleIndex % 2 === 1 ? 'dog' : 'cat',
+    breed: roleIndex % 2 === 1 ? '柯基' : '英短',
     ageFeel: '青年',
-    personalityTags: ['机智', '吐槽'],
-    speakingTone: '机智但很认真',
-    roleTags: ['搭档'],
+    personalityTags: roleIndex % 2 === 1 ? ['机智', '吐槽'] : ['好奇', '撒娇'],
+    speakingTone: roleIndex % 2 === 1 ? '机智但很认真' : '软萌但理直气壮',
+    roleTags: roleIndex === 1 ? ['搭档'] : ['配角', '对话角色'],
     anthropomorphic: true,
     referenceAssetIds: [],
   }
-  draft.roles.push(secondRole)
+  draft.roles.push(petRole)
+  ElMessage.success(`已添加角色：${roleName}`)
 }
 
-function removeSecondRole() {
-  draft.roles.splice(1, 1)
+function removeRole(index: number) {
+  if (index <= 0 || index >= draft.roles.length) return
+  const removedRole = draft.roles[index]
+  draft.roles.splice(index, 1)
+  const fallbackRoleId = draft.roles[Math.max(0, Math.min(index - 1, draft.roles.length - 1))]?.id || draft.roles[0]?.id
+  if (fallbackRoleId) {
+    draft.dialogueLines = draft.dialogueLines.map((line) =>
+      line.speakerRoleId === removedRole.id ? { ...line, speakerRoleId: fallbackRoleId } : line,
+    )
+  }
   syncRoleReferenceAssets()
 }
 
@@ -212,6 +244,10 @@ async function saveAndGo(routeName: WorkbenchRouteName) {
   saving.value = true
   try {
     await saveDraft()
+    if (returnToPath.value && routeName === 'pet-dialogue-create') {
+      void router.push(returnToPath.value)
+      return
+    }
     void router.push({ name: routeName })
   } catch (error) {
     ElMessage.error(petErrorMessage(error, '保存宠物角色失败，请稍后重试。'))

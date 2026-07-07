@@ -3,7 +3,7 @@
     <header class="pet-page-head">
       <span>宠物创作中心</span>
       <h2>宠物对话视频创建</h2>
-      <p>设置宠物 A / 宠物 B、分角色台词、AI 配音、口型同步和字幕样式。</p>
+      <p>设置多宠物角色、分角色台词、AI 配音、口型同步和字幕样式。</p>
     </header>
 
     <div class="pet-dialogue-layout">
@@ -15,14 +15,15 @@
             <strong>{{ role.name }}</strong>
             <span>{{ roleLabel(role.type) }} / {{ role.speakingTone || '未设置口吻' }}</span>
           </div>
+          <button type="button" :disabled="saving || creating" @click="addDialogueLine(role.id)">添加该角色台词</button>
         </article>
-        <RouterLink to="/pet-render/role">调整角色</RouterLink>
+        <RouterLink :to="roleSetupLink">调整角色</RouterLink>
       </section>
 
       <section class="pet-panel pet-dialogue-editor">
         <div class="pet-panel-head">
           <h3>分角色台词</h3>
-          <button type="button" :disabled="saving || creating" @click="addDialogueLine">添加台词</button>
+          <button type="button" :disabled="saving || creating" @click="addDialogueLine()">添加台词</button>
         </div>
         <article v-for="(line, index) in draft.dialogueLines" :key="line.id" class="pet-dialogue-line">
           <b>{{ index + 1 }}</b>
@@ -99,7 +100,7 @@
 </template>
 
 <script setup lang="ts">
-import { onMounted, ref } from 'vue'
+import { computed, onMounted, ref } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import PetPlanPreviewDrawer from './components/PetPlanPreviewDrawer.vue'
@@ -130,6 +131,13 @@ const previewing = ref(false)
 const apiMode = getPetCreationApiMode()
 const catRoleCover = new URL('../../assets/pet-creation/local-cat-dialogue.jpg', import.meta.url).href
 const dogRoleCover = new URL('../../assets/pet-creation/local-dog-reaction.jpg', import.meta.url).href
+const roleSetupLink = computed(() => ({
+  name: 'pet-role-setup' as const,
+  query: {
+    ...route.query,
+    returnTo: route.fullPath,
+  },
+}))
 
 usePetApiFallbackNotice()
 
@@ -152,10 +160,16 @@ async function applyRouteTemplateIfNeeded() {
   await saveDraft()
 }
 
-function addDialogueLine() {
+function defaultSpeakerRoleId() {
+  if (draft.roles.length === 0) return 'main-pet'
+  const nextIndex = draft.dialogueLines.length % draft.roles.length
+  return draft.roles[nextIndex]?.id || draft.roles[0]?.id || 'main-pet'
+}
+
+function addDialogueLine(roleId?: string) {
   const line: PetDialogueLine = {
     id: `dialogue-${Date.now()}`,
-    speakerRoleId: draft.roles[0]?.id || 'main-pet',
+    speakerRoleId: roleId || defaultSpeakerRoleId(),
     text: '',
     emotion: '开心',
     speed: 'normal',
@@ -374,6 +388,13 @@ onMounted(async () => {
 .pet-role-card {
   grid-template-columns: 84px 1fr;
   align-items: center;
+}
+
+.pet-role-card button {
+  grid-column: 1 / -1;
+  border: 1px solid #bfdbfe !important;
+  background: #eff6ff !important;
+  color: #1d4ed8 !important;
 }
 
 .pet-role-card img {

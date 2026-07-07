@@ -62,7 +62,7 @@ export const petTemplateGuideByWorkflow: Record<PetTemplateWorkflow, Array<{ ind
     { index: '04', title: '确认生成', text: '在确认抽屉核对积分、素材和 provider payload 后提交。' },
   ],
   dialogue: [
-    { index: '01', title: '设置角色', text: '主宠物和第二只宠物分别设置名称、性格、口吻和头像。' },
+    { index: '01', title: '设置角色', text: '为主宠物和更多对话角色分别设置名称、性格、口吻和头像。' },
     { index: '02', title: '编辑台词', text: '按角色填写或导入台词，控制情绪、语速和音色。' },
     { index: '03', title: '口型/字幕', text: '按台词决定是否开启配音、字幕和口型同步。' },
     { index: '04', title: '生成视频', text: '确认对话脚本和素材一致性后生成。' },
@@ -75,7 +75,7 @@ export const petTemplateGuideByWorkflow: Record<PetTemplateWorkflow, Array<{ ind
   ],
   material: [
     { index: '01', title: '上传主宠', text: '先选择或上传主宠物素材，保证参考图清晰。' },
-    { index: '02', title: '补参考', text: '按玩法补第二只宠物、产品/道具、音频、动作或场景参考。' },
+    { index: '02', title: '补参考', text: '按玩法补更多宠物、产品/道具、音频、动作或场景参考。' },
     { index: '03', title: '设一致性', text: '控制外观、毛色、花纹、场景和多镜头一致性。' },
     { index: '04', title: '进入生成', text: '回到分镜或确认抽屉完成生成。' },
   ],

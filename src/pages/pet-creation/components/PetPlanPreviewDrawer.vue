@@ -227,7 +227,7 @@ const materialGroups = computed(() => ({
 
 const modeLabel = computed(() => {
   if (validation.value.mode === 'text_video') return '纯文本生成'
-  if (validation.value.mode === 'dialogue_video') return '双宠物对话'
+  if (validation.value.mode === 'dialogue_video') return '多宠物对话'
   if (validation.value.mode === 'image_to_video') return '图片生成视频'
   return '参考图生成'
 })

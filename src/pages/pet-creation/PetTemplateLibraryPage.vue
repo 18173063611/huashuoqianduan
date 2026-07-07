@@ -78,7 +78,7 @@ const filteredTemplates = computed(() => {
 const genericGuideSteps = [
   { index: '01', title: '选择玩法', text: '先判断本次是对话、剧情、图生视频、表情反应还是背景场景。' },
   { index: '02', title: '进入生产页', text: '模板会自动进入对话、素材、分镜或背景编辑等对应页面。' },
-  { index: '03', title: '补齐素材', text: '按玩法补主宠物、第二只宠物、道具、场景和台词。' },
+  { index: '03', title: '补齐素材', text: '按玩法补主宠物、更多宠物、道具、场景和台词。' },
   { index: '04', title: '确认生成', text: '生成前核对草稿、分镜、积分和真实接口预检。' },
 ]
 const activeWorkflow = computed(() => selectedFilter.value === '热门玩法' ? 'smart' : filteredTemplates.value[0]?.workflow || 'smart')

@@ -3,7 +3,7 @@
     <header class="pet-material-picker-head">
       <div>
         <h3>宠物生产素材</h3>
-        <p>按宠物视频生产角色管理素材：主宠物、第二只宠物、产品/道具、背景/场景和口播/BGM 音频均写入宠物草稿。</p>
+        <p>按宠物视频生产角色管理素材：主宠物、第二或更多宠物、产品/道具、背景/场景和口播/BGM 音频均写入宠物草稿。</p>
       </div>
       <button type="button" @click="loadAssets">{{ loadingAssets ? '加载中' : '刷新资产' }}</button>
     </header>
@@ -143,12 +143,12 @@ const materialSlots: PetMaterialSlot[] = [
   },
   {
     role: 'second_pet',
-    label: '第二只宠物参考',
+    label: '第二/更多宠物参考',
     shortLabel: '副宠',
-    hint: '可选，用于双宠物对话',
-    description: '双宠物对话、合作短剧和互相吐槽模板需要第二只宠物参考图，避免角色漂移。',
-    placeholder: '搜索第二只宠物、搭档、双宠...',
-    urlPlaceholder: '粘贴第二只宠物图片 URL',
+    hint: '可选，用于多宠物对话',
+    description: '多宠物对话、合作短剧和互相吐槽模板建议补充第二或更多宠物参考图，避免角色漂移。',
+    placeholder: '搜索第二只宠物、更多宠物、搭档...',
+    urlPlaceholder: '粘贴第二或更多宠物图片 URL',
     assetTypes: ['IMAGE', 'COVER'],
     accept: 'image/*',
     kind: 'image',

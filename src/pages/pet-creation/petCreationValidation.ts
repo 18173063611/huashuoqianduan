@@ -227,7 +227,7 @@ function validateMaterials(draft: PetCreationDraft, mode: PetGenerationMode, iss
     pushIssue(issues, 'materials.main_pet', '未提供主宠物素材，将使用纯文本生成，角色一致性会降低。', 'warning')
   }
   enforceCount(issues, counts, 'main_pet', 3, '主宠物素材最多 3 张。')
-  enforceCount(issues, counts, 'second_pet', 3, '第二只宠物素材最多 3 张。')
+  enforceCount(issues, counts, 'second_pet', 3, '第二/更多宠物素材最多 3 张。')
   enforceCount(issues, counts, 'prop', 4, '产品/道具参考素材最多 4 张。')
   enforceCount(issues, counts, 'scene', 4, '场景参考素材最多 4 张。')
   enforceCount(issues, counts, 'audio', 1, '音频参考素材最多 1 条。')
@@ -249,10 +249,10 @@ function validateRoles(draft: PetCreationDraft, mode: PetGenerationMode, issues:
     names.add(name)
   }
   if ((mode === 'dialogue_video' || draft.videoType === 'dialogue') && roles.length < 2) {
-    pushIssue(issues, 'roles', '双宠物对话视频至少需要两个宠物角色。')
+    pushIssue(issues, 'roles', '宠物对话视频至少需要两个宠物角色，也可以继续添加更多角色。')
   }
   if ((mode === 'dialogue_video' || draft.videoType === 'dialogue') && !hasSecondPetMaterial(draft)) {
-    pushIssue(issues, 'materials.second_pet', '双宠物对话建议补充第二只宠物参考图，否则第二角色一致性会下降。', 'warning')
+    pushIssue(issues, 'materials.second_pet', '多宠物对话建议补充第二或更多宠物参考图，否则非主角角色一致性会下降。', 'warning')
   }
 }
 
