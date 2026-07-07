@@ -2,8 +2,17 @@ export const PET_CREATION_PERMISSION = 'PET_CREATION_ACCESS'
 export const VEHICLE_CREATION_PERMISSION = 'VEHICLE_CREATION_ACCESS'
 
 export const PET_CREATION_MENU_KEYS = ['pet-render', 'pet-templates', 'pet-works', 'pet-assets'] as const
+export const PET_AI_TOOL_MENU_KEYS = [
+  'pet-video-parse',
+  'pet-storyboard-tool',
+  'pet-ai-pet-generate',
+  'pet-background-generate',
+  'pet-voice',
+] as const
 
 export type PetCreationMenuKey = (typeof PET_CREATION_MENU_KEYS)[number]
+export type PetAiToolMenuKey = (typeof PET_AI_TOOL_MENU_KEYS)[number]
+export type PetWorkspaceMenuKey = PetCreationMenuKey | PetAiToolMenuKey
 
 export interface PetCreationAccessUser {
   userId?: number | string | null
@@ -49,6 +58,14 @@ export function isPetOnlyWorkspaceUser(user?: PetCreationAccessUser | null) {
 
 export function isPetCreationMenuKey(key: string): key is PetCreationMenuKey {
   return PET_CREATION_MENU_KEYS.includes(key as PetCreationMenuKey)
+}
+
+export function isPetAiToolMenuKey(key: string): key is PetAiToolMenuKey {
+  return PET_AI_TOOL_MENU_KEYS.includes(key as PetAiToolMenuKey)
+}
+
+export function isPetWorkspaceMenuKey(key: string): key is PetWorkspaceMenuKey {
+  return isPetCreationMenuKey(key) || isPetAiToolMenuKey(key)
 }
 
 function permissionCodesFor(user: PetCreationAccessUser) {

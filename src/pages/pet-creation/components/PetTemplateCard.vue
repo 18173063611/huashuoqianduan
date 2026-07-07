@@ -15,7 +15,7 @@
         <em>{{ workflow.label }}</em>
       </small>
       <button class="pet-template-card-action" type="button" @click="$emit('use-template', template)">
-        {{ workflow.actionLabel }}
+        使用模板
       </button>
     </div>
   </article>

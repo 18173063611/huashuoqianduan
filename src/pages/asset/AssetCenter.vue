@@ -113,7 +113,7 @@
         </div>
 
         <select
-          v-if="activeCategory === 'materials' && selectedWorkflowStage !== 'carBundle' && selectedWorkflowStage !== 'sceneBundle'"
+          v-if="showAssetTypeSelect"
           v-model="selectedType"
           class="asset-type-select"
           :disabled="loading"
@@ -127,7 +127,7 @@
           <option value="JSON">JSON 数据</option>
         </select>
         <select
-          v-if="activeCategory === 'materials' && selectedWorkflowStage !== 'carBundle' && selectedWorkflowStage !== 'sceneBundle'"
+          v-if="showAssetSourceSelect"
           v-model="selectedSourceType"
           class="asset-type-select"
           :disabled="loading"
@@ -137,7 +137,7 @@
           <option v-for="item in sourceTypeOptions" :key="item" :value="item">{{ sourceTypeLabel(item) }}</option>
         </select>
         <select
-          v-if="activeCategory === 'materials' && selectedWorkflowStage !== 'carBundle' && selectedWorkflowStage !== 'sceneBundle'"
+          v-if="showAssetGroupSelect"
           v-model="selectedAssetGroup"
           class="asset-type-select"
           :disabled="loading"
@@ -888,6 +888,7 @@ import {
   publicAssetProviderLabel,
   sourceTypeLabel as sourceTypeLabelShared,
   SCENE_MATERIAL_BUNDLE_GROUP,
+  type AssetWorkflowStageKey,
 } from '../../utils/assetWorkflow'
 import CarModelBundleBuilder from './CarModelBundleBuilder.vue'
 
@@ -1005,7 +1006,11 @@ const KNOWN_SOURCE_TYPES = [
   'SEEDANCE_CAR_SALES_VIDEO',
   'PET_REFERENCE_IMAGE',
   'PET_REFERENCE_VIDEO',
+  'PET_BACKGROUND_GENERATE',
+  'PET_IMAGE_GENERATE',
   'PET_VIDEO_RESULT',
+  'PET_SCRIPT_GENERATE',
+  'PET_STORYBOARD_GENERATE',
   'TEXT_TO_VIDEO_SEEDANCE_1_5',
   'TEXT_TO_VIDEO_SEEDANCE_2_0',
   'IMAGE_TO_VIDEO_SEEDANCE_1_5',
@@ -1018,6 +1023,16 @@ const UNGROUPED_GROUP_KEY = '__ungrouped'
 const GROUP_BENCHMARK = '爆款对标'
 const GROUP_STORYBOARD = '分镜脚本'
 const CAR_MODEL_BUNDLE_GROUP = '汽车素材包'
+const PET_MAIN_GROUP = '主宠物候选'
+const PET_SECOND_GROUP = '第二宠物候选'
+const PET_PROP_GROUP = '宠物产品/道具'
+const PET_SCENE_GROUP = '场景参考'
+const PET_BACKGROUND_GROUP = '宠物背景图'
+const PET_IMAGE_GROUP = 'AI宠物素材'
+const PET_AUDIO_GROUP = '宠物音频'
+const PET_COPY_GROUP = '宠物文案'
+const PET_STORYBOARD_GROUP = '宠物分镜'
+const PET_RESULT_GROUP = '宠物生成结果'
 const ASSET_PAGE_SIZE = 24
 const INLINE_PREVIEW_BATCH_SIZE = 6
 
@@ -1045,6 +1060,60 @@ const WORKFLOW_STAGE_OPTIONS = [
     key: 'voice',
     label: '音频/BGM',
     sourceTypes: ['TTS_GENERATE', 'VOICE_SAMPLE'],
+  },
+  {
+    key: 'petBackground',
+    label: '背景',
+    sourceTypes: ['PET_BACKGROUND_GENERATE', 'USER_UPLOAD', 'AI_GENERATED', 'PET_REFERENCE_IMAGE'],
+    assetRoles: ['scene'],
+    assetGroups: [PET_BACKGROUND_GROUP, PET_SCENE_GROUP, '宠物背景/场景'],
+    defaultAssetGroup: PET_BACKGROUND_GROUP,
+    defaultAssetRole: 'scene',
+  },
+  {
+    key: 'petPet',
+    label: '宠物',
+    sourceTypes: ['PET_IMAGE_GENERATE', 'PET_REFERENCE_IMAGE', 'USER_UPLOAD', 'AI_GENERATED'],
+    assetRoles: ['main_pet', 'second_pet', 'prop'],
+    assetGroups: [PET_IMAGE_GROUP, PET_MAIN_GROUP, PET_SECOND_GROUP, PET_PROP_GROUP, '宠物主图'],
+    defaultAssetGroup: PET_MAIN_GROUP,
+    defaultAssetRole: 'main_pet',
+  },
+  {
+    key: 'petVideo',
+    label: '视频',
+    sourceTypes: ['PET_VIDEO_RESULT', 'PET_REFERENCE_VIDEO', 'SEEDANCE_REFERENCE_VIDEO', 'SEEDANCE_FIRST_FRAME_VIDEO', 'SEEDANCE_TEXT_VIDEO'],
+    assetRoles: ['pet_video_result', 'reference_video', 'material_video'],
+    assetGroups: [PET_RESULT_GROUP],
+    defaultAssetGroup: PET_RESULT_GROUP,
+    defaultAssetRole: 'pet_video_result',
+  },
+  {
+    key: 'petAudio',
+    label: '音频',
+    sourceTypes: ['TTS_GENERATE', 'VOICE_SAMPLE', 'USER_UPLOAD'],
+    assetRoles: ['bgm', 'voiceover', 'reference_audio'],
+    assetGroups: [PET_AUDIO_GROUP],
+    defaultAssetGroup: PET_AUDIO_GROUP,
+    defaultAssetRole: 'reference_audio',
+  },
+  {
+    key: 'petCopy',
+    label: '文案',
+    sourceTypes: ['PET_SCRIPT_GENERATE', 'DOUYIN_BENCHMARK', 'DOUYIN_PARSE_TRANSCRIPT', 'DOUYIN_REWRITE', 'DOUYIN_TRANSCRIPT'],
+    assetRoles: ['voice_script', 'subtitle'],
+    assetGroups: [PET_COPY_GROUP, GROUP_BENCHMARK, '口播文案'],
+    defaultAssetGroup: PET_COPY_GROUP,
+    defaultAssetRole: 'voice_script',
+  },
+  {
+    key: 'petStoryboard',
+    label: '分镜',
+    sourceTypes: ['PET_STORYBOARD_GENERATE', 'STORYBOARD_GENERATE', 'VIDEO_SCRIPT_ANALYZE', 'VIDEO_SCRIPT_URL_ANALYZE'],
+    assetRoles: ['storyboard_json'],
+    assetGroups: [PET_STORYBOARD_GROUP, GROUP_STORYBOARD],
+    defaultAssetGroup: PET_STORYBOARD_GROUP,
+    defaultAssetRole: 'storyboard_json',
   },
   {
     key: 'digitalHuman',
@@ -1157,6 +1226,16 @@ const WORKFLOW_STAGE_BY_BUSINESS_VIEW: Partial<Record<BusinessViewKey, WorkflowS
 const ASSET_GROUP_PRESETS = [
   CAR_MODEL_BUNDLE_GROUP,
   SCENE_MATERIAL_BUNDLE_GROUP,
+  PET_MAIN_GROUP,
+  PET_SECOND_GROUP,
+  PET_PROP_GROUP,
+  PET_SCENE_GROUP,
+  PET_BACKGROUND_GROUP,
+  PET_IMAGE_GROUP,
+  PET_AUDIO_GROUP,
+  PET_COPY_GROUP,
+  PET_STORYBOARD_GROUP,
+  PET_RESULT_GROUP,
   GROUP_BENCHMARK,
   GROUP_STORYBOARD,
   '口播文案',
@@ -1299,10 +1378,26 @@ const assetGroupOptions = computed(() => {
   return Array.from(set)
 })
 
+const showAssetTypeSelect = computed(() =>
+  activeCategory.value === 'materials' &&
+  !isPetAssetMode.value &&
+  selectedWorkflowStage.value !== 'carBundle' &&
+  selectedWorkflowStage.value !== 'sceneBundle',
+)
+const showAssetSourceSelect = computed(() =>
+  activeCategory.value === 'materials' &&
+  selectedWorkflowStage.value !== 'carBundle' &&
+  selectedWorkflowStage.value !== 'sceneBundle',
+)
+const showAssetGroupSelect = computed(() =>
+  activeCategory.value === 'materials' &&
+  selectedWorkflowStage.value !== 'carBundle' &&
+  selectedWorkflowStage.value !== 'sceneBundle',
+)
 const workflowStageOptions = computed(() => {
   const hidden = isPetAssetMode.value
-    ? new Set<WorkflowStageKey>(['benchmark', 'storyboard', 'digitalHuman', 'carBundle', 'sceneBundle', 'template', 'material'])
-    : new Set<WorkflowStageKey>(['material'])
+    ? new Set<WorkflowStageKey>(['benchmark', 'storyboard', 'voice', 'digitalHuman', 'video', 'template', 'carBundle', 'sceneBundle', 'material'])
+    : new Set<WorkflowStageKey>(['material', 'petBackground', 'petPet', 'petVideo', 'petAudio', 'petCopy', 'petStoryboard'])
   return WORKFLOW_STAGE_OPTIONS.filter((item) => !hidden.has(item.key))
 })
 const selectedBusinessViewOption = computed(
@@ -1316,7 +1411,7 @@ const businessViewStatusText = computed(() => {
 const assetKindStatusText = computed(() => {
   const scope = listScopeLabel(listScope.value)
   if (isPetAssetMode.value) {
-    return `${scope} · 主宠物、第二只宠物、道具参考、场景参考和生成结果`
+    return `${scope} · 背景、宠物、视频、音频、文案和分镜按创作环节管理`
   }
   if (!selectedWorkflowStage.value) {
     return `${scope} · 文案、分镜、车型素材包、数字人形象等可复用资产`
@@ -1333,6 +1428,9 @@ const showMaterialContextActions = computed(() =>
   (showMaterialUploadAction.value || selectedWorkflowStage.value === 'carBundle'),
 )
 const materialUploadTargetLabel = computed(() => {
+  if (isPetAssetMode.value && !selectedWorkflowStage.value) {
+    return '宠物素材'
+  }
   if (selectedWorkflowStage.value) {
     return selectedAssetKindLabel.value
   }
@@ -1340,7 +1438,13 @@ const materialUploadTargetLabel = computed(() => {
 })
 const materialUploadHint = computed(() => {
   if (isPetAssetMode.value) {
-    return '上传清晰宠物图片、道具参考或场景参考，保存到当前账号的宠物资产中心。'
+    if (selectedWorkflowStage.value === 'petBackground') return '上传客厅、草地、宠物店等背景图，保存为宠物视频场景参考。'
+    if (selectedWorkflowStage.value === 'petPet') return '上传主宠物、第二只宠物或宠物用品参考图，作为宠物创作主体素材。'
+    if (selectedWorkflowStage.value === 'petVideo') return '上传宠物参考视频或生成结果视频，供作品复用和下载检查。'
+    if (selectedWorkflowStage.value === 'petAudio') return '上传宠物口播、BGM 或音效素材，供配音和后期复用。'
+    if (selectedWorkflowStage.value === 'petCopy') return '上传 TXT、MD、SRT 或 JSON 文案脚本，保存为宠物文案资产。'
+    if (selectedWorkflowStage.value === 'petStoryboard') return '上传 TXT、MD 或 JSON 分镜脚本，保存为宠物分镜资产。'
+    return '上传宠物创作素材，保存到当前账号的宠物资产中心。'
   }
   if (selectedWorkflowStage.value === 'benchmark' || selectedBusinessView.value === 'copy') {
     return '上传本地 TXT、MD 或 JSON 文案文件，保存到私有素材的文案资产。'
@@ -1363,6 +1467,14 @@ const materialUploadHint = computed(() => {
   return '上传本地文件，保存到当前账号的私有素材。'
 })
 const materialUploadAccept = computed(() => {
+  if (isPetAssetMode.value) {
+    if (selectedWorkflowStage.value === 'petAudio') return 'audio/*'
+    if (selectedWorkflowStage.value === 'petVideo') return 'video/*'
+    if (selectedWorkflowStage.value === 'petCopy' || selectedWorkflowStage.value === 'petStoryboard') {
+      return '.txt,.md,.json,.csv,.srt,.vtt,text/*,application/json'
+    }
+    return 'image/*'
+  }
   if (selectedWorkflowStage.value === 'benchmark' || selectedBusinessView.value === 'copy') {
     return '.txt,.md,.json,.csv,.srt,.vtt,text/*,application/json'
   }
@@ -1387,6 +1499,11 @@ const selectedUploadBusinessView = computed<BusinessViewKey>(() => {
   if (selectedWorkflowStage.value === 'benchmark') return 'copy'
   if (selectedWorkflowStage.value === 'storyboard') return 'storyboard'
   if (selectedWorkflowStage.value === 'voice') return 'audio'
+  if (selectedWorkflowStage.value === 'petVideo') return 'video'
+  if (selectedWorkflowStage.value === 'petAudio') return 'audio'
+  if (selectedWorkflowStage.value === 'petCopy') return 'copy'
+  if (selectedWorkflowStage.value === 'petStoryboard') return 'storyboard'
+  if (selectedWorkflowStage.value === 'petBackground' || selectedWorkflowStage.value === 'petPet') return 'image'
   if (selectedWorkflowStage.value === 'digitalHuman') return 'avatar'
   if (selectedWorkflowStage.value === 'video') return 'video'
   if (selectedWorkflowStage.value === 'template') return 'template'
@@ -1645,7 +1762,7 @@ onMounted(() => {
 })
 
 watch(
-  () => [route.query.assetView, route.query.view, route.query.workflowStage] as const,
+  () => [route.query.assetView, route.query.view, route.query.workflowStage, route.query.assetGroup] as const,
   () => {
     if (syncAssetViewFromRoute()) {
       if (loading.value || assetLoadingMore.value) {
@@ -2192,6 +2309,7 @@ function syncAssetViewFromRoute() {
   routeFilterSyncing = true
   const view = parseBusinessViewQuery(route.query.assetView ?? route.query.view)
   const stage = parseWorkflowStageQuery(route.query.workflowStage)
+  const assetGroup = parseAssetGroupQuery(route.query.assetGroup)
   try {
     if (view) {
       const stageForView = WORKFLOW_STAGE_BY_BUSINESS_VIEW[view] || ''
@@ -2207,6 +2325,10 @@ function syncAssetViewFromRoute() {
     }
     if (stage && selectedWorkflowStage.value !== stage) {
       selectWorkflowStage(stage)
+      changed = true
+    }
+    if (selectedAssetGroup.value !== assetGroup) {
+      selectedAssetGroup.value = assetGroup
       changed = true
     }
   } finally {
@@ -2227,6 +2349,10 @@ function parseWorkflowStageQuery(value: unknown): WorkflowStageKey | null {
   return WORKFLOW_STAGE_OPTIONS.some((item) => item.key === raw) ? raw as WorkflowStageKey : null
 }
 
+function parseAssetGroupQuery(value: unknown) {
+  return String(Array.isArray(value) ? value[0] || '' : value || '').trim()
+}
+
 function selectWorkflowStage(stage: WorkflowStageKey) {
   selectedWorkflowStage.value = stage
   if (stage) {
@@ -2239,6 +2365,16 @@ function selectWorkflowStage(stage: WorkflowStageKey) {
     selectedBusinessView.value = 'storyboard'
   } else if (stage === 'voice') {
     selectedBusinessView.value = 'audio'
+  } else if (stage === 'petVideo') {
+    selectedBusinessView.value = 'video'
+  } else if (stage === 'petAudio') {
+    selectedBusinessView.value = 'audio'
+  } else if (stage === 'petCopy') {
+    selectedBusinessView.value = 'copy'
+  } else if (stage === 'petStoryboard') {
+    selectedBusinessView.value = 'storyboard'
+  } else if (stage === 'petBackground' || stage === 'petPet') {
+    selectedBusinessView.value = 'image'
   } else if (stage === 'digitalHuman') {
     selectedBusinessView.value = 'avatar'
   } else if (stage === 'video') {
@@ -2275,6 +2411,15 @@ function assetTypeForCurrentQuery(): AssetType | undefined {
   ) {
     return 'JSON'
   }
+  if (selectedWorkflowStage.value === 'petBackground' || selectedWorkflowStage.value === 'petPet') {
+    return 'IMAGE'
+  }
+  if (selectedWorkflowStage.value === 'petVideo') {
+    return 'VIDEO'
+  }
+  if (selectedWorkflowStage.value === 'petAudio') {
+    return 'AUDIO'
+  }
   if (selectedType.value) {
     return selectedType.value
   }
@@ -2304,6 +2449,13 @@ function assetGroupForCurrentQuery() {
   }
   if (selectedWorkflowStage.value === 'sceneBundle') {
     return SCENE_MATERIAL_BUNDLE_GROUP
+  }
+  if (isPetAssetMode.value && isPetWorkflowStage(selectedWorkflowStage.value)) {
+    return selectedAssetGroup.value || undefined
+  }
+  const stage = currentWorkflowStageOption()
+  if (stage && 'defaultAssetGroup' in stage) {
+    return stage.defaultAssetGroup
   }
   return selectedAssetGroup.value || undefined
 }
@@ -2369,6 +2521,15 @@ function currentWorkflowStageOption() {
   return WORKFLOW_STAGE_OPTIONS.find((item) => item.key === selectedWorkflowStage.value)
 }
 
+function isPetWorkflowStage(stage: WorkflowStageKey | string) {
+  return String(stage || '').startsWith('pet')
+}
+
+function isSharedWorkflowStage(stage: WorkflowStageKey | string): stage is AssetWorkflowStageKey {
+  return ['', 'benchmark', 'storyboard', 'voice', 'digitalHuman', 'video', 'carBundle', 'sceneBundle', 'material']
+    .includes(String(stage) as AssetWorkflowStageKey)
+}
+
 function matchesWorkflowStage(asset: AssetItem) {
   if (listScope.value === 'global' && isPublicCarBundleComponentImage(asset)) {
     return false
@@ -2382,7 +2543,65 @@ function matchesWorkflowStage(asset: AssetItem) {
   if (selectedWorkflowStage.value === 'template') {
     return isTemplateLibraryAsset(asset)
   }
-  return matchesAssetWorkflowStage(asset, selectedWorkflowStage.value)
+  if (isPetAssetMode.value && isPetWorkflowStage(selectedWorkflowStage.value)) {
+    return matchesPetWorkflowStage(asset, selectedWorkflowStage.value)
+  }
+  if (isSharedWorkflowStage(selectedWorkflowStage.value)) {
+    return matchesAssetWorkflowStage(asset, selectedWorkflowStage.value)
+  }
+  return false
+}
+
+function matchesPetWorkflowStage(asset: AssetItem, stage: WorkflowStageKey) {
+  const metadata = parseJsonObject(asset.metadataJson)
+  const group = String(asset.assetGroup || '').trim()
+  const metaGroup = stringField(metadata, 'assetGroup')
+  const role = normalizedAssetRole(asset)
+  const sourceType = String(asset.sourceType || '').trim().toUpperCase()
+  const from = stringField(metadata, 'from')
+  const kind = stringField(metadata, 'kind')
+  const text = assetBusinessIdentityText(asset)
+  const groupMatched = (...groups: string[]) => groups.some((item) => item === group || item === metaGroup)
+  const roleMatched = (...roles: string[]) => roles.includes(role)
+  if (stage === 'petBackground') {
+    return isImage(asset) && (
+      sourceType === 'PET_BACKGROUND_GENERATE' ||
+      from === 'pet_background_generate' ||
+      kind === 'background' ||
+      groupMatched(PET_BACKGROUND_GROUP, PET_SCENE_GROUP, '宠物背景/场景') ||
+      roleMatched('scene') ||
+      includesAnyBusinessToken(text, ['pet_background', 'background', 'scene', '背景', '场景'])
+    )
+  }
+  if (stage === 'petPet') {
+    return isImage(asset) && (
+      sourceType === 'PET_IMAGE_GENERATE' ||
+      from === 'pet_image_generate' ||
+      kind === 'pet' ||
+      groupMatched(PET_IMAGE_GROUP, PET_MAIN_GROUP, PET_SECOND_GROUP, PET_PROP_GROUP, '宠物主图') ||
+      roleMatched('main_pet', 'second_pet', 'prop') ||
+      includesAnyBusinessToken(text, ['ai宠物', '宠物素材', '主宠物', '第二宠物', '宠物产品', '道具'])
+    )
+  }
+  if (stage === 'petVideo') {
+    return isVideo(asset) && (
+      sourceType === 'PET_VIDEO_RESULT' ||
+      sourceType === 'PET_REFERENCE_VIDEO' ||
+      groupMatched(PET_RESULT_GROUP) ||
+      roleMatched('pet_video_result', 'reference_video', 'material_video') ||
+      isBusinessVideoAsset(asset)
+    )
+  }
+  if (stage === 'petAudio') {
+    return groupMatched(PET_AUDIO_GROUP) || roleMatched('bgm', 'voiceover', 'reference_audio') || isAudioBusinessAsset(asset)
+  }
+  if (stage === 'petCopy') {
+    return groupMatched(PET_COPY_GROUP, GROUP_BENCHMARK, '口播文案') || roleMatched('voice_script', 'subtitle') || isCopyBusinessAsset(asset)
+  }
+  if (stage === 'petStoryboard') {
+    return groupMatched(PET_STORYBOARD_GROUP, GROUP_STORYBOARD) || roleMatched('storyboard_json') || isStoryboardBusinessAsset(asset)
+  }
+  return true
 }
 
 function matchesBusinessView(asset: AssetItem) {
@@ -2423,6 +2642,9 @@ function matchesPublicAssetProvider(asset: AssetItem) {
 }
 
 function assetBusinessLabel(asset: AssetItem) {
+  if (isPetAssetMode.value) {
+    return petAssetBusinessLabel(asset)
+  }
   if (selectedBusinessView.value === 'image' && isBusinessImageAsset(asset)) return businessViewLabel('image')
   if (selectedBusinessView.value === 'video' && isBusinessVideoAsset(asset)) return businessViewLabel('video')
   if (selectedBusinessView.value === 'copy' && isCopyBusinessAsset(asset)) return businessViewLabel('copy')
@@ -2438,6 +2660,16 @@ function assetBusinessLabel(asset: AssetItem) {
   if (isBusinessVideoAsset(asset)) return '视频素材'
   if (isBusinessImageAsset(asset)) return '图片素材'
   return '素材资产'
+}
+
+function petAssetBusinessLabel(asset: AssetItem) {
+  if (matchesPetWorkflowStage(asset, 'petBackground')) return '背景'
+  if (matchesPetWorkflowStage(asset, 'petPet')) return '宠物'
+  if (matchesPetWorkflowStage(asset, 'petVideo')) return '视频'
+  if (matchesPetWorkflowStage(asset, 'petAudio')) return '音频'
+  if (matchesPetWorkflowStage(asset, 'petStoryboard')) return '分镜'
+  if (matchesPetWorkflowStage(asset, 'petCopy')) return '文案'
+  return '宠物资产'
 }
 
 function publicAssetProviderPillClass(asset: AssetItem) {
@@ -3004,7 +3236,7 @@ function isCarBundlePayloadRecord(record: Record<string, unknown>) {
 }
 
 function canAddImageToCarBundle(asset: AssetItem) {
-  return hasToken.value && isImage(asset) && !isCarModelBundleAsset(asset)
+  return !isPetAssetMode.value && hasToken.value && isImage(asset) && !isCarModelBundleAsset(asset)
 }
 
 function canEditCarBundle(asset: AssetItem) {

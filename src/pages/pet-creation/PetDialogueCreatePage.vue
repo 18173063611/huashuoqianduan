@@ -128,8 +128,8 @@ const planEstimate = ref<PetVideoEstimate | null>(null)
 const planPreview = ref<PetVideoPreview | null>(null)
 const previewing = ref(false)
 const apiMode = getPetCreationApiMode()
-const catRoleCover = new URL('../../assets/pet-creation/template-cat-dialogue.png', import.meta.url).href
-const dogRoleCover = new URL('../../assets/pet-creation/template-dog-reaction.png', import.meta.url).href
+const catRoleCover = new URL('../../assets/pet-creation/local-cat-dialogue.jpg', import.meta.url).href
+const dogRoleCover = new URL('../../assets/pet-creation/local-dog-reaction.jpg', import.meta.url).href
 
 usePetApiFallbackNotice()
 

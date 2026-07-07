@@ -36,6 +36,7 @@ export interface TtsGenerateRequest {
   speed?: number
   pitch?: number
   volume?: number
+  businessDomain?: 'pet'
 }
 
 export interface TtsGenerateResponse {

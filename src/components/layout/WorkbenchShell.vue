@@ -21,7 +21,7 @@ import TaskFloatingDock from '../TaskFloatingDock.vue'
 import WorkbenchLayout from './WorkbenchLayout.vue'
 import { useAuthRequired } from '../../composables/useAuthRequired'
 import { getAuthUser } from '../../services/authSession'
-import { canAccessPetCreation, isPetCreationMenuKey, isPetOnlyWorkspaceUser } from '../../config/petCreationAccess'
+import { canAccessPetCreation, isPetCreationMenuKey, isPetOnlyWorkspaceUser, isPetWorkspaceMenuKey } from '../../config/petCreationAccess'
 
 type MenuKey = string
 
@@ -101,12 +101,12 @@ watch(
 )
 
 function navigateToMenu(key: MenuKey) {
-  if (isPetOnlyWorkspaceUser(getAuthUser()) && !isPetCreationMenuKey(key) && !key.startsWith('my-videos') && !key.startsWith('system-')) {
+  if (isPetOnlyWorkspaceUser(getAuthUser()) && !isPetWorkspaceMenuKey(key) && !key.startsWith('my-videos') && !key.startsWith('system-')) {
     ElMessage.warning('当前账号仅开通宠物创作中心')
     return
   }
-  if (isPetCreationMenuKey(key)) {
-    if (!requireAuth('登录后可使用宠物创作中心')) return
+  if (isPetWorkspaceMenuKey(key)) {
+    if (!requireAuth(isPetCreationMenuKey(key) ? '登录后可使用宠物创作中心' : '登录后可使用宠物 AI 资产生产工具')) return
     if (!canAccessPetCreation(getAuthUser())) {
       ElMessage.warning('当前账号暂未开通宠物创作中心')
       return
@@ -180,6 +180,7 @@ function goAssetHub(assetId?: number) {
 
 function authActionLabelForMenu(key: MenuKey) {
   if (isPetCreationMenuKey(key)) return '登录后可使用宠物创作中心'
+  if (isPetWorkspaceMenuKey(key)) return '登录后可使用宠物 AI 资产生产工具'
   if (key.startsWith('my-videos')) return '登录后可查看我的视频'
   if (key.startsWith('assets-')) return '登录后可管理资产中心素材'
   if (key.startsWith('system-')) return '登录后可使用系统管理功能'

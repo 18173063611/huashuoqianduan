@@ -7,56 +7,6 @@
       </div>
     </header>
 
-    <section class="pet-portal-panel">
-      <div class="pet-portal-flow">
-        <div class="pet-portal-head">
-          <strong>三步创作萌宠视频</strong>
-          <span>从玩法、素材到生成结果，按不同场景进入不同编辑页。</span>
-        </div>
-        <div class="pet-portal-steps">
-          <button type="button" @click="router.push({ name: 'pet-templates' })">
-            <i>01</i>
-            <strong>选择萌宠玩法</strong>
-            <span>对话、口播、分镜、图生视频、背景场景分别进入对应生产页。</span>
-          </button>
-          <button type="button" @click="router.push({ name: 'pet-role-setup' })">
-            <i>02</i>
-            <strong>上传宠物素材</strong>
-            <span>主宠物、第二只宠物、道具和场景参考均只使用宠物资产。</span>
-          </button>
-          <button type="button" @click="openPlanPreview">
-            <i>03</i>
-            <strong>确认生成预览</strong>
-            <span>生成前核对脚本、分镜、素材、积分和真实 provider 预检。</span>
-          </button>
-        </div>
-      </div>
-      <div class="pet-asset-tool-panel">
-        <div class="pet-portal-head">
-          <strong>宠物 AI 资产创作</strong>
-          <span>先生成或沉淀宠物素材、文案、分镜，再进入真实成片确认。</span>
-        </div>
-        <div class="pet-asset-tool-grid">
-          <button type="button" :disabled="Boolean(aiAssistBusy) || creating" @click="handleGenerateScriptQuick">
-            <strong>文案/对话资产</strong>
-            <span>生成可复用台词、口播和脚本。</span>
-          </button>
-          <button type="button" :disabled="Boolean(aiAssistBusy) || creating" @click="handleGenerateStoryboardQuick">
-            <strong>分镜资产</strong>
-            <span>生成镜头节奏、动作和字幕。</span>
-          </button>
-          <button type="button" @click="router.push({ name: 'pet-assets' })">
-            <strong>图片/视频素材</strong>
-            <span>管理宠物主图、结果视频和参考图。</span>
-          </button>
-          <button type="button" @click="goBackgroundEdit">
-            <strong>背景场景资产</strong>
-            <span>编辑背景图、场景参考和画面要求。</span>
-          </button>
-        </div>
-      </div>
-    </section>
-
     <section class="pet-create-panel">
       <div class="pet-create-main">
         <div class="pet-prompt-box">
@@ -220,8 +170,8 @@
         <button type="button" @click="refreshRecentWorks">重新加载</button>
       </div>
       <div v-else-if="recentWorks.length === 0" class="pet-empty-state">
-        <strong>宠物作品功能已预留</strong>
-        <p>首版先完成入口、权限和页面骨架，真实任务与作品列表后续接入 `petCreationApi.ts`。</p>
+        <strong>暂无最近生成</strong>
+        <p>提交宠物视频任务后，生成中、已完成或失败的作品会在这里同步展示。</p>
       </div>
       <div v-else class="pet-work-grid">
         <PetWorkCard
@@ -661,113 +611,11 @@ watch(
 }
 
 .pet-create-panel,
-.pet-portal-panel,
 .pet-empty-state {
   border: 1px solid #dfe7f5;
   border-radius: 8px;
   background: #ffffff;
   box-shadow: 0 18px 40px rgba(15, 23, 42, 0.05);
-}
-
-.pet-portal-panel {
-  display: grid;
-  grid-template-columns: minmax(0, 1.05fr) minmax(320px, 0.95fr);
-  gap: 16px;
-  padding: 18px;
-}
-
-.pet-portal-flow,
-.pet-asset-tool-panel {
-  display: grid;
-  align-content: start;
-  gap: 14px;
-}
-
-.pet-portal-head {
-  display: grid;
-  gap: 5px;
-}
-
-.pet-portal-head strong {
-  color: #111827;
-  font-size: 18px;
-  font-weight: 900;
-}
-
-.pet-portal-head span {
-  color: #667085;
-  font-size: 13px;
-  line-height: 1.55;
-}
-
-.pet-portal-steps {
-  display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
-  gap: 12px;
-}
-
-.pet-portal-steps button,
-.pet-asset-tool-grid button {
-  display: grid;
-  min-height: 132px;
-  align-content: center;
-  justify-items: start;
-  gap: 8px;
-  border: 1px solid #d7e2f5;
-  border-radius: 8px;
-  background: #fbfdff;
-  color: #172033;
-  padding: 14px;
-  text-align: left;
-  cursor: pointer;
-}
-
-.pet-portal-steps button:hover,
-.pet-asset-tool-grid button:hover {
-  border-color: #bfdbfe;
-  background: #eff6ff;
-}
-
-.pet-portal-steps i {
-  display: inline-grid;
-  width: 34px;
-  height: 34px;
-  place-items: center;
-  border-radius: 8px;
-  background: #eff6ff;
-  color: #2563eb;
-  font-style: normal;
-  font-size: 13px;
-  font-weight: 900;
-}
-
-.pet-portal-steps strong,
-.pet-asset-tool-grid strong {
-  color: #172033;
-  font-size: 14px;
-  font-weight: 900;
-}
-
-.pet-portal-steps span,
-.pet-asset-tool-grid span {
-  color: #667085;
-  font-size: 12px;
-  line-height: 1.55;
-}
-
-.pet-asset-tool-grid {
-  display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 12px;
-}
-
-.pet-asset-tool-grid button {
-  min-height: 102px;
-}
-
-.pet-asset-tool-grid button:disabled {
-  cursor: not-allowed;
-  opacity: 0.65;
 }
 
 .pet-create-panel {
@@ -1156,12 +1004,7 @@ watch(
 }
 
 @media (max-width: 900px) {
-  .pet-portal-panel,
   .pet-create-panel {
-    grid-template-columns: 1fr;
-  }
-
-  .pet-portal-steps {
     grid-template-columns: 1fr;
   }
 
@@ -1192,10 +1035,6 @@ watch(
 
 @media (max-width: 640px) {
   .pet-quick-workflow {
-    grid-template-columns: 1fr;
-  }
-
-  .pet-asset-tool-grid {
     grid-template-columns: 1fr;
   }
 }

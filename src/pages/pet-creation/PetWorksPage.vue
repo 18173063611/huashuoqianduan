@@ -78,7 +78,7 @@
         <h3>{{ activePreviewWork.title }}</h3>
         <p>{{ activePreviewWork.templateTitle }} · {{ activePreviewWork.aspectRatio }} · {{ activePreviewWork.durationSeconds }} 秒</p>
         <video v-if="activePreviewWork.videoUrl" :src="activePreviewWork.videoUrl" controls preload="metadata" />
-        <p v-else>mock 作品暂无真实视频，真实生成完成后会展示预览。</p>
+        <p v-else>当前作品暂未返回可播放地址，请刷新作品状态或检查下载链接。</p>
       </div>
       <button type="button" @click="activePreviewWork = null">关闭</button>
     </section>
@@ -163,7 +163,7 @@ watch([activeStatus, activePetType, keyword], () => {
 function previewWork(work: PetWork) {
   activePreviewWork.value = work
   if (!work.videoUrl) {
-    ElMessage.info('mock 作品暂无真实视频，真实生成完成后可在这里预览。')
+    ElMessage.info('当前作品暂未返回可播放地址，可刷新作品状态后再预览。')
   }
 }
 

@@ -130,7 +130,7 @@ const materialSlots: PetMaterialSlot[] = [
     assetTypes: ['IMAGE', 'COVER'],
     accept: 'image/*',
     kind: 'image',
-    assetGroup: '宠物主图',
+    assetGroup: '主宠物候选',
     metadataRole: 'main_pet',
   },
   {
@@ -144,7 +144,7 @@ const materialSlots: PetMaterialSlot[] = [
     assetTypes: ['IMAGE', 'COVER'],
     accept: 'image/*',
     kind: 'image',
-    assetGroup: '宠物主图',
+    assetGroup: '第二宠物候选',
     metadataRole: 'second_pet',
   },
   {
@@ -172,7 +172,7 @@ const materialSlots: PetMaterialSlot[] = [
     assetTypes: ['IMAGE', 'COVER'],
     accept: 'image/*',
     kind: 'image',
-    assetGroup: '宠物背景/场景',
+    assetGroup: '场景参考',
     metadataRole: 'scene',
   },
   {
@@ -341,6 +341,7 @@ async function loadAssets() {
           pageNo: 1,
           pageSize: 24,
           businessDomain: 'pet',
+          assetGroup: slot.assetGroup,
         }),
       ),
     )

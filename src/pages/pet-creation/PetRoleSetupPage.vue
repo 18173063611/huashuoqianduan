@@ -6,89 +6,95 @@
       <p>上传主宠物和参考素材，设置角色一致性、宠物信息和拟人化程度。</p>
     </header>
 
-    <PetMaterialPicker v-model="draft.materials" />
+    <div class="pet-role-workbench">
+      <div class="pet-role-main">
+        <PetMaterialPicker v-model="draft.materials" />
 
-    <PetPostProductionPanel
-      id="pet-background-scene"
-      :draft="draft"
-      show-sync-button
-      @change="saveDraft"
-    />
-
-    <div class="pet-role-layout">
-      <section v-for="(role, index) in draft.roles" :key="role.id" class="pet-panel">
-        <div class="pet-role-panel-head">
-          <h3>{{ index === 0 ? '主宠物信息' : '第二只宠物信息' }}</h3>
-          <button v-if="index > 0" type="button" @click="removeSecondRole">移除</button>
-        </div>
-        <label>
-          宠物名称
-          <input v-model="role.name" />
-        </label>
-        <label>
-          宠物类型
-          <select v-model="role.type">
-            <option value="cat">小猫</option>
-            <option value="dog">小狗</option>
-            <option value="other">其他宠物</option>
-          </select>
-        </label>
-        <label>
-          品种
-          <input v-model="role.breed" />
-        </label>
-        <label>
-          年龄感
-          <input v-model="role.ageFeel" />
-        </label>
-        <label>
-          性格标签
-          <input :value="role.personalityTags.join(' / ')" @input="updateTags(role.id, 'personalityTags', $event)" />
-        </label>
-        <label>
-          说话口吻
-          <input v-model="role.speakingTone" />
-        </label>
-        <label>
-          角色标签
-          <input :value="role.roleTags.join(' / ')" @input="updateTags(role.id, 'roleTags', $event)" />
-        </label>
-        <label class="pet-role-check">
-          <input v-model="role.anthropomorphic" type="checkbox" />
-          <span>允许该角色拟人化表达</span>
-        </label>
-      </section>
-    </div>
-
-    <button v-if="draft.roles.length < 2" class="pet-secondary-role-button" type="button" @click="addSecondRole">
-      添加第二只宠物
-    </button>
-
-    <section class="pet-panel">
-      <h3>角色一致性设置</h3>
-      <div class="pet-switch-grid">
-        <label>
-          <input v-model="draft.consistency.keepAppearance" type="checkbox" />
-          <span>保持宠物外观一致</span>
-        </label>
-        <label>
-          <input v-model="draft.consistency.keepFurPattern" type="checkbox" />
-          <span>保持毛色和花纹一致</span>
-        </label>
-        <label>
-          <input v-model="draft.consistency.keepScene" type="checkbox" />
-          <span>保留背景场景</span>
-        </label>
-        <label>
-          <input v-model="draft.consistency.allowAnthropomorphic" type="checkbox" />
-          <span>允许轻微拟人化</span>
-        </label>
-        <label>
-          <input v-model="draft.consistency.multiShotPriority" type="checkbox" />
-          <span>多镜头一致性优先</span>
-        </label>
+        <PetPostProductionPanel
+          id="pet-background-scene"
+          :draft="draft"
+          show-sync-button
+          @change="saveDraft"
+        />
       </div>
-    </section>
+
+      <aside class="pet-role-side">
+        <div class="pet-role-layout">
+          <section v-for="(role, index) in draft.roles" :key="role.id" class="pet-panel">
+            <div class="pet-role-panel-head">
+              <h3>{{ index === 0 ? '主宠物信息' : '第二只宠物信息' }}</h3>
+              <button v-if="index > 0" type="button" @click="removeSecondRole">移除</button>
+            </div>
+            <label>
+              宠物名称
+              <input v-model="role.name" />
+            </label>
+            <label>
+              宠物类型
+              <select v-model="role.type">
+                <option value="cat">小猫</option>
+                <option value="dog">小狗</option>
+                <option value="other">其他宠物</option>
+              </select>
+            </label>
+            <label>
+              品种
+              <input v-model="role.breed" />
+            </label>
+            <label>
+              年龄感
+              <input v-model="role.ageFeel" />
+            </label>
+            <label>
+              性格标签
+              <input :value="role.personalityTags.join(' / ')" @input="updateTags(role.id, 'personalityTags', $event)" />
+            </label>
+            <label>
+              说话口吻
+              <input v-model="role.speakingTone" />
+            </label>
+            <label>
+              角色标签
+              <input :value="role.roleTags.join(' / ')" @input="updateTags(role.id, 'roleTags', $event)" />
+            </label>
+            <label class="pet-role-check">
+              <input v-model="role.anthropomorphic" type="checkbox" />
+              <span>允许该角色拟人化表达</span>
+            </label>
+          </section>
+        </div>
+
+        <button v-if="draft.roles.length < 2" class="pet-secondary-role-button" type="button" @click="addSecondRole">
+          添加第二只宠物
+        </button>
+
+        <section class="pet-panel">
+          <h3>角色一致性设置</h3>
+          <div class="pet-switch-grid">
+            <label>
+              <input v-model="draft.consistency.keepAppearance" type="checkbox" />
+              <span>保持宠物外观一致</span>
+            </label>
+            <label>
+              <input v-model="draft.consistency.keepFurPattern" type="checkbox" />
+              <span>保持毛色和花纹一致</span>
+            </label>
+            <label>
+              <input v-model="draft.consistency.keepScene" type="checkbox" />
+              <span>保留背景场景</span>
+            </label>
+            <label>
+              <input v-model="draft.consistency.allowAnthropomorphic" type="checkbox" />
+              <span>允许轻微拟人化</span>
+            </label>
+            <label>
+              <input v-model="draft.consistency.multiShotPriority" type="checkbox" />
+              <span>多镜头一致性优先</span>
+            </label>
+          </div>
+        </section>
+      </aside>
+    </div>
 
     <div class="pet-actions">
       <button type="button" :disabled="saving" @click="saveAndGo('pet-dialogue-create')">
@@ -228,9 +234,22 @@ onMounted(async () => {
   line-height: 1.65;
 }
 
+.pet-role-workbench {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 360px;
+  gap: 16px;
+  align-items: start;
+}
+
+.pet-role-main,
+.pet-role-side {
+  display: grid;
+  gap: 16px;
+}
+
 .pet-switch-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+  grid-template-columns: 1fr;
   gap: 10px;
 }
 
@@ -245,7 +264,7 @@ onMounted(async () => {
 
 .pet-role-layout {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+  grid-template-columns: 1fr;
   gap: 16px;
 }
 
@@ -360,6 +379,16 @@ onMounted(async () => {
 .pet-actions button:disabled {
   cursor: not-allowed;
   opacity: 0.65;
+}
+
+@media (max-width: 1120px) {
+  .pet-role-workbench {
+    grid-template-columns: 1fr;
+  }
+
+  .pet-switch-grid {
+    grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+  }
 }
 
 </style>

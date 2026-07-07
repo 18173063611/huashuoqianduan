@@ -70,7 +70,7 @@
     <section v-if="task?.status === 'completed'" class="pet-panel pet-result-panel">
       <h3>生成结果</h3>
       <video v-if="task.previewUrl" :src="task.previewUrl" controls preload="metadata" />
-      <p v-else>mock 结果暂无真实视频，真实生成接口接入后这里会展示预览视频。</p>
+      <p v-else>任务已完成，但暂未返回可播放地址，请进入作品页检查下载链接或刷新任务状态。</p>
       <RouterLink to="/pet-works">进入作品页</RouterLink>
     </section>
 
@@ -109,11 +109,11 @@ const retrying = ref(false)
 const errorMessage = ref('')
 const steps = ['脚本生成', '分镜生成', '角色一致性检查', '画面生成', 'AI 配音', '口型同步', '视频合成', '生成完成']
 const shotCovers = [
-  new URL('../../assets/pet-creation/template-cat-dialogue.png', import.meta.url).href,
-  new URL('../../assets/pet-creation/template-dog-reaction.png', import.meta.url).href,
-  new URL('../../assets/pet-creation/template-pet-monologue.png', import.meta.url).href,
-  new URL('../../assets/pet-creation/template-photo-to-video.png', import.meta.url).href,
-  new URL('../../assets/pet-creation/template-double-dialogue.png', import.meta.url).href,
+  new URL('../../assets/pet-creation/local-cat-dialogue.jpg', import.meta.url).href,
+  new URL('../../assets/pet-creation/local-dog-reaction.jpg', import.meta.url).href,
+  new URL('../../assets/pet-creation/local-pet-monologue.jpg', import.meta.url).href,
+  new URL('../../assets/pet-creation/local-photo-to-video.jpg', import.meta.url).href,
+  new URL('../../assets/pet-creation/local-double-dialogue.jpg', import.meta.url).href,
 ]
 const visibleShots = computed(() => task.value?.draft.shots.slice(0, 5) || [])
 const currentShotIndex = computed(() => {

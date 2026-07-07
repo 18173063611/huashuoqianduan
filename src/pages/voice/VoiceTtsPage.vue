@@ -1,8 +1,8 @@
 <template>
   <section class="voice-page app-page-stack">
     <header class="tool-page-hero">
-      <h1>声音生成</h1>
-      <p>选择音色并生成口播音频，管理可复用声音资产。</p>
+      <h1>{{ pageTitleText }}</h1>
+      <p>{{ pageDescriptionText }}</p>
     </header>
     <div class="voice-content">
       <div class="voice-layout">
@@ -122,7 +122,7 @@
               <span class="voice-saved-badge">已自动保存到资产中心</span>
             </div>
             <p v-if="taskStatus === 'SUCCESS'" class="app-muted voice-success-tip">
-              生成完成后可直接试听，也可在「资产中心 / 私有素材 / 音频」中查看。
+              生成完成后可直接试听，也可在「{{ assetCenterName }} / 私有素材 / 音频」中查看。
             </p>
           </div>
         </section>
@@ -154,6 +154,16 @@ import {
   type TtsTaskResult,
   type VoicePresetItem,
 } from '../../types/voiceTypes'
+
+const props = withDefaults(defineProps<{
+  businessDomain?: 'pet'
+  pageTitle?: string
+  pageDescription?: string
+}>(), {
+  businessDomain: undefined,
+  pageTitle: '声音生成',
+  pageDescription: '选择音色并生成口播音频，管理可复用声音资产。',
+})
 
 const presetsLoading = ref(false)
 const presetsError = ref('')
@@ -211,6 +221,9 @@ const filteredPresets = computed(() => {
 
 const audioAssetUrl = ref('')
 const audioAssetId = ref<number | null>(null)
+const pageTitleText = computed(() => props.pageTitle)
+const pageDescriptionText = computed(() => props.pageDescription)
+const assetCenterName = computed(() => props.businessDomain === 'pet' ? '宠物资产中心' : '资产中心')
 
 onMounted(async () => {
   resetTask()
@@ -365,6 +378,9 @@ async function submitTts() {
       speed: 1,
       pitch: 0,
       volume: 1,
+    }
+    if (props.businessDomain === 'pet') {
+      body.businessDomain = 'pet'
     }
     if (loadedScriptVersionId.value != null) {
       body.scriptId = loadedScriptVersionId.value

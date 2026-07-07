@@ -24,6 +24,11 @@ export type WorkbenchRouteName =
   | 'pet-templates'
   | 'pet-works'
   | 'pet-assets'
+  | 'pet-video-parse'
+  | 'pet-storyboard-tool'
+  | 'pet-ai-pet-generate'
+  | 'pet-background-generate'
+  | 'pet-voice'
   | 'my-videos'
   | 'AssetCenter'
   | 'system-credits'
@@ -296,6 +301,70 @@ const routes: RouteRecordRaw[] = [
           ...businessRouteMeta,
           menuKey: 'pet-assets',
           title: '宠物资产中心',
+          requiresPetCreationAccess: true,
+        },
+      },
+      {
+        path: 'pet-tools/benchmark',
+        name: 'pet-video-parse',
+        component: () => import('../pages/pet-creation/PetAssetScriptToolPage.vue'),
+        props: { mode: 'benchmark' },
+        meta: {
+          ...businessRouteMeta,
+          menuKey: 'pet-video-parse',
+          title: '宠物爆款对标',
+          requiresPetCreationAccess: true,
+        },
+      },
+      {
+        path: 'pet-tools/storyboard',
+        name: 'pet-storyboard-tool',
+        component: () => import('../pages/pet-creation/PetAssetScriptToolPage.vue'),
+        props: { mode: 'storyboard' },
+        meta: {
+          ...businessRouteMeta,
+          menuKey: 'pet-storyboard-tool',
+          title: '宠物分镜生成',
+          requiresPetCreationAccess: true,
+        },
+      },
+      {
+        path: 'pet-tools/ai-pet',
+        name: 'pet-ai-pet-generate',
+        component: () => import('../pages/pet-creation/PetImageAssetGeneratePage.vue'),
+        props: { mode: 'pet' },
+        meta: {
+          ...businessRouteMeta,
+          menuKey: 'pet-ai-pet-generate',
+          title: 'AI宠物生成',
+          requiresPetCreationAccess: true,
+        },
+      },
+      {
+        path: 'pet-tools/background',
+        name: 'pet-background-generate',
+        component: () => import('../pages/pet-creation/PetImageAssetGeneratePage.vue'),
+        props: { mode: 'background' },
+        meta: {
+          ...businessRouteMeta,
+          menuKey: 'pet-background-generate',
+          title: '背景图生成',
+          requiresPetCreationAccess: true,
+        },
+      },
+      {
+        path: 'pet-tools/voice',
+        name: 'pet-voice',
+        component: () => import('../pages/voice/VoiceTtsPage.vue'),
+        props: {
+          businessDomain: 'pet',
+          pageTitle: '声音生成',
+          pageDescription: '生成宠物口播、旁白或角色台词音频，并保存到宠物资产中心。',
+        },
+        meta: {
+          ...businessRouteMeta,
+          menuKey: 'pet-voice',
+          title: '声音生成',
           requiresPetCreationAccess: true,
         },
       },
@@ -692,6 +761,11 @@ const recentToolTitles: Partial<Record<WorkbenchRouteName, string>> = {
   'pet-templates': '萌宠模板库',
   'pet-works': '我的宠物作品',
   'pet-assets': '宠物资产中心',
+  'pet-video-parse': '宠物爆款对标',
+  'pet-storyboard-tool': '宠物分镜生成',
+  'pet-ai-pet-generate': 'AI宠物生成',
+  'pet-background-generate': '背景图生成',
+  'pet-voice': '声音生成',
   'video-parse': '爆款对标',
   'benchmark-create-page': '爆款对标创作',
   'asset-reuse': '资产复用创作',
@@ -722,6 +796,11 @@ const recentToolSubtitles: Partial<Record<WorkbenchRouteName, string>> = {
   'pet-templates': '宠物创作中心',
   'pet-works': '宠物创作中心',
   'pet-assets': '宠物创作中心',
+  'pet-video-parse': '宠物 AI 资产生产工具',
+  'pet-storyboard-tool': '宠物 AI 资产生产工具',
+  'pet-ai-pet-generate': '宠物 AI 资产生产工具',
+  'pet-background-generate': '宠物 AI 资产生产工具',
+  'pet-voice': '宠物 AI 资产生产工具',
   'video-parse': 'AI 资产生产工具',
   'benchmark-create-page': '创作中心',
   'asset-reuse': '创作中心',

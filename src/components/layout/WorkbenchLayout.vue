@@ -175,7 +175,7 @@ interface MenuSection {
   items: MenuItem[]
 }
 
-type MenuSectionKey = 'creation' | 'pet-creation' | 'ai-tools' | 'tutorial'
+type MenuSectionKey = 'creation' | 'pet-creation' | 'pet-ai-tools' | 'ai-tools' | 'tutorial'
 
 const allMenuSections: MenuSection[] = [
   {
@@ -238,6 +238,48 @@ const allMenuSections: MenuSection[] = [
         icon: FolderOpened,
         title: '宠物资产中心',
         subtitle: '管理主宠物、第二只宠物、道具和场景参考图，只展示宠物相关素材。',
+      },
+    ],
+  },
+  {
+    key: 'pet-ai-tools',
+    label: 'AI资产生产工具',
+    icon: DataAnalysis,
+    items: [
+      {
+        key: 'pet-video-parse',
+        label: '爆款对标',
+        icon: DataAnalysis,
+        title: '宠物爆款对标',
+        subtitle: '围绕萌宠短视频结构生成对标文案和分镜资产。',
+      },
+      {
+        key: 'pet-storyboard-tool',
+        label: '分镜生成',
+        icon: Tickets,
+        title: '宠物分镜生成',
+        subtitle: '把宠物创意拆成镜头、动作、字幕和情绪节奏。',
+      },
+      {
+        key: 'pet-ai-pet-generate',
+        label: 'AI宠物生成',
+        icon: PictureRounded,
+        title: 'AI宠物生成',
+        subtitle: '生成宠物主体参考图，并保存到宠物资产中心。',
+      },
+      {
+        key: 'pet-background-generate',
+        label: '背景图生成',
+        icon: PictureRounded,
+        title: '背景图生成',
+        subtitle: '生成宠物视频可复用的背景图、场景图和氛围参考。',
+      },
+      {
+        key: 'pet-voice',
+        label: '声音生成',
+        icon: Microphone,
+        title: '声音生成',
+        subtitle: '生成宠物口播、旁白或角色台词音频，并进入宠物资产域。',
       },
     ],
   },
@@ -318,10 +360,11 @@ const brokenAvatarUrl = ref('')
 const petOnlyWorkspace = computed(() => isPetOnlyWorkspaceUser(currentUser.value))
 const menuSections = computed(() => {
   if (petOnlyWorkspace.value) {
-    return allMenuSections.filter((section) => section.key === 'pet-creation')
+    return allMenuSections.filter((section) => section.key === 'pet-creation' || section.key === 'pet-ai-tools')
   }
   return allMenuSections.filter((section) => {
     if (section.key === 'pet-creation') return canAccessPetCreation(currentUser.value)
+    if (section.key === 'pet-ai-tools') return false
     if (section.key === 'creation') return canAccessVehicleCreation(currentUser.value)
     return true
   })
@@ -343,6 +386,7 @@ const showPageHeading = computed(() => {
   if (route.name === 'video-parse') return false
   if (route.name === 'benchmark-create-page') return false
   if (['script-rewrite', 'storyboard', 'avatar', 'voice'].includes(String(route.name || ''))) return false
+  if (['pet-video-parse', 'pet-storyboard-tool', 'pet-ai-pet-generate', 'pet-background-generate', 'pet-voice'].includes(String(route.name || ''))) return false
   return true
 })
 const pageTitle = computed(() => {
