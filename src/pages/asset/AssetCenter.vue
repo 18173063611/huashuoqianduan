@@ -1035,6 +1035,15 @@ const PET_STORYBOARD_GROUP = '宠物分镜'
 const PET_RESULT_GROUP = '宠物生成结果'
 const ASSET_PAGE_SIZE = 24
 const INLINE_PREVIEW_BATCH_SIZE = 6
+const PET_SOURCE_TYPE_SET = new Set([
+  'PET_REFERENCE_IMAGE',
+  'PET_REFERENCE_VIDEO',
+  'PET_BACKGROUND_GENERATE',
+  'PET_IMAGE_GENERATE',
+  'PET_VIDEO_RESULT',
+  'PET_SCRIPT_GENERATE',
+  'PET_STORYBOARD_GENERATE',
+])
 
 const WORKFLOW_STAGE_OPTIONS = [
   { key: '', label: '全部资产', sourceTypes: [] },
@@ -1226,16 +1235,6 @@ const WORKFLOW_STAGE_BY_BUSINESS_VIEW: Partial<Record<BusinessViewKey, WorkflowS
 const ASSET_GROUP_PRESETS = [
   CAR_MODEL_BUNDLE_GROUP,
   SCENE_MATERIAL_BUNDLE_GROUP,
-  PET_MAIN_GROUP,
-  PET_SECOND_GROUP,
-  PET_PROP_GROUP,
-  PET_SCENE_GROUP,
-  PET_BACKGROUND_GROUP,
-  PET_IMAGE_GROUP,
-  PET_AUDIO_GROUP,
-  PET_COPY_GROUP,
-  PET_STORYBOARD_GROUP,
-  PET_RESULT_GROUP,
   GROUP_BENCHMARK,
   GROUP_STORYBOARD,
   '口播文案',
@@ -1243,6 +1242,19 @@ const ASSET_GROUP_PRESETS = [
   '成片视频',
   '资产整合包',
 ] as const
+const PET_ASSET_GROUP_PRESETS = [
+  PET_BACKGROUND_GROUP,
+  PET_IMAGE_GROUP,
+  PET_MAIN_GROUP,
+  PET_SECOND_GROUP,
+  PET_PROP_GROUP,
+  PET_SCENE_GROUP,
+  PET_AUDIO_GROUP,
+  PET_COPY_GROUP,
+  PET_STORYBOARD_GROUP,
+  PET_RESULT_GROUP,
+] as const
+const PET_ASSET_GROUP_PRESET_SET = new Set<string>(PET_ASSET_GROUP_PRESETS)
 
 const assets = ref<AssetItem[]>([])
 const avatarAssets = ref<AvatarItem[]>([])
@@ -1355,8 +1367,11 @@ const emptySubtitle = computed(() => {
 })
 
 const sourceTypeOptions = computed(() => {
-  const set = new Set<string>(KNOWN_SOURCE_TYPES)
+  const set = new Set<string>(KNOWN_SOURCE_TYPES.filter((item) => isPetAssetMode.value || !PET_SOURCE_TYPE_SET.has(item)))
   for (const asset of assets.value) {
+    if (!isPetAssetMode.value && PET_SOURCE_TYPE_SET.has(String(asset.sourceType || '').trim().toUpperCase())) {
+      continue
+    }
     if (asset.sourceType) {
       set.add(asset.sourceType)
     }
@@ -1365,14 +1380,21 @@ const sourceTypeOptions = computed(() => {
 })
 
 const assetGroupOptions = computed(() => {
-  const set = new Set<string>(ASSET_GROUP_PRESETS)
+  const set = new Set<string>(isPetAssetMode.value ? PET_ASSET_GROUP_PRESETS : ASSET_GROUP_PRESETS)
   for (const asset of assets.value) {
     const group = (asset.assetGroup || '').trim()
+    if (!isPetAssetMode.value && PET_ASSET_GROUP_PRESET_SET.has(group)) {
+      continue
+    }
     if (group) {
       set.add(group)
     }
   }
-  if (selectedAssetGroup.value && selectedAssetGroup.value !== UNGROUPED_GROUP_KEY) {
+  if (
+    selectedAssetGroup.value &&
+    selectedAssetGroup.value !== UNGROUPED_GROUP_KEY &&
+    (isPetAssetMode.value || !PET_ASSET_GROUP_PRESET_SET.has(selectedAssetGroup.value))
+  ) {
     set.add(selectedAssetGroup.value)
   }
   return Array.from(set)
