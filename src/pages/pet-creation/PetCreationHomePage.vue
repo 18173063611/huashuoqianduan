@@ -36,7 +36,7 @@
           <button class="pet-material-card" type="button" @click="goRoleSetup">
             <i>▧</i>
             <strong>添加参考图</strong>
-            <span>补充第二只宠物、道具和场景参考。</span>
+            <span>补充第二或更多宠物、道具和场景参考。</span>
           </button>
         </div>
 
@@ -77,7 +77,7 @@
           <label>
             生成模式
             <select v-model="draft.generationMode" @change="saveDraft">
-              <option value="dialogue_video">双宠物对话</option>
+              <option value="dialogue_video">多宠物对话</option>
               <option value="reference_video">参考图生成</option>
               <option value="image_to_video">图片生成视频</option>
               <option value="text_video">纯文本生成</option>
@@ -258,7 +258,7 @@ const materialSummaryTitle = computed(() =>
 )
 const materialSummaryText = computed(() => {
   if (draft.materials.length === 0) {
-    return '支持主宠物、第二只宠物、产品/道具、背景/场景和口播/BGM 音频；可从宠物资产中心选择、上传或粘贴 URL。'
+    return '支持主宠物、第二或更多宠物、产品/道具、背景/场景和口播/BGM 音频；可从宠物资产中心选择、上传或粘贴 URL。'
   }
   return draft.materials.map((material) => material.label).join(' / ')
 })
