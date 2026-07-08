@@ -119,6 +119,7 @@ import type { PetReferenceMaterial, PetRole } from './petCreationTypes'
 import type { WorkbenchRouteName } from '../../router'
 import { hasMainPetMaterial, mainPetMaterialWarning, petErrorMessage } from './petCreationValidation'
 import { findPetTemplate } from './petTemplateConfig'
+import { syncPetRoleReferenceAssets } from './petAssetAutoMatch'
 
 const route = useRoute()
 const router = useRouter()
@@ -201,17 +202,8 @@ function removeRole(index: number) {
 }
 
 function syncRoleReferenceAssets(materials: PetReferenceMaterial[] = draft.materials) {
-  const assetIdsByRole = (role: PetReferenceMaterial['role']) =>
-    materials
-      .filter((material) => material.role === role && material.assetId)
-      .map((material) => String(material.assetId))
-
-  if (draft.roles[0]) {
-    draft.roles[0].referenceAssetIds = assetIdsByRole('main_pet')
-  }
-  if (draft.roles[1]) {
-    draft.roles[1].referenceAssetIds = assetIdsByRole('second_pet')
-  }
+  draft.materials = materials
+  syncPetRoleReferenceAssets(draft)
 }
 
 async function handleMaterialChange(materials: PetReferenceMaterial[], material: PetReferenceMaterial | null) {

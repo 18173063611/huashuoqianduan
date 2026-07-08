@@ -7,7 +7,7 @@ export const petTemplateFilters = [
   '图生视频',
   '表情反应',
   '唱跳动作',
-  '商业科普',
+  '商业口播',
   '背景场景',
 ]
 
@@ -17,9 +17,9 @@ function petAsset(fileName: string) {
 
 export const petTemplates: PetTemplate[] = [
   {
-    id: 'cat-dialogue',
-    title: '小猫对话',
-    description: '单宠或双宠台词互动，适合搞笑剧情、吐槽和反差梗。',
+    id: 'multi-pet-dialogue',
+    title: '多宠物对话',
+    description: '支持单宠、双宠和多宠物分角色台词互动，适合搞笑剧情、吐槽和反差梗。',
     coverUrl: petAsset('local-cat-dialogue.jpg'),
     category: '对话口播',
     videoType: 'dialogue',
@@ -27,10 +27,10 @@ export const petTemplates: PetTemplate[] = [
     durationSeconds: 15,
     aspectRatio: '9:16',
     style: 'funny',
-    tags: ['小猫', '对话', '字幕'],
+    tags: ['多宠物', '对话', '字幕'],
     workflow: 'dialogue',
-    promptPreset: '两只宠物在家里因为一件小事互相吐槽，台词短、反应快，结尾有反差笑点。',
-    scriptPreset: '小猫先认真解释自己没有闯祸，第二只宠物马上补刀揭穿，小猫用撒娇收尾。',
+    promptPreset: '多只宠物在家里因为一件小事互相吐槽，台词短、反应快，结尾有反差笑点。',
+    scriptPreset: '主宠先认真解释自己没有闯祸，其他宠物轮流补刀揭穿，最后主宠用撒娇收尾。',
     dialogueLines: [
       { id: 'tpl-cat-dialogue-1', speakerRoleId: 'main-cat', text: '我只是路过，真的没有偷玩。', emotion: '认真解释', speed: 'normal', voiceName: '软萌童声', lipSync: true },
       { id: 'tpl-cat-dialogue-2', speakerRoleId: 'second-dog', text: '那爪子上的证据怎么解释？', emotion: '吐槽', speed: 'normal', voiceName: '机智少年音', lipSync: true },
@@ -44,8 +44,8 @@ export const petTemplates: PetTemplate[] = [
   },
   {
     id: 'double-pet-dialogue',
-    title: '双宠物对话',
-    description: '两只宠物互相吐槽、争辩或合作完成小剧场，统一放入对话口播分类。',
+    title: '多宠物对话',
+    description: '旧模板兼容入口：会自动合并到多宠物对话生产页。',
     coverUrl: petAsset('local-double-dialogue.jpg'),
     category: '对话口播',
     videoType: 'dialogue',
@@ -198,19 +198,19 @@ export const petTemplates: PetTemplate[] = [
   },
   {
     id: 'pet-talking',
-    title: '宠物口播种草',
-    description: '适合宠物用品介绍、门店活动和知识科普，文案可继续 AI 生成。',
+    title: '宠物口播/用品种草',
+    description: '适合宠物用品展示、养宠知识科普和轻商业口播，文案可继续 AI 生成。',
     coverUrl: petAsset('local-pet-talking.jpg'),
-    category: '商业科普',
+    category: '商业口播',
     videoType: 'talking',
     generationMode: 'reference_video',
     durationSeconds: 30,
     aspectRatio: '9:16',
     style: 'realistic',
-    tags: ['口播', '种草', '科普'],
+    tags: ['口播', '用品种草', '科普'],
     workflow: 'dialogue',
-    promptPreset: '宠物以轻松口播方式介绍一个宠物用品或养宠小知识，语气真诚，不出现汽车销售内容。',
-    scriptPreset: '开场提出一个养宠痛点，中段用宠物视角解释产品或知识点，结尾给出温和提醒。',
+    promptPreset: '宠物以轻松口播方式介绍一个宠物用品、零食、玩具或养宠小知识，语气真诚，不出现汽车销售内容。',
+    scriptPreset: '开场提出一个养宠痛点，中段用宠物视角解释产品或知识点，结尾给出温和提醒或轻种草建议。',
     subtitleEnabled: true,
     voiceEnabled: true,
     lipSyncEnabled: true,
@@ -222,7 +222,7 @@ export const petTemplates: PetTemplate[] = [
     title: '宠物用品展示',
     description: '上传宠物和产品/道具图，生成宠物用品、零食、玩具或护理工具展示短片。',
     coverUrl: petAsset('local-pet-talking.jpg'),
-    category: '商业科普',
+    category: '商业口播',
     videoType: 'talking',
     generationMode: 'reference_video',
     durationSeconds: 15,
@@ -291,6 +291,87 @@ export const petTemplates: PetTemplate[] = [
   },
 ]
 
-export function findPetTemplate(templateId?: string) {
-  return petTemplates.find((template) => template.id === templateId)
+export const featuredPetTemplateIds = [
+  'multi-pet-dialogue',
+  'pet-ai-smart-story',
+  'viral-benchmark-storyboard',
+  'dog-reaction',
+  'photo-to-video',
+  'pet-sticker',
+  'pet-dance-sing',
+  'pet-talking',
+  'background-scene-edit',
+]
+
+const petTemplateAliases: Record<string, string> = {
+  'cat-dialogue': 'multi-pet-dialogue',
+  'double-pet-dialogue': 'multi-pet-dialogue',
+  'pet-monologue': 'multi-pet-dialogue',
+  'pet-product-showcase': 'pet-talking',
+}
+
+function canonicalTemplateId(templateId?: string) {
+  if (!templateId) return ''
+  return petTemplateAliases[templateId] || templateId
+}
+
+export function findPetTemplate(templateId?: string, source: PetTemplate[] = petTemplates) {
+  const canonicalId = canonicalTemplateId(templateId)
+  if (!canonicalId) return undefined
+  return source.find((template) => template.id === canonicalId) || petTemplates.find((template) => template.id === canonicalId)
+}
+
+export function getVisiblePetTemplates(source: PetTemplate[] = petTemplates) {
+  const seen = new Set<string>()
+  return source
+    .map((template) => findPetTemplate(template.id, source) || template)
+    .filter((template) => {
+      const id = canonicalTemplateId(template.id)
+      if (!featuredPetTemplateIds.includes(id)) return false
+      if (seen.has(id)) return false
+      seen.add(id)
+      return true
+    })
+}
+
+export function getFeaturedPetTemplates(source: PetTemplate[] = petTemplates) {
+  const visibleTemplates = getVisiblePetTemplates(source)
+  return featuredPetTemplateIds
+    .map((id) => visibleTemplates.find((template) => template.id === id))
+    .filter((template): template is PetTemplate => Boolean(template))
+}
+
+export function getPetTemplatesForFilter(filter: string, source: PetTemplate[] = petTemplates) {
+  const visibleTemplates = getVisiblePetTemplates(source)
+  if (filter === '热门玩法') return getFeaturedPetTemplates(source).slice(0, 6)
+  return visibleTemplates.filter(
+    (template) => template.category === filter || template.tags.includes(filter),
+  )
+}
+
+function hasAnyKeyword(value: string, keywords: string[]) {
+  return keywords.some((keyword) => value.includes(keyword))
+}
+
+export function selectPetTemplateForPrompt(prompt: string, source: PetTemplate[] = petTemplates) {
+  const value = prompt.trim().toLowerCase()
+  let templateId = 'pet-ai-smart-story'
+  if (hasAnyKeyword(value, ['对话', '吵架', '吐槽', '聊天', '台词', '口型', '配音', '多宠物', '多只', '两只', '双宠', 'dialogue', 'chat', 'conversation', 'lines'])) {
+    templateId = 'multi-pet-dialogue'
+  } else if (hasAnyKeyword(value, ['爆款', '钩子', '反转', '分镜', '剧情', '小剧场', '脚本', 'storyboard', 'script', 'hook', 'viral', 'plot'])) {
+    templateId = 'viral-benchmark-storyboard'
+  } else if (hasAnyKeyword(value, ['照片', '动起来', '图生视频', '单张图', '图片生成', 'photo', 'image to video', 'animate', 'single image'])) {
+    templateId = 'photo-to-video'
+  } else if (hasAnyKeyword(value, ['表情包', '表情', 'reaction', '反应', '惊讶', '破防'])) {
+    templateId = 'pet-sticker'
+  } else if (hasAnyKeyword(value, ['跳舞', '唱歌', '唱跳', '音乐', '节奏', '舞蹈'])) {
+    templateId = 'pet-dance-sing'
+  } else if (hasAnyKeyword(value, ['种草', '产品', '用品', '零食', '玩具', '科普', '介绍', '口播', 'product', 'toy', 'snack', 'talking', 'explain'])) {
+    templateId = 'pet-talking'
+  } else if (hasAnyKeyword(value, ['背景', '场景', '客厅', '草地', '公园', '宠物店', '咖啡店', 'background', 'scene', 'living room', 'park', 'kitchen'])) {
+    templateId = 'background-scene-edit'
+  } else if (hasAnyKeyword(value, ['狗', '小狗', 'dog', 'puppy', '反应'])) {
+    templateId = 'dog-reaction'
+  }
+  return findPetTemplate(templateId, source) || findPetTemplate('pet-ai-smart-story', source) || petTemplates[0]
 }

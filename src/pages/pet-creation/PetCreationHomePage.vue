@@ -117,7 +117,7 @@
           <button class="pet-advanced-button" type="button" @click="advancedOpen = !advancedOpen">
             高级参数
           </button>
-          <button class="pet-primary-button" type="button" :disabled="creating" @click="openPlanPreview">
+          <button class="pet-primary-button" type="button" :disabled="Boolean(aiAssistBusy) || creating" @click="openPlanPreview">
             {{ creating ? '提交中...' : '立即生成 ✦' }}
           </button>
         </div>
@@ -225,10 +225,12 @@ import {
   regeneratePetWork,
 } from '../../services/petCreationApi'
 import { usePetCreationState } from './usePetCreationState'
-import type { PetAspectRatio, PetCreationDraft, PetTemplate, PetVideoEstimate, PetVideoPreview, PetWork } from './petCreationTypes'
+import type { PetAspectRatio, PetCreationDraft, PetRole, PetTemplate, PetVideoEstimate, PetVideoPreview, PetWork } from './petCreationTypes'
 import { hasPrompt, petErrorMessage, promptRequiredMessage, validatePetCreationDraft } from './petCreationValidation'
 import { usePetApiFallbackNotice } from './usePetApiFallbackNotice'
 import { routeForPetTemplate } from './petTemplateWorkflow'
+import { autoMatchPetMaterials } from './petAssetAutoMatch'
+import { findPetTemplate, getFeaturedPetTemplates, selectPetTemplateForPrompt } from './petTemplateConfig'
 
 const route = useRoute()
 const router = useRouter()
@@ -249,10 +251,16 @@ const previewing = ref(false)
 const apiMode = getPetCreationApiMode()
 const durationOptions = [5, 10, 15, 30] as const
 const appliedQueryTemplateId = ref('')
+const EXTRA_ROLE_SEEDS = [
+  { name: '豆包', type: 'cat' as const, breed: '英短', tone: '软萌但有点嘴硬', tags: ['好奇', '撒娇'] },
+  { name: '可乐', type: 'dog' as const, breed: '柯基', tone: '机智但认真', tags: ['机智', '吐槽'] },
+  { name: '团子', type: 'cat' as const, breed: '橘猫', tone: '慢悠悠但很会补刀', tags: ['淡定', '补刀'] },
+  { name: '小七', type: 'dog' as const, breed: '金毛', tone: '热情又护短', tags: ['热情', '护短'] },
+]
 
 usePetApiFallbackNotice()
 
-const recommendedTemplates = computed(() => templates.value.slice(0, 7))
+const recommendedTemplates = computed(() => getFeaturedPetTemplates(templates.value).slice(0, 7))
 const materialSummaryTitle = computed(() =>
   draft.materials.length > 0 ? `已配置 ${draft.materials.length} 个宠物参考素材` : '从宠物资产中心选择素材',
 )
@@ -269,7 +277,7 @@ function cloneDraft(payload: PetCreationDraft): PetCreationDraft {
 async function applyTemplateFromQuery() {
   const templateId = String(route.query.templateId || '')
   if (!templateId || appliedQueryTemplateId.value === templateId) return
-  const template = templates.value.find((item) => item.id === templateId)
+  const template = findPetTemplate(templateId, templates.value)
   if (!template) return
   appliedQueryTemplateId.value = templateId
   applyTemplate(template)
@@ -336,8 +344,88 @@ async function handleBenchmarkStoryboard() {
   await handleGenerateStoryboardQuick()
 }
 
+function routeForSmartTemplate(template: PetTemplate) {
+  const target = routeForPetTemplate(template)
+  if (typeof target === 'string') return target
+  return {
+    ...target,
+    query: {
+      ...(target.query || {}),
+      from: 'ai-prompt',
+    },
+  }
+}
+
+function targetRoleCountForPrompt(prompt: string) {
+  const value = prompt.toLowerCase()
+  if (/[六6]|six/.test(value)) return 6
+  if (/[五5]|five/.test(value)) return 5
+  if (/[四4]|four/.test(value)) return 4
+  if (/[三3]|three/.test(value)) return 3
+  if (value.includes('多宠物') || value.includes('多只') || value.includes('multiple') || value.includes('many pets')) return 3
+  return 2
+}
+
+function ensureDialogueRolesForPrompt(prompt: string) {
+  const targetCount = Math.min(6, Math.max(2, targetRoleCountForPrompt(prompt)))
+  while (draft.roles.length < targetCount) {
+    const index = draft.roles.length
+    const seed = EXTRA_ROLE_SEEDS[(index - 2 + EXTRA_ROLE_SEEDS.length) % EXTRA_ROLE_SEEDS.length]
+    const role: PetRole = {
+      id: `ai-pet-role-${Date.now()}-${index}`,
+      name: seed.name,
+      type: seed.type,
+      breed: seed.breed,
+      ageFeel: '青年',
+      personalityTags: seed.tags,
+      speakingTone: seed.tone,
+      roleTags: ['对话角色'],
+      anthropomorphic: true,
+      referenceAssetIds: [],
+    }
+    draft.roles.push(role)
+  }
+}
+
+async function prepareAiTemplateDraftAndGo() {
+  if (!hasPrompt(draft)) {
+    ElMessage.warning(promptRequiredMessage())
+    return
+  }
+  creating.value = true
+  try {
+    const originalPrompt = draft.prompt.trim()
+    const template = selectPetTemplateForPrompt(originalPrompt, templates.value)
+    applyTemplate(template)
+    draft.prompt = originalPrompt
+    if (template.workflow === 'dialogue') {
+      ensureDialogueRolesForPrompt(originalPrompt)
+    }
+    const matchedCount = await autoMatchPetMaterials(draft, template)
+    if (template.workflow === 'background' && !draft.visualSettings.backgroundPrompt.trim()) {
+      draft.visualSettings.backgroundPrompt = originalPrompt.slice(0, 160)
+    }
+    await saveDraft()
+    if (template.workflow === 'dialogue') {
+      const nextDraft = await generatePetScript(cloneDraft(snapshotDraft()))
+      Object.assign(draft, nextDraft)
+    } else if (template.workflow === 'smart' || template.workflow === 'storyboard' || template.id === 'pet-dance-sing') {
+      const nextDraft = await generatePetStoryboard(cloneDraft(snapshotDraft()))
+      Object.assign(draft, nextDraft)
+    }
+    await saveDraft()
+    ElMessage.success(`已匹配「${template.title}」并预填${matchedCount > 0 ? ` ${matchedCount} 个素材、` : ''}文案/分镜草稿。`)
+    void router.push(routeForSmartTemplate(template))
+  } catch (error) {
+    ElMessage.error(petErrorMessage(error, '生成宠物创作草稿失败，请稍后重试。'))
+  } finally {
+    creating.value = false
+  }
+}
+
 async function openPlanPreview() {
-  if (creating.value) return
+  if (aiAssistBusy.value || creating.value) return
+  if (hasPrompt(draft)) return prepareAiTemplateDraftAndGo()
   planOpen.value = true
   planEstimate.value = null
   planPreview.value = null

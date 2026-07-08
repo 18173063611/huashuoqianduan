@@ -1,4 +1,4 @@
-import { petTemplates } from './petTemplateConfig'
+import { findPetTemplate, petTemplates } from './petTemplateConfig'
 import type { PetAspectRatio, PetCreationDraft, PetVideoTask, PetWork, PetWorkDownload, PetWorkForkOptions, PetWorkQuery } from './petCreationTypes'
 
 const PET_DRAFT_STORAGE_KEY = 'huashuo_pet_creation_draft'
@@ -42,11 +42,11 @@ function taskTitleForDraft(draft: PetCreationDraft) {
 }
 
 function templateTitleForDraft(draft: PetCreationDraft) {
-  return petTemplates.find((template) => template.id === draft.templateId)?.title || '自定义创作'
+  return findPetTemplate(draft.templateId)?.title || '自定义创作'
 }
 
 function templateCoverForDraft(draft: PetCreationDraft) {
-  return petTemplates.find((template) => template.id === draft.templateId)?.coverUrl || petTemplates[0]?.coverUrl
+  return findPetTemplate(draft.templateId)?.coverUrl || petTemplates[0]?.coverUrl
 }
 
 function templateCoverByTitle(title: string) {
@@ -73,6 +73,73 @@ function defaultDialogueLines() {
       voiceName: '机智少年音',
       lipSync: true,
     },
+  ]
+}
+
+function roleIdAt(draft: PetCreationDraft, index: number, fallback: string) {
+  return draft.roles[index]?.id || fallback
+}
+
+function promptSnippet(prompt: string, maxLength = 22) {
+  const firstClause = prompt.replace(/\s+/g, ' ').trim().split(/[，,。；;]/)[0] || '这件事'
+  const normalized = firstClause.replace(/^小[猫狗](把|在)?/, '').trim() || '这件事'
+  return normalized.length > maxLength ? `${normalized.slice(0, maxLength)}...` : normalized
+}
+
+function generatedDialogueLinesForPrompt(payload: PetCreationDraft, prompt: string) {
+  const snippet = promptSnippet(prompt)
+  const lipSync = payload.lipSyncEnabled
+  const roleIds = payload.roles.length > 0 ? payload.roles.map((role) => role.id) : ['main-cat', 'second-dog']
+  const lineSeeds = [
+    {
+      id: 'dialogue-generated-1',
+      speakerRoleId: roleIds[0] || roleIdAt(payload, 0, 'main-cat'),
+      text: `我先解释一下，${snippet}不是你想的那样。`,
+      emotion: '认真解释' as const,
+      speed: 'normal' as const,
+      voiceName: '软萌童声',
+      lipSync,
+    },
+    {
+      id: 'dialogue-generated-2',
+      speakerRoleId: roleIds[1] || roleIds[0] || roleIdAt(payload, 1, 'second-dog'),
+      text: '那你把原因讲清楚，我可都看见了。',
+      emotion: '吐槽' as const,
+      speed: 'normal' as const,
+      voiceName: '机智少年音',
+      lipSync,
+    },
+    {
+      id: 'dialogue-generated-3',
+      speakerRoleId: roleIds[2] || roleIds[0] || roleIdAt(payload, 0, 'main-cat'),
+      text: '我只是想确认一下，没想到被发现了。',
+      emotion: '撒娇' as const,
+      speed: 'normal' as const,
+      voiceName: '软萌童声',
+      lipSync,
+    },
+    {
+      id: 'dialogue-generated-4',
+      speakerRoleId: roleIds[3] || roleIds[1] || roleIds[0] || roleIdAt(payload, 1, 'second-dog'),
+      text: '好吧，下次记得带上我一起。',
+      emotion: '开心' as const,
+      speed: 'normal' as const,
+      voiceName: '机智少年音',
+      lipSync,
+    },
+  ]
+  if (roleIds.length <= 4) return lineSeeds
+  return [
+    ...lineSeeds,
+    ...roleIds.slice(4).map((roleId, index) => ({
+      id: `dialogue-generated-extra-${index + 5}`,
+      speakerRoleId: roleId,
+      text: index % 2 === 0 ? '我也可以作证，现场确实很可疑。' : '先别急，可能只是一个可爱的误会。',
+      emotion: index % 2 === 0 ? '吐槽' as const : '开心' as const,
+      speed: 'normal' as const,
+      voiceName: index % 2 === 0 ? '机智少年音' : '软萌童声',
+      lipSync,
+    })),
   ]
 }
 
@@ -333,9 +400,16 @@ export function mockGeneratePetStoryboard(payload: PetCreationDraft) {
 export function mockGeneratePetScript(payload: PetCreationDraft) {
   const prompt = payload.prompt.trim() || '宠物日常小剧场'
   const backgroundHint = payload.visualSettings.backgroundPrompt?.trim()
+  const requiresDialogue = payload.generationMode === 'dialogue_video' || payload.videoType === 'dialogue' || payload.videoType === 'talking'
   const nextDraft = clonePetDraft({
     ...payload,
     scriptText: `${prompt}${backgroundHint ? `，画面背景保持${backgroundHint}` : ''}。开头用一句反差字幕吸引注意，中段让宠物用拟人化口吻解释原因，结尾保留一个适合转发的可爱包袱。`,
+    dialogueLines: requiresDialogue ? generatedDialogueLinesForPrompt(payload, prompt) : payload.dialogueLines,
+    visualSettings: {
+      ...payload.visualSettings,
+      cameraRhythm: payload.style === 'funny' ? 'short_drama' : payload.visualSettings.cameraRhythm,
+      expressionIntensity: Math.max(payload.visualSettings.expressionIntensity, payload.style === 'healing' ? 68 : 82),
+    },
   })
   writeJson(PET_DRAFT_STORAGE_KEY, nextDraft)
   return Promise.resolve(clonePetDraft(nextDraft))

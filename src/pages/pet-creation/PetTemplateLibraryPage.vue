@@ -61,7 +61,7 @@ import { computed, ref } from 'vue'
 import { useRouter } from 'vue-router'
 import { ElMessage } from 'element-plus'
 import PetTemplateCard from './components/PetTemplateCard.vue'
-import { petTemplateFilters, petTemplates } from './petTemplateConfig'
+import { getPetTemplatesForFilter, petTemplateFilters, petTemplates } from './petTemplateConfig'
 import { usePetCreationState } from './usePetCreationState'
 import type { PetTemplate } from './petCreationTypes'
 import { petTemplateGuideByWorkflow, petTemplateWorkflowFor, routeForPetTemplate } from './petTemplateWorkflow'
@@ -69,12 +69,7 @@ import { petTemplateGuideByWorkflow, petTemplateWorkflowFor, routeForPetTemplate
 const router = useRouter()
 const { applyTemplate, loadDraft, saveDraft } = usePetCreationState()
 const selectedFilter = ref('热门玩法')
-const filteredTemplates = computed(() => {
-  if (selectedFilter.value === '热门玩法') return petTemplates
-  return petTemplates.filter(
-    (template) => template.category === selectedFilter.value || template.tags.includes(selectedFilter.value),
-  )
-})
+const filteredTemplates = computed(() => getPetTemplatesForFilter(selectedFilter.value))
 const genericGuideSteps = [
   { index: '01', title: '选择玩法', text: '先判断本次是对话、剧情、图生视频、表情反应还是背景场景。' },
   { index: '02', title: '进入生产页', text: '模板会自动进入对话、素材、分镜或背景编辑等对应页面。' },
