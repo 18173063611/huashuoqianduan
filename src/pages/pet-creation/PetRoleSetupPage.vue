@@ -6,6 +6,16 @@
       <p>上传主宠物和参考素材，设置角色一致性、宠物信息和拟人化程度。</p>
     </header>
 
+    <section v-if="returnToPath" class="pet-return-banner">
+      <div>
+        <strong>已从多宠物对话页进入素材与角色设定</strong>
+        <span>选择主宠、添加更多宠物角色后，可以直接保存并回到对话生产页继续写台词。</span>
+      </div>
+      <button type="button" :disabled="saving" @click="saveAndReturnToSource">
+        {{ saving ? '保存中...' : '保存并返回多宠物对话页' }}
+      </button>
+    </section>
+
     <div class="pet-role-workbench">
       <div class="pet-role-main">
         <PetMaterialPicker v-model="draft.materials" @change="handleMaterialChange" />
@@ -20,6 +30,21 @@
       </div>
 
       <aside class="pet-role-side">
+        <section id="pet-role-manager" class="pet-panel pet-role-manager">
+          <div>
+            <h3>多宠物角色管理</h3>
+            <p>当前已配置 {{ draft.roles.length }} / {{ MAX_PET_ROLES }} 个角色，新增角色后可在多宠物对话页为它分配台词。</p>
+          </div>
+          <div class="pet-role-manager-actions">
+            <button type="button" :disabled="draft.roles.length >= MAX_PET_ROLES" @click="addPetRole">
+              新增宠物角色
+            </button>
+            <button v-if="returnToPath" type="button" :disabled="saving" @click="saveAndReturnToSource">
+              保存并返回
+            </button>
+          </div>
+        </section>
+
         <div class="pet-role-layout">
           <section v-for="(role, index) in draft.roles" :key="role.id" class="pet-panel">
             <div class="pet-role-panel-head">
@@ -228,6 +253,10 @@ async function applyRouteTemplateIfNeeded() {
   await saveDraft()
 }
 
+async function saveAndReturnToSource() {
+  await saveAndGo('pet-dialogue-create')
+}
+
 async function saveAndGo(routeName: WorkbenchRouteName) {
   if (saving.value) return
   if (!hasMainPetMaterial(draft)) {
@@ -258,6 +287,9 @@ onMounted(async () => {
   }
   if (route.query.focus === 'scene') {
     window.setTimeout(() => document.getElementById('pet-background-scene')?.scrollIntoView({ behavior: 'smooth', block: 'center' }), 80)
+  }
+  if (route.query.focus === 'roles') {
+    window.setTimeout(() => document.getElementById('pet-role-manager')?.scrollIntoView({ behavior: 'smooth', block: 'start' }), 80)
   }
 })
 </script>
@@ -303,6 +335,58 @@ onMounted(async () => {
   line-height: 1.65;
 }
 
+.pet-return-banner {
+  display: flex;
+  min-height: 72px;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  border: 1px solid #bfdbfe;
+  border-radius: 8px;
+  background: #eff6ff;
+  padding: 14px 16px;
+}
+
+.pet-return-banner div {
+  display: grid;
+  gap: 4px;
+}
+
+.pet-return-banner strong {
+  color: #1e3a8a;
+  font-size: 15px;
+  font-weight: 900;
+}
+
+.pet-return-banner span {
+  color: #475467;
+  font-size: 13px;
+  line-height: 1.5;
+}
+
+.pet-return-banner button,
+.pet-role-manager-actions button {
+  display: inline-flex;
+  min-height: 38px;
+  align-items: center;
+  justify-content: center;
+  border: 1px solid #2563eb;
+  border-radius: 8px;
+  background: #2563eb;
+  color: #ffffff;
+  padding: 0 14px;
+  font-size: 13px;
+  font-weight: 850;
+  cursor: pointer;
+  white-space: nowrap;
+}
+
+.pet-return-banner button:disabled,
+.pet-role-manager-actions button:disabled {
+  cursor: not-allowed;
+  opacity: 0.6;
+}
+
 .pet-material-saving {
   margin: -8px 0 0;
   color: #2563eb;
@@ -321,6 +405,28 @@ onMounted(async () => {
 .pet-role-side {
   display: grid;
   gap: 16px;
+}
+
+.pet-role-manager {
+  gap: 12px;
+}
+
+.pet-role-manager p {
+  margin: 6px 0 0;
+  color: #667085;
+  font-size: 12px;
+  line-height: 1.55;
+}
+
+.pet-role-manager-actions {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 8px;
+}
+
+.pet-role-manager-actions button:first-child {
+  background: #ffffff;
+  color: #2563eb;
 }
 
 .pet-switch-grid {
@@ -460,6 +566,11 @@ onMounted(async () => {
 @media (max-width: 1120px) {
   .pet-role-workbench {
     grid-template-columns: 1fr;
+  }
+
+  .pet-return-banner {
+    align-items: stretch;
+    flex-direction: column;
   }
 
   .pet-switch-grid {

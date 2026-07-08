@@ -64,7 +64,10 @@
             <h3>角色设定</h3>
             <small>支持单宠、双宠和多宠物</small>
           </div>
-          <RouterLink :to="roleSetupLink">调整角色</RouterLink>
+          <div class="pet-role-head-actions">
+            <RouterLink :to="roleCreateLink">新增角色</RouterLink>
+            <RouterLink :to="roleSetupLink">调整角色</RouterLink>
+          </div>
         </div>
         <div class="pet-role-list">
           <article v-for="(role, index) in draft.roles" :key="role.id" class="pet-role-card">
@@ -234,6 +237,15 @@ const roleSetupLink = computed(() => ({
   name: 'pet-role-setup' as const,
   query: {
     ...route.query,
+    returnTo: route.fullPath,
+  },
+}))
+const roleCreateLink = computed(() => ({
+  name: 'pet-role-setup' as const,
+  query: {
+    ...route.query,
+    focus: 'roles',
+    intent: 'addRole',
     returnTo: route.fullPath,
   },
 }))
@@ -634,6 +646,18 @@ onMounted(async () => {
 .pet-panel-head > div {
   display: grid;
   gap: 3px;
+}
+
+.pet-role-head-actions {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 8px;
+}
+
+.pet-role-head-actions a:first-child {
+  border-color: #bfdbfe;
+  background: #eff6ff;
 }
 
 .pet-role-rail {
