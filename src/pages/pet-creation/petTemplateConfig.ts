@@ -93,7 +93,7 @@ export const petTemplates: PetTemplate[] = [
     id: 'viral-benchmark-storyboard',
     title: '爆款对标分镜',
     description: '参考短视频爆款结构，自动组织开场钩子、情绪递进和结尾包袱。',
-    coverUrl: petAsset('local-short-drama.jpg'),
+    coverUrl: petAsset('local-viral-storyboard.jpg'),
     category: '剧情分镜',
     videoType: 'short_drama',
     generationMode: 'reference_video',

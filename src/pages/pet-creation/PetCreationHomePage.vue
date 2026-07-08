@@ -260,7 +260,7 @@ const EXTRA_ROLE_SEEDS = [
 
 usePetApiFallbackNotice()
 
-const recommendedTemplates = computed(() => getFeaturedPetTemplates(templates.value).slice(0, 7))
+const recommendedTemplates = computed(() => getFeaturedPetTemplates(templates.value).slice(0, 6))
 const materialSummaryTitle = computed(() =>
   draft.materials.length > 0 ? `已配置 ${draft.materials.length} 个宠物参考素材` : '从宠物资产中心选择素材',
 )
