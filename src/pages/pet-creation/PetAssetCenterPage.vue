@@ -4,7 +4,7 @@
       <div>
         <span>宠物创作中心</span>
         <h1>宠物资产中心</h1>
-        <p>只管理宠物创作相关素材，按背景、宠物、视频、音频、文案和分镜组织，与车辆资产隔离。</p>
+        <p>只管理宠物创作相关素材，按背景、宠物、人物、视频、音频、文案和分镜组织，与车辆资产隔离。</p>
       </div>
     </header>
 
@@ -29,6 +29,7 @@ import AssetCenter from '../asset/AssetCenter.vue'
 const assetStages = [
   { workflowStage: 'petBackground', title: '背景', text: '宠物视频背景图、场景图和氛围参考。' },
   { workflowStage: 'petPet', title: '宠物', text: '主宠、第二宠和用品道具等主体参考。' },
+  { workflowStage: 'petDigitalHuman', title: '人物', text: '主人、讲解人和人宠同框参考形象。' },
   { workflowStage: 'petVideo', title: '视频', text: '宠物参考视频、生成结果和可下载成片。' },
   { workflowStage: 'petAudio', title: '音频', text: '角色台词、旁白、BGM 和音效素材。' },
   { workflowStage: 'petCopy', title: '文案', text: '口播脚本、字幕文本和对话文案。' },

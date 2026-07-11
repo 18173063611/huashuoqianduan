@@ -12,16 +12,35 @@ function cloneTemplateValue<T>(value: T): T {
   return JSON.parse(JSON.stringify(value)) as T
 }
 
+function defaultPetVoiceName(type: PetCreationDraft['roles'][number]['type'], index: number) {
+  if (type === 'dog') return index % 2 === 0 ? '活泼男声' : '机智少年音'
+  if (type === 'cat') return index % 2 === 0 ? '软萌童声' : '奶萌童声'
+  return index % 2 === 0 ? '清亮女声' : '默认萌宠音'
+}
+
+function ensurePetVoiceNames<T extends PetCreationDraft>(payload: T): T {
+  payload.roles.forEach((role, index) => {
+    if (!role.voiceName) role.voiceName = defaultPetVoiceName(role.type, index)
+  })
+  payload.dialogueLines.forEach((line) => {
+    if (line.voiceName) return
+    const roleIndex = payload.roles.findIndex((role) => role.id === line.speakerRoleId)
+    const role = payload.roles[roleIndex]
+    line.voiceName = role?.voiceName || defaultPetVoiceName(role?.type || 'other', Math.max(roleIndex, 0))
+  })
+  return payload
+}
+
 export function usePetCreationState(initialDraft: PetCreationDraft = defaultPetDraft) {
-  const draft = reactive<PetCreationDraft>(cloneDraft(initialDraft))
+  const draft = reactive<PetCreationDraft>(ensurePetVoiceNames(cloneDraft(initialDraft)))
   const selectedTemplate = computed(() => findPetTemplate(draft.templateId))
 
   async function loadDraft() {
-    Object.assign(draft, await getPetDraft())
+    Object.assign(draft, ensurePetVoiceNames(await getPetDraft()))
   }
 
   function snapshotDraft() {
-    return cloneDraft(draft)
+    return ensurePetVoiceNames(cloneDraft(draft))
   }
 
   async function saveDraft() {
@@ -69,10 +88,11 @@ export function usePetCreationState(initialDraft: PetCreationDraft = defaultPetD
     if (template.consistency) {
       Object.assign(draft.consistency, cloneTemplateValue(template.consistency))
     }
+    ensurePetVoiceNames(draft)
   }
 
   function resetDraft() {
-    Object.assign(draft, cloneDraft(defaultPetDraft))
+    Object.assign(draft, ensurePetVoiceNames(cloneDraft(defaultPetDraft)))
   }
 
   return {

@@ -1,5 +1,5 @@
 <template>
-  <div class="app-shell">
+  <div class="app-shell" :class="{ 'app-shell--pet-workspace': petWorkspaceActive }">
     <aside class="app-sidebar">
       <div class="app-brand">
         <span class="app-brand-mark" aria-hidden="true">
@@ -275,6 +275,13 @@ const allMenuSections: MenuSection[] = [
         subtitle: '生成宠物视频可复用的背景图、场景图和氛围参考。',
       },
       {
+        key: 'pet-avatar',
+        label: '数字人形象',
+        icon: PictureRounded,
+        title: '数字人形象',
+        subtitle: '生成或上传宠物短视频讲解形象，并保存到宠物资产中心。',
+      },
+      {
         key: 'pet-voice',
         label: '声音生成',
         icon: Microphone,
@@ -358,6 +365,7 @@ const authRefreshTick = ref(0)
 const brokenAvatarUrl = ref('')
 
 const petOnlyWorkspace = computed(() => isPetOnlyWorkspaceUser(currentUser.value))
+const petWorkspaceActive = computed(() => route.path.startsWith('/pet-'))
 const menuSections = computed(() => {
   if (petOnlyWorkspace.value) {
     return allMenuSections.filter((section) => section.key === 'pet-creation' || section.key === 'pet-ai-tools')
@@ -386,7 +394,7 @@ const showPageHeading = computed(() => {
   if (route.name === 'video-parse') return false
   if (route.name === 'benchmark-create-page') return false
   if (['script-rewrite', 'storyboard', 'avatar', 'voice'].includes(String(route.name || ''))) return false
-  if (['pet-video-parse', 'pet-storyboard-tool', 'pet-ai-pet-generate', 'pet-background-generate', 'pet-voice'].includes(String(route.name || ''))) return false
+  if (['pet-video-parse', 'pet-storyboard-tool', 'pet-ai-pet-generate', 'pet-background-generate', 'pet-avatar', 'pet-voice'].includes(String(route.name || ''))) return false
   return true
 })
 const pageTitle = computed(() => {
@@ -875,6 +883,82 @@ watch(
 }
 
 @media (max-width: 640px) {
+  .app-shell--pet-workspace .app-sidebar {
+    padding: 8px 10px;
+  }
+
+  .app-shell--pet-workspace .app-brand,
+  .app-shell--pet-workspace .app-sidebar-user-wrap {
+    display: none;
+  }
+
+  .app-shell--pet-workspace .app-menu {
+    display: flex;
+    grid-template-columns: none;
+    align-items: center;
+    gap: 6px;
+    overflow-x: auto;
+    overscroll-behavior-x: contain;
+    padding: 0 0 2px;
+    scrollbar-width: none;
+  }
+
+  .app-shell--pet-workspace .app-menu::-webkit-scrollbar {
+    display: none;
+  }
+
+  .app-shell--pet-workspace .app-menu-section {
+    display: contents;
+  }
+
+  .app-shell--pet-workspace .app-menu-section-button {
+    width: auto;
+    min-height: 36px;
+    flex: 0 0 auto;
+    border: 1px solid #dfe7f5;
+    background: #ffffff;
+    padding: 0 10px;
+    white-space: nowrap;
+  }
+
+  .app-shell--pet-workspace .app-menu-section-arrow {
+    display: none;
+  }
+
+  .app-shell--pet-workspace .app-menu-children {
+    display: flex;
+    flex: 0 0 auto;
+    gap: 5px;
+    padding-left: 0;
+  }
+
+  .app-shell--pet-workspace .app-menu-children .app-menu-item {
+    min-height: 36px;
+    flex: 0 0 auto;
+    border: 1px solid #dfe7f5;
+    border-radius: 6px;
+    background: #ffffff;
+    padding: 0 10px;
+    white-space: nowrap;
+  }
+
+  .app-shell--pet-workspace .app-menu-children .app-menu-item.active {
+    border-color: #bfdbfe;
+    background: #eff6ff;
+  }
+
+  .app-shell--pet-workspace .app-menu-children .app-menu-item.active::before {
+    display: none;
+  }
+
+  .app-shell--pet-workspace .app-page-heading {
+    display: none;
+  }
+
+  .app-shell--pet-workspace .app-topbar {
+    min-height: 52px;
+  }
+
   .app-topbar-actions {
     width: 100%;
     flex-wrap: wrap;

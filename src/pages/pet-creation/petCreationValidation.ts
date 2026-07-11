@@ -23,11 +23,15 @@ export interface PetValidationResult {
   canSubmit: boolean
 }
 
-const ALLOWED_MATERIAL_ROLES = new Set(['main_pet', 'second_pet', 'prop', 'scene', 'audio'])
+const ALLOWED_MATERIAL_ROLES = new Set(['main_pet', 'second_pet', 'human_avatar', 'prop', 'scene', 'audio'])
 const ALLOWED_PET_TYPES = new Set(['cat', 'dog', 'other'])
 const ALLOWED_RATIOS = new Set(['9:16', '16:9', '1:1'])
-const ALLOWED_DURATIONS = new Set([5, 10, 15, 30])
 const ALLOWED_STYLES = new Set(['realistic', 'cute', 'anime', 'anthropomorphic', 'funny', 'healing'])
+export const PET_MIN_VIDEO_DURATION_SECONDS = 4
+export const PET_MAX_VIDEO_DURATION_SECONDS = 15
+export const PET_DEFAULT_VIDEO_DURATION_SECONDS = 15
+export const PET_MIN_SHOT_DURATION_SECONDS = 1
+export const PET_MAX_SHOT_DURATION_SECONDS = 120
 
 const PLACEHOLDER_PROMPTS = [
   '描述你想要的宠物视频',
@@ -112,6 +116,18 @@ export function promptRequiredMessage() {
   return '请先填写宠物视频创意描述，再继续生成。'
 }
 
+export function normalizePetVideoDurationSeconds(value: unknown, fallback = PET_DEFAULT_VIDEO_DURATION_SECONDS) {
+  const numeric = Number(value)
+  if (!Number.isFinite(numeric)) return fallback
+  return Math.min(PET_MAX_VIDEO_DURATION_SECONDS, Math.max(PET_MIN_VIDEO_DURATION_SECONDS, Math.round(numeric)))
+}
+
+export function normalizePetShotDurationSeconds(value: unknown, fallback = 3) {
+  const numeric = Number(value)
+  if (!Number.isFinite(numeric)) return fallback
+  return Math.min(PET_MAX_SHOT_DURATION_SECONDS, Math.max(PET_MIN_SHOT_DURATION_SECONDS, Math.round(numeric)))
+}
+
 export function mainPetMaterialWarning() {
   return '真实生成默认需要主宠物素材；如需无参考图生成，请在生成模式中明确选择“纯文本生成”。'
 }
@@ -180,13 +196,27 @@ function validatePrompt(draft: PetCreationDraft, issues: PetValidationIssue[]) {
 
 function validateBaseParams(draft: PetCreationDraft, issues: PetValidationIssue[]) {
   if (!ALLOWED_RATIOS.has(draft.aspectRatio)) pushIssue(issues, 'aspectRatio', '视频比例仅支持 9:16、16:9、1:1。')
-  if (!ALLOWED_DURATIONS.has(draft.durationSeconds)) pushIssue(issues, 'durationSeconds', '视频时长仅支持 5、10、15、30 秒。')
+  const durationSeconds = Number(draft.durationSeconds)
+  if (
+    !Number.isInteger(durationSeconds)
+    || durationSeconds < PET_MIN_VIDEO_DURATION_SECONDS
+    || durationSeconds > PET_MAX_VIDEO_DURATION_SECONDS
+  ) {
+    pushIssue(
+      issues,
+      'durationSeconds',
+      `视频时长支持 ${PET_MIN_VIDEO_DURATION_SECONDS}-${PET_MAX_VIDEO_DURATION_SECONDS} 秒，请填写整数秒。`,
+    )
+  }
   if (!ALLOWED_STYLES.has(draft.style)) pushIssue(issues, 'style', '画面风格不在宠物创作支持范围内。')
   if ((draft.visualSettings.backgroundPrompt || '').trim().length > 160) {
     pushIssue(issues, 'visualSettings.backgroundPrompt', '背景图/场景要求不能超过 160 字。')
   }
   if ((draft.visualSettings.productPrompt || '').trim().length > 160) {
     pushIssue(issues, 'visualSettings.productPrompt', '产品/道具展示要求不能超过 160 字。')
+  }
+  if ((draft.visualSettings.stylePrompt || '').trim().length > 160) {
+    pushIssue(issues, 'visualSettings.stylePrompt', '风格描述不能超过 160 字。')
   }
 }
 
@@ -228,6 +258,7 @@ function validateMaterials(draft: PetCreationDraft, mode: PetGenerationMode, iss
   }
   enforceCount(issues, counts, 'main_pet', 3, '主宠物素材最多 3 张。')
   enforceCount(issues, counts, 'second_pet', 3, '第二/更多宠物素材最多 3 张。')
+  enforceCount(issues, counts, 'human_avatar', 2, '人物/主人参考素材最多 2 张。')
   enforceCount(issues, counts, 'prop', 4, '产品/道具参考素材最多 4 张。')
   enforceCount(issues, counts, 'scene', 4, '场景参考素材最多 4 张。')
   enforceCount(issues, counts, 'audio', 1, '音频参考素材最多 1 条。')
@@ -292,12 +323,13 @@ function validateStoryboard(draft: PetCreationDraft, issues: PetValidationIssue[
 
   let totalSeconds = 0
   for (const shot of shots) {
-    totalSeconds += Number(shot.durationSeconds || 0)
-    if (!shot.durationSeconds || shot.durationSeconds < 1) {
-      pushIssue(issues, 'shots.durationSeconds', `镜头 ${shot.index} 时长不能小于 1 秒。`)
+    const shotSeconds = Number(shot.durationSeconds || 0)
+    totalSeconds += shotSeconds
+    if (!Number.isInteger(shotSeconds) || shotSeconds < PET_MIN_SHOT_DURATION_SECONDS) {
+      pushIssue(issues, 'shots.durationSeconds', `镜头 ${shot.index} 时长不能小于 ${PET_MIN_SHOT_DURATION_SECONDS} 秒。`)
     }
-    if (shot.durationSeconds > 8) {
-      pushIssue(issues, 'shots.durationSeconds', `镜头 ${shot.index} 时长不能超过 8 秒。`)
+    if (shotSeconds > PET_MAX_SHOT_DURATION_SECONDS) {
+      pushIssue(issues, 'shots.durationSeconds', `镜头 ${shot.index} 时长不能超过 ${PET_MAX_SHOT_DURATION_SECONDS} 秒。`)
     }
     if (!shot.frameDescription.trim()) pushIssue(issues, 'shots.frameDescription', `镜头 ${shot.index} 缺少画面描述。`)
     if (!shot.characterAction.trim()) pushIssue(issues, 'shots.characterAction', `镜头 ${shot.index} 缺少角色动作。`)

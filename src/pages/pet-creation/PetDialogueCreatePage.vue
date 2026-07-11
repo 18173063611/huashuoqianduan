@@ -3,34 +3,51 @@
     <header class="pet-page-head">
       <div>
         <span>宠物创作中心</span>
-        <h2>{{ templateTitle }}生产页</h2>
-        <p>按多宠物短视频的成熟链路组织角色、台词、口型、字幕和后期约束，编辑后可直接预检生成。</p>
+        <h2>{{ pageTitle }}</h2>
+        <p>{{ modeDescription }}</p>
       </div>
       <div class="pet-head-meta">
-        <strong>{{ validDialogueCount }} 条台词</strong>
-        <small>{{ roleCount }} 个角色 · {{ draft.durationSeconds }} 秒</small>
+        <strong>{{ storyModeLabel }}</strong>
+        <small>{{ roleCount }} 个宠物角色 · {{ draft.durationSeconds }} 秒</small>
       </div>
     </header>
 
-    <nav class="pet-production-steps" aria-label="宠物对话生产流程">
+    <nav class="pet-production-steps" aria-label="宠物剧情对话生产流程">
       <span class="active"><b>01</b>角色素材</span>
       <span class="active"><b>02</b>分角色台词</span>
       <span><b>03</b>口型字幕</span>
       <span><b>04</b>确认生成</span>
     </nav>
 
+    <PetMaterialPicker
+      :key="draft.templateId || 'dialogue-materials'"
+      v-model="draft.materials"
+      :initial-role="storyInitialMaterialRole"
+      @change="handleMaterialsChange"
+    />
+
     <section class="pet-dialogue-command">
       <label class="pet-prompt-box">
-        <span>对话主题</span>
+        <span>剧情主题</span>
         <textarea
           v-model="draft.prompt"
           maxlength="500"
-          placeholder="描述宠物之间发生了什么，例如：三只宠物因为谁偷吃零食互相吐槽，最后主宠撒娇收尾。"
+          :placeholder="dialoguePromptPlaceholder"
         />
       </label>
       <aside class="pet-ready-card" :class="{ warn: firstBlockingIssue }">
-        <strong>{{ firstBlockingIssue ? '待补齐' : '对话结构可预检' }}</strong>
-        <span>{{ firstBlockingIssue?.message || '角色、台词、口型和字幕会在确认抽屉中再次校验。' }}</span>
+        <div class="pet-dialogue-ai-actions">
+          <button type="button" class="primary" :disabled="aiGenerating || saving || creating" @click="handleGenerateDialogueScript">
+            {{ aiGenerating ? '生成中...' : 'AI 生成台词' }}
+          </button>
+          <button type="button" :disabled="aiGenerating || saving || creating" @click="handleGenerateDialogueAndStoryboard">
+            {{ aiGenerating ? '生成中...' : 'AI 生成台词+分镜' }}
+          </button>
+        </div>
+        <div>
+          <strong>{{ firstBlockingIssue ? '待补齐' : '对话结构可预检' }}</strong>
+          <span>{{ firstBlockingIssue?.message || '角色、台词、口型、背景和字幕会在确认抽屉中再次校验。' }}</span>
+        </div>
       </aside>
     </section>
 
@@ -62,7 +79,7 @@
         <div class="pet-panel-head">
           <div>
             <h3>角色设定</h3>
-            <small>支持单宠、双宠和多宠物</small>
+            <small>{{ storyRoleHint }}</small>
           </div>
           <div class="pet-role-head-actions">
             <RouterLink :to="roleCreateLink">新增角色</RouterLink>
@@ -77,6 +94,18 @@
               <span>{{ roleLabel(role.type) }} / {{ role.speakingTone || '未设置口吻' }}</span>
               <em>{{ role.personalityTags.slice(0, 3).join(' · ') || '待补性格标签' }}</em>
             </div>
+            <label class="pet-role-voice-select">
+              <span>音色</span>
+              <select :value="role.voiceName || voiceNameForRole(role.id)" @change="updateRoleVoice(role.id, $event)">
+                <option
+                  v-if="role.voiceName && !PET_VOICE_OPTIONS.includes(role.voiceName)"
+                  :value="role.voiceName"
+                >
+                  {{ role.voiceName }}
+                </option>
+                <option v-for="voice in PET_VOICE_OPTIONS" :key="voice" :value="voice">{{ voice }}</option>
+              </select>
+            </label>
             <button type="button" :disabled="saving || creating" @click="addDialogueLine(role.id)">添加该角色台词</button>
           </article>
         </div>
@@ -99,7 +128,7 @@
           <article v-for="(line, index) in draft.dialogueLines" :key="line.id" class="pet-dialogue-line">
             <header>
               <b>{{ String(index + 1).padStart(2, '0') }}</b>
-              <select v-model="line.speakerRoleId">
+              <select v-model="line.speakerRoleId" @change="applyLineSpeakerVoice(line)">
                 <option v-for="role in draft.roles" :key="role.id" :value="role.id">{{ role.name }}</option>
               </select>
               <button type="button" :disabled="saving || creating || draft.dialogueLines.length <= 1" @click="removeDialogueLine(line.id)">删除</button>
@@ -127,7 +156,15 @@
               </label>
               <label>
                 音色
-                <input v-model="line.voiceName" />
+                <select v-model="line.voiceName">
+                  <option
+                    v-if="line.voiceName && !PET_VOICE_OPTIONS.includes(line.voiceName)"
+                    :value="line.voiceName"
+                  >
+                    {{ line.voiceName }}
+                  </option>
+                  <option v-for="voice in PET_VOICE_OPTIONS" :key="voice" :value="voice">{{ voice }}</option>
+                </select>
               </label>
               <label class="pet-inline-check">
                 <input v-model="line.lipSync" type="checkbox" />
@@ -153,6 +190,13 @@
             </li>
           </ul>
         </section>
+
+        <PetGenerationParamPanel
+          :draft="draft"
+          compact
+          show-mode
+          @change="handleGenerationParamChange"
+        />
 
         <PetPostProductionPanel
           :draft="draft"
@@ -190,15 +234,25 @@
 import { computed, onMounted, ref } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
+import PetMaterialPicker from './components/PetMaterialPicker.vue'
 import PetPlanPreviewDrawer from './components/PetPlanPreviewDrawer.vue'
 import PetPostProductionPanel from './components/PetPostProductionPanel.vue'
-import { createPetVideoTask, estimatePetVideoCost, getPetCreationApiMode, previewPetVideoTask } from '../../services/petCreationApi'
+import PetGenerationParamPanel from './components/PetGenerationParamPanel.vue'
+import {
+  createPetVideoTask,
+  estimatePetVideoCost,
+  generatePetScript,
+  generatePetStoryboard,
+  getPetCreationApiMode,
+  previewPetVideoTask,
+} from '../../services/petCreationApi'
 import { usePetCreationState } from './usePetCreationState'
-import type { PetDialogueLine, PetType, PetVideoEstimate, PetVideoPreview } from './petCreationTypes'
+import type { PetDialogueLine, PetReferenceMaterial, PetType, PetVideoEstimate, PetVideoPreview } from './petCreationTypes'
 import type { WorkbenchRouteName } from '../../router'
 import {
   hasMainPetMaterial,
   hasPrompt,
+  normalizePetVideoDurationSeconds,
   petErrorMessage,
   promptRequiredMessage,
   validatePetCreationDraft,
@@ -206,11 +260,13 @@ import {
 } from './petCreationValidation'
 import { usePetApiFallbackNotice } from './usePetApiFallbackNotice'
 import { findPetTemplate } from './petTemplateConfig'
+import { resolvePetStoryMode, syncPetStoryMode } from './petStoryMode'
 
 const route = useRoute()
 const router = useRouter()
 const { draft, applyTemplate, loadDraft, saveDraft, snapshotDraft } = usePetCreationState()
 const saving = ref(false)
+const aiGenerating = ref(false)
 const creating = ref(false)
 const planOpen = ref(false)
 const planEstimate = ref<PetVideoEstimate | null>(null)
@@ -219,20 +275,46 @@ const previewing = ref(false)
 const apiMode = getPetCreationApiMode()
 const catRoleCover = new URL('../../assets/pet-creation/local-cat-dialogue.jpg', import.meta.url).href
 const dogRoleCover = new URL('../../assets/pet-creation/local-dog-reaction.jpg', import.meta.url).href
+const PET_VOICE_OPTIONS = ['软萌童声', '奶萌童声', '机智少年音', '温柔女声', '清亮女声', '活泼男声', '沉稳男声', '默认萌宠音']
 const template = computed(() => findPetTemplate(String(draft.templateId || route.query.templateId || '')))
-const templateTitle = computed(() => template.value?.title || '多宠物对话')
+const templateTitle = computed(() => template.value?.title || '宠物剧情对话')
+const isUnifiedStoryTemplate = computed(() => template.value?.id === 'multi-pet-dialogue')
+const pageTitle = computed(() => isUnifiedStoryTemplate.value ? '宠物剧情对话' : templateTitle.value)
+const storyMode = computed(() => resolvePetStoryMode(draft))
+const humanIntentPending = computed(() => route.query.intentMode === 'human-pet' && storyMode.value !== 'human-pet')
+const storyModeLabel = computed(() => {
+  if (!isUnifiedStoryTemplate.value) return '对话/口播模式'
+  if (storyMode.value === 'human-pet') return '人宠情景模式'
+  return humanIntentPending.value ? '待上传人物图' : '多宠物对话模式'
+})
+const modeDescription = computed(() => {
+  if (!isUnifiedStoryTemplate.value) return '沿用现有角色、台词、配音、字幕、口型和分镜链路，编辑后可直接预检生成。'
+  if (storyMode.value === 'human-pet') return '已检测到人物/主人图片，系统自动使用现有人宠情景视频参数；移除人物图后会自动切回多宠物对话。'
+  if (humanIntentPending.value) return '已识别主人互动意图。请在下方添加人物/主人图片，上传后系统会自动进入人宠情景模式。'
+  return '未检测到人物图片，系统自动使用现有多宠物对话参数，保留分角色台词、音色、字幕、口型和分镜能力。'
+})
+const dialoguePromptPlaceholder = computed(() => storyMode.value === 'human-pet'
+  ? '描述主人和宠物如何互动，例如：主人带狗狗旅行，在海边发生温暖又搞笑的小故事。'
+  : '描述宠物之间发生了什么，例如：猫和狗因为谁偷吃零食互相吐槽，最后主宠撒娇收尾。')
+const storyRoleHint = computed(() => storyMode.value === 'human-pet' ? '人物图片已自动触发人宠模式' : '支持双宠和多宠物分角色对话')
+const storyInitialMaterialRole = computed<PetReferenceMaterial['role']>(() => humanIntentPending.value ? 'human_avatar' : 'main_pet')
 const roleCount = computed(() => draft.roles.length)
 const validDialogueCount = computed(() => validDialogueLines(draft).length)
 const lineCharCount = computed(() => draft.dialogueLines.reduce((sum, line) => sum + line.text.trim().length, 0))
 const validation = computed(() => validatePetCreationDraft(draft))
 const firstBlockingIssue = computed(() => validation.value.blockingIssues[0])
-const checklist = computed(() => [
-  { label: '对话主题已填写', ok: hasPrompt(draft) },
-  { label: '至少 2 个宠物角色', ok: draft.roles.length >= 2 },
-  { label: '主宠物参考图已添加', ok: hasMainPetMaterial(draft) || draft.generationMode === 'text_video' },
-  { label: '至少 1 条有效台词', ok: validDialogueCount.value >= 1 },
-  { label: '口型同步有台词支撑', ok: !draft.lipSyncEnabled || validDialogueCount.value >= 1 },
-])
+const checklist = computed(() => {
+  const common = [
+    { label: '剧情主题已填写', ok: hasPrompt(draft) },
+    { label: '主宠物参考图已添加', ok: hasMainPetMaterial(draft) || draft.generationMode === 'text_video' },
+    { label: '至少 1 条有效台词', ok: validDialogueCount.value >= 1 },
+    { label: '口型同步有台词支撑', ok: !draft.lipSyncEnabled || validDialogueCount.value >= 1 },
+  ]
+  if (storyMode.value === 'human-pet') {
+    return [{ label: '人物/主人图片已添加', ok: true }, { label: '至少 1 个宠物角色', ok: draft.roles.length >= 1 }, ...common]
+  }
+  return [{ label: '至少 2 个宠物角色', ok: draft.roles.length >= 2 }, ...common]
+})
 const roleSetupLink = computed(() => ({
   name: 'pet-role-setup' as const,
   query: {
@@ -252,6 +334,11 @@ const roleCreateLink = computed(() => ({
 
 usePetApiFallbackNotice()
 
+function syncUnifiedStoryMode() {
+  if (!isUnifiedStoryTemplate.value) return
+  syncPetStoryMode(draft)
+}
+
 function roleLabel(type: PetType) {
   if (type === 'cat') return '小猫'
   if (type === 'dog') return '小狗'
@@ -267,10 +354,55 @@ function roleCover(type: PetType, index: number) {
   return index % 2 === 0 ? catRoleCover : dogRoleCover
 }
 
+function defaultVoiceNameForRole(type: PetType, index: number) {
+  if (type === 'dog') return index % 2 === 0 ? '活泼男声' : '机智少年音'
+  if (type === 'cat') return index % 2 === 0 ? '软萌童声' : '奶萌童声'
+  return index % 2 === 0 ? '清亮女声' : '默认萌宠音'
+}
+
+function ensureRoleVoiceNames() {
+  draft.roles.forEach((role, index) => {
+    if (!role.voiceName) role.voiceName = defaultVoiceNameForRole(role.type, index)
+  })
+}
+
+function voiceNameForRole(roleId: string) {
+  const index = draft.roles.findIndex((role) => role.id === roleId)
+  const role = draft.roles[index]
+  if (!role) return '默认萌宠音'
+  return role.voiceName || defaultVoiceNameForRole(role.type, index)
+}
+
+function normalizeDialogueVoices(onlyMissing = true) {
+  ensureRoleVoiceNames()
+  draft.dialogueLines.forEach((line) => {
+    if (!onlyMissing || !line.voiceName) {
+      line.voiceName = voiceNameForRole(line.speakerRoleId)
+    }
+  })
+}
+
+function applyLineSpeakerVoice(line: PetDialogueLine) {
+  line.voiceName = voiceNameForRole(line.speakerRoleId)
+}
+
+function updateRoleVoice(roleId: string, event: Event) {
+  const role = draft.roles.find((item) => item.id === roleId)
+  if (!role) return
+  const voiceName = (event.target as HTMLSelectElement).value
+  role.voiceName = voiceName
+  draft.dialogueLines.forEach((line) => {
+    if (line.speakerRoleId === roleId) line.voiceName = voiceName
+  })
+  void saveDraft().catch((error) => {
+    ElMessage.error(petErrorMessage(error, '保存角色音色失败，请稍后重试。'))
+  })
+}
+
 async function applyRouteTemplateIfNeeded() {
   const nextTemplate = findPetTemplate(String(route.query.templateId || ''))
-  if (!nextTemplate || draft.templateId === nextTemplate.id) return
-  applyTemplate(nextTemplate)
+  if (nextTemplate && draft.templateId !== nextTemplate.id) applyTemplate(nextTemplate)
+  syncUnifiedStoryMode()
   await saveDraft()
 }
 
@@ -281,13 +413,15 @@ function defaultSpeakerRoleId() {
 }
 
 function addDialogueLine(roleId?: string) {
+  ensureRoleVoiceNames()
+  const speakerRoleId = roleId || defaultSpeakerRoleId()
   const line: PetDialogueLine = {
     id: `dialogue-${Date.now()}-${draft.dialogueLines.length}`,
-    speakerRoleId: roleId || defaultSpeakerRoleId(),
+    speakerRoleId,
     text: '',
     emotion: '开心',
     speed: 'normal',
-    voiceName: '默认萌宠音',
+    voiceName: voiceNameForRole(speakerRoleId),
     lipSync: true,
   }
   draft.dialogueLines.push(line)
@@ -298,7 +432,77 @@ function removeDialogueLine(lineId: string) {
   draft.dialogueLines = draft.dialogueLines.filter((line) => line.id !== lineId)
 }
 
+async function handleMaterialsChange() {
+  try {
+    syncUnifiedStoryMode()
+    await saveDraft()
+  } catch (error) {
+    ElMessage.error(petErrorMessage(error, '保存宠物素材选择失败，请稍后重试。'))
+  }
+}
+
+async function handleGenerationParamChange() {
+  try {
+    draft.durationSeconds = normalizePetVideoDurationSeconds(draft.durationSeconds)
+    syncUnifiedStoryMode()
+    await saveDraft()
+  } catch (error) {
+    ElMessage.error(petErrorMessage(error, '保存生成参数失败，请稍后重试。'))
+  }
+}
+
+async function handleGenerateDialogueScript() {
+  if (aiGenerating.value || saving.value || creating.value) return
+  if (!hasPrompt(draft)) {
+    ElMessage.warning(promptRequiredMessage())
+    return
+  }
+  aiGenerating.value = true
+  try {
+    syncUnifiedStoryMode()
+    normalizeDialogueVoices()
+    await saveDraft()
+    const nextDraft = await generatePetScript(snapshotDraft())
+    Object.assign(draft, nextDraft)
+    normalizeDialogueVoices()
+    await saveDraft()
+    ElMessage.success('已根据提示词生成角色台词，可继续手动微调。')
+  } catch (error) {
+    ElMessage.error(petErrorMessage(error, '生成宠物台词失败，请稍后重试。'))
+  } finally {
+    aiGenerating.value = false
+  }
+}
+
+async function handleGenerateDialogueAndStoryboard() {
+  if (aiGenerating.value || saving.value || creating.value) return
+  if (!hasPrompt(draft)) {
+    ElMessage.warning(promptRequiredMessage())
+    return
+  }
+  aiGenerating.value = true
+  try {
+    syncUnifiedStoryMode()
+    normalizeDialogueVoices()
+    await saveDraft()
+    const scriptedDraft = await generatePetScript(snapshotDraft())
+    Object.assign(draft, scriptedDraft)
+    normalizeDialogueVoices()
+    const storyboardDraft = await generatePetStoryboard(snapshotDraft())
+    Object.assign(draft, storyboardDraft)
+    normalizeDialogueVoices()
+    await saveDraft()
+    ElMessage.success('已生成分角色台词和分镜，正式生成前仍可继续编辑。')
+  } catch (error) {
+    ElMessage.error(petErrorMessage(error, '生成宠物台词和分镜失败，请稍后重试。'))
+  } finally {
+    aiGenerating.value = false
+  }
+}
+
 async function saveDialogueDraft() {
+  syncUnifiedStoryMode()
+  normalizeDialogueVoices()
   const lines = validDialogueLines(draft)
   if (lines.length === 0) {
     ElMessage.warning('请至少填写一条有效台词。')
@@ -397,6 +601,7 @@ async function confirmCreateTask() {
     ElMessage.warning('当前为本地安全测试模式，未调用第三方视频生成。需要真实生成时，请先由管理员开启 provider submit 并再次确认。')
     return
   }
+  creating.value = true
   try {
     await ElMessageBox.confirm(
       '将调用第三方视频生成并可能产生费用。本次只生成 1 条，确认后不可撤销。是否继续？',
@@ -408,9 +613,9 @@ async function confirmCreateTask() {
       },
     )
   } catch {
+    creating.value = false
     return
   }
-  creating.value = true
   try {
     if (!(await saveDialogueDraft())) return
     const task = await createPetVideoTask(snapshotDraft())
@@ -427,6 +632,8 @@ onMounted(async () => {
   try {
     await loadDraft()
     await applyRouteTemplateIfNeeded()
+    syncUnifiedStoryMode()
+    normalizeDialogueVoices()
   } catch (error) {
     ElMessage.error(petErrorMessage(error, '宠物草稿恢复失败，请返回首页重试。'))
   }
@@ -441,6 +648,7 @@ onMounted(async () => {
 .pet-line-list,
 .pet-empty-state {
   display: grid;
+  min-width: 0;
   gap: 14px;
 }
 
@@ -595,6 +803,33 @@ onMounted(async () => {
   line-height: 1.5;
 }
 
+.pet-dialogue-ai-actions {
+  display: grid;
+  gap: 8px;
+}
+
+.pet-dialogue-ai-actions button {
+  min-height: 40px;
+  border: 1px solid #bfdbfe;
+  border-radius: 8px;
+  background: #ffffff;
+  color: #2563eb;
+  font-size: 13px;
+  font-weight: 900;
+  cursor: pointer;
+}
+
+.pet-dialogue-ai-actions button.primary {
+  border-color: #2563eb;
+  background: #2563eb;
+  color: #ffffff;
+}
+
+.pet-dialogue-ai-actions button:disabled {
+  cursor: not-allowed;
+  opacity: 0.62;
+}
+
 .pet-metric-strip {
   display: grid;
   grid-template-columns: repeat(5, minmax(0, 1fr));
@@ -630,9 +865,11 @@ onMounted(async () => {
   grid-template-columns: 310px minmax(0, 1fr) 320px;
   gap: 16px;
   align-items: start;
+  min-width: 0;
 }
 
 .pet-panel {
+  min-width: 0;
   padding: 16px;
 }
 
@@ -665,7 +902,7 @@ onMounted(async () => {
 }
 
 .pet-role-list {
-  max-height: 680px;
+  max-height: min(680px, calc(100vh - 220px));
   overflow: auto;
   padding-right: 2px;
 }
@@ -714,6 +951,20 @@ onMounted(async () => {
   white-space: nowrap;
 }
 
+.pet-role-voice-select {
+  display: grid;
+  grid-column: 1 / -1;
+  grid-template-columns: 42px minmax(0, 1fr);
+  gap: 8px;
+  align-items: center;
+}
+
+.pet-role-voice-select span {
+  color: #475467;
+  font-size: 12px;
+  font-weight: 850;
+}
+
 .pet-role-card button {
   grid-column: 1 / -1;
   border-color: #bfdbfe !important;
@@ -723,14 +974,19 @@ onMounted(async () => {
 
 .pet-dialogue-editor {
   align-content: start;
+  min-width: 0;
 }
 
 .pet-line-list {
   gap: 12px;
+  max-height: min(740px, calc(100vh - 220px));
+  overflow-y: auto;
+  padding-right: 2px;
 }
 
 .pet-dialogue-line {
   display: grid;
+  min-width: 0;
   gap: 10px;
   border: 1px solid #dfe7f5;
   border-radius: 8px;
@@ -760,6 +1016,7 @@ onMounted(async () => {
 
 .pet-dialogue-line textarea {
   min-height: 78px;
+  max-height: 150px;
   resize: vertical;
 }
 
@@ -838,8 +1095,14 @@ onMounted(async () => {
 }
 
 .pet-right-column {
+  position: sticky;
+  top: 18px;
   display: grid;
+  min-width: 0;
+  max-height: calc(100vh - 36px);
   gap: 14px;
+  overflow-y: auto;
+  scrollbar-width: thin;
 }
 
 .pet-check-list {
@@ -901,11 +1164,15 @@ onMounted(async () => {
 }
 
 .pet-actions {
+  position: sticky;
+  bottom: 12px;
+  z-index: 4;
   display: flex;
   flex-wrap: wrap;
   justify-content: flex-end;
   gap: 10px;
-  padding: 12px;
+  padding: 12px 88px 12px 12px;
+  backdrop-filter: blur(10px);
 }
 
 button:disabled {
@@ -920,6 +1187,9 @@ button:disabled {
 
   .pet-right-column {
     grid-column: 1 / -1;
+    position: static;
+    max-height: none;
+    overflow: visible;
   }
 }
 
@@ -946,6 +1216,12 @@ button:disabled {
   .pet-dialogue-line-controls,
   .pet-dialogue-line header {
     grid-template-columns: 1fr;
+  }
+}
+
+@media (max-width: 720px) {
+  .pet-actions {
+    padding-right: 12px;
   }
 }
 </style>

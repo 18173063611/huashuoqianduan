@@ -1,5 +1,5 @@
 <template>
-  <el-drawer v-model="drawerVisible" :title="editingUserId ? '编辑账号' : '新增账号'" size="440px">
+  <el-drawer v-model="drawerVisible" :title="editingUserId ? '编辑账号' : '新增账号'" size="520px">
     <el-form ref="formRef" :model="form" :rules="rules" label-position="top">
       <el-form-item label="登录账号" prop="username">
         <el-input v-model="form.username" :disabled="!!editingUserId" maxlength="60" />
@@ -23,6 +23,25 @@
           <el-option label="已锁定" value="LOCKED" />
         </el-select>
       </el-form-item>
+      <el-form-item label="业务权限">
+        <el-checkbox-group v-model="form.permissions" class="permission-list">
+          <el-checkbox v-for="option in permissionOptions" :key="option.value" :label="option.value" border>
+            <span class="permission-title">{{ option.label }}</span>
+            <span class="permission-desc">{{ option.desc }}</span>
+          </el-checkbox>
+        </el-checkbox-group>
+        <p class="form-tip">只勾选宠物创作中心就是宠物专用账号；同时勾选汽车创作中心则可访问两个中心。</p>
+      </el-form-item>
+      <el-form-item v-if="!editingUserId" label="初始积分" prop="initialCredits">
+        <el-input-number
+          v-model="form.initialCredits"
+          :min="0"
+          :max="100000000"
+          :step="1000"
+          controls-position="right"
+          style="width: 100%"
+        />
+      </el-form-item>
       <el-form-item label="手机号">
         <el-input v-model="form.phone" maxlength="30" placeholder="未填写" />
       </el-form-item>
@@ -43,7 +62,7 @@
 <script setup lang="ts">
 import { computed, reactive, ref, watch } from 'vue'
 import type { FormInstance, FormRules } from 'element-plus'
-import type { AdminUserSaveRequest } from '../../../types/adminTypes'
+import type { AdminFeaturePermission, AdminUserSaveRequest } from '../../../types/adminTypes'
 
 const props = defineProps<{
   visible: boolean
@@ -68,7 +87,15 @@ const form = reactive<AdminUserSaveRequest>({
   phone: '',
   email: '',
   remark: '',
+  permissions: [],
+  initialCredits: 0,
 })
+
+const permissionOptions: { label: string; value: AdminFeaturePermission; desc: string }[] = [
+  { label: '宠物创作中心', value: 'PET_CREATION_ACCESS', desc: '允许进入宠物创作中心并调用宠物生成能力' },
+  { label: '汽车创作中心', value: 'VEHICLE_CREATION_ACCESS', desc: '允许进入汽车创作中心' },
+  { label: '宠物公共资产编辑', value: 'PET_PUBLIC_ASSET_EDITOR', desc: '允许管理宠物公共素材' },
+]
 
 const drawerVisible = computed({
   get: () => props.visible,
@@ -94,7 +121,10 @@ watch(
   () => [props.visible, props.initialValue] as const,
   () => {
     if (!props.visible) return
-    Object.assign(form, props.initialValue)
+    Object.assign(form, props.initialValue, {
+      permissions: [...(props.initialValue.permissions || [])],
+      initialCredits: props.initialValue.initialCredits ?? 0,
+    })
     formRef.value?.clearValidate()
   },
   { immediate: true },
@@ -106,3 +136,38 @@ async function submit() {
   emit('save', { ...form })
 }
 </script>
+
+<style scoped>
+.permission-list {
+  display: grid;
+  gap: 10px;
+}
+
+.permission-list :deep(.el-checkbox) {
+  height: auto;
+  margin-right: 0;
+  padding: 10px 12px;
+}
+
+.permission-list :deep(.el-checkbox__label) {
+  display: grid;
+  gap: 2px;
+  line-height: 1.35;
+  white-space: normal;
+}
+
+.permission-title {
+  color: #111827;
+  font-weight: 700;
+}
+
+.permission-desc,
+.form-tip {
+  color: #6b7280;
+  font-size: 12px;
+}
+
+.form-tip {
+  margin: 8px 0 0;
+}
+</style>

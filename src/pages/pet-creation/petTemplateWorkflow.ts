@@ -8,15 +8,15 @@ export const petTemplateWorkflowMeta: Record<PetTemplateWorkflow, {
   routeName: string
 }> = {
   smart: {
-    label: 'AI智能编排',
+    label: '一句话智能编排',
     actionLabel: '进入智能创作',
     description: '先由 AI 生成文案和分镜，再进入脚本分镜页精修。',
     routeName: 'pet-storyboard',
   },
   dialogue: {
-    label: '对话/口播编辑',
-    actionLabel: '进入对话页',
-    description: '进入角色、台词、配音、字幕和口型同步的对话生产页。',
+    label: '宠物剧情对话',
+    actionLabel: '进入剧情对话',
+    description: '根据人物图片自动切换人宠/多宠模式，并保留角色、台词、配音、字幕和口型能力。',
     routeName: 'pet-dialogue-create',
   },
   storyboard: {
@@ -36,6 +36,12 @@ export const petTemplateWorkflowMeta: Record<PetTemplateWorkflow, {
     actionLabel: '编辑背景图',
     description: '进入素材角色页，重点补充场景参考图和背景生成要求。',
     routeName: 'pet-role-setup',
+  },
+  sticker: {
+    label: '表情包生成',
+    actionLabel: '生成表情包',
+    description: '上传宠物照片并描述动作，沿用视频生成链路输出 GIF 或 MP4。',
+    routeName: 'pet-sticker-create',
   },
 }
 
@@ -62,7 +68,7 @@ export const petTemplateGuideByWorkflow: Record<PetTemplateWorkflow, Array<{ ind
     { index: '04', title: '确认生成', text: '在确认抽屉核对积分、素材和 provider payload 后提交。' },
   ],
   dialogue: [
-    { index: '01', title: '设置角色', text: '为主宠物和更多对话角色分别设置名称、性格、口吻和头像。' },
+    { index: '01', title: '添加素材', text: '添加主人图片自动进入人宠模式；不添加人物图则按多宠物对话模式。' },
     { index: '02', title: '编辑台词', text: '按角色填写或导入台词，控制情绪、语速和音色。' },
     { index: '03', title: '口型/字幕', text: '按台词决定是否开启配音、字幕和口型同步。' },
     { index: '04', title: '生成视频', text: '确认对话脚本和素材一致性后生成。' },
@@ -84,5 +90,11 @@ export const petTemplateGuideByWorkflow: Record<PetTemplateWorkflow, Array<{ ind
     { index: '02', title: '加场景图', text: '上传或选择客厅、草地、宠物店等背景参考。' },
     { index: '03', title: '写背景要求', text: '描述光线、景深、干净程度和主体突出方式。' },
     { index: '04', title: '生成视频', text: '背景只作为场景约束，不替换宠物身份。' },
+  ],
+  sticker: [
+    { index: '01', title: '上传照片', text: '选择一张宠物图作为表情主体。' },
+    { index: '02', title: '描述动作', text: '写清跳舞、做鬼脸、跺脚等动作和表情。' },
+    { index: '03', title: '选择格式', text: '动态输出可选择 GIF 或 MP4。' },
+    { index: '04', title: '预检生成', text: '沿用现有视频预检；GIF 在视频完成后自动转换。' },
   ],
 }

@@ -80,6 +80,18 @@
               <input v-model="role.speakingTone" />
             </label>
             <label>
+              角色音色
+              <select v-model="role.voiceName">
+                <option
+                  v-if="role.voiceName && !PET_VOICE_OPTIONS.includes(role.voiceName)"
+                  :value="role.voiceName"
+                >
+                  {{ role.voiceName }}
+                </option>
+                <option v-for="voice in PET_VOICE_OPTIONS" :key="voice" :value="voice">{{ voice }}</option>
+              </select>
+            </label>
+            <label>
               角色标签
               <input :value="role.roleTags.join(' / ')" @input="updateTags(role.id, 'roleTags', $event)" />
             </label>
@@ -153,10 +165,12 @@ const saving = ref(false)
 const materialSaving = ref(false)
 const MAX_PET_ROLES = 6
 const PET_ROLE_NAME_SEEDS = ['布丁', '豆包', '可乐', '团子', '小七']
+const PET_VOICE_OPTIONS = ['软萌童声', '奶萌童声', '机智少年音', '温柔女声', '清亮女声', '活泼男声', '沉稳男声', '默认萌宠音']
 
 const MATERIAL_ROLE_LABELS: Record<PetReferenceMaterial['role'], string> = {
   main_pet: '主宠物参考',
   second_pet: '第二/更多宠物参考',
+  human_avatar: '人物/主人参考',
   prop: '产品/道具参考',
   scene: '背景/场景参考',
   audio: '口播/BGM 音频',
@@ -190,6 +204,18 @@ function updateTags(roleId: string, field: 'personalityTags' | 'roleTags', event
   role[field] = parseTags((event.target as HTMLInputElement).value)
 }
 
+function defaultVoiceNameForRole(type: PetRole['type'], index: number) {
+  if (type === 'dog') return index % 2 === 0 ? '活泼男声' : '机智少年音'
+  if (type === 'cat') return index % 2 === 0 ? '软萌童声' : '奶萌童声'
+  return index % 2 === 0 ? '清亮女声' : '默认萌宠音'
+}
+
+function ensureRoleVoiceNames() {
+  draft.roles.forEach((role, index) => {
+    if (!role.voiceName) role.voiceName = defaultVoiceNameForRole(role.type, index)
+  })
+}
+
 function addPetRole() {
   if (draft.roles.length >= MAX_PET_ROLES) {
     ElMessage.warning(`最多支持 ${MAX_PET_ROLES} 个宠物角色。`)
@@ -205,6 +231,7 @@ function addPetRole() {
     ageFeel: '青年',
     personalityTags: roleIndex % 2 === 1 ? ['机智', '吐槽'] : ['好奇', '撒娇'],
     speakingTone: roleIndex % 2 === 1 ? '机智但很认真' : '软萌但理直气壮',
+    voiceName: defaultVoiceNameForRole(roleIndex % 2 === 1 ? 'dog' : 'cat', roleIndex),
     roleTags: roleIndex === 1 ? ['搭档'] : ['配角', '对话角色'],
     anthropomorphic: true,
     referenceAssetIds: [],
@@ -264,6 +291,7 @@ async function saveAndGo(routeName: WorkbenchRouteName) {
   }
   saving.value = true
   try {
+    ensureRoleVoiceNames()
     await saveDraft()
     if (returnToPath.value && routeName === 'pet-dialogue-create') {
       void router.push(returnToPath.value)
@@ -282,6 +310,7 @@ onMounted(async () => {
     await loadDraft()
     syncRoleReferenceAssets()
     await applyRouteTemplateIfNeeded()
+    ensureRoleVoiceNames()
   } catch (error) {
     ElMessage.error(petErrorMessage(error, '宠物草稿恢复失败，请返回首页重试。'))
   }

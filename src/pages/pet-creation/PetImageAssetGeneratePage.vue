@@ -36,6 +36,13 @@
           </label>
         </div>
 
+        <BillingEstimateBanner
+          :estimated-credit-cost="imageEstimate.estimatedCreditCost.value"
+          :balance="imageEstimate.balance.value"
+          :loading="imageEstimate.loading.value"
+          :steps="imageEstimate.steps.value"
+        />
+
         <label class="pet-image-prompt">
           生成提示词
           <textarea v-model.trim="form.prompt" rows="7" :placeholder="pageCopy.promptPlaceholder" />
@@ -61,7 +68,13 @@
           </div>
         </div>
 
-        <button class="app-primary-button" type="button" :disabled="submitting || !canSubmit" @click="submitGenerate">
+        <button
+          class="app-primary-button"
+          type="button"
+          :disabled="submitting || !canSubmit || !!imageEstimate.insufficientHint.value"
+          :title="imageEstimate.insufficientHint.value || ''"
+          @click="submitGenerate"
+        >
           {{ submitting ? '生成中...' : pageCopy.actionLabel }}
         </button>
         <p v-if="errorMessage" class="app-error">{{ errorMessage }}</p>
@@ -96,6 +109,8 @@
 <script setup lang="ts">
 import { computed, onMounted, reactive, ref, watch } from 'vue'
 import { useRouter } from 'vue-router'
+import BillingEstimateBanner from '../../components/business/BillingEstimateBanner.vue'
+import { useBillingEstimate } from '../../composables/useBillingEstimate'
 import { API_ORIGIN } from '../../services/request'
 import { getAssets } from '../../services/assetApi'
 import { generatePetImageAsset, type PetImageAssetKind } from '../../services/petAssetToolApi'
@@ -156,6 +171,14 @@ const form = reactive({
   referenceAssetIds: [] as number[],
 })
 
+const imageEstimate = useBillingEstimate({
+  taskType: () => (props.mode === 'background' ? 'PET_BACKGROUND_GENERATE' : 'PET_IMAGE_GENERATE'),
+  watchKeys: () => [props.mode, form.imageCount, form.size],
+  buildRequest: () => ({
+    imageCount: form.imageCount,
+  }),
+})
+
 const canSubmit = computed(() => Boolean(form.prompt.trim() && form.imageCount >= 1))
 
 watch(
@@ -194,6 +217,10 @@ async function loadReferenceAssets() {
 
 async function submitGenerate() {
   if (submitting.value || !canSubmit.value) return
+  if (imageEstimate.insufficientHint.value) {
+    errorMessage.value = imageEstimate.insufficientHint.value
+    return
+  }
   submitting.value = true
   errorMessage.value = ''
   successMessage.value = ''
@@ -210,6 +237,7 @@ async function submitGenerate() {
     generatedAssets.value = result.assets || []
     successMessage.value = `已生成 ${generatedAssets.value.length} 张图片并保存到宠物资产中心。`
     await loadReferenceAssets()
+    await imageEstimate.refresh()
   } catch (error) {
     errorMessage.value = error instanceof Error ? error.message : '生成失败'
   } finally {
@@ -218,7 +246,13 @@ async function submitGenerate() {
 }
 
 function goPetAssets() {
-  void router.push({ name: 'pet-assets', query: { tab: 'materials' } })
+  void router.push({
+    name: 'pet-assets',
+    query: {
+      tab: 'materials',
+      workflowStage: props.mode === 'background' ? 'petBackground' : 'petPet',
+    },
+  })
 }
 
 function assetUrl(url?: string | null) {

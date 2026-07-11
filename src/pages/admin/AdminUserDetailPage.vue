@@ -55,6 +55,19 @@
             <el-descriptions-item label="账号状态">
               <el-tag :type="getTagTypeByStatus(user.status)">{{ getUserStatusLabel(user.status) }}</el-tag>
             </el-descriptions-item>
+            <el-descriptions-item label="业务权限">
+              <div class="permission-tags">
+                <el-tag
+                  v-for="permission in user.permissions || []"
+                  :key="permission"
+                  type="success"
+                  effect="plain"
+                >
+                  {{ getPermissionLabel(permission) }}
+                </el-tag>
+                <span v-if="!user.permissions?.length" class="permission-empty">未显式配置</span>
+              </div>
+            </el-descriptions-item>
             <el-descriptions-item label="手机号">{{ formatEmpty(user.phone, '未填写') }}</el-descriptions-item>
             <el-descriptions-item label="邮箱">{{ formatEmpty(user.email, '未填写') }}</el-descriptions-item>
             <el-descriptions-item label="备注">{{ formatEmpty(user.remark) }}</el-descriptions-item>
@@ -272,6 +285,13 @@ function openCreditAdjust() {
   creditAdjustVisible.value = true
 }
 
+function getPermissionLabel(permission: string) {
+  if (permission === 'PET_CREATION_ACCESS') return '宠物创作中心'
+  if (permission === 'VEHICLE_CREATION_ACCESS') return '汽车创作中心'
+  if (permission === 'PET_PUBLIC_ASSET_EDITOR') return '宠物公共资产'
+  return permission
+}
+
 async function toggleUserStatus() {
   if (!user.value) return
   statusSaving.value = true
@@ -447,6 +467,17 @@ onMounted(loadData)
 
 .credit-warning {
   margin-top: 12px;
+}
+
+.permission-tags {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.permission-empty {
+  color: #9ca3af;
+  font-size: 12px;
 }
 
 .credit-change {

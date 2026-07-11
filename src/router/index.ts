@@ -20,6 +20,7 @@ export type WorkbenchRouteName =
   | 'pet-dialogue-create'
   | 'pet-role-setup'
   | 'pet-storyboard'
+  | 'pet-sticker-create'
   | 'pet-generation-status'
   | 'pet-templates'
   | 'pet-works'
@@ -28,6 +29,7 @@ export type WorkbenchRouteName =
   | 'pet-storyboard-tool'
   | 'pet-ai-pet-generate'
   | 'pet-background-generate'
+  | 'pet-avatar'
   | 'pet-voice'
   | 'my-videos'
   | 'AssetCenter'
@@ -234,7 +236,7 @@ const routes: RouteRecordRaw[] = [
         meta: {
           ...businessRouteMeta,
           menuKey: 'pet-render',
-          title: '宠物对话视频创建',
+          title: '宠物剧情对话',
           requiresPetCreationAccess: true,
         },
       },
@@ -259,6 +261,45 @@ const routes: RouteRecordRaw[] = [
           title: '脚本与分镜生成',
           requiresPetCreationAccess: true,
         },
+      },
+      {
+        path: 'pet-render/sticker',
+        name: 'pet-sticker-create',
+        component: () => import('../pages/pet-creation/PetStickerCreatePage.vue'),
+        meta: {
+          ...businessRouteMeta,
+          menuKey: 'pet-render',
+          title: '宠物表情包生成',
+          requiresPetCreationAccess: true,
+        },
+      },
+      {
+        path: 'pet-render/multi-pet-dialogue',
+        redirect: (to) => ({
+          name: 'pet-dialogue-create',
+          query: { ...to.query, templateId: 'multi-pet-dialogue' },
+        }),
+      },
+      {
+        path: 'pet-render/dog-reaction',
+        redirect: (to) => ({
+          name: 'pet-dialogue-create',
+          query: { ...to.query, templateId: 'dog-reaction', intentMode: 'human-pet' },
+        }),
+      },
+      {
+        path: 'pet-render/photo-to-video',
+        redirect: (to) => ({
+          name: 'pet-sticker-create',
+          query: { ...to.query, templateId: 'photo-to-video' },
+        }),
+      },
+      {
+        path: 'pet-render/pet-sticker',
+        redirect: (to) => ({
+          name: 'pet-sticker-create',
+          query: { ...to.query, templateId: 'pet-sticker' },
+        }),
       },
       {
         path: 'pet-render/progress/:taskId?',
@@ -349,6 +390,22 @@ const routes: RouteRecordRaw[] = [
           ...businessRouteMeta,
           menuKey: 'pet-background-generate',
           title: '背景图生成',
+          requiresPetCreationAccess: true,
+        },
+      },
+      {
+        path: 'pet-tools/avatar',
+        name: 'pet-avatar',
+        component: () => import('../pages/avatar/AvatarGeneratePage.vue'),
+        props: {
+          businessDomain: 'pet',
+          pageTitle: '数字人形象',
+          pageDescription: '生成或上传宠物短视频讲解形象，并保存到宠物资产中心。',
+        },
+        meta: {
+          ...businessRouteMeta,
+          menuKey: 'pet-avatar',
+          title: '数字人形象',
           requiresPetCreationAccess: true,
         },
       },
@@ -754,9 +811,10 @@ router.beforeEach(async (to) => {
 const recentToolTitles: Partial<Record<WorkbenchRouteName, string>> = {
   render: 'AI 智能创作',
   'pet-render': 'AI 萌宠创作',
-  'pet-dialogue-create': '宠物对话视频创建',
+  'pet-dialogue-create': '宠物剧情对话',
   'pet-role-setup': '素材上传与角色设定',
   'pet-storyboard': '脚本与分镜生成',
+  'pet-sticker-create': '宠物表情包生成',
   'pet-generation-status': '视频生成中',
   'pet-templates': '萌宠模板库',
   'pet-works': '我的宠物作品',
@@ -765,6 +823,7 @@ const recentToolTitles: Partial<Record<WorkbenchRouteName, string>> = {
   'pet-storyboard-tool': '宠物分镜生成',
   'pet-ai-pet-generate': 'AI宠物生成',
   'pet-background-generate': '背景图生成',
+  'pet-avatar': '数字人形象',
   'pet-voice': '声音生成',
   'video-parse': '爆款对标',
   'benchmark-create-page': '爆款对标创作',
@@ -792,6 +851,7 @@ const recentToolSubtitles: Partial<Record<WorkbenchRouteName, string>> = {
   'pet-dialogue-create': '宠物创作中心',
   'pet-role-setup': '宠物创作中心',
   'pet-storyboard': '宠物创作中心',
+  'pet-sticker-create': '宠物创作中心',
   'pet-generation-status': '宠物创作中心',
   'pet-templates': '宠物创作中心',
   'pet-works': '宠物创作中心',
@@ -800,6 +860,7 @@ const recentToolSubtitles: Partial<Record<WorkbenchRouteName, string>> = {
   'pet-storyboard-tool': '宠物 AI 资产生产工具',
   'pet-ai-pet-generate': '宠物 AI 资产生产工具',
   'pet-background-generate': '宠物 AI 资产生产工具',
+  'pet-avatar': '宠物 AI 资产生产工具',
   'pet-voice': '宠物 AI 资产生产工具',
   'video-parse': 'AI 资产生产工具',
   'benchmark-create-page': '创作中心',

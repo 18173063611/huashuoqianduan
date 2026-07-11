@@ -1,8 +1,8 @@
 <template>
   <section class="avatar-page app-page-stack">
     <header class="tool-page-hero">
-      <h1>数字人形象</h1>
-      <p>生成或上传讲解形象，作为后续成片的人物资产。</p>
+      <h1>{{ pageTitleText }}</h1>
+      <p>{{ pageDescriptionText }}</p>
     </header>
     <div class="avatar-content">
       <div class="avatar-layout">
@@ -22,7 +22,7 @@
               <textarea
                 v-model.trim="form.prompt"
                 rows="7"
-                placeholder="例如：生成一位适合汽车讲解的数字人形象，干净背景，正面全身，商业摄影质感"
+                :placeholder="promptPlaceholder"
               />
             </label>
             <section class="avatar-outfit-panel" aria-label="数字人全身与换装设置">
@@ -153,7 +153,7 @@
                   <li>想保持同一人物风格时选 1 张最像目标形象的图；想融合造型时最多勾选 2-3 张。</li>
                 </ul>
               </div>
-              <p v-if="referenceAssets.length === 0" class="app-muted avatar-small">资产中心暂无图片资产，可先上传形象照或直接文生图。</p>
+              <p v-if="referenceAssets.length === 0" class="app-muted avatar-small">{{ assetCenterName }}暂无图片资产，可先上传形象照或直接文生图。</p>
               <div v-else class="avatar-reference-list">
                 <div class="avatar-reference-actions">
                   <span>已选 {{ selectedReferenceAssets.length }} 张</span>
@@ -254,7 +254,7 @@
               <div>
                 <strong>{{ avatar.avatarName }}</strong>
                 <small v-if="avatarBodyMetaText(avatar)" class="avatar-body-chip">{{ avatarBodyMetaText(avatar) }}</small>
-                <span class="avatar-saved-badge">已自动保存到资产中心</span>
+                <span class="avatar-saved-badge">已自动保存到{{ assetCenterName }}</span>
               </div>
             </article>
           </div>
@@ -314,6 +314,16 @@ import { trackTaskResult } from '../../services/taskRealtime'
 import type { AssetItem } from '../../types/assetTypes'
 import type { AvatarGenerateRequest, AvatarGenerateTaskResult, AvatarItem } from '../../types/avatarTypes'
 
+const props = withDefaults(defineProps<{
+  businessDomain?: 'pet'
+  pageTitle?: string
+  pageDescription?: string
+}>(), {
+  businessDomain: undefined,
+  pageTitle: '数字人形象',
+  pageDescription: '生成或上传讲解形象，作为后续成片的人物资产。',
+})
+
 const sourceMode = ref<'AI' | 'UPLOAD'>('AI')
 const loggedIn = ref(false)
 const AVATAR_HEIGHT_MIN_CM = 140
@@ -322,13 +332,15 @@ const AVATAR_WEIGHT_MIN_KG = 35
 const AVATAR_WEIGHT_MAX_KG = 150
 const AVATAR_DEFAULT_HEIGHT_CM = 170
 const AVATAR_DEFAULT_WEIGHT_KG = 62
+const DEFAULT_AVATAR_PROMPT = '生成一位适合汽车销售讲解的真实数字人形象，干净背景，正面全身，商业摄影质感，不要文字、表格、说明卡片或水印'
+const PET_AVATAR_PROMPT = '生成一位适合宠物短视频讲解、宠物用品介绍或萌宠剧情旁白的真实数字人形象，干净背景，正面全身，亲和自然，商业摄影质感，不要文字、表格、说明卡片或水印'
 const form = reactive<AvatarGenerateRequest>({
   avatarName: '',
-  prompt: '生成一位适合汽车销售讲解的真实数字人形象，干净背景，正面全身，商业摄影质感，不要文字、表格、说明卡片或水印',
+  prompt: props.businessDomain === 'pet' ? PET_AVATAR_PROMPT : DEFAULT_AVATAR_PROMPT,
   referenceAssetIds: [],
   style: 'REALISTIC',
   framing: 'FULL_BODY',
-  outfitPreset: 'car_sales_suit',
+  outfitPreset: props.businessDomain === 'pet' ? 'white_shirt_slacks' : 'car_sales_suit',
   outfitDescription: '',
   heightCm: AVATAR_DEFAULT_HEIGHT_CM,
   weightKg: AVATAR_DEFAULT_WEIGHT_KG,
@@ -387,6 +399,14 @@ const avatarBodySummary = computed(() =>
 )
 const avatarBodyPrompt = computed(() =>
   `身材锁定：身高 ${normalizedAvatarHeight.value}cm，体重 ${normalizedAvatarWeight.value}kg，${avatarBodyShape.value}，整体身形比例保持一致`,
+)
+const pageTitleText = computed(() => props.pageTitle)
+const pageDescriptionText = computed(() => props.pageDescription)
+const assetCenterName = computed(() => props.businessDomain === 'pet' ? '宠物资产中心' : '资产中心')
+const promptPlaceholder = computed(() =>
+  props.businessDomain === 'pet'
+    ? '例如：生成一位适合宠物短视频讲解的数字人形象，干净背景，正面全身，亲和自然'
+    : '例如：生成一位适合汽车讲解的数字人形象，干净背景，正面全身，商业摄影质感',
 )
 // 与后端 createTask 实际预扣金额完全一致；数字人形象按张数动态预估，更贴近实际结算。
 const avatarEstimate = useBillingEstimate({
@@ -452,7 +472,10 @@ onBeforeUnmount(() => {
 async function loadReferenceAssets() {
   loadingAssets.value = true
   try {
-    referenceAssets.value = await getAssets({ assetType: 'IMAGE' })
+    referenceAssets.value = await getAssets({
+      assetType: 'IMAGE',
+      businessDomain: props.businessDomain,
+    })
   } catch (e) {
     errorMessage.value = e instanceof Error ? e.message : '加载图片资产失败'
   } finally {
@@ -536,7 +559,7 @@ async function deleteSelectedReferenceAssets() {
 async function loadAvatars() {
   loadingAvatars.value = true
   try {
-    avatars.value = await getAvatars()
+    avatars.value = await getAvatars(props.businessDomain ? { businessDomain: props.businessDomain } : undefined)
   } catch (e) {
     errorMessage.value = e instanceof Error ? e.message : '加载形象库失败'
   } finally {
@@ -557,8 +580,9 @@ async function submitUpload() {
   errorMessage.value = ''
   saveMessage.value = ''
   try {
-    const avatar = await uploadAvatar(uploadName.value, uploadFile.value)
+    const avatar = await uploadAvatar(uploadName.value, uploadFile.value, props.businessDomain ? { businessDomain: props.businessDomain } : undefined)
     generatedAvatars.value = [avatar]
+    saveMessage.value = `上传完成，形象已自动保存到${assetCenterName.value}。`
     await Promise.all([loadAvatars(), loadReferenceAssets()])
   } catch (e) {
     errorMessage.value = e instanceof Error ? e.message : '上传失败'
@@ -584,7 +608,11 @@ async function submitGenerate() {
   saveMessage.value = ''
   generatedAvatars.value = []
   try {
-    const res = await generateAvatar({ ...form }, avatarGenIdempotencyKey.value)
+    const payload: AvatarGenerateRequest = { ...form }
+    if (props.businessDomain === 'pet') {
+      payload.businessDomain = 'pet'
+    }
+    const res = await generateAvatar(payload, avatarGenIdempotencyKey.value)
     avatarGenIdempotencyKey.value = null
     rememberSessionTaskId(res.taskId)
     resetSmoothProgress()
@@ -623,7 +651,7 @@ function startTaskTracking(taskId: number) {
       taskProgress.value = taskResult.progress ?? 100
       taskError.value = taskResult.errorMessage || ''
       await applyAvatarResult(taskResult.result)
-      saveMessage.value = '生成完成，形象已自动保存到资产中心。'
+      saveMessage.value = `生成完成，形象已自动保存到${assetCenterName.value}。`
     },
     onFailure(message) {
       taskError.value = message.errorMessage || '形象生成任务失败'
@@ -689,6 +717,14 @@ async function applyAvatarResult(result: AvatarGenerateTaskResult) {
     referenceAssetIds: null,
     previewUrl: url,
     metadataJson: JSON.stringify({
+      ...(props.businessDomain === 'pet'
+        ? {
+            businessDomain: 'pet',
+            domain: 'pet_creation',
+            assetGroup: '宠物数字人形象',
+            assetRole: 'host_image',
+          }
+        : {}),
       heightCm: normalizedAvatarHeight.value,
       weightKg: normalizedAvatarWeight.value,
       bodyShapeLabel: avatarBodyShape.value,

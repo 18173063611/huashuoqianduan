@@ -18,6 +18,7 @@ export interface PetImageGenerateResponse {
   previewUrls: string[]
   remoteImageUrls: string[]
   assets: AssetItem[]
+  taskId?: number
 }
 
 export function generatePetImageAsset(payload: PetImageGenerateRequest) {

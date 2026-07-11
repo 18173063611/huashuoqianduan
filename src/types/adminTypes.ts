@@ -1,6 +1,11 @@
 import type { PageResult } from './apiTypes'
 import type { UserRole, UserStatus } from './userTypes'
 
+export type AdminFeaturePermission =
+  | 'PET_CREATION_ACCESS'
+  | 'VEHICLE_CREATION_ACCESS'
+  | 'PET_PUBLIC_ASSET_EDITOR'
+
 export interface AdminUserItem {
   userId: number
   username: string
@@ -10,6 +15,7 @@ export interface AdminUserItem {
   phone?: string
   email?: string
   remark?: string
+  permissions?: AdminFeaturePermission[]
   creditBalance?: number
   lastLoginAt?: string
   createdAt?: string
@@ -32,6 +38,8 @@ export interface AdminUserSaveRequest {
   phone?: string
   email?: string
   remark?: string
+  permissions?: AdminFeaturePermission[]
+  initialCredits?: number
 }
 
 export interface AdminPasswordResetRequest {

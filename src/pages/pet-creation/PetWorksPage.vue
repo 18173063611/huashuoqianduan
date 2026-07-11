@@ -72,21 +72,45 @@
       />
     </div>
 
-    <section v-if="activePreviewWork" class="pet-preview-panel">
-      <div>
-        <span>作品预览</span>
-        <h3>{{ activePreviewWork.title }}</h3>
-        <p>{{ activePreviewWork.templateTitle }} · {{ activePreviewWork.aspectRatio }} · {{ activePreviewWork.durationSeconds }} 秒</p>
-        <video v-if="activePreviewWork.videoUrl" :src="activePreviewWork.videoUrl" controls preload="metadata" />
-        <p v-else>当前作品暂未返回可播放地址，请刷新作品状态或检查下载链接。</p>
+    <Teleport to="body">
+      <div v-if="activePreviewWork" class="pet-work-preview-backdrop" @click.self="closePreview">
+        <section
+          class="pet-work-preview-dialog"
+          role="dialog"
+          aria-modal="true"
+          aria-labelledby="pet-work-preview-title"
+        >
+          <header>
+            <div>
+              <span>作品预览</span>
+              <h3 id="pet-work-preview-title">{{ activePreviewWork.title }}</h3>
+              <p>{{ activePreviewWork.templateTitle }} · {{ activePreviewWork.aspectRatio }} · {{ activePreviewWork.durationSeconds }} 秒</p>
+            </div>
+            <button type="button" class="pet-work-preview-close" aria-label="关闭预览" title="关闭预览" @click="closePreview">×</button>
+          </header>
+          <div class="pet-work-preview-stage">
+            <video
+              v-if="activePreviewVideoUrl"
+              :key="activePreviewVideoUrl"
+              :src="activePreviewVideoUrl"
+              controls
+              autoplay
+              playsinline
+              preload="metadata"
+            />
+            <div v-else class="pet-work-preview-empty">
+              <strong>暂无可播放视频</strong>
+              <p>当前作品暂未返回可播放地址，请刷新作品状态或检查下载链接。</p>
+            </div>
+          </div>
+        </section>
       </div>
-      <button type="button" @click="activePreviewWork = null">关闭</button>
-    </section>
+    </Teleport>
   </section>
 </template>
 
 <script setup lang="ts">
-import { computed, onMounted, ref, watch } from 'vue'
+import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { useRouter } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import PetWorkCard from './components/PetWorkCard.vue'
@@ -94,6 +118,7 @@ import { deletePetWork, downloadPetWork, forkPetWork, listPetWorks, regeneratePe
 import type { PetAspectRatio, PetType, PetVideoType, PetWork, PetWorkStatus } from './petCreationTypes'
 import { petErrorMessage } from './petCreationValidation'
 import { usePetApiFallbackNotice } from './usePetApiFallbackNotice'
+import { resolvePetWorkVideoUrl } from './petWorkCover'
 
 const tabs: Array<{ label: string; status: PetWorkStatus | 'all' }> = [
   { label: '全部作品', status: 'all' },
@@ -114,6 +139,7 @@ const loading = ref(false)
 const errorMessage = ref('')
 const actionKey = ref('')
 const router = useRouter()
+let previousBodyOverflow = ''
 
 usePetApiFallbackNotice()
 
@@ -133,6 +159,9 @@ const emptyDescription = computed(() =>
 )
 const visibleWorks = computed(() =>
   works.value.filter((work) => matchesVideoType(work) && matchesTimeRange(work)),
+)
+const activePreviewVideoUrl = computed(() =>
+  activePreviewWork.value ? resolvePetWorkVideoUrl(activePreviewWork.value) : '',
 )
 
 async function refreshWorks() {
@@ -162,10 +191,33 @@ watch([activeStatus, activePetType, keyword], () => {
 
 function previewWork(work: PetWork) {
   activePreviewWork.value = work
-  if (!work.videoUrl) {
+  if (!resolvePetWorkVideoUrl(work)) {
     ElMessage.info('当前作品暂未返回可播放地址，可刷新作品状态后再预览。')
   }
 }
+
+function closePreview() {
+  activePreviewWork.value = null
+}
+
+function handlePreviewKeydown(event: KeyboardEvent) {
+  if (event.key === 'Escape' && activePreviewWork.value) closePreview()
+}
+
+watch(activePreviewWork, (work) => {
+  if (work) {
+    previousBodyOverflow = document.body.style.overflow
+    document.body.style.overflow = 'hidden'
+    return
+  }
+  document.body.style.overflow = previousBodyOverflow
+})
+
+onMounted(() => document.addEventListener('keydown', handlePreviewKeydown))
+onBeforeUnmount(() => {
+  document.removeEventListener('keydown', handlePreviewKeydown)
+  document.body.style.overflow = previousBodyOverflow
+})
 
 async function forkWork(work: PetWork) {
   await forkWorkAsAspect(work, work.aspectRatio)
@@ -302,53 +354,108 @@ function matchesTimeRange(work: PetWork) {
   box-shadow: 0 18px 40px rgba(15, 23, 42, 0.04);
 }
 
-.pet-preview-panel {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 16px;
-  border: 1px solid #dfe7f5;
-  border-radius: 8px;
-  background: #ffffff;
-  box-shadow: 0 18px 40px rgba(15, 23, 42, 0.04);
-  padding: 18px 20px;
+.pet-work-preview-backdrop {
+  position: fixed;
+  z-index: 2400;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  background: rgba(15, 23, 42, 0.68);
+  padding: 24px;
 }
 
-.pet-preview-panel span {
+.pet-work-preview-dialog {
+  display: grid;
+  box-sizing: border-box;
+  width: min(920px, 100%);
+  max-height: calc(100vh - 48px);
+  overflow: hidden;
+  border: 1px solid rgba(255, 255, 255, 0.42);
+  border-radius: 8px;
+  background: #ffffff;
+  box-shadow: 0 28px 80px rgba(15, 23, 42, 0.34);
+}
+
+.pet-work-preview-dialog > header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 16px 18px;
+}
+
+.pet-work-preview-dialog span {
   color: #2563eb;
   font-size: 12px;
   font-weight: 850;
 }
 
-.pet-preview-panel h3 {
+.pet-work-preview-dialog h3 {
   margin: 6px 0;
   color: #172033;
   font-size: 18px;
   font-weight: 900;
 }
 
-.pet-preview-panel p {
+.pet-work-preview-dialog p {
   margin: 0;
   color: #667085;
   font-size: 13px;
 }
 
-.pet-preview-panel video {
-  width: min(520px, 100%);
-  margin-top: 12px;
-  border-radius: 8px;
+.pet-work-preview-stage {
+  display: grid;
+  min-height: 360px;
+  max-height: calc(100vh - 170px);
+  place-items: center;
+  overflow: hidden;
   background: #0f172a;
 }
 
-.pet-preview-panel button {
-  min-height: 34px;
+.pet-work-preview-stage video {
+  display: block;
+  width: 100%;
+  height: min(72vh, 720px);
+  object-fit: contain;
+  background: #0f172a;
+}
+
+.pet-work-preview-close {
+  display: inline-grid;
+  width: 36px;
+  height: 36px;
+  flex: 0 0 36px;
+  place-items: center;
   border: 1px solid #dfe7f5;
   border-radius: 8px;
   background: #ffffff;
+  color: #475467;
+  cursor: pointer;
+  font-size: 24px;
+  line-height: 1;
+}
+
+.pet-work-preview-close:hover {
+  border-color: #bfdbfe;
+  background: #eff6ff;
   color: #2563eb;
-  padding: 0 12px;
-  font-size: 13px;
-  font-weight: 850;
+}
+
+.pet-work-preview-close:focus-visible {
+  outline: 3px solid rgba(37, 99, 235, 0.24);
+  outline-offset: 2px;
+}
+
+.pet-work-preview-empty {
+  display: grid;
+  justify-items: center;
+  gap: 8px;
+  color: #ffffff;
+  text-align: center;
+}
+
+.pet-work-preview-empty p {
+  color: #cbd5e1;
 }
 
 .pet-works-head {
@@ -434,7 +541,7 @@ function matchesTimeRange(work: PetWork) {
 
 .pet-works-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+  grid-template-columns: repeat(auto-fill, minmax(240px, 1fr));
   gap: 12px;
 }
 
@@ -466,5 +573,27 @@ function matchesTimeRange(work: PetWork) {
   font-size: 13px;
   font-weight: 850;
   text-decoration: none;
+}
+
+@media (max-width: 640px) {
+  .pet-work-preview-backdrop {
+    align-items: end;
+    padding: 0;
+  }
+
+  .pet-work-preview-dialog {
+    width: 100%;
+    max-height: 92vh;
+    border-radius: 8px 8px 0 0;
+  }
+
+  .pet-work-preview-stage {
+    min-height: 280px;
+    max-height: calc(92vh - 112px);
+  }
+
+  .pet-work-preview-stage video {
+    height: calc(92vh - 112px);
+  }
 }
 </style>

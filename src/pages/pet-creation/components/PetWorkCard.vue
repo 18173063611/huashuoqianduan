@@ -1,7 +1,16 @@
 <template>
   <article class="pet-work-card">
-    <div class="pet-work-card-cover" :class="{ 'has-image': !!work.coverUrl }" :style="coverStyle">
-      <button v-if="work.videoUrl" type="button" class="pet-work-card-play" aria-label="预览视频" @click.stop="$emit('preview', work)">
+    <div class="pet-work-card-cover" :class="{ 'has-image': !!coverUrl, 'has-video': !coverUrl && !!previewVideoUrl }" :style="coverStyle">
+      <video
+        v-if="!coverUrl && previewVideoUrl"
+        class="pet-work-card-cover-video"
+        :src="previewVideoUrl"
+        muted
+        playsinline
+        preload="metadata"
+        aria-hidden="true"
+      />
+      <button v-if="previewVideoUrl" type="button" class="pet-work-card-play" aria-label="预览视频" @click.stop="$emit('preview', work)">
         ▶
       </button>
       <span>{{ statusText }}</span>
@@ -31,6 +40,7 @@
 import { computed } from 'vue'
 import type { PetAspectRatio, PetWork } from '../petCreationTypes'
 import { petFailureMessage } from '../petCreationValidation'
+import { resolvePetWorkCoverUrl, resolvePetWorkVideoUrl } from '../petWorkCover'
 
 const props = defineProps<{
   work: PetWork
@@ -60,11 +70,22 @@ const petTypeText = computed(() => {
 
 const failureText = computed(() => petFailureMessage(props.work.errorCode, props.work.errorMessage))
 const canRegenerate = computed(() => props.work.status === 'failed' && props.work.retryable === true)
+const coverUrl = computed(() => {
+  const resolved = resolvePetWorkCoverUrl(props.work)
+  if (resolved) return resolved
+  const materials = props.work.draft?.materials || []
+  const material = materials.find((item) => item.role === 'main_pet')
+    || materials.find((item) => item.role === 'second_pet')
+    || materials.find((item) => item.role === 'human_avatar')
+    || materials.find((item) => item.role === 'scene')
+  return material?.url || ''
+})
+const previewVideoUrl = computed(() => resolvePetWorkVideoUrl(props.work))
 
 const coverStyle = computed(() => {
-  if (!props.work.coverUrl) return undefined
+  if (!coverUrl.value) return undefined
   return {
-    backgroundImage: `linear-gradient(135deg, rgba(37, 99, 235, 0.18), rgba(20, 184, 166, 0.12)), url("${props.work.coverUrl.replace(/"/g, '\\"')}")`,
+    backgroundImage: `linear-gradient(135deg, rgba(37, 99, 235, 0.18), rgba(20, 184, 166, 0.12)), url("${coverUrl.value.replace(/"/g, '\\"')}")`,
   }
 })
 </script>
@@ -82,6 +103,8 @@ const coverStyle = computed(() => {
 .pet-work-card-cover {
   position: relative;
   display: grid;
+  overflow: hidden;
+  aspect-ratio: 16 / 9;
   min-height: 132px;
   place-items: center;
   background:
@@ -91,14 +114,41 @@ const coverStyle = computed(() => {
   background-size: cover;
 }
 
-.pet-work-card-cover.has-image {
-  min-height: 152px;
+.pet-work-card-cover.has-image,
+.pet-work-card-cover.has-video {
+  min-height: 0;
+}
+
+.pet-work-card-cover::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  background: linear-gradient(180deg, rgba(15, 23, 42, 0.04), rgba(15, 23, 42, 0.18));
+  opacity: 0;
+}
+
+.pet-work-card-cover.has-image::after,
+.pet-work-card-cover.has-video::after {
+  opacity: 1;
+}
+
+.pet-work-card-cover-video {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  border: 0;
+  background: #eaf2ff;
+  object-fit: cover;
+  pointer-events: none;
 }
 
 .pet-work-card-cover span {
   position: absolute;
   top: 12px;
   right: 12px;
+  z-index: 2;
   border-radius: 999px;
   background: rgba(255, 255, 255, 0.9);
   color: #2563eb;
@@ -112,6 +162,8 @@ const coverStyle = computed(() => {
   width: 44px;
   height: 44px;
   place-items: center;
+  position: relative;
+  z-index: 2;
   border: 1px solid rgba(255, 255, 255, 0.82);
   border-radius: 999px;
   background: rgba(15, 23, 42, 0.64);

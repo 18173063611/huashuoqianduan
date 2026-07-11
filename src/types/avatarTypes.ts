@@ -34,6 +34,7 @@ export interface AvatarGenerateRequest {
   weightKg: number
   imageCount: number
   size: string
+  businessDomain?: 'pet'
 }
 
 export interface AvatarGenerateResponse {

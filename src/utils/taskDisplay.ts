@@ -3,6 +3,8 @@
  */
 
 const TASK_TYPE_LABELS: Record<string, string> = {
+  PET_IMAGE_GENERATE: 'Pet image generation',
+  PET_BACKGROUND_GENERATE: 'Pet background generation',
   TTS_GENERATE: '语音合成',
   VOICE_SAMPLE: '音色试听',
   AVATAR_GENERATE: '数字人形象生成',

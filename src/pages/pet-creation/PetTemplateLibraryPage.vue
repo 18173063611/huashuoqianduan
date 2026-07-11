@@ -2,8 +2,8 @@
   <section class="pet-library-page">
     <header class="pet-library-head">
       <span>宠物创作中心</span>
-      <h2>选择萌宠视频模板</h2>
-      <p>选择一个玩法模板，快速生成适合短视频平台传播的宠物内容。</p>
+      <h2>选择宠物创作模板</h2>
+      <p>模板已收敛为四个清晰入口；旧模板 ID 仍保留兼容，会自动进入合并后的生产页。</p>
     </header>
 
     <div class="pet-library-shell">
@@ -68,22 +68,22 @@ import { petTemplateGuideByWorkflow, petTemplateWorkflowFor, routeForPetTemplate
 
 const router = useRouter()
 const { applyTemplate, loadDraft, saveDraft } = usePetCreationState()
-const selectedFilter = ref('热门玩法')
+const selectedFilter = ref('全部')
 const filteredTemplates = computed(() => getPetTemplatesForFilter(selectedFilter.value))
 const genericGuideSteps = [
-  { index: '01', title: '选择玩法', text: '先判断本次是对话、剧情、图生视频、表情反应还是背景场景。' },
-  { index: '02', title: '进入生产页', text: '模板会自动进入对话、素材、分镜或背景编辑等对应页面。' },
-  { index: '03', title: '补齐素材', text: '按玩法补主宠物、更多宠物、道具、场景和台词。' },
+  { index: '01', title: '选择入口', text: '自由描述用 AI 智能创作；有参考视频用爆款对标；动图用表情包；互动对白用剧情对话。' },
+  { index: '02', title: '自动分流', text: '首页一句话会复用现有模板路由，直接进入对应生产页。' },
+  { index: '03', title: '补齐素材', text: '按玩法补主宠、第二宠物、人物、道具和场景；人物图会自动触发人宠模式。' },
   { index: '04', title: '确认生成', text: '生成前核对草稿、分镜、积分和真实接口预检。' },
 ]
-const activeWorkflow = computed(() => selectedFilter.value === '热门玩法' ? 'smart' : filteredTemplates.value[0]?.workflow || 'smart')
+const activeWorkflow = computed(() => selectedFilter.value === '全部' ? 'smart' : filteredTemplates.value[0]?.workflow || 'smart')
 const playbookTitle = computed(() => {
-  if (selectedFilter.value === '热门玩法') return '玩法选择流程'
+  if (selectedFilter.value === '全部') return '玩法选择流程'
   const template = filteredTemplates.value[0] || petTemplates[0]
   return template ? `${petTemplateWorkflowFor(template).label}流程` : '玩法说明'
 })
 const templateGuideSteps = computed(() =>
-  selectedFilter.value === '热门玩法' ? genericGuideSteps : petTemplateGuideByWorkflow[activeWorkflow.value],
+  selectedFilter.value === '全部' ? genericGuideSteps : petTemplateGuideByWorkflow[activeWorkflow.value],
 )
 
 async function handleUseTemplate(template: PetTemplate) {
@@ -175,8 +175,13 @@ async function handleUseTemplate(template: PetTemplate) {
 
 .pet-library-grid {
   display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
+  grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+  grid-auto-rows: 1fr;
   gap: 16px;
+}
+
+.pet-library-grid > * {
+  min-width: 0;
 }
 
 .pet-library-empty {

@@ -7,6 +7,7 @@ export const PET_AI_TOOL_MENU_KEYS = [
   'pet-storyboard-tool',
   'pet-ai-pet-generate',
   'pet-background-generate',
+  'pet-avatar',
   'pet-voice',
 ] as const
 

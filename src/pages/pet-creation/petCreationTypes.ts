@@ -9,7 +9,7 @@ export type PetDialogueEmotion = '委屈' | '开心' | '吐槽' | '认真解释'
 export type PetVoiceSpeed = 'slow' | 'normal' | 'fast'
 export type PetSubtitlePosition = 'bottom' | 'middle' | 'top'
 export type PetCameraRhythm = 'slow' | 'balanced' | 'fast' | 'short_drama'
-export type PetTemplateWorkflow = 'smart' | 'dialogue' | 'storyboard' | 'material' | 'background'
+export type PetTemplateWorkflow = 'smart' | 'dialogue' | 'storyboard' | 'material' | 'background' | 'sticker'
 export type PetTextStrokeMode = 'none' | 'thin' | 'strong'
 
 export interface PetTemplate {
@@ -19,7 +19,7 @@ export interface PetTemplate {
   coverUrl?: string
   category: string
   videoType: PetVideoType
-  durationSeconds: 5 | 10 | 15 | 30
+  durationSeconds: number
   aspectRatio: PetAspectRatio
   style: PetCreationStyle
   tags: string[]
@@ -45,6 +45,7 @@ export interface PetRole {
   ageFeel?: string
   personalityTags: string[]
   speakingTone?: string
+  voiceName?: string
   roleTags: string[]
   anthropomorphic: boolean
   referenceAssetIds: string[]
@@ -52,7 +53,7 @@ export interface PetRole {
 
 export interface PetReferenceMaterial {
   id: string
-  role: 'main_pet' | 'second_pet' | 'prop' | 'scene' | 'audio'
+  role: 'main_pet' | 'second_pet' | 'human_avatar' | 'prop' | 'scene' | 'audio'
   assetId?: string
   url: string
   label: string
@@ -101,7 +102,7 @@ export interface PetCreationDraft {
   dialogueLines: PetDialogueLine[]
   scriptText?: string
   shots: PetStoryboardShot[]
-  durationSeconds: 5 | 10 | 15 | 30
+  durationSeconds: number
   language: 'zh-CN'
   aspectRatio: PetAspectRatio
   style: PetCreationStyle
@@ -115,6 +116,17 @@ export interface PetCreationDraft {
     cameraRhythm: PetCameraRhythm
     backgroundPrompt: string
     productPrompt?: string
+    stylePrompt?: string
+    stickerOverlay?: {
+      text?: string
+      textX?: number
+      textY?: number
+      icon?: string
+      iconX?: number
+      iconY?: number
+      staticFormat?: 'png' | 'jpg'
+      dynamicFormat?: 'gif' | 'mp4'
+    }
   }
   consistency: {
     keepAppearance: boolean

@@ -19,7 +19,13 @@ import type {
   PetWorkStatus,
 } from '../pages/pet-creation/petCreationTypes'
 import { getBillingEstimate } from './creditApi'
-import { estimatedPetFallbackCost, inferPetGenerationMode, validatePetCreationDraft } from '../pages/pet-creation/petCreationValidation'
+import {
+  estimatedPetFallbackCost,
+  inferPetGenerationMode,
+  normalizePetVideoDurationSeconds,
+  validatePetCreationDraft,
+} from '../pages/pet-creation/petCreationValidation'
+import { resolvePetWorkCoverUrl, resolvePetWorkVideoUrl } from '../pages/pet-creation/petWorkCover'
 import {
   clonePetDraft,
   defaultPetDraft,
@@ -106,10 +112,8 @@ function clampProgress(value: unknown) {
   return Math.min(100, Math.max(0, Math.round(numberValue(value, 0))))
 }
 
-function normalizeDuration(value: unknown, fallback: 5 | 10 | 15 | 30): 5 | 10 | 15 | 30 {
-  const n = Number(value)
-  if (n === 5 || n === 10 || n === 15 || n === 30) return n
-  return fallback
+function normalizeDuration(value: unknown, fallback: number): number {
+  return normalizePetVideoDurationSeconds(value, fallback)
 }
 
 function normalizeAspectRatio(value: unknown, fallback: PetAspectRatio): PetAspectRatio {
@@ -259,6 +263,8 @@ function normalizePetWork(raw: unknown): PetWork | null {
   const id = stringValue(raw.id, stringValue(raw.workId))
   if (!id) return null
   const draft = normalizePetDraft(raw.draft || raw.payload || raw.draftJson)
+  const resolvedCoverUrl = resolvePetWorkCoverUrl(raw)
+  const resolvedVideoUrl = resolvePetWorkVideoUrl(raw)
   return {
     id,
     title: stringValue(raw.title, draft.prompt || '宠物作品'),
@@ -267,9 +273,9 @@ function normalizePetWork(raw: unknown): PetWork | null {
     status: normalizePetWorkStatus(raw.status),
     aspectRatio: normalizeAspectRatio(raw.aspectRatio, draft.aspectRatio),
     durationSeconds: numberValue(raw.durationSeconds, draft.durationSeconds),
-    coverUrl: stringValue(raw.coverUrl ?? raw.thumbnailUrl),
-    videoUrl: stringValue(raw.videoUrl ?? raw.previewUrl),
-    downloadUrl: stringValue(raw.downloadUrl),
+    coverUrl: resolvedCoverUrl || stringValue(raw.coverUrl ?? raw.thumbnailUrl),
+    videoUrl: resolvedVideoUrl || stringValue(raw.videoUrl ?? raw.previewUrl),
+    downloadUrl: stringValue(raw.downloadUrl) || resolvedVideoUrl,
     draft,
     errorCode: stringValue(raw.errorCode),
     errorMessage: stringValue(raw.errorMessage ?? raw.failReason ?? raw.message),
@@ -313,6 +319,7 @@ function mockPetPromptPreview(payload: PetCreationDraft) {
     `Core idea: ${payload.prompt.trim()}`,
     `Generation mode: ${inferPetGenerationMode(payload)}`,
     `Style and camera: ${payload.style}, ${payload.aspectRatio}, ${payload.durationSeconds} seconds.`,
+    `Custom style: ${payload.visualSettings.stylePrompt || 'none'}.`,
     'Quality constraints: Keep the main pet appearance, fur color, fur pattern, face, body shape, and personality stable across all shots.',
   ].join('\n')
 }
@@ -456,6 +463,7 @@ export function generatePetStoryboard(payload: PetCreationDraft) {
       request<unknown>('/pet-videos/storyboard', {
         method: 'POST',
         body: JSON.stringify(payload),
+        timeoutMs: 45000,
       }).then((data) => normalizePetDraft(data, payload)),
     () => mockGeneratePetStoryboard(payload),
   )
@@ -468,6 +476,7 @@ export function generatePetScript(payload: PetCreationDraft) {
       request<unknown>('/pet-videos/script', {
         method: 'POST',
         body: JSON.stringify(payload),
+        timeoutMs: 45000,
       }).then((data) => normalizePetDraft(data, payload)),
     () => mockGeneratePetScript(payload),
   )

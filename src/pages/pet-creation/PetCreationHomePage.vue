@@ -17,7 +17,7 @@
             placeholder="描述你想要的宠物视频，例如：小猫晚上偷偷出门，被主人发现后委屈解释"
           />
           <div class="pet-prompt-footer">
-            <span>需求描述为选填，后续可结合模板和宠物素材包生成。</span>
+            <span>输入一句自然语言即可，系统会自动识别模板并编排剧情、角色、素材、对白和分镜。</span>
             <strong>{{ draft.prompt.length }}/500</strong>
           </div>
         </div>
@@ -61,48 +61,7 @@
       </div>
 
       <aside class="pet-param-panel">
-        <h3>视频参数设置</h3>
-        <div class="pet-duration-tabs">
-          <button
-            v-for="seconds in durationOptions"
-            :key="seconds"
-            type="button"
-            :class="{ active: draft.durationSeconds === seconds }"
-            @click="setDuration(seconds)"
-          >
-            {{ seconds }}秒
-          </button>
-        </div>
-        <div class="pet-param-grid">
-          <label>
-            生成模式
-            <select v-model="draft.generationMode" @change="saveDraft">
-              <option value="dialogue_video">多宠物对话</option>
-              <option value="reference_video">参考图生成</option>
-              <option value="image_to_video">图片生成视频</option>
-              <option value="text_video">纯文本生成</option>
-            </select>
-          </label>
-          <label>
-            语言
-            <select v-model="draft.language" @change="saveDraft">
-              <option value="zh-CN">中文讲述</option>
-            </select>
-          </label>
-          <label>
-            比例
-            <select v-model="draft.aspectRatio" @change="saveDraft">
-              <option value="9:16">9:16</option>
-              <option value="16:9">16:9</option>
-              <option value="1:1">1:1</option>
-            </select>
-          </label>
-        </div>
-        <div class="pet-style-tabs">
-          <button type="button" :class="{ active: draft.style === 'cute' }" @click="draft.style = 'cute'; saveDraft()">可爱</button>
-          <button type="button" :class="{ active: draft.style === 'funny' }" @click="draft.style = 'funny'; saveDraft()">搞笑</button>
-          <button type="button" :class="{ active: draft.style === 'healing' }" @click="draft.style = 'healing'; saveDraft()">治愈</button>
-        </div>
+        <PetGenerationParamPanel :draft="draft" compact show-mode @change="saveDraft" />
         <div class="pet-switch-row">
           <label class="pet-param-check">
             <input v-model="draft.subtitleEnabled" type="checkbox" @change="saveDraft" />
@@ -210,6 +169,7 @@ import PetTemplateCard from './components/PetTemplateCard.vue'
 import PetWorkCard from './components/PetWorkCard.vue'
 import PetPlanPreviewDrawer from './components/PetPlanPreviewDrawer.vue'
 import PetPostProductionPanel from './components/PetPostProductionPanel.vue'
+import PetGenerationParamPanel from './components/PetGenerationParamPanel.vue'
 import {
   createPetVideoTask,
   deletePetWork,
@@ -226,11 +186,12 @@ import {
 } from '../../services/petCreationApi'
 import { usePetCreationState } from './usePetCreationState'
 import type { PetAspectRatio, PetCreationDraft, PetRole, PetTemplate, PetVideoEstimate, PetVideoPreview, PetWork } from './petCreationTypes'
-import { hasPrompt, petErrorMessage, promptRequiredMessage, validatePetCreationDraft } from './petCreationValidation'
+import { hasMainPetMaterial, hasPrompt, petErrorMessage, promptRequiredMessage, validatePetCreationDraft } from './petCreationValidation'
 import { usePetApiFallbackNotice } from './usePetApiFallbackNotice'
 import { routeForPetTemplate } from './petTemplateWorkflow'
 import { autoMatchPetMaterials } from './petAssetAutoMatch'
-import { findPetTemplate, getFeaturedPetTemplates, selectPetTemplateForPrompt } from './petTemplateConfig'
+import { findPetTemplate, getFeaturedPetTemplates, inferPetStoryIntentMode, selectPetTemplateForPrompt } from './petTemplateConfig'
+import { syncPetStoryMode } from './petStoryMode'
 
 const route = useRoute()
 const router = useRouter()
@@ -249,7 +210,6 @@ const planEstimate = ref<PetVideoEstimate | null>(null)
 const planPreview = ref<PetVideoPreview | null>(null)
 const previewing = ref(false)
 const apiMode = getPetCreationApiMode()
-const durationOptions = [5, 10, 15, 30] as const
 const appliedQueryTemplateId = ref('')
 const EXTRA_ROLE_SEEDS = [
   { name: '豆包', type: 'cat' as const, breed: '英短', tone: '软萌但有点嘴硬', tags: ['好奇', '撒娇'] },
@@ -260,7 +220,7 @@ const EXTRA_ROLE_SEEDS = [
 
 usePetApiFallbackNotice()
 
-const recommendedTemplates = computed(() => getFeaturedPetTemplates(templates.value).slice(0, 6))
+const recommendedTemplates = computed(() => getFeaturedPetTemplates(templates.value).slice(0, 4))
 const materialSummaryTitle = computed(() =>
   draft.materials.length > 0 ? `已配置 ${draft.materials.length} 个宠物参考素材` : '从宠物资产中心选择素材',
 )
@@ -281,6 +241,7 @@ async function applyTemplateFromQuery() {
   if (!template) return
   appliedQueryTemplateId.value = templateId
   applyTemplate(template)
+  if (template.id === 'multi-pet-dialogue') syncPetStoryMode(draft)
   await saveDraft()
   if (route.name === 'pet-render') {
     void router.replace(routeForPetTemplate(template))
@@ -289,6 +250,7 @@ async function applyTemplateFromQuery() {
 
 async function handleUseTemplate(template: PetTemplate) {
   applyTemplate(template)
+  if (template.id === 'multi-pet-dialogue') syncPetStoryMode(draft)
   await saveDraft()
   ElMessage.success(`已应用「${template.title}」模板`)
   void router.push(routeForPetTemplate(template))
@@ -344,7 +306,7 @@ async function handleBenchmarkStoryboard() {
   await handleGenerateStoryboardQuick()
 }
 
-function routeForSmartTemplate(template: PetTemplate) {
+function routeForSmartTemplate(template: PetTemplate, prompt: string) {
   const target = routeForPetTemplate(template)
   if (typeof target === 'string') return target
   return {
@@ -352,6 +314,7 @@ function routeForSmartTemplate(template: PetTemplate) {
     query: {
       ...(target.query || {}),
       from: 'ai-prompt',
+      ...(template.id === 'multi-pet-dialogue' ? { intentMode: inferPetStoryIntentMode(prompt) } : {}),
     },
   }
 }
@@ -398,10 +361,17 @@ async function prepareAiTemplateDraftAndGo() {
     const template = selectPetTemplateForPrompt(originalPrompt, templates.value)
     applyTemplate(template)
     draft.prompt = originalPrompt
-    if (template.workflow === 'dialogue') {
+    if (template.workflow === 'sticker') {
+      prepareStickerDraftFromPrompt(originalPrompt)
+    }
+    if (template.workflow === 'dialogue' && inferPetStoryIntentMode(originalPrompt) === 'multi-pet') {
       ensureDialogueRolesForPrompt(originalPrompt)
     }
     const matchedCount = await autoMatchPetMaterials(draft, template)
+    if (template.id === 'multi-pet-dialogue') syncPetStoryMode(draft)
+    if (template.id === 'pet-ai-smart-story' && !hasMainPetMaterial(draft)) {
+      draft.generationMode = 'text_video'
+    }
     if (template.workflow === 'background' && !draft.visualSettings.backgroundPrompt.trim()) {
       draft.visualSettings.backgroundPrompt = originalPrompt.slice(0, 160)
     }
@@ -409,18 +379,40 @@ async function prepareAiTemplateDraftAndGo() {
     if (template.workflow === 'dialogue') {
       const nextDraft = await generatePetScript(cloneDraft(snapshotDraft()))
       Object.assign(draft, nextDraft)
+      if (template.id === 'multi-pet-dialogue') syncPetStoryMode(draft)
     } else if (template.workflow === 'smart' || template.workflow === 'storyboard' || template.id === 'pet-dance-sing') {
       const nextDraft = await generatePetStoryboard(cloneDraft(snapshotDraft()))
       Object.assign(draft, nextDraft)
     }
     await saveDraft()
     ElMessage.success(`已匹配「${template.title}」并预填${matchedCount > 0 ? ` ${matchedCount} 个素材、` : ''}文案/分镜草稿。`)
-    void router.push(routeForSmartTemplate(template))
+    void router.push(routeForSmartTemplate(template, originalPrompt))
   } catch (error) {
     ElMessage.error(petErrorMessage(error, '生成宠物创作草稿失败，请稍后重试。'))
   } finally {
     creating.value = false
   }
+}
+
+function prepareStickerDraftFromPrompt(prompt: string) {
+  draft.scriptText = prompt
+  const quotedCaption = prompt.match(/[“\"「『](.{1,16}?)[”\"」』]/)?.[1]?.trim()
+  const inferredCaption = quotedCaption
+    || (/偷吃/.test(prompt) && /发现/.test(prompt) ? '糟糕，被发现了' : '')
+    || (/文字|加字|字幕/.test(prompt) ? '我什么都没做' : '')
+  draft.subtitleEnabled = Boolean(inferredCaption)
+  draft.subtitleStyle.strokeMode = /白色描边|白描边/.test(prompt) ? 'strong' : draft.subtitleStyle.strokeMode
+  draft.shots = inferredCaption
+    ? [{
+        id: `ai-sticker-${Date.now()}`,
+        index: 1,
+        durationSeconds: draft.durationSeconds,
+        frameDescription: '宠物聊天表情包近景，主体清晰，背景干净',
+        characterAction: '宠物发现偷吃被看到后露出搞笑又心虚的表情',
+        cameraMove: '固定近景',
+        subtitle: inferredCaption,
+      }]
+    : []
 }
 
 async function openPlanPreview() {
@@ -488,6 +480,7 @@ async function confirmCreateTask() {
     ElMessage.warning('当前为本地安全测试模式，未调用第三方视频生成。需要真实生成时，请先由管理员开启 provider submit 并再次确认。')
     return
   }
+  creating.value = true
   try {
     await ElMessageBox.confirm(
       '将调用第三方视频生成并可能产生费用。本次只生成 1 条，确认后不可撤销。是否继续？',
@@ -499,9 +492,9 @@ async function confirmCreateTask() {
       },
     )
   } catch {
+    creating.value = false
     return
   }
-  creating.value = true
   try {
     await saveDraft()
     const task = await createPetVideoTask(cloneDraft(snapshotDraft()))
@@ -539,11 +532,6 @@ async function goBackgroundEdit() {
   }
   await saveDraft()
   void router.push({ name: 'pet-role-setup', query: { focus: 'scene' } })
-}
-
-function setDuration(seconds: (typeof durationOptions)[number]) {
-  draft.durationSeconds = seconds
-  void saveDraft()
 }
 
 function previewWork() {
@@ -642,6 +630,10 @@ async function deleteWork(work: PetWork) {
 onMounted(async () => {
   try {
     await loadDraft()
+    if (!draft.templateId && !hasPrompt(draft)) {
+      draft.videoType = 'short_drama'
+      draft.generationMode = hasMainPetMaterial(draft) ? 'reference_video' : 'text_video'
+    }
   } catch (error) {
     ElMessage.error(petErrorMessage(error, '宠物草稿恢复失败，已使用默认草稿。'))
   }
@@ -1053,10 +1045,20 @@ watch(
   text-decoration: none;
 }
 
-.pet-template-grid,
+.pet-template-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+  grid-auto-rows: 1fr;
+  gap: 14px;
+}
+
+.pet-template-grid > * {
+  min-width: 0;
+}
+
 .pet-work-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
   gap: 12px;
 }
 

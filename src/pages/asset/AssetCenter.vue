@@ -185,7 +185,7 @@
           class="asset-search"
           type="search"
           :disabled="loading"
-          :placeholder="activeCategory === 'materials' ? '搜索资产名、车型、风格、数字人或整合包...' : '搜索音色名称或 voice_type...'"
+          :placeholder="activeCategory === 'materials' ? (isPetAssetMode ? '搜索资产名、宠物、场景、人物或脚本...' : '搜索资产名、车型、风格、数字人或整合包...') : '搜索音色名称或 voice_type...'"
         />
         <input
           ref="materialUploadInputRef"
@@ -330,8 +330,10 @@
     </div>
 
     <div v-else-if="isAvatarAssetMode && filteredAssetAvatars.length === 0" class="app-empty asset-empty">
-      <div class="asset-empty-title">暂无数字人资产</div>
-      <div class="asset-empty-subtitle">当前筛选下没有数字人形象，可切换到全部素材或公共素材查看公共推荐。</div>
+      <div class="asset-empty-title">{{ isPetAssetMode ? '暂无人物资产' : '暂无数字人资产' }}</div>
+      <div class="asset-empty-subtitle">
+        {{ isPetAssetMode ? '当前筛选下没有主人或讲解人形象，可上传人物参考图或先在人物生成工具中创建。' : '当前筛选下没有数字人形象，可切换到全部素材或公共素材查看公共推荐。' }}
+      </div>
     </div>
 
     <div v-else-if="!isAvatarAssetMode && assets.length === 0" class="app-empty asset-empty">
@@ -357,13 +359,13 @@
       >
         <div class="avatar-asset-cover">
           <img v-if="avatar.previewUrl" :src="resolveFileUrl(avatar.previewUrl)" :alt="avatar.avatarName" />
-          <span v-else>数字人</span>
+          <span v-else>{{ isPetAssetMode ? '人物' : '数字人' }}</span>
         </div>
         <div class="avatar-asset-body">
           <strong>{{ avatar.avatarName }}</strong>
           <p>{{ avatarSourceLabel(avatar) }} · {{ avatarVisibilityLabel(avatar) }}</p>
           <div class="asset-row-tags">
-            <span class="asset-group-pill asset-business-pill">数字人资产</span>
+            <span class="asset-group-pill asset-business-pill">{{ isPetAssetMode ? '人物资产' : '数字人资产' }}</span>
             <span class="asset-group-pill" :class="avatarVisibilityPillClass(avatar)">
               {{ avatarVisibilityLabel(avatar) }}
             </span>
@@ -451,6 +453,15 @@
         </div>
 
         <div class="asset-row-actions">
+          <button
+            v-if="canUsePetCreationAsset(asset)"
+            class="app-primary-button asset-use-pet"
+            type="button"
+            :disabled="petApplyingAssetId != null"
+            @click="handleUsePetCreationAsset(asset)"
+          >
+            {{ petApplyingAssetId === asset.assetId ? '导入中...' : '一键使用' }}
+          </button>
           <button
             v-if="canOpenAssetPreview(asset)"
             class="app-secondary-button asset-open"
@@ -685,7 +696,18 @@
               {{ displayAssetPreviewSubtitle(previewAsset) }}
             </p>
           </div>
-          <button class="app-secondary-button" type="button" @click="closeAssetPreview">关闭</button>
+          <div class="asset-preview-head-actions">
+            <button
+              v-if="previewAsset && canUsePetCreationAsset(previewAsset)"
+              class="app-primary-button"
+              type="button"
+              :disabled="petApplyingAssetId != null"
+              @click="handleUsePetCreationAsset(previewAsset)"
+            >
+              {{ petApplyingAssetId === previewAsset.assetId ? '导入中...' : '一键使用' }}
+            </button>
+            <button class="app-secondary-button" type="button" @click="closeAssetPreview">关闭</button>
+          </div>
         </header>
 
         <p v-if="previewError" class="app-error">{{ previewError }}</p>
@@ -720,7 +742,7 @@
               @loadedmetadata="handleVideoMetadataLoaded(previewAsset, $event)"
             />
             <div class="asset-preview-video-meta">
-              <strong>{{ previewAsset.fileName }}</strong>
+              <strong>{{ displayAssetTitle(previewAsset) }}</strong>
               <small>{{ displayAssetMeta(previewAsset) }}</small>
               <small v-if="videoDurationText(previewAsset)">时长 {{ videoDurationText(previewAsset) }}</small>
               <div class="asset-video-cover-tools">
@@ -873,6 +895,7 @@ import { getTaskDetail, getTaskResult, newIdempotencyKey } from '../../services/
 import { rememberSessionTaskId } from '../../services/sessionTaskStore'
 import { VOICE_PRESET_SELECTION_KEY, type VoicePresetItem } from '../../types/voiceTypes'
 import { taskTypeLabel } from '../../utils/taskDisplay'
+import { petAssetDisplayName, petAssetTypeLabel } from '../pet-creation/petAssetDisplayName'
 import {
   assetWorkflowDisplayMeta as assetWorkflowDisplayMetaShared,
   assetWorkflowDisplayTitle as assetWorkflowDisplayTitleShared,
@@ -1033,6 +1056,7 @@ const PET_AUDIO_GROUP = '宠物音频'
 const PET_COPY_GROUP = '宠物文案'
 const PET_STORYBOARD_GROUP = '宠物分镜'
 const PET_RESULT_GROUP = '宠物生成结果'
+const PET_DIGITAL_HUMAN_GROUP = '宠物数字人形象'
 const ASSET_PAGE_SIZE = 24
 const INLINE_PREVIEW_BATCH_SIZE = 6
 const PET_SOURCE_TYPE_SET = new Set([
@@ -1043,6 +1067,7 @@ const PET_SOURCE_TYPE_SET = new Set([
   'PET_VIDEO_RESULT',
   'PET_SCRIPT_GENERATE',
   'PET_STORYBOARD_GENERATE',
+  'AVATAR_GENERATE',
 ])
 
 const WORKFLOW_STAGE_OPTIONS = [
@@ -1096,6 +1121,15 @@ const WORKFLOW_STAGE_OPTIONS = [
     assetGroups: [PET_RESULT_GROUP],
     defaultAssetGroup: PET_RESULT_GROUP,
     defaultAssetRole: 'pet_video_result',
+  },
+  {
+    key: 'petDigitalHuman',
+    label: '人物',
+    sourceTypes: ['AVATAR_GENERATE', 'USER_UPLOAD'],
+    assetRoles: ['host_image'],
+    assetGroups: [PET_DIGITAL_HUMAN_GROUP],
+    defaultAssetGroup: PET_DIGITAL_HUMAN_GROUP,
+    defaultAssetRole: 'host_image',
   },
   {
     key: 'petAudio',
@@ -1253,6 +1287,7 @@ const PET_ASSET_GROUP_PRESETS = [
   PET_COPY_GROUP,
   PET_STORYBOARD_GROUP,
   PET_RESULT_GROUP,
+  PET_DIGITAL_HUMAN_GROUP,
 ] as const
 const PET_ASSET_GROUP_PRESET_SET = new Set<string>(PET_ASSET_GROUP_PRESETS)
 
@@ -1329,6 +1364,7 @@ const previewError = ref('')
 const previewAsset = ref<AssetItem | null>(null)
 const previewPayload = ref<unknown>(null)
 const previewShotIndex = ref(-1)
+const petApplyingAssetId = ref<number | null>(null)
 const inlinePreviewByAssetId = ref<Record<number, AssetInlinePreview>>({})
 const videoDurationByAssetId = ref<Record<number, string>>({})
 const VIDEO_COVER_OVERRIDE_KEY = 'huashuo_video_cover_overrides'
@@ -1419,7 +1455,7 @@ const showAssetGroupSelect = computed(() =>
 const workflowStageOptions = computed(() => {
   const hidden = isPetAssetMode.value
     ? new Set<WorkflowStageKey>(['benchmark', 'storyboard', 'voice', 'digitalHuman', 'video', 'template', 'carBundle', 'sceneBundle', 'material'])
-    : new Set<WorkflowStageKey>(['material', 'petBackground', 'petPet', 'petVideo', 'petAudio', 'petCopy', 'petStoryboard'])
+    : new Set<WorkflowStageKey>(['material', 'petBackground', 'petPet', 'petVideo', 'petDigitalHuman', 'petAudio', 'petCopy', 'petStoryboard'])
   return WORKFLOW_STAGE_OPTIONS.filter((item) => !hidden.has(item.key))
 })
 const selectedBusinessViewOption = computed(
@@ -1433,7 +1469,7 @@ const businessViewStatusText = computed(() => {
 const assetKindStatusText = computed(() => {
   const scope = listScopeLabel(listScope.value)
   if (isPetAssetMode.value) {
-    return `${scope} · 背景、宠物、视频、音频、文案和分镜按创作环节管理`
+    return `${scope} · 背景、宠物、人物、视频、音频、文案和分镜按创作环节管理`
   }
   if (!selectedWorkflowStage.value) {
     return `${scope} · 文案、分镜、车型素材包、数字人形象等可复用资产`
@@ -1462,6 +1498,7 @@ const materialUploadHint = computed(() => {
   if (isPetAssetMode.value) {
     if (selectedWorkflowStage.value === 'petBackground') return '上传客厅、草地、宠物店等背景图，保存为宠物视频场景参考。'
     if (selectedWorkflowStage.value === 'petPet') return '上传主宠物、第二只宠物或宠物用品参考图，作为宠物创作主体素材。'
+    if (selectedWorkflowStage.value === 'petDigitalHuman') return '上传主人、讲解人或人宠同框人物参考图，保存为宠物人物资产。'
     if (selectedWorkflowStage.value === 'petVideo') return '上传宠物参考视频或生成结果视频，供作品复用和下载检查。'
     if (selectedWorkflowStage.value === 'petAudio') return '上传宠物口播、BGM 或音效素材，供配音和后期复用。'
     if (selectedWorkflowStage.value === 'petCopy') return '上传 TXT、MD、SRT 或 JSON 文案脚本，保存为宠物文案资产。'
@@ -1525,6 +1562,7 @@ const selectedUploadBusinessView = computed<BusinessViewKey>(() => {
   if (selectedWorkflowStage.value === 'petAudio') return 'audio'
   if (selectedWorkflowStage.value === 'petCopy') return 'copy'
   if (selectedWorkflowStage.value === 'petStoryboard') return 'storyboard'
+  if (selectedWorkflowStage.value === 'petDigitalHuman') return 'avatar'
   if (selectedWorkflowStage.value === 'petBackground' || selectedWorkflowStage.value === 'petPet') return 'image'
   if (selectedWorkflowStage.value === 'digitalHuman') return 'avatar'
   if (selectedWorkflowStage.value === 'video') return 'video'
@@ -1566,7 +1604,7 @@ const filteredVoices = computed(() => {
 })
 
 const isAvatarAssetMode = computed(() =>
-  activeCategory.value === 'materials' && selectedWorkflowStage.value === 'digitalHuman',
+  activeCategory.value === 'materials' && (selectedWorkflowStage.value === 'digitalHuman' || selectedWorkflowStage.value === 'petDigitalHuman'),
 )
 
 const filteredAssetAvatars = computed(() => {
@@ -1779,12 +1817,16 @@ const rewritePreviewTitle = computed(() => {
 })
 
 onMounted(() => {
-  syncAssetViewFromRoute()
+  const changed = syncAssetViewFromRoute()
+  if (changed) {
+    void nextTick(() => refreshCurrent())
+    return
+  }
   void refreshCurrent()
 })
 
 watch(
-  () => [route.query.assetView, route.query.view, route.query.workflowStage, route.query.assetGroup] as const,
+  () => [route.query.assetView, route.query.view, route.query.workflowStage, route.query.assetGroup, route.query.scope] as const,
   () => {
     if (syncAssetViewFromRoute()) {
       if (loading.value || assetLoadingMore.value) {
@@ -1886,7 +1928,7 @@ async function loadAssets(options?: { append?: boolean }) {
       return
     }
     if (isAvatarAssetMode.value) {
-      const rows = await getAvatars()
+      const rows = await getAvatars(isPetAssetMode.value ? { businessDomain: 'pet' } : undefined)
       if (seq !== assetLoadSeq) return
       avatarAssets.value = rows
       assets.value = []
@@ -2179,7 +2221,11 @@ async function handleMaterialUploadChange(event: Event) {
   try {
     for (const file of files) {
       if (avatarUploadMode) {
-        const uploadedAvatar = await uploadAvatar(avatarNameFromFile(file), file)
+        const uploadedAvatar = await uploadAvatar(
+          avatarNameFromFile(file),
+          file,
+          isPetAssetMode.value ? { businessDomain: 'pet' } : undefined,
+        )
         latestAvatarId = uploadedAvatar.avatarId
         continue
       }
@@ -2187,6 +2233,7 @@ async function handleMaterialUploadChange(event: Event) {
       const uploaded = await uploadMaterialAsset(file, {
         publish: publishAfterUpload,
         metadataJson: uploadMetadata ? JSON.stringify(uploadMetadata) : undefined,
+        businessDomain: isPetAssetMode.value ? 'pet' : undefined,
       })
       latestAssetId = uploaded.assetId
       latestAsset = uploaded
@@ -2199,8 +2246,9 @@ async function handleMaterialUploadChange(event: Event) {
     keyword.value = ''
     sortKey.value = 'createdAtDesc'
     listScope.value = 'private'
+    const avatarKindLabel = isPetAssetMode.value ? '人物' : '数字人'
     jumpHint.value = avatarUploadMode
-      ? files.length > 1 ? `已上传 ${files.length} 个数字人形象到私有资产。` : '已上传到私有数字人资产。'
+      ? files.length > 1 ? `已上传 ${files.length} 个${avatarKindLabel}形象到私有资产。` : `已上传到私有${avatarKindLabel}资产。`
       : files.length > 1 ? `已上传 ${files.length} 个素材到私有资产。` : '已上传到私有资产。'
     await loadAssets()
     if (avatarUploadMode) {
@@ -2332,6 +2380,7 @@ function syncAssetViewFromRoute() {
   const view = parseBusinessViewQuery(route.query.assetView ?? route.query.view)
   const stage = parseWorkflowStageQuery(route.query.workflowStage)
   const assetGroup = parseAssetGroupQuery(route.query.assetGroup)
+  const scope = parseListScopeQuery(route.query.scope)
   try {
     if (view) {
       const stageForView = WORKFLOW_STAGE_BY_BUSINESS_VIEW[view] || ''
@@ -2351,6 +2400,10 @@ function syncAssetViewFromRoute() {
     }
     if (selectedAssetGroup.value !== assetGroup) {
       selectedAssetGroup.value = assetGroup
+      changed = true
+    }
+    if (scope && listScope.value !== scope) {
+      listScope.value = scope
       changed = true
     }
   } finally {
@@ -2375,6 +2428,11 @@ function parseAssetGroupQuery(value: unknown) {
   return String(Array.isArray(value) ? value[0] || '' : value || '').trim()
 }
 
+function parseListScopeQuery(value: unknown): AssetListScope | null {
+  const raw = String(Array.isArray(value) ? value[0] || '' : value || '')
+  return ['all', 'global', 'private'].includes(raw) ? raw as AssetListScope : null
+}
+
 function selectWorkflowStage(stage: WorkflowStageKey) {
   selectedWorkflowStage.value = stage
   if (stage) {
@@ -2395,6 +2453,8 @@ function selectWorkflowStage(stage: WorkflowStageKey) {
     selectedBusinessView.value = 'copy'
   } else if (stage === 'petStoryboard') {
     selectedBusinessView.value = 'storyboard'
+  } else if (stage === 'petDigitalHuman') {
+    selectedBusinessView.value = 'avatar'
   } else if (stage === 'petBackground' || stage === 'petPet') {
     selectedBusinessView.value = 'image'
   } else if (stage === 'digitalHuman') {
@@ -2433,7 +2493,7 @@ function assetTypeForCurrentQuery(): AssetType | undefined {
   ) {
     return 'JSON'
   }
-  if (selectedWorkflowStage.value === 'petBackground' || selectedWorkflowStage.value === 'petPet') {
+  if (selectedWorkflowStage.value === 'petBackground' || selectedWorkflowStage.value === 'petPet' || selectedWorkflowStage.value === 'petDigitalHuman') {
     return 'IMAGE'
   }
   if (selectedWorkflowStage.value === 'petVideo') {
@@ -2473,6 +2533,9 @@ function assetGroupForCurrentQuery() {
     return SCENE_MATERIAL_BUNDLE_GROUP
   }
   if (isPetAssetMode.value && isPetWorkflowStage(selectedWorkflowStage.value)) {
+    if (selectedWorkflowStage.value === 'petBackground') {
+      return selectedAssetGroup.value || PET_BACKGROUND_GROUP
+    }
     return selectedAssetGroup.value || undefined
   }
   const stage = currentWorkflowStageOption()
@@ -2582,9 +2645,13 @@ function matchesPetWorkflowStage(asset: AssetItem, stage: WorkflowStageKey) {
   const sourceType = String(asset.sourceType || '').trim().toUpperCase()
   const from = stringField(metadata, 'from')
   const kind = stringField(metadata, 'kind')
+  const metadataStage = stringField(metadata, 'workflowStage')
   const text = assetBusinessIdentityText(asset)
   const groupMatched = (...groups: string[]) => groups.some((item) => item === group || item === metaGroup)
   const roleMatched = (...roles: string[]) => roles.includes(role)
+  if (metadataStage.startsWith('pet') && metadataStage !== stage) {
+    return false
+  }
   if (stage === 'petBackground') {
     return isImage(asset) && (
       sourceType === 'PET_BACKGROUND_GENERATE' ||
@@ -2603,6 +2670,16 @@ function matchesPetWorkflowStage(asset: AssetItem, stage: WorkflowStageKey) {
       groupMatched(PET_IMAGE_GROUP, PET_MAIN_GROUP, PET_SECOND_GROUP, PET_PROP_GROUP, '宠物主图') ||
       roleMatched('main_pet', 'second_pet', 'prop') ||
       includesAnyBusinessToken(text, ['ai宠物', '宠物素材', '主宠物', '第二宠物', '宠物产品', '道具'])
+    )
+  }
+  if (stage === 'petDigitalHuman') {
+    return isImage(asset) && (
+      sourceType === 'AVATAR_GENERATE' ||
+      sourceType === 'USER_UPLOAD' ||
+      from === 'pet_avatar_generate' ||
+      from === 'pet_avatar_upload' ||
+      groupMatched(PET_DIGITAL_HUMAN_GROUP) ||
+      (roleMatched('host_image') && includesAnyBusinessToken(text, ['pet_avatar', '宠物数字人', '数字人形象', '数字人']))
     )
   }
   if (stage === 'petVideo') {
@@ -2687,6 +2764,7 @@ function assetBusinessLabel(asset: AssetItem) {
 function petAssetBusinessLabel(asset: AssetItem) {
   if (matchesPetWorkflowStage(asset, 'petBackground')) return '背景'
   if (matchesPetWorkflowStage(asset, 'petPet')) return '宠物'
+  if (matchesPetWorkflowStage(asset, 'petDigitalHuman')) return '人物'
   if (matchesPetWorkflowStage(asset, 'petVideo')) return '视频'
   if (matchesPetWorkflowStage(asset, 'petAudio')) return '音频'
   if (matchesPetWorkflowStage(asset, 'petStoryboard')) return '分镜'
@@ -3354,6 +3432,9 @@ function compactSourceLabel(value: string) {
 }
 
 function displayAssetTitle(asset: AssetItem) {
+  if (isPetAssetMode.value) {
+    return petAssetDisplayName(asset)
+  }
   const workflowTitle = assetWorkflowDisplayTitleShared(asset)
   if (workflowTitle) {
     return workflowTitle
@@ -3369,6 +3450,14 @@ function displayAssetTitle(asset: AssetItem) {
 }
 
 function displayAssetMeta(asset: AssetItem) {
+  if (isPetAssetMode.value) {
+    return [
+      petAssetTypeLabel(asset),
+      asset.assetGroup || petAssetBusinessLabel(asset),
+      sourceTypeLabel(asset.sourceType),
+      formatFileSize(asset.fileSize),
+    ].filter(Boolean).join(' · ')
+  }
   const workflowMeta = assetWorkflowDisplayMetaShared(asset)
   if (workflowMeta) {
     return workflowMeta
@@ -3388,6 +3477,9 @@ function displayAssetMeta(asset: AssetItem) {
 }
 
 function displayAssetPreviewSubtitle(asset: AssetItem) {
+  if (isPetAssetMode.value) {
+    return `${displayAssetTitle(asset)} · ${displayAssetMeta(asset)}`
+  }
   if (isJson(asset) && asset.kind === 'GENERATED') {
     return displayAssetMeta(asset)
   }
@@ -3451,7 +3543,7 @@ function avatarVisibilityPillClass(avatar: AvatarItem) {
 
 function avatarSourceLabel(avatar: AvatarItem) {
   const sourceType = String(avatar.sourceType || '').trim().toUpperCase()
-  if (sourceType === 'AVATAR_GENERATE') return '数字人形象生成'
+  if (sourceType === 'AVATAR_GENERATE') return isPetAssetMode.value ? '人物形象生成' : '数字人形象生成'
   if (sourceType === 'AI_GENERATED') return 'AI 生成'
   if (sourceType === 'USER_UPLOAD') return '用户上传'
   return avatar.sourceType || '形象资产'
@@ -3531,14 +3623,15 @@ async function copyLink(asset: AssetItem) {
 async function copyAvatarLink(avatar: AvatarItem) {
   const url = resolveFileUrl(avatar.previewUrl || '')
   if (!url || url === '#') {
-    errorMessage.value = '该数字人暂无可复制的预览链接'
+    errorMessage.value = isPetAssetMode.value ? '该人物暂无可复制的预览链接' : '该数字人暂无可复制的预览链接'
     return
   }
   try {
     await navigator.clipboard.writeText(url)
-    jumpHint.value = '已复制数字人图片链接。'
+    const copiedHint = isPetAssetMode.value ? '已复制人物图片链接。' : '已复制数字人图片链接。'
+    jumpHint.value = copiedHint
     window.setTimeout(() => {
-      if (jumpHint.value === '已复制数字人图片链接。') {
+      if (jumpHint.value === copiedHint) {
         jumpHint.value = ''
       }
     }, 2500)
@@ -3569,6 +3662,59 @@ async function openAssetPreview(asset: AssetItem) {
   }
 }
 
+function canUsePetCreationAsset(asset: AssetItem) {
+  if (!isPetAssetMode.value || !(isText(asset) || isJson(asset))) return false
+  return matchesPetWorkflowStage(asset, 'petCopy')
+    || matchesPetWorkflowStage(asset, 'petStoryboard')
+    || isCopyBusinessAsset(asset)
+    || isStoryboardBusinessAsset(asset)
+}
+
+async function handleUsePetCreationAsset(asset: AssetItem) {
+  if (!canUsePetCreationAsset(asset) || petApplyingAssetId.value != null) return
+  petApplyingAssetId.value = asset.assetId
+  errorMessage.value = ''
+  jumpHint.value = ''
+  try {
+    const [content, creationApi, assetImport, autoMatch, templateConfig] = await Promise.all([
+      getAssetTextContent(asset),
+      import('../../services/petCreationApi'),
+      import('../pet-creation/petCreationAssetImport'),
+      import('../pet-creation/petAssetAutoMatch'),
+      import('../pet-creation/petTemplateConfig'),
+    ])
+    const baseDraft = await creationApi.getPetDraft()
+    const imported = assetImport.importPetCreationAssetContent(baseDraft, content, {
+      assetId: asset.assetId,
+      fileName: asset.fileName,
+      title: displayAssetTitle(asset),
+    })
+    const template = templateConfig.findPetTemplate(imported.templateId)
+      || templateConfig.findPetTemplate(imported.kind === 'dialogue' ? 'multi-pet-dialogue' : 'viral-benchmark-storyboard')
+    if (!template) throw new Error('没有找到与该资产匹配的宠物模板。')
+    const matchedCount = await autoMatch.autoMatchPetMaterials(imported.draft, template, {
+      requiredRoles: imported.requiredMaterialRoles,
+      replaceRoles: imported.requiredMaterialRoles,
+      roleKeywords: imported.materialKeywords,
+    })
+    await creationApi.savePetDraft(imported.draft)
+    closeAssetPreview()
+    jumpHint.value = `已导入“${imported.title}”：${imported.importedDialogueCount} 条角色台词、${imported.importedShotCount} 个分镜，自动匹配 ${matchedCount} 项素材。`
+    await router.push({
+      name: imported.routeName,
+      query: {
+        templateId: imported.templateId,
+        from: 'pet-asset',
+        assetId: String(asset.assetId),
+      },
+    })
+  } catch (error) {
+    errorMessage.value = error instanceof Error ? error.message : '导入宠物创作资产失败'
+  } finally {
+    petApplyingAssetId.value = null
+  }
+}
+
 function closeAssetPreview() {
   previewModalOpen.value = false
   previewLoading.value = false
@@ -3582,7 +3728,7 @@ async function handleDeleteAvatar(avatar: AvatarItem) {
   if (loading.value) {
     return
   }
-  const ok = window.confirm(`确认删除该数字人形象？\n${avatar.avatarName}`)
+  const ok = window.confirm(`确认删除该${isPetAssetMode.value ? '人物' : '数字人'}形象？\n${avatar.avatarName}`)
   if (!ok) {
     return
   }
@@ -3591,9 +3737,9 @@ async function handleDeleteAvatar(avatar: AvatarItem) {
   try {
     await deleteAvatar(avatar.avatarId)
     avatarAssets.value = avatarAssets.value.filter((item) => item.avatarId !== avatar.avatarId)
-    jumpHint.value = '已删除数字人形象。'
+    jumpHint.value = isPetAssetMode.value ? '已删除人物形象。' : '已删除数字人形象。'
   } catch (e) {
-    errorMessage.value = e instanceof Error ? e.message : '删除数字人失败'
+    errorMessage.value = e instanceof Error ? e.message : (isPetAssetMode.value ? '删除人物失败' : '删除数字人失败')
   } finally {
     loading.value = false
   }
@@ -4639,6 +4785,10 @@ async function playVoiceSample(voice: VoicePresetItem) {
   gap: 8px;
 }
 
+.asset-row-actions .asset-use-pet {
+  min-width: 96px;
+}
+
 .asset-row-preview img {
   width: 240px;
   max-width: 100%;
@@ -4947,6 +5097,13 @@ async function playVoiceSample(voice: VoicePresetItem) {
 .asset-preview-head {
   align-items: flex-start;
   color: #111827;
+}
+
+.asset-preview-head-actions {
+  display: flex;
+  flex-shrink: 0;
+  align-items: center;
+  gap: 8px;
 }
 
 .asset-preview-toolbar {
@@ -5576,7 +5733,8 @@ async function playVoiceSample(voice: VoicePresetItem) {
   margin-top: auto;
 }
 
-.asset-file-list--grid .asset-row-actions .app-secondary-button {
+.asset-file-list--grid .asset-row-actions .app-secondary-button,
+.asset-file-list--grid .asset-row-actions .app-primary-button {
   min-height: 32px;
   padding: 6px 8px;
   font-size: 12px;

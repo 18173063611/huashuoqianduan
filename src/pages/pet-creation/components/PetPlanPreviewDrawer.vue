@@ -85,7 +85,7 @@
             <section class="pet-plan-card">
               <div class="pet-plan-card-head">
                 <span>宠物素材</span>
-                <small>主宠 {{ materialGroups.main.length }} / 第二宠 {{ materialGroups.second.length }} / 产品 {{ materialGroups.prop.length }} / 场景 {{ materialGroups.scene.length }} / 音频 {{ materialGroups.audio.length }}</small>
+                <small>主宠 {{ materialGroups.main.length }} / 第二宠 {{ materialGroups.second.length }} / 人物 {{ materialGroups.human.length }} / 产品 {{ materialGroups.prop.length }} / 场景 {{ materialGroups.scene.length }} / 音频 {{ materialGroups.audio.length }}</small>
               </div>
               <div class="pet-plan-materials">
                 <span v-for="material in materialGroups.all" :key="material.id">
@@ -220,6 +220,7 @@ const materialGroups = computed(() => ({
   all: props.draft.materials,
   main: props.draft.materials.filter((item) => item.role === 'main_pet'),
   second: props.draft.materials.filter((item) => item.role === 'second_pet'),
+  human: props.draft.materials.filter((item) => item.role === 'human_avatar'),
   prop: props.draft.materials.filter((item) => item.role === 'prop'),
   scene: props.draft.materials.filter((item) => item.role === 'scene'),
   audio: props.draft.materials.filter((item) => item.role === 'audio'),
@@ -264,6 +265,7 @@ function materialRoleLabel(role: string) {
   const map: Record<string, string> = {
     main_pet: '主宠物',
     second_pet: '第二宠物',
+    human_avatar: '人物/主人',
     prop: '产品/道具',
     scene: '场景',
     audio: '音频',
@@ -282,7 +284,7 @@ function petTypeLabel(type: string) {
 .pet-plan-backdrop {
   position: fixed;
   inset: 0;
-  z-index: 2400;
+  z-index: 2000;
   display: flex;
   justify-content: flex-end;
   background: rgba(15, 23, 42, 0.32);

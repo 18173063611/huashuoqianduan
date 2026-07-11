@@ -3,9 +3,11 @@
     <header class="pet-material-picker-head">
       <div>
         <h3>宠物生产素材</h3>
-        <p>按宠物视频生产角色管理素材：主宠物、第二或更多宠物、产品/道具、背景/场景和口播/BGM 音频均写入宠物草稿。</p>
+        <p>按宠物视频生产角色管理素材：主宠物、第二或更多宠物、人物/主人、产品/道具、背景/场景和口播/BGM 音频均写入宠物草稿。</p>
       </div>
-      <button type="button" @click="loadAssets">{{ loadingAssets ? '加载中' : '刷新资产' }}</button>
+      <button type="button" @click="toggleBrowser">
+        {{ browserOpen ? '收起素材库' : '选择/更换素材' }}
+      </button>
     </header>
 
     <div class="pet-material-slots">
@@ -14,8 +16,13 @@
         :key="slot.role"
         class="pet-material-slot"
         :class="{ active: slot.role === activeRole }"
+        role="button"
+        tabindex="0"
+        @click="openBrowserForRole(slot.role)"
+        @keydown.enter.prevent="openBrowserForRole(slot.role)"
+        @keydown.space.prevent="openBrowserForRole(slot.role)"
       >
-        <button type="button" class="pet-material-preview" @click="setActiveRole(slot.role)">
+        <button type="button" class="pet-material-preview" @click.stop="openBrowserForRole(slot.role)">
           <img
             v-if="slot.kind === 'image' && materialByRole[slot.role]?.url"
             :src="materialByRole[slot.role]?.url"
@@ -31,70 +38,79 @@
           v-if="materialByRole[slot.role]"
           class="pet-material-remove"
           type="button"
-          @click="removeMaterial(slot.role)"
+          @click.stop="removeMaterial(slot.role)"
         >
           移除
         </button>
       </article>
     </div>
 
-    <div class="pet-material-actions">
-      <label class="pet-upload-action" :class="{ disabled: uploading }">
-        <input type="file" :accept="activeSlot.accept" :disabled="uploading" @change="handleUploadChange" />
-        <span>{{ uploading ? '上传中...' : `上传${activeSlotLabel}` }}</span>
-      </label>
-      <div class="pet-url-action">
-        <input v-model.trim="manualUrl" :placeholder="activeSlot.urlPlaceholder" />
-        <button type="button" @click="addManualUrl">添加 URL</button>
-      </div>
+    <div class="pet-material-current">
+      <span>当前选择：{{ activeSlotLabel }}</span>
+      <button type="button" @click="toggleBrowser">
+        {{ browserOpen ? '完成选择' : `选择${activeSlotLabel}` }}
+      </button>
     </div>
 
-    <p v-if="errorMessage" class="pet-material-error">{{ errorMessage }}</p>
-
-    <div class="pet-asset-toolbar">
-      <input
-        v-model.trim="keyword"
-        :disabled="loadingAssets"
-        :placeholder="activeSlot.placeholder"
-        @keydown.enter.prevent="loadAssets"
-      />
-      <select v-model="scope" :disabled="loadingAssets">
-        <option value="private">私有素材</option>
-        <option value="global">公共素材</option>
-        <option value="all">全部素材</option>
-      </select>
-      <button type="button" :disabled="loadingAssets" @click="loadAssets">搜索</button>
-    </div>
-
-    <p class="pet-material-tip">{{ activeSlot.description }}</p>
-
-    <div v-if="loadingAssets" class="pet-asset-empty">正在加载宠物资产中心素材。</div>
-    <div v-else-if="assetOptions.length === 0" class="pet-asset-empty">
-      当前分类暂无可选素材，可先上传文件或粘贴 URL。
-    </div>
-    <div v-else class="pet-asset-grid">
-      <article v-for="asset in assetOptions" :key="asset.assetId" class="pet-asset-card">
-        <div class="pet-asset-preview-box">
-          <img v-if="assetPreviewUrl(asset)" :src="assetPreviewUrl(asset)" :alt="asset.fileName" />
-          <span v-else>{{ assetKindLabel(asset) }}</span>
+    <div v-if="browserOpen" class="pet-material-browser">
+      <div class="pet-material-actions">
+        <label class="pet-upload-action" :class="{ disabled: uploading }">
+          <input type="file" :accept="activeSlot.accept" :disabled="uploading" @change="handleUploadChange" />
+          <span>{{ uploading ? '上传中...' : `上传${activeSlotLabel}` }}</span>
+        </label>
+        <div class="pet-url-action">
+          <input v-model.trim="manualUrl" :placeholder="activeSlot.urlPlaceholder" />
+          <button type="button" @click="addManualUrl">添加 URL</button>
         </div>
-        <strong>{{ asset.fileName }}</strong>
-        <small>{{ assetSubtitle(asset) }}</small>
-        <button
-          type="button"
-          class="pet-asset-select-button"
-          :class="{ selected: isSelectedAsset(asset) }"
-          @click="selectAsset(asset)"
-        >
-          {{ isSelectedAsset(asset) ? `已加入${activeSlotLabel}` : `加入${activeSlotLabel}` }}
-        </button>
-      </article>
+      </div>
+
+      <p v-if="errorMessage" class="pet-material-error">{{ errorMessage }}</p>
+
+      <div class="pet-asset-toolbar">
+        <input
+          v-model.trim="keyword"
+          :disabled="loadingAssets"
+          :placeholder="activeSlot.placeholder"
+          @keydown.enter.prevent="loadAssets"
+        />
+        <select v-model="scope" :disabled="loadingAssets">
+          <option value="private">私有素材</option>
+          <option value="global">公共素材</option>
+          <option value="all">全部素材</option>
+        </select>
+        <button type="button" :disabled="loadingAssets" @click="loadAssets">搜索</button>
+      </div>
+
+      <p class="pet-material-tip">{{ activeSlot.description }}</p>
+
+      <div v-if="loadingAssets" class="pet-asset-empty">正在加载宠物资产中心素材。</div>
+      <div v-else-if="assetOptions.length === 0" class="pet-asset-empty">
+        当前分类暂无可选素材，可先上传文件或粘贴 URL。
+      </div>
+      <div v-else class="pet-asset-grid">
+        <article v-for="asset in assetOptions" :key="asset.assetId" class="pet-asset-card">
+          <div class="pet-asset-preview-box">
+            <img v-if="assetPreviewUrl(asset)" :src="assetPreviewUrl(asset)" :alt="asset.fileName" />
+            <span v-else>{{ assetKindLabel(asset) }}</span>
+          </div>
+          <strong>{{ asset.fileName }}</strong>
+          <small>{{ assetSubtitle(asset) }}</small>
+          <button
+            type="button"
+            class="pet-asset-select-button"
+            :class="{ selected: isSelectedAsset(asset) }"
+            @click="selectAsset(asset)"
+          >
+            {{ isSelectedAsset(asset) ? `已加入${activeSlotLabel}` : `加入${activeSlotLabel}` }}
+          </button>
+        </article>
+      </div>
     </div>
   </section>
 </template>
 
 <script setup lang="ts">
-import { computed, onMounted, ref, watch } from 'vue'
+import { computed, ref, watch } from 'vue'
 import { getAssets, uploadMaterialAsset, type AssetListScope } from '../../../services/assetApi'
 import { normalizePublicMediaUrl } from '../../../utils/mediaUrl'
 import type { AssetItem, AssetType } from '../../../types/assetTypes'
@@ -114,11 +130,13 @@ interface PetMaterialSlot {
   accept: string
   kind: 'image' | 'audio'
   assetGroup: string
+  assetGroups?: string[]
   metadataRole: string
 }
 
 const props = defineProps<{
   modelValue: PetReferenceMaterial[]
+  initialRole?: PetMaterialRole
 }>()
 
 const emit = defineEmits<{
@@ -170,6 +188,20 @@ const materialSlots: PetMaterialSlot[] = [
     metadataRole: 'prop',
   },
   {
+    role: 'human_avatar',
+    label: '人物/主人参考',
+    shortLabel: '人物',
+    hint: '可选，用于人宠情景视频',
+    description: '人物图会以 human_avatar 素材传入，只作为主人或陪伴者参考，不能替换主宠物身份。',
+    placeholder: '搜索主人、人物、人宠同框、讲解人...',
+    urlPlaceholder: '粘贴人物/主人图片 URL',
+    assetTypes: ['IMAGE', 'COVER'],
+    accept: 'image/*',
+    kind: 'image',
+    assetGroup: '宠物数字人形象',
+    metadataRole: 'human_avatar',
+  },
+  {
     role: 'scene',
     label: '背景/场景参考',
     shortLabel: '背景',
@@ -180,7 +212,8 @@ const materialSlots: PetMaterialSlot[] = [
     assetTypes: ['IMAGE', 'COVER'],
     accept: 'image/*',
     kind: 'image',
-    assetGroup: '场景参考',
+    assetGroup: '宠物背景图',
+    assetGroups: ['宠物背景图', '场景参考', '宠物背景/场景'],
     metadataRole: 'scene',
   },
   {
@@ -199,7 +232,11 @@ const materialSlots: PetMaterialSlot[] = [
   },
 ]
 
-const activeRole = ref<PetMaterialRole>('main_pet')
+function isMaterialRole(role: unknown): role is PetMaterialRole {
+  return materialSlots.some((slot) => slot.role === role)
+}
+
+const activeRole = ref<PetMaterialRole>(isMaterialRole(props.initialRole) ? props.initialRole : 'main_pet')
 const keyword = ref('')
 const scope = ref<AssetListScope>('all')
 const manualUrl = ref('')
@@ -207,6 +244,7 @@ const loadingAssets = ref(false)
 const uploading = ref(false)
 const errorMessage = ref('')
 const assetOptions = ref<AssetItem[]>([])
+const browserOpen = ref(false)
 
 const activeSlot = computed(() => materialSlots.find((slot) => slot.role === activeRole.value) || materialSlots[0])
 const activeSlotLabel = computed(() => activeSlot.value.label)
@@ -223,6 +261,19 @@ function setActiveRole(role: PetMaterialRole) {
   activeRole.value = role
   manualUrl.value = ''
   errorMessage.value = ''
+}
+
+async function toggleBrowser() {
+  browserOpen.value = !browserOpen.value
+  if (browserOpen.value) {
+    await loadAssets()
+  }
+}
+
+async function openBrowserForRole(role: PetMaterialRole) {
+  setActiveRole(role)
+  browserOpen.value = true
+  await loadAssets()
 }
 
 function assetUrl(asset: AssetItem) {
@@ -277,6 +328,7 @@ function selectAsset(asset: AssetItem) {
     label: asset.fileName || activeSlotLabel.value,
   })
   errorMessage.value = ''
+  browserOpen.value = false
 }
 
 function addManualUrl() {
@@ -293,6 +345,7 @@ function addManualUrl() {
   })
   manualUrl.value = ''
   errorMessage.value = ''
+  browserOpen.value = false
 }
 
 function uploadMetadata() {
@@ -348,17 +401,20 @@ async function loadAssets() {
   errorMessage.value = ''
   const slot = activeSlot.value
   try {
+    const groups = slot.assetGroups?.length ? slot.assetGroups : [slot.assetGroup]
     const lists = await Promise.all(
-      slot.assetTypes.map((assetType) =>
-        getAssets({
-          assetType,
-          keyword: keyword.value,
-          scope: scope.value,
-          pageNo: 1,
-          pageSize: 24,
-          businessDomain: 'pet',
-          assetGroup: slot.assetGroup,
-        }),
+      slot.assetTypes.flatMap((assetType) =>
+        groups.map((assetGroup) =>
+          getAssets({
+            assetType,
+            keyword: keyword.value,
+            scope: scope.value,
+            pageNo: 1,
+            pageSize: 24,
+            businessDomain: 'pet',
+            assetGroup,
+          }),
+        ),
       ),
     )
     assetOptions.value = dedupeAssets(lists.flat())
@@ -371,11 +427,17 @@ async function loadAssets() {
 }
 
 watch(activeRole, () => {
-  void loadAssets()
+  if (browserOpen.value) void loadAssets()
 })
 
-onMounted(() => {
-  void loadAssets()
+watch(() => props.initialRole, (role) => {
+  if (!isMaterialRole(role)) return
+  activeRole.value = role
+  browserOpen.value = false
+  assetOptions.value = []
+  manualUrl.value = ''
+  keyword.value = ''
+  errorMessage.value = ''
 })
 </script>
 
@@ -384,6 +446,7 @@ onMounted(() => {
 .pet-material-slot,
 .pet-asset-card {
   display: grid;
+  min-width: 0;
   gap: 12px;
 }
 
@@ -396,6 +459,7 @@ onMounted(() => {
 }
 
 .pet-material-picker-head,
+.pet-material-current,
 .pet-material-actions,
 .pet-asset-toolbar {
   display: flex;
@@ -403,7 +467,8 @@ onMounted(() => {
   gap: 12px;
 }
 
-.pet-material-picker-head {
+.pet-material-picker-head,
+.pet-material-current {
   justify-content: space-between;
 }
 
@@ -438,6 +503,28 @@ onMounted(() => {
   cursor: pointer;
 }
 
+.pet-material-current {
+  min-height: 42px;
+  border: 1px solid #dfe7f5;
+  border-radius: 8px;
+  background: #fbfdff;
+  padding: 0 10px 0 12px;
+}
+
+.pet-material-current span {
+  color: #475467;
+  font-size: 13px;
+  font-weight: 850;
+}
+
+.pet-material-browser {
+  display: grid;
+  max-height: min(620px, calc(100vh - 220px));
+  overflow-y: auto;
+  padding-right: 2px;
+  gap: 12px;
+}
+
 .pet-asset-select-button.selected {
   border-color: #93c5fd;
   background: #eff6ff;
@@ -447,6 +534,7 @@ onMounted(() => {
 .pet-material-slots {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(190px, 1fr));
+  grid-auto-rows: 1fr;
   gap: 10px;
 }
 
@@ -454,15 +542,22 @@ onMounted(() => {
   position: relative;
   grid-template-columns: 56px 1fr;
   align-items: center;
+  min-height: 82px;
   border: 1px solid #dfe7f5;
   border-radius: 8px;
   background: #fbfdff;
   padding: 10px;
+  cursor: pointer;
 }
 
 .pet-material-slot.active {
   border-color: #bfdbfe;
   background: #eff6ff;
+}
+
+.pet-material-slot:focus-visible {
+  outline: 2px solid #93c5fd;
+  outline-offset: 2px;
 }
 
 .pet-material-preview {
@@ -486,9 +581,20 @@ onMounted(() => {
 
 .pet-material-slot strong,
 .pet-asset-card strong {
+  overflow: hidden;
   color: #172033;
   font-size: 14px;
   font-weight: 900;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.pet-material-slot p,
+.pet-asset-card small {
+  display: -webkit-box;
+  overflow: hidden;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
 }
 
 .pet-material-remove {
@@ -567,6 +673,7 @@ onMounted(() => {
 .pet-asset-grid {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+  grid-auto-rows: 1fr;
   gap: 10px;
 }
 
@@ -592,6 +699,7 @@ onMounted(() => {
 
 @media (max-width: 760px) {
   .pet-material-picker-head,
+  .pet-material-current,
   .pet-material-actions,
   .pet-asset-toolbar,
   .pet-url-action {

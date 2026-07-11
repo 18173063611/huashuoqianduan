@@ -53,6 +53,21 @@
             <el-tag :type="row.role === 'ADMIN' ? 'danger' : 'info'" effect="plain">{{ getRoleLabel(row.role) }}</el-tag>
           </template>
         </el-table-column>
+        <el-table-column label="业务权限" min-width="220">
+          <template #default="{ row }">
+            <div class="permission-tags">
+              <el-tag
+                v-for="permission in row.permissions || []"
+                :key="permission"
+                type="success"
+                effect="plain"
+              >
+                {{ getPermissionLabel(permission) }}
+              </el-tag>
+              <span v-if="!row.permissions?.length" class="permission-empty">未显式配置</span>
+            </div>
+          </template>
+        </el-table-column>
         <el-table-column label="状态" width="110">
           <template #default="{ row }">
             <el-tag :type="getTagTypeByStatus(row.status)">{{ getUserStatusLabel(row.status) }}</el-tag>
@@ -218,6 +233,8 @@ function emptyUserForm(): AdminUserSaveRequest {
     phone: '',
     email: '',
     remark: '',
+    permissions: ['VEHICLE_CREATION_ACCESS'],
+    initialCredits: 0,
   }
 }
 
@@ -244,6 +261,8 @@ function openEdit(row: AdminUserItem) {
     phone: row.phone || '',
     email: row.email || '',
     remark: row.remark || '',
+    permissions: [...(row.permissions || [])],
+    initialCredits: 0,
   })
   editorVisible.value = true
 }
@@ -255,8 +274,11 @@ function isBuiltinAdmin(row: AdminUserItem) {
 async function saveUser(payload: AdminUserSaveRequest) {
   saving.value = true
   try {
-    if (editingUserId.value) await updateAdminUser(editingUserId.value, payload)
-    else await createAdminUser(payload)
+    if (editingUserId.value) {
+      const updatePayload = { ...payload }
+      delete updatePayload.initialCredits
+      await updateAdminUser(editingUserId.value, updatePayload)
+    } else await createAdminUser(payload)
     ElMessage.success('账号已保存')
     editorVisible.value = false
     await loadUsers()
@@ -265,6 +287,13 @@ async function saveUser(payload: AdminUserSaveRequest) {
   } finally {
     saving.value = false
   }
+}
+
+function getPermissionLabel(permission: string) {
+  if (permission === 'PET_CREATION_ACCESS') return '宠物创作中心'
+  if (permission === 'VEHICLE_CREATION_ACCESS') return '汽车创作中心'
+  if (permission === 'PET_PUBLIC_ASSET_EDITOR') return '宠物公共资产'
+  return permission
 }
 
 async function toggleStatus(row: AdminUserItem) {
@@ -373,5 +402,16 @@ onMounted(loadUsers)
 .admin-users-pagination {
   justify-content: flex-end;
   margin-top: 16px;
+}
+
+.permission-tags {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.permission-empty {
+  color: #9ca3af;
+  font-size: 12px;
 }
 </style>

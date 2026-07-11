@@ -1,4 +1,5 @@
 import { findPetTemplate, petTemplates } from './petTemplateConfig'
+import { normalizePetVideoDurationSeconds } from './petCreationValidation'
 import type { PetAspectRatio, PetCreationDraft, PetVideoTask, PetWork, PetWorkDownload, PetWorkForkOptions, PetWorkQuery } from './petCreationTypes'
 
 const PET_DRAFT_STORAGE_KEY = 'huashuo_pet_creation_draft'
@@ -80,16 +81,36 @@ function roleIdAt(draft: PetCreationDraft, index: number, fallback: string) {
   return draft.roles[index]?.id || fallback
 }
 
+function voiceNameForRole(draft: PetCreationDraft, roleId: string, fallback: string) {
+  return draft.roles.find((role) => role.id === roleId)?.voiceName || fallback
+}
+
 function promptSnippet(prompt: string, maxLength = 22) {
   const firstClause = prompt.replace(/\s+/g, ' ').trim().split(/[，,。；;]/)[0] || '这件事'
   const normalized = firstClause.replace(/^小[猫狗](把|在)?/, '').trim() || '这件事'
   return normalized.length > maxLength ? `${normalized.slice(0, maxLength)}...` : normalized
 }
 
+function distributeDurations(totalSeconds: number, shotCount: number) {
+  const total = normalizePetVideoDurationSeconds(totalSeconds)
+  const base = Math.max(1, Math.floor(total / shotCount))
+  const durations = Array.from({ length: shotCount }, () => base)
+  let remaining = total - base * shotCount
+  let index = 0
+  while (remaining > 0) {
+    durations[index % shotCount] += 1
+    remaining -= 1
+    index += 1
+  }
+  return durations
+}
+
 function generatedDialogueLinesForPrompt(payload: PetCreationDraft, prompt: string) {
   const snippet = promptSnippet(prompt)
   const lipSync = payload.lipSyncEnabled
   const roleIds = payload.roles.length > 0 ? payload.roles.map((role) => role.id) : ['main-cat', 'second-dog']
+  const firstVoice = voiceNameForRole(payload, roleIds[0] || 'main-cat', '软萌童声')
+  const secondVoice = voiceNameForRole(payload, roleIds[1] || 'second-dog', '机智少年音')
   const lineSeeds = [
     {
       id: 'dialogue-generated-1',
@@ -97,7 +118,7 @@ function generatedDialogueLinesForPrompt(payload: PetCreationDraft, prompt: stri
       text: `我先解释一下，${snippet}不是你想的那样。`,
       emotion: '认真解释' as const,
       speed: 'normal' as const,
-      voiceName: '软萌童声',
+      voiceName: firstVoice,
       lipSync,
     },
     {
@@ -106,7 +127,7 @@ function generatedDialogueLinesForPrompt(payload: PetCreationDraft, prompt: stri
       text: '那你把原因讲清楚，我可都看见了。',
       emotion: '吐槽' as const,
       speed: 'normal' as const,
-      voiceName: '机智少年音',
+      voiceName: secondVoice,
       lipSync,
     },
     {
@@ -115,7 +136,7 @@ function generatedDialogueLinesForPrompt(payload: PetCreationDraft, prompt: stri
       text: '我只是想确认一下，没想到被发现了。',
       emotion: '撒娇' as const,
       speed: 'normal' as const,
-      voiceName: '软萌童声',
+      voiceName: voiceNameForRole(payload, roleIds[2] || roleIds[0] || 'main-cat', firstVoice),
       lipSync,
     },
     {
@@ -124,7 +145,7 @@ function generatedDialogueLinesForPrompt(payload: PetCreationDraft, prompt: stri
       text: '好吧，下次记得带上我一起。',
       emotion: '开心' as const,
       speed: 'normal' as const,
-      voiceName: '机智少年音',
+      voiceName: voiceNameForRole(payload, roleIds[3] || roleIds[1] || roleIds[0] || 'second-dog', secondVoice),
       lipSync,
     },
   ]
@@ -137,7 +158,7 @@ function generatedDialogueLinesForPrompt(payload: PetCreationDraft, prompt: stri
       text: index % 2 === 0 ? '我也可以作证，现场确实很可疑。' : '先别急，可能只是一个可爱的误会。',
       emotion: index % 2 === 0 ? '吐槽' as const : '开心' as const,
       speed: 'normal' as const,
-      voiceName: index % 2 === 0 ? '机智少年音' : '软萌童声',
+      voiceName: voiceNameForRole(payload, roleId, index % 2 === 0 ? secondVoice : firstVoice),
       lipSync,
     })),
   ]
@@ -156,6 +177,7 @@ export const defaultPetDraft: PetCreationDraft = {
       ageFeel: '幼年',
       personalityTags: ['好奇', '嘴硬', '爱撒娇'],
       speakingTone: '软萌但理直气壮',
+      voiceName: '软萌童声',
       roleTags: ['主角', '吐槽担当'],
       anthropomorphic: true,
       referenceAssetIds: [],
@@ -168,6 +190,7 @@ export const defaultPetDraft: PetCreationDraft = {
       ageFeel: '青年',
       personalityTags: ['机智', '吐槽', '护短'],
       speakingTone: '机智但很认真',
+      voiceName: '机智少年音',
       roleTags: ['搭档', '吐槽担当'],
       anthropomorphic: true,
       referenceAssetIds: [],
@@ -250,6 +273,7 @@ export const defaultPetDraft: PetCreationDraft = {
     cameraRhythm: 'balanced',
     backgroundPrompt: '',
     productPrompt: '',
+    stylePrompt: '',
   },
   consistency: {
     keepAppearance: true,
@@ -319,11 +343,14 @@ export function mockListPetTemplates() {
 }
 
 export function mockGetPetDraft() {
-  return Promise.resolve(clonePetDraft(readJson(PET_DRAFT_STORAGE_KEY, defaultPetDraft)))
+  const draft = clonePetDraft(readJson(PET_DRAFT_STORAGE_KEY, defaultPetDraft))
+  draft.durationSeconds = normalizePetVideoDurationSeconds(draft.durationSeconds)
+  return Promise.resolve(draft)
 }
 
 export function mockSavePetDraft(payload: PetCreationDraft) {
   const nextDraft = clonePetDraft(payload)
+  nextDraft.durationSeconds = normalizePetVideoDurationSeconds(nextDraft.durationSeconds)
   writeJson(PET_DRAFT_STORAGE_KEY, nextDraft)
   return Promise.resolve(clonePetDraft(nextDraft))
 }
@@ -337,14 +364,16 @@ export function mockResetPetDraft() {
 export function mockGeneratePetStoryboard(payload: PetCreationDraft) {
   const prompt = payload.prompt.trim() || '萌宠偷偷做了一件小坏事，被主人发现后努力解释'
   const backgroundHint = payload.visualSettings.backgroundPrompt?.trim()
+  const styleHint = payload.visualSettings.stylePrompt?.trim()
+  const durations = distributeDurations(payload.durationSeconds, 5)
   const nextDraft = clonePetDraft({
     ...payload,
-    scriptText: `${prompt}${backgroundHint ? `，背景设定为${backgroundHint}` : ''}。整体节奏轻松可爱，前 3 秒抛出反差，中段展示宠物表情和动作，结尾用一句撒娇字幕收束。`,
+    scriptText: `${prompt}${backgroundHint ? `，背景设定为${backgroundHint}` : ''}${styleHint ? `，风格要求为${styleHint}` : ''}。整体节奏轻松可爱，前 3 秒抛出反差，中段展示宠物表情和动作，结尾用一句撒娇字幕收束。`,
     shots: [
       {
         id: 'shot-generated-1',
         index: 1,
-        durationSeconds: 3,
+        durationSeconds: durations[0],
         frameDescription: backgroundHint ? `在${backgroundHint}中开场展示主题：${prompt}` : `开场展示主题：${prompt}`,
         characterAction: '宠物看向镜头，表情带一点心虚和好奇',
         cameraMove: '轻微推进',
@@ -354,7 +383,7 @@ export function mockGeneratePetStoryboard(payload: PetCreationDraft) {
       {
         id: 'shot-generated-2',
         index: 2,
-        durationSeconds: 5,
+        durationSeconds: durations[1],
         frameDescription: '中景展示宠物与场景互动，突出动作细节',
         characterAction: '宠物坐下、歪头、尾巴轻轻摆动',
         cameraMove: '固定中景',
@@ -364,7 +393,7 @@ export function mockGeneratePetStoryboard(payload: PetCreationDraft) {
       {
         id: 'shot-generated-3',
         index: 3,
-        durationSeconds: 4,
+        durationSeconds: durations[2],
         frameDescription: '结尾特写宠物表情，叠加可爱字幕',
         characterAction: '宠物靠近镜头，做出撒娇表情',
         cameraMove: '慢速推近',
@@ -374,7 +403,7 @@ export function mockGeneratePetStoryboard(payload: PetCreationDraft) {
       {
         id: 'shot-generated-4',
         index: 4,
-        durationSeconds: 3,
+        durationSeconds: durations[3],
         frameDescription: '切到第二只宠物或道具参考，制造反差笑点',
         characterAction: '第二只宠物短暂停顿后给出反应',
         cameraMove: '轻微摇移',
@@ -384,7 +413,7 @@ export function mockGeneratePetStoryboard(payload: PetCreationDraft) {
       {
         id: 'shot-generated-5',
         index: 5,
-        durationSeconds: 3,
+        durationSeconds: durations[4],
         frameDescription: '双宠物同框或宠物回到主场景，用治愈画面收尾',
         characterAction: '宠物看向镜头，表情放松',
         cameraMove: '固定近景',
@@ -400,10 +429,11 @@ export function mockGeneratePetStoryboard(payload: PetCreationDraft) {
 export function mockGeneratePetScript(payload: PetCreationDraft) {
   const prompt = payload.prompt.trim() || '宠物日常小剧场'
   const backgroundHint = payload.visualSettings.backgroundPrompt?.trim()
+  const styleHint = payload.visualSettings.stylePrompt?.trim()
   const requiresDialogue = payload.generationMode === 'dialogue_video' || payload.videoType === 'dialogue' || payload.videoType === 'talking'
   const nextDraft = clonePetDraft({
     ...payload,
-    scriptText: `${prompt}${backgroundHint ? `，画面背景保持${backgroundHint}` : ''}。开头用一句反差字幕吸引注意，中段让宠物用拟人化口吻解释原因，结尾保留一个适合转发的可爱包袱。`,
+    scriptText: `${prompt}${backgroundHint ? `，画面背景保持${backgroundHint}` : ''}${styleHint ? `，风格保持${styleHint}` : ''}。开头用一句反差字幕吸引注意，中段让宠物用拟人化口吻解释原因，结尾保留一个适合转发的可爱包袱。`,
     dialogueLines: requiresDialogue ? generatedDialogueLinesForPrompt(payload, prompt) : payload.dialogueLines,
     visualSettings: {
       ...payload.visualSettings,
@@ -506,9 +536,7 @@ export function mockForkPetWork(workId: string, options: PetWorkForkOptions = {}
   const nextDraft = clonePetDraft(sourceWork?.draft || {
     ...defaultPetDraft,
     prompt: sourceWork?.title || defaultPetDraft.prompt,
-    durationSeconds: sourceWork?.durationSeconds === 5 || sourceWork?.durationSeconds === 10 || sourceWork?.durationSeconds === 15 || sourceWork?.durationSeconds === 30
-      ? sourceWork.durationSeconds
-      : defaultPetDraft.durationSeconds,
+    durationSeconds: normalizePetVideoDurationSeconds(sourceWork?.durationSeconds, defaultPetDraft.durationSeconds),
     aspectRatio: sourceWork?.aspectRatio || defaultPetDraft.aspectRatio,
   })
   nextDraft.aspectRatio = normalizeForkAspect(options.aspectRatio, nextDraft.aspectRatio)
