@@ -10,7 +10,7 @@ export const petTemplateWorkflowMeta: Record<PetTemplateWorkflow, {
   smart: {
     label: '一句话智能编排',
     actionLabel: '进入智能创作',
-    description: '先由 AI 生成文案和分镜，再进入脚本分镜页精修。',
+    description: '由 AI 一次生成文案、对白、分镜和参数，再进入脚本分镜页精修。',
     routeName: 'pet-storyboard',
   },
   dialogue: {
@@ -63,8 +63,8 @@ export function routeForPetTemplate(template: PetTemplate): RouteLocationRaw {
 export const petTemplateGuideByWorkflow: Record<PetTemplateWorkflow, Array<{ index: string; title: string; text: string }>> = {
   smart: [
     { index: '01', title: '输入创意', text: '写一句宠物剧情主题，AI 会补齐文案、钩子和情绪递进。' },
-    { index: '02', title: '生成脚本', text: '先生成可编辑脚本，避免直接裸提交提示词。' },
-    { index: '03', title: '生成分镜', text: '拆成镜头、动作、字幕、运镜和配音情绪。' },
+    { index: '02', title: '智能编排', text: '一次生成可编辑文案、对白、镜头和视频参数。' },
+    { index: '03', title: '微调分镜', text: '按需调整动作、字幕、运镜和配音情绪。' },
     { index: '04', title: '确认生成', text: '在确认抽屉核对积分、素材和 provider payload 后提交。' },
   ],
   dialogue: [

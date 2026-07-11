@@ -355,29 +355,59 @@ function hasAnyKeyword(value: string, keywords: string[]) {
   return keywords.some((keyword) => value.includes(keyword))
 }
 
+function hasExplicitBenchmarkIntent(value: string) {
+  if (/https?:\/\//.test(value)) return true
+  return hasAnyKeyword(value, [
+    '对标', '仿拍', '同款视频', '视频链接', '上传视频', '参考素材', '参考这个视频', '参考该视频',
+    '参考这条视频', '参考以下视频', '按这个视频', '照着这个视频', '拆解这个视频', '分析这个视频',
+    'benchmark', 'reference video', 'video link', 'remake this video',
+  ]) || /参考.{0,8}(爆款|热门|短)?视频/.test(value)
+}
+
+function hasStickerIntent(value: string) {
+  return hasAnyKeyword(value, [
+    '表情包', '贴纸', '聊天表情', '宠物表情', '表情图', '做鬼脸', '照片动起来', '动起来', '图生视频', '单张图',
+    'gif', '动图', 'animate', 'image to video',
+  ])
+}
+
+function hasHumanParticipant(value: string) {
+  const withoutPetFamilyRoles = value.replace(/(?:猫|狗|宠物)(?:爸爸|妈妈|爷爷|奶奶)/g, '')
+  return hasAnyKeyword(withoutPetFamilyRoles, [
+    '人宠', '主人', '铲屎官', '人物', '人类', '男孩', '女孩', '小朋友', '爸爸', '妈妈', '爷爷', '奶奶',
+    'human pet', 'owner',
+  ])
+}
+
+function hasDialogueAction(value: string) {
+  return hasAnyKeyword(value, [
+    '对话', '对白', '吵架', '争吵', '争论', '斗嘴', '吐槽', '聊天', '台词', '问答', '轮流说', '互相说',
+    '讨论', '商量', '采访', '辩论', '解释', '回应', '回答', 'conversation', 'dialogue', 'chat', 'talk', 'lines',
+  ]) || /(?:说|问|喊|叫)[：:“”"「『]/.test(value)
+}
+
+function hasMultipleParticipants(value: string) {
+  if (hasAnyKeyword(value, [
+    '多宠物', '多只宠物', '多只', '两只', '三只', '四只', '五只', '六只', '双宠', '多个宠物',
+    '多个角色', '多角色', '两个角色', '三个角色', '多个人物', '多人物', '两个人', '三个人', '一群宠物',
+    '猫狗', '狗猫',
+    'multiple pets', 'two pets', 'three pets', 'multiple characters',
+  ])) return true
+
+  const participant = '(?:小?猫(?:咪)?|小?狗(?:狗)?|兔子|鹦鹉|仓鼠|宠物|主人|铲屎官|男孩|女孩|小朋友)'
+  const pairPattern = new RegExp(`${participant}.{0,8}(?:和|与|跟|及|、|还有|加上|一起).{0,8}${participant}`)
+  return pairPattern.test(value)
+}
+
 export function selectPetTemplateForPrompt(prompt: string, source: PetTemplate[] = petTemplates) {
   const value = prompt.trim().toLowerCase()
   let templateId = 'pet-ai-smart-story'
-  const hasBenchmarkSourceIntent = hasAnyKeyword(value, [
-    '爆款', '对标', '仿拍', '同款视频', '参考视频', '视频链接', '上传视频', '参考素材',
-    'viral video', 'benchmark', 'reference video', 'video link',
-  ]) || /https?:\/\//.test(value)
-  const mentionsCat = hasAnyKeyword(value, ['猫', '小猫', 'cat', 'kitten'])
-  const mentionsDog = hasAnyKeyword(value, ['狗', '小狗', 'dog', 'puppy'])
 
-  if (hasBenchmarkSourceIntent) {
+  if (hasExplicitBenchmarkIntent(value)) {
     templateId = 'viral-benchmark-storyboard'
-  } else if (hasAnyKeyword(value, [
-    '表情包', '贴纸', '聊天表情', '宠物表情', '表情图', '做鬼脸', '照片动起来', '动起来', '图生视频', '单张图',
-    'gif', '动图', 'animate', 'image to video',
-  ])) {
+  } else if (hasStickerIntent(value)) {
     templateId = 'pet-sticker'
-  } else if (hasAnyKeyword(value, ['人宠', '主人', '陪伴', '回家', '蹲下', '同框', '互动', 'human pet', 'owner'])) {
-    templateId = 'multi-pet-dialogue'
-  } else if (
-    mentionsCat && mentionsDog
-    || hasAnyKeyword(value, ['对话', '吵架', '吐槽', '聊天', '台词', '多宠物', '多只', '两只', '双宠', '争夺', 'dialogue', 'chat', 'conversation', 'lines'])
-  ) {
+  } else if (hasHumanParticipant(value) || hasDialogueAction(value) || hasMultipleParticipants(value)) {
     templateId = 'multi-pet-dialogue'
   }
   return findPetTemplate(templateId, source) || findPetTemplate('pet-ai-smart-story', source) || petTemplates[0]
@@ -385,7 +415,11 @@ export function selectPetTemplateForPrompt(prompt: string, source: PetTemplate[]
 
 export function inferPetStoryIntentMode(prompt: string): 'human-pet' | 'multi-pet' {
   const value = prompt.trim().toLowerCase()
-  return hasAnyKeyword(value, ['人宠', '主人', '人物', '陪伴', '回家', '同框', 'human pet', 'owner'])
+  return hasHumanParticipant(value)
     ? 'human-pet'
     : 'multi-pet'
+}
+
+export function extractPetPromptVideoUrl(prompt: string) {
+  return prompt.match(/https?:\/\/[^\s，。；、]+/i)?.[0] || ''
 }

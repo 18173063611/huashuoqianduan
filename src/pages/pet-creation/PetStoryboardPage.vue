@@ -146,14 +146,8 @@
           >
             {{ benchmarkPrimaryButtonLabel }}
           </button>
-          <button v-if="!isBenchmarkTemplate" type="button" class="primary" :disabled="busy || benchmarkParsing" @click="handleGenerateScript">
-            {{ busy ? '处理中...' : 'AI 生成脚本' }}
-          </button>
-          <button v-if="!isBenchmarkTemplate" type="button" :disabled="busy || benchmarkParsing" @click="handleGenerateStoryboard">
-            {{ busy ? '处理中...' : 'AI 生成分镜' }}
-          </button>
-          <button v-if="!isBenchmarkTemplate" type="button" :disabled="busy || benchmarkParsing" @click="handleBenchmarkStoryboard">
-            {{ busy ? '处理中...' : '爆款结构重排' }}
+          <button v-if="!isBenchmarkTemplate" type="button" class="primary" :disabled="busy || benchmarkParsing" @click="handleGenerateCreativePlan">
+            {{ smartGenerationStage || 'AI 智能生成文案与分镜' }}
           </button>
         </div>
         <div class="pet-ready-state" :class="{ warn: firstBlockingIssue }">
@@ -367,7 +361,7 @@ import {
   previewPetVideoTask,
 } from '../../services/petCreationApi'
 import { usePetCreationState } from './usePetCreationState'
-import type { PetReferenceMaterial, PetStoryboardShot, PetVideoEstimate, PetVideoPreview } from './petCreationTypes'
+import type { PetReferenceMaterial, PetStoryboardShot, PetTemplate, PetVideoEstimate, PetVideoPreview } from './petCreationTypes'
 import {
   PET_MAX_SHOT_DURATION_SECONDS,
   PET_MIN_SHOT_DURATION_SECONDS,
@@ -381,7 +375,14 @@ import {
   validStoryboardShots,
 } from './petCreationValidation'
 import { usePetApiFallbackNotice } from './usePetApiFallbackNotice'
-import { findPetTemplate } from './petTemplateConfig'
+import {
+  extractPetPromptVideoUrl,
+  findPetTemplate,
+  inferPetStoryIntentMode,
+  selectPetTemplateForPrompt,
+} from './petTemplateConfig'
+import { routeForPetTemplate } from './petTemplateWorkflow'
+import { syncPetStoryMode } from './petStoryMode'
 import {
   applyVideoBenchmarkToPetDraft,
   detectPetBenchmarkPlatform,
@@ -397,6 +398,7 @@ const route = useRoute()
 const router = useRouter()
 const { draft, applyTemplate, loadDraft, saveDraft, snapshotDraft } = usePetCreationState()
 const busy = ref(false)
+const smartGenerationStage = ref('')
 const creating = ref(false)
 const planOpen = ref(false)
 const planEstimate = ref<PetVideoEstimate | null>(null)
@@ -850,7 +852,20 @@ async function handleGenerationParamChange() {
   }
 }
 
-async function handleGenerateScript() {
+function routeForDetectedTemplate(template: PetTemplate, prompt: string) {
+  const target = routeForPetTemplate(template)
+  if (typeof target === 'string') return target
+  return {
+    ...target,
+    query: {
+      ...(target.query || {}),
+      from: 'ai-prompt',
+      ...(template.id === 'multi-pet-dialogue' ? { intentMode: inferPetStoryIntentMode(prompt) } : {}),
+    },
+  }
+}
+
+async function handleGenerateCreativePlan() {
   if (busy.value || creating.value) return
   if (!hasPrompt(draft)) {
     ElMessage.warning(promptRequiredMessage())
@@ -859,43 +874,67 @@ async function handleGenerateScript() {
   normalizeStoryboardDurations()
   busy.value = true
   try {
-    const nextDraft = await generatePetScript(snapshotDraft())
-    Object.assign(draft, nextDraft)
+    const originalPrompt = draft.prompt.trim()
+    const detectedTemplate = selectPetTemplateForPrompt(originalPrompt)
+    const shouldSwitchTemplate = detectedTemplate.id !== draft.templateId
+    if (shouldSwitchTemplate) {
+      applyTemplate(detectedTemplate)
+      draft.prompt = originalPrompt
+      await autoMatchPetMaterials(draft, detectedTemplate)
+    }
+
+    if (detectedTemplate.id === 'viral-benchmark-storyboard') {
+      benchmarkUrl.value = extractPetPromptVideoUrl(originalPrompt)
+      await saveDraft()
+      ElMessage.success('已识别为「爆款对标创作」，请确认视频链接或上传参考视频后开始分析。')
+      void router.push(routeForDetectedTemplate(detectedTemplate, originalPrompt))
+      return
+    }
+
+    if (detectedTemplate.id === 'pet-sticker') {
+      draft.scriptText = originalPrompt
+      draft.dialogueLines = []
+      draft.shots = []
+      await saveDraft()
+      ElMessage.success('已识别为「宠物表情包」，请确认宠物图片和 GIF/MP4 输出格式。')
+      void router.push(routeForDetectedTemplate(detectedTemplate, originalPrompt))
+      return
+    }
+
+    if (detectedTemplate.id === 'multi-pet-dialogue') {
+      syncPetStoryMode(draft)
+    }
+
+    draft.scriptText = ''
+    draft.dialogueLines = []
+    draft.shots = []
+    smartGenerationStage.value = '正在生成文案...'
+    const scriptedDraft = await generatePetScript(snapshotDraft())
+    Object.assign(draft, scriptedDraft)
+    if (detectedTemplate.id === 'multi-pet-dialogue') syncPetStoryMode(draft)
+
+    smartGenerationStage.value = '正在生成分镜和参数...'
+    const storyboardDraft = await generatePetStoryboard(snapshotDraft())
+    Object.assign(draft, storyboardDraft)
+    if (detectedTemplate.id === 'multi-pet-dialogue') {
+      syncPetStoryMode(draft)
+    } else if (detectedTemplate.id === 'pet-ai-smart-story') {
+      draft.videoType = detectedTemplate.videoType
+      draft.generationMode = hasMainPetMaterial(draft)
+        ? (detectedTemplate.generationMode || 'reference_video')
+        : 'text_video'
+    }
     await saveDraft()
+    ElMessage.success(`已根据提示词生成「${detectedTemplate.title}」文案、分镜和参数。`)
+    if (shouldSwitchTemplate) {
+      void router.push(routeForDetectedTemplate(detectedTemplate, originalPrompt))
+    }
   } catch (error) {
-    ElMessage.error(petErrorMessage(error, '生成宠物脚本失败，请稍后重试。'))
+    ElMessage.error(petErrorMessage(error, '智能生成宠物文案与分镜失败，请稍后重试。'))
   } finally {
+    smartGenerationStage.value = ''
     busy.value = false
   }
-}
-
-async function handleGenerateStoryboard() {
-  if (busy.value || creating.value) return
-  if (!hasPrompt(draft)) {
-    ElMessage.warning(promptRequiredMessage())
-    return
-  }
-  normalizeStoryboardDurations()
-  busy.value = true
-  try {
-    const nextDraft = await generatePetStoryboard(snapshotDraft())
-    Object.assign(draft, nextDraft)
-    await saveDraft()
-  } catch (error) {
-    ElMessage.error(petErrorMessage(error, '生成宠物分镜失败，请稍后重试。'))
-  } finally {
-    busy.value = false
-  }
-}
-
-async function handleBenchmarkStoryboard() {
-  if (busy.value || creating.value) return
-  const basePrompt = draft.prompt.trim() || '主宠被发现做了一件小坏事，努力用可爱表情解释'
-  draft.prompt = `${basePrompt}。参考爆款萌宠短视频结构：前三秒抛出反差钩子，中段用宠物表情和动作递进，结尾用治愈或反转包袱收束。`
-  draft.visualSettings.cameraRhythm = 'short_drama'
-  draft.visualSettings.expressionIntensity = Math.max(draft.visualSettings.expressionIntensity, 84)
-  draft.subtitleEnabled = true
-  await handleGenerateStoryboard()
 }
 
 async function saveAndGoRole() {
@@ -1046,11 +1085,14 @@ onMounted(async () => {
     await loadDraft()
     normalizeStoryboardDurations()
     await applyRouteTemplateIfNeeded()
+    if (isBenchmarkTemplate.value && !benchmarkUrl.value.trim()) {
+      benchmarkUrl.value = extractPetPromptVideoUrl(draft.prompt)
+    }
   } catch (error) {
     ElMessage.error(petErrorMessage(error, '宠物草稿恢复失败，请返回首页重试。'))
   }
   if (!isBenchmarkTemplate.value && draft.shots.length === 0 && hasPrompt(draft)) {
-    await handleGenerateStoryboard()
+    await handleGenerateCreativePlan()
   }
 })
 </script>

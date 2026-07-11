@@ -74,6 +74,52 @@ async function prepareContext(browser, viewport) {
     }
     await route.continue()
   })
+  await context.route('**/api/v1/pet-videos/script', async (route) => {
+    const draft = route.request().postDataJSON()
+    await route.fulfill({
+      status: 200,
+      contentType: 'application/json',
+      body: JSON.stringify({
+        code: 0,
+        message: 'OK',
+        data: {
+          ...draft,
+          scriptText: `根据提示词生成的文案：${draft.prompt}`,
+          dialogueLines: draft.dialogueLines?.length ? draft.dialogueLines : [
+            { id: 'smoke-line-1', speakerRoleId: draft.roles?.[0]?.id || 'main-pet', text: '先看看发生了什么。', emotion: '惊讶', speed: 'normal', voiceName: '软萌童声', lipSync: true },
+            { id: 'smoke-line-2', speakerRoleId: draft.roles?.[1]?.id || draft.roles?.[0]?.id || 'second-pet', text: '这件事可没有那么简单。', emotion: '吐槽', speed: 'normal', voiceName: '机智少年音', lipSync: true },
+          ],
+        },
+        traceId: 'pet-template-smoke',
+      }),
+    })
+  })
+  await context.route('**/api/v1/pet-videos/storyboard', async (route) => {
+    const draft = route.request().postDataJSON()
+    const shotDuration = Math.max(1, Math.floor(Number(draft.durationSeconds || 15) / 3))
+    await route.fulfill({
+      status: 200,
+      contentType: 'application/json',
+      body: JSON.stringify({
+        code: 0,
+        message: 'OK',
+        data: {
+          ...draft,
+          shots: [1, 2, 3].map((index) => ({
+            id: `smoke-shot-${index}`,
+            index,
+            durationSeconds: shotDuration,
+            frameDescription: `第 ${index} 个测试分镜`,
+            characterAction: '宠物按提示词完成自然动作',
+            cameraMove: '稳定镜头',
+            subtitle: draft.dialogueLines?.[index - 1]?.text || '',
+            voiceEmotion: '自然',
+          })),
+        },
+        traceId: 'pet-template-smoke',
+      }),
+    })
+  })
   await context.route('**/api/v1/assets**', async (route) => {
     if (route.request().method().toUpperCase() === 'GET') {
       await route.fulfill({
@@ -314,6 +360,50 @@ async function runRouteSmoke(browser) {
   return { key: 'PetNoCarRegressionSmoke', status: summarize(checks), checks }
 }
 
+async function runPromptIntentRoutingCheck(browser) {
+  const cases = [
+    { name: '普通单宠创意', prompt: '小猫在窗边晒太阳，最后对镜头眨眼', path: '/pet-render/storyboard', templateId: 'pet-ai-smart-story' },
+    { name: '多角色对话', prompt: '小猫和小狗在客厅轮流吐槽谁偷吃了零食', path: '/pet-render/dialogue', templateId: 'multi-pet-dialogue', intentMode: 'multi-pet' },
+    { name: '宠物家庭角色', prompt: '猫妈妈和小猫讨论今天谁负责收玩具', path: '/pet-render/dialogue', templateId: 'multi-pet-dialogue', intentMode: 'multi-pet' },
+    { name: '人宠剧情', prompt: '主人带狗狗旅行，途中互相回应并完成温暖互动', path: '/pet-render/dialogue', templateId: 'multi-pet-dialogue', intentMode: 'human-pet' },
+    { name: '家庭人物人宠剧情', prompt: '爸爸和小狗在院子里聊天', path: '/pet-render/dialogue', templateId: 'multi-pet-dialogue', intentMode: 'human-pet' },
+    { name: '宠物表情包', prompt: '把这张小猫照片做成开心跳舞的 GIF 表情包', path: '/pet-render/sticker', templateId: 'pet-sticker' },
+    { name: '外部爆款对标', prompt: '参考这个爆款视频 https://example.com/demo.mp4 生成类似宠物短片', path: '/pet-render/storyboard', templateId: 'viral-benchmark-storyboard' },
+    { name: '普通爆款诉求不误判', prompt: '生成一个容易成为爆款的小猫治愈短视频', path: '/pet-render/storyboard', templateId: 'pet-ai-smart-story' },
+  ]
+  const checks = []
+  for (const testCase of cases) {
+    const context = await prepareContext(browser, { width: 1366, height: 900 })
+    const page = await context.newPage()
+    await page.goto(`${appBaseUrl}/pet-render`, { waitUntil: 'domcontentloaded', timeout: selectorTimeout })
+    await page.waitForSelector('.pet-page .pet-prompt-box textarea', { timeout: selectorTimeout })
+    await page.locator('.pet-page .pet-prompt-box textarea').fill(testCase.prompt)
+    await page.locator('.pet-quick-workflow button').first().click()
+    await page.waitForURL((url) => url.pathname === testCase.path && url.searchParams.get('templateId') === testCase.templateId, { timeout: selectorTimeout })
+    const url = new URL(page.url())
+    const routeOk = url.pathname === testCase.path && url.searchParams.get('templateId') === testCase.templateId
+    const modeOk = !testCase.intentMode || url.searchParams.get('intentMode') === testCase.intentMode
+    checks.push(makeCheck(`${testCase.name}模板分配`, routeOk && modeOk, `${url.pathname}${url.search}`))
+    await context.close()
+  }
+
+  const context = await prepareContext(browser, { width: 1366, height: 900 })
+  const page = await context.newPage()
+  await page.goto(`${appBaseUrl}/pet-render/storyboard?templateId=pet-ai-smart-story`, { waitUntil: 'domcontentloaded', timeout: selectorTimeout })
+  await page.waitForSelector('.pet-command-buttons', { timeout: selectorTimeout })
+  const screenshotPath = path.join(visualDir, 'PetAiSmartOneClickTest.png')
+  await page.screenshot({ path: screenshotPath, fullPage: false })
+  const buttonTexts = await page.locator('.pet-command-buttons button').allInnerTexts()
+  checks.push(makeCheck(
+    'AI智能创作只保留一个智能生成按钮',
+    buttonTexts.filter((text) => text.includes('AI 智能生成文案与分镜')).length === 1
+      && !buttonTexts.some((text) => /AI 生成脚本|AI 生成分镜|爆款结构重排/.test(text)),
+    buttonTexts.join(' | '),
+  ))
+  await context.close()
+  return { key: 'PetPromptIntentRoutingTest', status: summarize(checks), screenshotPath, checks }
+}
+
 function printReport(report) {
   console.log(`\n${report.key}: ${report.status}`)
   if (report.screenshotPath) console.log(`screenshot: ${report.screenshotPath}`)
@@ -342,6 +432,7 @@ async function main() {
       selector: '.pet-dialogue-page',
     }))
     reports.push(await runRouteSmoke(browser))
+    reports.push(await runPromptIntentRoutingCheck(browser))
   } finally {
     await browser.close().catch(() => undefined)
   }
